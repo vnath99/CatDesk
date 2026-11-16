@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-09T23:22:20Z",
+  "classification": "TESTED_SOURCE_NOT_SELECTED_INSTALLED_OR_LIVE_ACCEPTANCE",
+  "sourceParent": "30a804cea933547da3007386c36bc7114674dad5",
+  "problem": "USER_DIGEST_AND_TRUSTED_ANCHOR_USED_DIFFERENT_DOM_TIER_SELECTION",
+  "change": "REUSE_EXISTING_TRUSTED_TURN_PROJECTION_FOR_BOTH_READERS",
+  "sourceFiles": {
+    "scripts/wake_bridge.py": "442576956bf5df4ca3b73170c113c83c9b48c903ce8afef6d2212a6c8e552e64",
+    "tests/test_wake_bridge.py": "fdeb27e609d01a072cc1a0489ad375fb0cf57175139fdacb1ddae6162aebe7ce",
+    "tests/test_wake_bridge_current_dom.py": "ae01f70ef7f8d66644d1e06d563a079548f2625c79495cd215fffd959b3f38f7"
+  },
+  "preservedRequirements": [
+    "EXACT_NORMALIZED_USER_BODY",
+    "EXCLUSIVE_USER_ASSISTANT_CLASSIFICATION",
+    "EXISTING_TRUSTED_TIER_PRIORITY",
+    "DUPLICATE_REFUSAL",
+    "EXACT_DOCUMENT_AND_PROJECT_TARGET",
+    "UNKNOWN_OUTCOME_NO_REPLAY",
+    "TERMINAL_READER_DISAGREEMENT"
+  ],
+  "verification": {
+    "independentReadOnlyDiffReview": "NO_ACTIONABLE_FINDINGS",
+    "diffWhitespaceCheck": "PASS",
+    "localSuites": [
+      {"suite": "test_wake_bridge_current_dom", "tests": 139, "seconds": 172.769, "exitCode": 0},
+      {"suite": "test_wake_bridge", "tests": 127, "seconds": 176.095, "exitCode": 0},
+      {"suite": "test_wake_response_persistence", "tests": 7, "seconds": 0.009, "exitCode": 0},
+      {"suite": "test_adapter", "tests": 47, "seconds": 12.931, "exitCode": 0},
+      {"suite": "test_new_conversation", "tests": 85, "seconds": 7.509, "exitCode": 0}
+    ],
+    "totalTestsPassed": 405,
+    "newTestMethods": 3,
+    "newMixedLayoutSubcases": 5,
+    "oldReaderNegativeControls": {
+      "retainedPriorSourceSha256": "ed8fa04cd1b4ee93647bdb0424b0255465e0df82aa8bfabe843aff1cb8b6befe",
+      "expectedFailedSubcases": 5,
+      "unexpectedErrors": 0,
+      "priorSourceModified": false,
+      "browserStarts": 0,
+      "networkCalls": 0
+    }
+  },
+  "acceptanceLimits": {
+    "liveThirdReviewCauseEstablished": false,
+    "focusedMainReviewSourceChanged": false,
+    "selectedDevelopmentPackageChanged": false,
+    "protectedMainOrInstalledWakeChanged": false,
+    "reviewOrProducerAuthorityGranted": false,
+    "c1": "INCOMPLETE"
+  }
+}

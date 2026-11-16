@@ -48,6 +48,13 @@ unsafe extern "system" {
         read: *mut u32,
         overlapped: *mut c_void,
     ) -> i32;
+    fn WriteFile(
+        file: *mut c_void,
+        buffer: *const c_void,
+        length: u32,
+        written: *mut u32,
+        overlapped: *mut c_void,
+    ) -> i32;
     fn GetLastError() -> u32;
     fn GetOverlappedResult(
         file: *mut c_void,
@@ -217,6 +224,48 @@ pub(crate) fn read_once(
     read_once_with_pending_hook(pipe, max_bytes, deadline, stop, || Ok(()))
 }
 
+/// One bounded reply on the same admitted pipe instance. A reply is not a
+/// second request read and cannot change which operator was impersonated.
+pub(crate) fn write_once(
+    pipe: BorrowedHandle<'_>,
+    bytes: &[u8],
+    max_bytes: usize,
+    deadline: Duration,
+    stop: &AtomicBool,
+) -> Result<()> {
+    if bytes.is_empty()
+        || bytes.len() > max_bytes
+        || max_bytes > u32::MAX as usize
+        || deadline.is_zero()
+        || stop.load(Ordering::Acquire)
+    {
+        return Err("WAKE_BROKER_PIPE_REPLY_SIZE_OR_DEADLINE_INVALID".into());
+    }
+    let started = Instant::now();
+    let mut io = PendingIo::new(bytes.len())?;
+    io.buffer.copy_from_slice(bytes);
+    let completed = unsafe {
+        WriteFile(
+            pipe.as_raw_handle(),
+            io.buffer.as_ptr().cast(),
+            io.buffer.len() as u32,
+            io.transferred.as_mut(),
+            io.raw_overlapped().cast(),
+        )
+    } != 0;
+    let transferred = if completed {
+        *io.transferred
+    } else if unsafe { GetLastError() } as i32 == ERROR_IO_PENDING {
+        io.wait(pipe, started, deadline, stop)?.1
+    } else {
+        return Err("WAKE_BROKER_PIPE_REPLY_FAILED".into());
+    };
+    if transferred as usize != bytes.len() {
+        return Err("WAKE_BROKER_PIPE_REPLY_INDETERMINATE".into());
+    }
+    Ok(())
+}
+
 fn read_once_with_pending_hook(
     pipe: BorrowedHandle<'_>,
     max_bytes: usize,
@@ -368,6 +417,37 @@ mod tests {
             "WAKE_BROKER_PIPE_DEADLINE_OR_STOP"
         );
         assert!(started.elapsed() < Duration::from_secs(3));
+    }
+
+    #[test]
+    fn one_bounded_reply_preserves_complete_message_and_refuses_empty() {
+        let (server, client) = connected_fixture();
+        let reader = std::thread::spawn(move || {
+            let mut file = std::fs::File::from(client);
+            let mut bytes = [0u8; 4];
+            std::io::Read::read_exact(&mut file, &mut bytes).unwrap();
+            bytes
+        });
+        assert!(
+            write_once(
+                server.as_handle(),
+                b"",
+                4,
+                Duration::from_secs(1),
+                &AtomicBool::new(false)
+            )
+            .is_err()
+        );
+        write_once(
+            server.as_handle(),
+            b"done",
+            4,
+            Duration::from_secs(1),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        drop(server);
+        assert_eq!(reader.join().unwrap(), *b"done");
     }
 
     #[test]

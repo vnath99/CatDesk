@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C220_C221",
+  "sourceParent": "3d9dc505e47da9e8088170ca3458d11791ec64d3",
+  "branch": "codex/web-rollover-oct17",
+  "status": "ACTUAL_WINDOWS_OWNERSHIP_DIAGNOSIS_CHILD_QUALIFICATION_PENDING",
+  "reportedRefusal": {
+    "line": 19,
+    "unsupportedPowerShellVersionRuledOut": true,
+    "guard": "OWNERSHIP_QUERY_FAILED_OR_PROCESS_IN_ANY_JOB",
+    "genericMessageDistinguishesThoseBranches": false,
+    "laterOperatorQuerySucceeded": true,
+    "laterOperatorJobMembership": true,
+    "catdeskPreflightOrPromotionReached": false
+  },
+  "preservation": {
+    "status": "PASS",
+    "filesMatched": 486,
+    "candidateAndFiveAuthorityFilesUnchanged": true,
+    "originalCanonicalFingerprintDivergencePreserved": true,
+    "releasePairClaimAuthorizationTransactionPresent": false,
+    "promotionAuditDirectoryPresent": false,
+    "evidenceSha256": "65d44c66456d97692cee70a666f308387464b96399126278b824be66aac4da3a"
+  },
+  "actualRetainedProcessQueries": {
+    "processesIdentityMatched": 5,
+    "successfulMembershipQueries": 5,
+    "allInSomeJob": true,
+    "processQueryHandlesClosed": 5,
+    "jobCreatorEstablished": false,
+    "evidenceSha256": "0c6ecd3322199377e74dddd75ce3760b4cfd8b0a1e9904552e3242cf21308965"
+  },
+  "operatorImmediateJob": {
+    "observedUtc": "2026-10-25T20:23:39.0156903+00:00",
+    "powerShellVersion": "7.6.5",
+    "limitFlags": 6144,
+    "killOnJobClose": false,
+    "silentBreakawayAllowed": true,
+    "uiRestrictions": 0,
+    "membersListed": 382,
+    "listComplete": true,
+    "explorerInReturnedList": false,
+    "operatorCodexTerminalAndConsoleInReturnedList": true,
+    "outerChainEstablished": false,
+    "evidenceSha256": "27f1884a024b55f3fb36cef4ae6165a22ad3142773ecdda9d8c22d7f8376a56e"
+  },
+  "toolImmediateJob": {
+    "observedUtc": "2026-10-25T20:20:48.2402634+00:00",
+    "limitFlags": 10240,
+    "killOnJobClose": true,
+    "silentBreakawayAllowed": false,
+    "membersListed": 3,
+    "knownDesktopRootsInReturnedList": 0
+  },
+  "interpretation": [
+    "Process ancestry, Job membership and Job creator are different facts; do not attribute the operator's Job to Codex or Windows Terminal from ancestry alone.",
+    "QueryInformationJobObject with a null handle describes only the immediate Job; a permissive snapshot does not prove the full ancestor chain safe.",
+    "The measured silent-departure policy warrants a bounded ordinary-child inheritance test, not a guard waiver.",
+    "No parent override, explicit breakaway flag, Job mutation, new release candidate or production action has been used."
+  ],
+  "actualChildQualification": "TOOL_CONTAINED_CONTROL_PASSED_OPERATOR_RESULT_PENDING",
+  "nativeOrWrapperGuardChanged": false,
+  "productionActions": 0,
+  "browserWakeRecurringStarts": 0,
+  "installedAcceptance": false,
+  "sourceTestsRepeated": false,
+  "toolChildControl": {
+    "membershipSamples": 2,
+    "jobChanges": 0,
+    "stderrClosed": true,
+    "stdoutClosed": true,
+    "scope": "ACTUAL_WINDOWS_ORDINARY_DOTNET_CHILD_NOT_PRODUCTION",
+    "childUncontainedAtBothSamples": false,
+    "exactChildIdentityVerified": true,
+    "naturalExit": true,
+    "catdeskCommands": 0,
+    "elapsedMilliseconds": 1788,
+    "evidenceSha256": "432c77f6dd2c86605fc06bc72026ff1f74143fefabcc5f93ef62c9409829062a",
+    "inJobAtBothSamples": true
+  },
+  "postPromotionLimitsFromSource": {
+    "slotAOperationalVerifiedIsTrustedRollback": false,
+    "publicStartRecoverCanStartWakeAndGui": true,
+    "scope": "EXACT_C208_SOURCE_REVIEW_NOT_INSTALLED_TEST",
+    "sourceCommit": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+    "ordinaryNativeBearerAuthIncludesC209Change": false,
+    "headlessBearerTestsProveOrdinaryNativeAuth": false,
+    "publicStartRecoverIsBackendOnly": false,
+    "trustedPreviousVersionExists": false
+  }
+}

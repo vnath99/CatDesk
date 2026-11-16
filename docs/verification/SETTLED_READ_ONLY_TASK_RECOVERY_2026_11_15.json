@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T20:23:03Z",
+  "sourceCommit": "79a449b6bc7bb3c042210caca07e09a47b158123",
+  "developmentAppSha256": "9d6e8c50b9b4cf927fa2d9db48b2c292002fe7877e91d532e56d74486bdf33ef",
+  "status": "PARTIAL_CONTROLLED_LIVE",
+  "productionChanged": false,
+  "canonicalConnectionChanged": false,
+  "protectedAuthorityCreated": false,
+  "newReleaseOrInfrastructureManager": false,
+  "previousVerifiedDevelopmentFallbackRetained": true,
+  "wholeCandidateHealthy": false,
+  "sourceChecks": [
+    {
+      "name": "recovery-module",
+      "exitCode": 0
+    },
+    {
+      "name": "full-clippy",
+      "exitCode": 0
+    },
+    {
+      "name": "format",
+      "exitCode": 0
+    }
+  ],
+  "recoveryTestsPassed": 8,
+  "childFixtureIgnoredOutsideHarness": 1,
+  "originalTask": {
+    "observedUtc": "2026-11-15T20:02:39.350842+00:00",
+    "originalAssignmentUnchanged": true,
+    "settledReadOnlyRetirementRecorded": true,
+    "ownerClosedReceiptCount": 1,
+    "callStatuses": {
+      "local-apply": "COMPLETED",
+      "local-preview": "COMPLETED",
+      "local-read": "COMPLETED",
+      "local-verify": "COMPLETED"
+    },
+    "oldCompletedCallIdsRetained": true,
+    "changedPaths": [
+      "CATDESK_IMPORTANT_COMMANDS.md"
+    ],
+    "diffWhitespacePassed": true,
+    "mcpVerificationPassed": false,
+    "reportedFailure": "CreateProcessAsUserW failed: 5 (Access is denied.)",
+    "modelCalls": 0,
+    "normalGitCheckpointPerformed": false
+  },
+  "localMcp": {
+    "unauthenticatedStatus": 401,
+    "wrongBearerStatus": 401,
+    "authenticatedInitializeStatus": 200,
+    "authenticatedCatalogStatus": 200,
+    "toolCount": 12,
+    "originalReadAndPreviewReplayed": false,
+    "patchApplied": true,
+    "duplicateMutationSubmitted": false,
+    "fixedVerificationSuccess": false,
+    "fixedVerificationCleanupProved": true,
+    "nativeModelCalls": 0,
+    "controllerExitCode": 0,
+    "outputStreamsClosed": true,
+    "developmentListenerClosed": true
+  },
+  "diagnosticWake": {
+    "maximumMessages": 1,
+    "deliveryInvocations": 1,
+    "exactUserReceipt": true,
+    "timerComplete": true,
+    "operatorOriginatedNotTaskSelfWake": true,
+    "codeExecutionGranted": false,
+    "diagnosticRequestClosedOnly": true,
+    "acknowledgment": {
+      "observedUtc": "2026-11-15T20:14:41.466928+00:00",
+      "action": "EXISTING_EXACT_SENT_RESPONSE_SNAPSHOT_READ_ONLY",
+      "exitCode": 0,
+      "eventVerified": true,
+      "projectAndEventMatch": true,
+      "ackMarkerVerified": true,
+      "verificationBlockedReported": true,
+      "responseSha256": "be7e7d583647c4d03067c404d97dffed58dbdca6179ac7a283f0c1f33459f6cd",
+      "diagnostic": {
+        "budgetMillis": 90000,
+        "elapsedMillis": 34962,
+        "phase": "COMPLETE"
+      },
+      "status": null,
+      "reason": null,
+      "sendAttempted": false,
+      "originalDeliveryReceiptUnchanged": true,
+      "rawConversationOrDraftExported": false,
+      "submissions": 0
+    }
+  },
+  "remaining": {
+    "fixedVerifier": "Native sandbox target-spawn error 5; exact token/desktop/ACL/hosting cause not established. CLI hash/version matched; documented newer setup subcommand unsupported. One same-mode system noop diagnostic was inconclusive at 35 seconds and its Job drained; no original command retry, no sandbox bypass or mode change.",
+    "fullMvp": "Web-origin file edit, successful granted verification, Git checkpoint, self-issued continuation and two-project independence remain unverified. Existing protected review/migration requirements stay separate."
+  },
+  "preservation": {
+    "observedUtc": "2026-11-15T20:20:34.665774+00:00",
+    "originalPinsCompared": 1702,
+    "changedDevelopmentPins": 4,
+    "productionOrProtectedPinChanges": 0,
+    "profileIdentitiesUnchanged": true,
+    "registeredSourceClean": true,
+    "executionChangedPaths": [
+      "CATDESK_IMPORTANT_COMMANDS.md"
+    ],
+    "sourceCommit": "79a449b6bc7bb3c042210caca07e09a47b158123",
+    "canonicalImageSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901"
+  },
+  "cleanup": {
+    "profileQuiescent": true,
+    "matchingTestProcesses": 0,
+    "nativeNoopTimedOut": true,
+    "nativeNoopJobTerminationFailed": false,
+    "recurringAutomation": false
+  },
+  "evidenceHashes": {
+    "unitOwner": "9581c31d33b5a7a359c2428f30ca914813b102a189df0bae3d48622c3dd986c2",
+    "taskOwner": "a1894dfce36cdcae843698f699a375eb2e1b9aca588aec4b8b5b23d44f1c735d",
+    "deliveryOwner": "a65273a23f5f82b96dba5b3d60cbabd95f6268dad959a11c0e8aa15230573fa4",
+    "bodyReadOwner": "8ee658870b540c2755f88f7558d71797447e521e576d61715d6819fc8be63a68",
+    "cleanup": "8a7b973871c314b363f236ef9752e131cfadb425b511f4a2045cafdb8a17fb09"
+  },
+  "latestSourceCommit": "9d96f8e32f3fdf8b528d15eda453e9398f74a392",
+  "sourceOnlyFollowup": {
+    "observedUtc": "2026-11-15T20:32:08Z",
+    "change": "Validate retained operations against original full preview-diff hash without executing a tool or rewriting journal.",
+    "sourceTestsPassed": 8,
+    "clippyPassed": true,
+    "formatPassed": true,
+    "selectedApplicationRebuiltOrChanged": false,
+    "evidenceSha256": "0c7e3fa8db7ddbd3a4fb67de0f469702f0f8d15941cafc29a50edcf3cdbc634b"
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "purpose": "PARTIAL_SOURCE_REVIEW_ONLY_NOT_RELEASE_AUTHORITY",
+  "batchId": "b010",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "patchBytes": 59716,
+  "sourcePaths": [
+    "scripts/wake_profile_quiescence.py",
+    "scripts/wake_readiness_visual_probe.py",
+    "src/daemon_reload.rs",
+    "src/delegated/autonomy_projects.rs",
+    "src/delegated/autonomy_runtime.rs",
+    "src/delegated/autonomy_supervisor.rs",
+    "src/delegated/codex_app_server.rs",
+    "src/main.rs"
+  ],
+  "units": [
+    {
+      "unitId": "u023",
+      "path": "scripts/wake_profile_quiescence.py",
+      "skipLines": 0,
+      "takeLines": 204,
+      "bytes": 9193,
+      "sha256": "6f9bbab985280803ba4ab405c69cbf60a05e052ccd5a6c2eec3c804752269517",
+      "baseBlob": null,
+      "targetBlob": "67370ea65a1021915e38255676832c074e13a2a7"
+    },
+    {
+      "unitId": "u024",
+      "path": "scripts/wake_readiness_visual_probe.py",
+      "skipLines": 0,
+      "takeLines": 382,
+      "bytes": 18384,
+      "sha256": "9502cdc1779f76eb4ca91b3f3ca60dd80d385500bc8185eef6825d35c3891982",
+      "baseBlob": "5e3d2ba5abb58b9e20a1ae89a027981f323f8585",
+      "targetBlob": "60ad352fe972bd64f9c5a28ddfbe719d2e84dd72"
+    },
+    {
+      "unitId": "u025",
+      "path": "src/daemon_reload.rs",
+      "skipLines": 0,
+      "takeLines": 110,
+      "bytes": 5058,
+      "sha256": "b5e627d8e70c3e402ab6601c53c5b65aa2aef0c53e220d6eca6206825c9eb3e0",
+      "baseBlob": "778ac587052d4944d31fd42b643133df59efcf7a",
+      "targetBlob": "9bb9fd36a4ee8fa99dd5f38bb7ed79d3a57ced9d"
+    },
+    {
+      "unitId": "u026",
+      "path": "src/delegated/autonomy_projects.rs",
+      "skipLines": 0,
+      "takeLines": 174,
+      "bytes": 7128,
+      "sha256": "5d78cc7975a8e2aa92c82f1bfb6a861b314e71a3ddc6f66fb53f11b572d98e87",
+      "baseBlob": "dc52d9fd82990d9796985cd6cf5bf49ffb86a07a",
+      "targetBlob": "40fa6a8f4bf6b987c0ae25618c307752db813968"
+    },
+    {
+      "unitId": "u027",
+      "path": "src/delegated/autonomy_runtime.rs",
+      "skipLines": 0,
+      "takeLines": 275,
+      "bytes": 11866,
+      "sha256": "fcca12118b9b3ad2dc57f4d031c26551eac00080f77aa81912142fc4222bdcf3",
+      "baseBlob": "fe20b2153735e11723db6809653196c532f335e5",
+      "targetBlob": "62da648421f5ac77013609a0d07bfffa55a42e22"
+    },
+    {
+      "unitId": "u028",
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "skipLines": 0,
+      "takeLines": 53,
+      "bytes": 2403,
+      "sha256": "c07ad8fa65bb4d87c0e17e803a4af24d3b44d9a6fbf6e9aa3d38337e0c2b2a33",
+      "baseBlob": "b8cc78fbce037b08c0abf21e8e2eaa84e732788f",
+      "targetBlob": "f30ffebb20206435d1beba279f191394fb75a080"
+    },
+    {
+      "unitId": "u029",
+      "path": "src/delegated/codex_app_server.rs",
+      "skipLines": 0,
+      "takeLines": 51,
+      "bytes": 2552,
+      "sha256": "b14132aa3aa5f9c11953b4deac5ff8efe042b9949905abd0d36921a99b32a426",
+      "baseBlob": "ec101f20098e88d100325b82f61965d9d8de51b2",
+      "targetBlob": "a22414e763e06bad49819dfc4c93827885298b2a"
+    },
+    {
+      "unitId": "u030",
+      "path": "src/main.rs",
+      "skipLines": 0,
+      "takeLines": 59,
+      "bytes": 3132,
+      "sha256": "1d017a28130a2ea61cf7addc6365de995b1da2365b5d8a6cd4304450e5d4cf77",
+      "baseBlob": "78f4845e6618f1db4aadeb4b04e23ed1330cd27b",
+      "targetBlob": "3ecb87471b978ee2a1256c52bc42664d7cd32eea"
+    }
+  ],
+  "cumulativeSourceAccepted": false,
+  "requiredReplyMarker": "NOV01_GIT_SOURCE_BATCH_ONLY",
+  "requiredReplyFields": [
+    "marker",
+    "sourceCommit",
+    "batchId",
+    "verdict",
+    "findings",
+    "inspectedUnitIds",
+    "inspectedPaths",
+    "limitations",
+    "cumulativeSourceAccepted"
+  ],
+  "permittedVerdicts": [
+    "REVIEWED_BATCH",
+    "FAIL",
+    "INCONCLUSIVE"
+  ]
+}

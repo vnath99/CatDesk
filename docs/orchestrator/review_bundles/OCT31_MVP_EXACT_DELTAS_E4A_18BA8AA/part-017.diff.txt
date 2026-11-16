@@ -1,0 +1,178 @@
++    return "OTHER"
++
++
++def select_registered_target_tab(cdp, url, report=None):
++    """CDP's controlled tab may differ from the human-visible tab after login.
++
++    Select only a unique returned tab whose target metadata AND document URL
++    match the registered destination. Do not navigate, close tabs, read draft
++    contents, or export any other tab's URL. Uncertainty never permits selection.
++    """
++    facts = dict(schemaVersion=1, tabCount=-1, metadataMatches=0, unreadableMetadata=0,
++                 candidateShape="UNOBSERVED", candidateRoute="UNKNOWN", candidateFrame="UNKNOWN",
++                 controlledShape="UNOBSERVED", controlledRoute="UNKNOWN", alternateRoute=False,
++                 stage="ENUMERATION", state="TARGET_TAB_UNAVAILABLE")
++    def finish(state):
++        facts["state"] = state
++        if report is not None:
++            report(dict(facts))
++        return state
++    def controlled():
++        value = cdp.get_current_url()
++        facts["controlledShape"] = value_shape(value)
++        facts["controlledRoute"] = route_class(value, url)
++        return value
++    try:
++        try:
++            controlled()
++        except Exception:
++            facts["controlledShape"] = "OTHER"
++        tabs = cdp.get_tabs()
++        if not isinstance(tabs, (list, tuple)) or len(tabs) > 32:
++            return finish("TARGET_TAB_UNAVAILABLE")
++        facts["tabCount"] = len(tabs)
++        facts["stage"] = "METADATA"
++        matches = []
++        for tab in tabs:
++            try:
++                metadata = tab.target.url
++                if not isinstance(metadata, str):
++                    facts["unreadableMetadata"] += 1
++                elif exact_url(metadata, url):
++                    matches.append(tab)
++            except Exception:
++                facts["unreadableMetadata"] += 1
++        facts["metadataMatches"] = len(matches)
++        if facts["unreadableMetadata"]:
++            return finish("TARGET_TAB_UNAVAILABLE")
++        if not matches:
++            return finish("TARGET_TAB_MISSING")
++        if len(matches) != 1:
++            return finish("TARGET_TAB_AMBIGUOUS")
++        tab = matches[0]
++        facts["stage"] = "DOCUMENT"
++        document = cdp.loop.run_until_complete(tab.get_current_url())
++        facts["candidateShape"] = value_shape(document)
++        facts["candidateRoute"] = route_class(document, url)
++        try:
++            frame = cdp.loop.run_until_complete(tab.evaluate("window === window.top"))
++            facts["candidateFrame"] = "TOP" if frame is True else ("SUBFRAME" if frame is False else "UNKNOWN")
++        except Exception:
++            pass
++        if not exact_url(document, url):
++            return finish("TARGET_TAB_DRIFT")
++        facts["alternateRoute"] = document != url
++        facts["stage"] = "SWITCH"
++        cdp.switch_to_tab(tab)
++        if not exact_url(controlled(), url):
++            return finish("TARGET_TAB_DRIFT")
++        facts["stage"] = "VERIFIED"
++        return finish("TARGET_TAB_EXACT")
++    except Exception:
++        return finish("TARGET_TAB_UNAVAILABLE")
++
+ def classify(cdp, url):
+     try: current = str(cdp.get_current_url())
+     except Exception: return "URL_UNAVAILABLE"
+     try:
+         p = urlparse(current)
+-        expected = urlparse(url)
+     except Exception:
+         return "URL_INVALID"
+     if current.startswith("chrome-error://"): return "CHROME_ERROR"
+     if p.path.startswith("/auth/") or any(visible(cdp, s) for s in LOGIN): return "LOGIN_VISIBLE"
+     if any(visible(cdp, s) for s in CAPTCHA): return "CAPTCHA_VISIBLE"
+-    exact = p.scheme == "https" and p.hostname == expected.hostname and p.path.rstrip("/") == expected.path.rstrip("/") and not p.query and not p.fragment
++    exact = exact_url(current, url)
+     if exact and visible(cdp, EDITOR):
+         return "EXACT_READY_BUSY" if any(visible(cdp, s) for s in STOP) else "EXACT_READY_IDLE"
+     if exact: return "EXACT_NO_EDITOR"
+     if p.hostname in {"chatgpt.com","chat.openai.com"} and p.path in {"","/"}: return "HOME"
+     return "TARGET_DRIFT"
+ 
++def chrome_error_detail(cdp):
++    """Export only a fixed browser error label, never page text or a target URL.
++
++    Ordinary ChatGPT documents, including unknown drafts, are not inspected.
++    The browser's internal error document must still be selected at evaluation.
++    """
++    try:
++        if not str(cdp.get_current_url()).startswith("chrome-error://"):
++            return "UNKNOWN"
++        code = cdp.evaluate("""(() => {
++            if (location.protocol !== 'chrome-error:') return null;
++            const nodes = document.querySelectorAll('#error-code, .error-code');
++            if (nodes.length !== 1) return null;
++            return nodes[0].textContent;
++        })()""")
++        if isinstance(code, str) and code.strip() in NETWORK_ERRORS:
++            return code.strip()
++    except Exception:
++        pass
++    return "UNKNOWN"
++
++def home_recovery_check(cdp, url):
++    """Explain the existing emptiness guard using fixed metadata, never text.
++
++    The reason is not authentication or task authority. The document must still
++    be HTTPS ChatGPT Home inside the evaluation before inspecting its composer.
++    """
++    if classify(cdp, url) != "HOME":
++        return "NOT_HOME"
++    if any(visible(cdp, s) for s in STOP):
++        return "BUSY"
++    try:
++        reason = cdp.evaluate("""(() => {
++            if (location.protocol !== 'https:' ||
++                !['chatgpt.com', 'chat.openai.com'].includes(location.hostname) ||
++                !['', '/'].includes(location.pathname) || location.port ||
++                location.username || location.password || location.search || location.hash) return 'NOT_HOME';
++            if (document.readyState !== 'complete') return 'DOCUMENT_LOADING';
++            const editors = document.querySelectorAll('#prompt-textarea');
++            if (editors.length === 0) return 'EDITOR_MISSING';
++            if (editors.length !== 1) return 'EDITOR_AMBIGUOUS';
++            const e = editors[0];
++            if (!(e instanceof HTMLTextAreaElement) && !e.isContentEditable) return 'EDITOR_UNSUPPORTED';
++            const text = e instanceof HTMLTextAreaElement ? e.value : e.textContent;
++            if (text !== '') return 'DRAFT_PRESENT';
++            if (e.querySelector('img, video, audio, input, [data-file-id]')) return 'EDITOR_MEDIA_PRESENT';
++            if (document.querySelector('[data-testid*="attachment" i], [data-testid*="file-thumbnail" i]')) return 'ATTACHMENT_INDICATOR';
++            return 'EMPTY';
++        })()""")
++        if isinstance(reason, str) and reason in HOME_CHECKS:
++            return reason
++    except Exception:
++        return "EVALUATION_FAILED"
++    return "EVALUATION_UNKNOWN"
++
++def recover_empty_home(cdp, url):
++    """One same-tab navigation after the same strict idle/empty checks.
++
++    The caller consumes its sole attempt regardless of the fixed outcome. No
++    unknown draft, attachment, wrapped value or evaluation failure permits it.
++    """
++    reason = home_recovery_check(cdp, url)
++    if reason != "EMPTY":
++        return reason
++    if classify(cdp, url) != "HOME":
++        return "NOT_HOME"
++    if any(visible(cdp, s) for s in STOP):
++        return "BUSY"
++    try:
++        # Existing bridge recovery also uses get(): open() can switch tabs.
++        cdp.get(url)
++        return "NAVIGATION_ATTEMPTED"
++    except Exception:
++        return "NAVIGATION_FAILED"
++
+ def main():
+     parser = argparse.ArgumentParser(description="Read-only CatDesk Wake profile readiness probe")
+     parser.add_argument("--conversation-url", required=True)
+     parser.add_argument("--seconds", type=float, default=45.0)
+     parser.add_argument("--await-start", action="store_true")
++    # Internal development owner supplies only its independently validated
++    # selected profile. The legacy production probe retains its fixed default.
++    parser.add_argument("--profile", type=Path)
++    parser.add_argument("--primitives", type=Path)
++    parser.add_argument("--primitives-sha256")
++    parser.add_argument("--read-only", action="store_true")

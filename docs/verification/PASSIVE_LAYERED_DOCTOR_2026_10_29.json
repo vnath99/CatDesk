@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T21:25:18.893948+00:00",
+  "classification": "TESTED_SOURCE_AND_ACTUAL_WINDOWS_PASSIVE_METADATA",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "initialDoctorCommit": "8831d4298dfe1ae001b1016d6b6e6d59834fed48",
+  "compatibilityCommit": "760fc2547e89c36c26b948caf464327f20484ece",
+  "installedExecutableChanged": false,
+  "layers": 17,
+  "sourceTests": {
+    "powerShell7": {
+      "assertions": 72,
+      "passed": true,
+      "logSha256": "1cd4d67aeaa5d9e6dcb3d86f68a5e8577c72efbe838cadd424e0296615d9cfdb"
+    },
+    "windowsPowerShell51": {
+      "assertions": 72,
+      "passed": true,
+      "logSha256": "1cd4d67aeaa5d9e6dcb3d86f68a5e8577c72efbe838cadd424e0296615d9cfdb"
+    },
+    "existingLifecycleBothShells": "PASS"
+  },
+  "actualPassiveMetadata": {
+    "observedUtc": "2026-10-29T21:23:02.744813+00:00",
+    "failure": null,
+    "scope": "ACTUAL_WINDOWS_PASSIVE_METADATA_NOT_RUNTIME_OR_WEB_ACCEPTANCE",
+    "protectedFiles": 5858,
+    "changedProtectedFiles": 0,
+    "topologyPreserved": true,
+    "checks": [
+      {
+        "scope": "canonical-core",
+        "release": "RELEASE_PAIR_VERIFIED",
+        "recoveryAuthority": "RECOVERY_AUTHORITY_AVAILABLE",
+        "daemon": "LOCAL_MCP_LISTENER_MISSING",
+        "registry": {
+          "metadataOnly": true,
+          "nativeOwnerLivenessVerified": false,
+          "registeredProjects": 4,
+          "nativeOwnerRegistrations": 4,
+          "pairedWakeTargets": 0,
+          "webBindings": 3
+        },
+        "wake": "WAKE_UNKNOWN_OUTCOME",
+        "connector": "UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE",
+        "connectorEvidenceType": "IMPORTED_ADVISORY",
+        "layerCount": 17
+      },
+      {
+        "scope": "controlled-core",
+        "release": "RELEASE_PAIR_VERIFIED",
+        "recoveryAuthority": "RECOVERY_AUTHORITY_AVAILABLE",
+        "daemon": "LOCAL_MCP_LISTENER_MISSING",
+        "registry": {
+          "webBindings": 10,
+          "pairedWakeTargets": 10,
+          "registeredProjects": 10,
+          "metadataOnly": true,
+          "nativeOwnerLivenessVerified": false,
+          "nativeOwnerRegistrations": 0
+        },
+        "wake": "WAKE_UNKNOWN_OUTCOME",
+        "connector": "UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE",
+        "connectorEvidenceType": "IMPORTED_ADVISORY",
+        "layerCount": 17
+      },
+      {
+        "scope": "controlled-windows",
+        "release": "RELEASE_PAIR_VERIFIED",
+        "recoveryAuthority": "RECOVERY_AUTHORITY_AVAILABLE",
+        "daemon": "LOCAL_MCP_LISTENER_MISSING",
+        "registry": {
+          "nativeOwnerRegistrations": 0,
+          "nativeOwnerLivenessVerified": false,
+          "pairedWakeTargets": 10,
+          "metadataOnly": true,
+          "webBindings": 10,
+          "registeredProjects": 10
+        },
+        "wake": "WAKE_UNKNOWN_OUTCOME",
+        "connector": "UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE",
+        "connectorEvidenceType": "IMPORTED_ADVISORY",
+        "layerCount": 17
+      }
+    ],
+    "newConnectorProbes": 0,
+    "newBrowserStarts": 0,
+    "newWakeStarts": 0,
+    "nativeProjectCommands": 0,
+    "installedWebAcceptance": "UNVERIFIED"
+  },
+  "failureHistoryPreserved": [
+    "REGISTRY_INVALID from unsupported Rust verbatim-drive spelling, corrected in source",
+    "WAKE_CONFIG_INVALID from unsupported existing retirement schema2, corrected in source",
+    "Windows PowerShell51 inherited PowerShell7 PSModulePath: Get-FileHash unavailable; corrected only child test environment"
+  ],
+  "testEnvironmentCorrection": {
+    "systemEnvironmentChanged": false,
+    "childOnlyDefaultPS51ModuleRoots": true,
+    "isolatedReproduction": "Inherited Utility7 cannot discover Get-FileHash; default Utility3.1 can"
+  },
+  "limitations": [
+    "Metadata pairing is not caller identity, authorization, workspace existence or native-owner liveness",
+    "Canonical scope separately reports PROJECT_WAKE_TARGET_MISMATCH: 4 native registrations, 3 Web bindings, 0 paired global Wake targets; no scope merge or repair",
+    "All local health/MCP, browser and provider probes NOT_RUN; no connector request made",
+    "Oct29 429 is imported OPERATOR_REPORTED advisory, not an observation made by this doctor",
+    "Installed Web coding and unattended operation UNVERIFIED"
+  ],
+  "fileSha256": {
+    "catdesk.ps1": "2f3ef18d776f75c5c47e579c1ab192f20308f9dc0ad250d0a3f8a9bea529561e",
+    "scripts/catdesk-doctor.ps1": "5d766572af84d49f51242381db5e2e85f0ee455aaa49c1fbc698fb6a93792068",
+    "scripts/test-catdesk-doctor.ps1": "62f4348f46907ce216b0d74766f74e911ec16ef211df4f352d875153a409562d"
+  },
+  "privateRunResultSha256": "8f824b040c8a7ce51d6c27675e9ebdde8eb4d50fea52ab208f4219296d6fd32e",
+  "fileHashBasis": "TESTED_WINDOWS_CHECKOUT_BYTES; CRLF where present",
+  "normalizedGitBlobSha256": {
+    "catdesk.ps1": "a372be3187f9ed6007bfae4a8788f30e96e593028c374015e12572662b9c9773",
+    "scripts/catdesk-doctor.ps1": "5d766572af84d49f51242381db5e2e85f0ee455aaa49c1fbc698fb6a93792068",
+    "scripts/test-catdesk-doctor.ps1": "c9ceea86d8b64626176af384d058eec4100dc143f439de8e7f3bae9b24746435"
+  }
+}

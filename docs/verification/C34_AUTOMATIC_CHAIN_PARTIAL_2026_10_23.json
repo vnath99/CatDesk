@@ -1,0 +1,55 @@
+{
+  "recordedUtc": "2026-10-23T15:13:01.5160128Z",
+  "localDate": "2026-10-23",
+  "task": "C34-AUTOMATIC-CHAIN",
+  "classification": "PARTIAL_SELECTED_BOUNDED_AUTOMATIC_CHAIN",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "5973f1437953ed57a591bc70927631e96c5f6016",
+  "startedUtc": "2026-10-23T14:00:47.5713842Z",
+  "finishedUtc": "2026-10-23T14:10:10.6612376Z",
+  "elapsedSeconds": 563.0892364,
+  "bounds": {
+    "listenerSeconds": 560,
+    "foregroundHostSeconds": 575,
+    "outerJobSeconds": 620
+  },
+  "sourceEvent": {
+    "newSubmissionCount": 1,
+    "delivery": "SENT_EXACT_COMPLETE",
+    "assistantBody": "EVENT_BOUND_MARKER_PROJECT_REQUEST_AND_PENDING_NEXT_ACTION_VERIFIED",
+    "independentReadSeconds": 51.11,
+    "readMetadataChanges": 0,
+    "readNewRecords": 0
+  },
+  "chain": {
+    "newHandoffRequest": false,
+    "newContextIntent": false,
+    "newRolloverRecord": false,
+    "newConversation": false,
+    "bindingsChanged": 0,
+    "fullAutomaticChainAccepted": false,
+    "historicalTargetFailureCause": "UNPROVEN_COLLAPSED_DIAGNOSTIC"
+  },
+  "checkpoint": {
+    "atUtc": "2026-10-23T14:15:35.0407294Z",
+    "records": 204,
+    "exactPairedReadbacks": 9,
+    "allOldRolloverRecordsExact": true,
+    "controlledWorkspaceExact": true,
+    "originalPolicyRestored": true,
+    "queueFiles": 0
+  },
+  "cleanup": {
+    "listenerNaturalExit": true,
+    "ownedHostTreeExitProved": true,
+    "ownedProcesses": 0,
+    "controls": "BOTH_STOPPED",
+    "nativeSessionActions": 0,
+    "recurringStarts": 0,
+    "productionChanged": false,
+    "completedCanaryReplayed": false
+  },
+  "next": "Continue the exact unfinished controlled task without resending its completed source event",
+  "protectedInstalledAcceptance": false,
+  "unattendedAcceptance": false
+}

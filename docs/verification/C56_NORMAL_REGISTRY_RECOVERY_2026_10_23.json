@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C56_NORMAL_REGISTRY_RECOVERY_AND_STOPPED_SELECTION",
+  "observedUtc": "2026-10-24T02:21:36.2603208+00:00",
+  "localDate": "2026-10-23_America_New_York",
+  "sourceCommit": "90c2cc95e11bc132fc46571811655898e087cc76",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "NORMAL_EXECUTABLE_DISPOSABLE_RECOVERY_FIXTURE_AND_SELECTED_STOPPED_UNPROTECTED_DEVELOPMENT",
+  "build": {
+    "startedUtc": "2026-10-24T02:06:18.9237820+00:00",
+    "maximumSeconds": 600,
+    "ownedJobClosed": true,
+    "finishedUtc": "2026-10-24T02:13:12.0869890+00:00",
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "elapsedSeconds": 413.1649113,
+    "imageBytes": 34871296,
+    "imageSha256": "36096e31d7f9bd44b661e647aadd7ed7cbacd15e34444773dfecc1a3b98c4f22"
+  },
+  "normal": {
+    "injectedState": "Explicit synthetic CREATED receipt, saved source snapshot and Wake-first successor; not actual browser evidence.",
+    "commandCount": 21,
+    "classification": "NORMAL_CLI_INJECTED_WAKE_FIRST_CREATED_FIXTURE_WITH_REAL_WINDOWS_REGISTRY_REPLACE_FAULT",
+    "checks": [
+      "normal-process-registry-write-fault-preserves-injected-created-receipt-wake-generation2-and-old-registry",
+      "independent-sibling-normal-target-read-and-work-metadata-queue-progress-during-registry-write-fault-not-web-coding",
+      "fresh-normal-process-finishes-exact-successor-binding-and-context-cas-with-one-continuation-event",
+      "cold-normal-retry-preserves-record-registry-wake-and-exactly-once-queue-bytes",
+      "cold-process-status-preserves-predecessor-handoff-and-pending-not-delivered-continuation"
+    ],
+    "fault": "Real Windows read-share handle permits registry read but refuses atomic registry replacement.",
+    "fullRuntimeRestartQualified": false,
+    "scopedOwnersAfterJob": 0,
+    "expectedRefusal": "WEB_ROLLOVER_BINDING_REQUIRES_RECONCILIATION",
+    "continuationEvents": 1,
+    "actualContinuationDelivery": false,
+    "actualBrowserCrashQualified": false,
+    "allOwnersExited": true,
+    "startedUtc": "2026-10-24T02:19:29.1562396+00:00",
+    "finishedUtc": "2026-10-24T02:19:33.6381236+00:00",
+    "generationAdvancedOnRecovery": false,
+    "successorGeneration": 2,
+    "maximumSeconds": 180,
+    "elapsedSeconds": 4.4819028,
+    "siblingMetadataEvents": 1
+  },
+  "harness": {
+    "corrections": [
+      "Use the actual context-observe schema.",
+      "Compare receipt fields without relying on JSON property order.",
+      "Read the documented target status inside the wake envelope."
+    ],
+    "allAttemptsScopedOwnersAfterJob": 0,
+    "recordedAttempts": [
+      {
+        "failure": "C56_NORMAL_COMMAND_FAILED_seed-alpha-source-context",
+        "changedRuntimeRecords": 0,
+        "ownedProcesses": 0,
+        "startedUtc": "2026-10-24T02:17:55.1423987+00:00"
+      },
+      {
+        "failure": "C56_WRITE_FAULT_DAMAGED_RECOVERY_STATE",
+        "changedRuntimeRecords": 0,
+        "ownedProcesses": 0,
+        "startedUtc": "2026-10-24T02:18:36.4022463+00:00"
+      },
+      {
+        "failure": "The property 'status' cannot be found on this object. Verify that the property exists.",
+        "changedRuntimeRecords": 0,
+        "ownedProcesses": 0,
+        "startedUtc": "2026-10-24T02:19:05.5744520+00:00"
+      },
+      {
+        "failure": null,
+        "changedRuntimeRecords": 0,
+        "ownedProcesses": 0,
+        "startedUtc": "2026-10-24T02:19:29.1562396+00:00"
+      }
+    ],
+    "preflightCorrection": "One attempt refused an obsolete baseline before launching any fixture; current 266-record baseline independently verified exact.",
+    "partialAttemptsPreserved": true,
+    "productFailuresObserved": 0,
+    "allAttemptsChangedRealRecords": 0
+  },
+  "selection": {
+    "productionModified": false,
+    "stateRecordsChecked": 266,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "previousPackagePreserved": true,
+    "sourceCommit": "90c2cc95e11bc132fc46571811655898e087cc76",
+    "classification": "SELECTED_STOPPED_UNPROTECTED_DEVELOPMENT_PACKAGE",
+    "nativeSessionsChanged": false,
+    "protectedInstalledAcceptance": false,
+    "newStateRecords": 0,
+    "wakeHostStarted": false,
+    "recurringStarted": false,
+    "browserProfileAction": "NONE",
+    "scopedProcessCount": 0,
+    "messagesSent": 0,
+    "elapsedSeconds": 6.4377197,
+    "browserStarted": false,
+    "selectedPackage": "1.0.0-dev.85-db6749033837a831998b64ae61dce4daf16923fc5029404e78fd46c713f3c67e",
+    "allowedPackagePointerChanges": 2,
+    "previousPackage": "1.0.0-dev.85-3b7008dfd5652cd36f57cbe01c33856223825316aadd00c9b9131183f74d146a",
+    "unexpectedChanges": 0,
+    "unchangedProtectedRecords": 264,
+    "selectedViewPassed": true,
+    "failure": null,
+    "exactPairedReads": 9,
+    "atUtc": "2026-10-24T02:20:24.8425032Z"
+  },
+  "preservation": {
+    "originalFiveProjects": "PRESERVED",
+    "allowedPackagePointerChanges": 2,
+    "existingAuthenticatedProfile": "PRESERVED_NOT_OPENED",
+    "otherRecordsUnchanged": 264,
+    "nativeSessionActions": 0,
+    "productionModified": false,
+    "pairedProjects": 9,
+    "previousPackageRetained": true,
+    "browserWakeRecurringStarts": 0,
+    "scopedOwners": 0,
+    "C50TaskGrantAndHistory": "PRESERVED_NOT_REPLAYED",
+    "runtimeRecords": 266,
+    "newRuntimeRecords": 0,
+    "messagesSent": 0
+  },
+  "acceptance": {
+    "fullOctoberMilestone": "OPEN",
+    "protectedInstalledRuntime": "NOT_QUALIFIED",
+    "fullRuntimeRestart": "OPEN",
+    "normalRecovery": "PASS_DISPOSABLE_INJECTED_STATE_AND_REAL_REGISTRY_WRITE_FAULT",
+    "source": "C55_NATIVE_RED_GREEN_60_TESTS_PRESERVED",
+    "actualWebMcpCodingBC": "OPEN",
+    "unattendedOperation": "NOT_ACTIVATED_OR_ACCEPTED",
+    "actualBrowserPairedCommitCrash": "OPEN",
+    "selectedDevelopment": "PASS_STOPPED_V68_NINE_PAIRED_READS"
+  },
+  "blocker": "Actual C50 replacement reports missing scoped task tool. Existing local MCP and official runtime were last observed stopped; supported startup-owner information is pending. Last separate connector result was HTTP429; cause not established.",
+  "nextTask": "Inspect the next independent context/rollover recovery gap in source. When the supported local MCP and existing official-runtime startup owner is established, qualify serving build/catalog and actual Web B/C in bounded tests without replaying C50."
+}

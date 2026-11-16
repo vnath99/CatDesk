@@ -1,0 +1,109 @@
++    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake'\)") 'exact public command vocabulary is present'
+     Require ($source -notmatch '(?i)provision-catdesk-release|cargo\s+(build|run|test)|tunnel-client.*(stop|remove)|runtimes\s+(stop|rm)') 'facade contains no compile/provision or tunnel stop/remove route'
+     Require ($source -notmatch 'Stop-Process\s+-Id\s+\$processId') 'public stop never reacquires destructive authority by PID alone'
+     Require ($source -match 'Stop-CatDeskListenerProcessForRecovery\s+-LocalMcp\s+\$endpoint\s+-Canonical\s+\$identity\s+-Candidate\s+\$candidate') 'public stop reuses the exact pinned listener process-instance mutation boundary'
+diff --git a/scripts/test-local-mcp-readiness-strict.ps1 b/scripts/test-local-mcp-readiness-strict.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..29539a9ec65bf77c42df3a49a99285f5069d1505
+--- /dev/null
++++ b/scripts/test-local-mcp-readiness-strict.ps1
+@@ -0,0 +1,41 @@
++# Regression for callers that enable strict mode before using public startup.
++# No process, network, credential, workspace or installed-state operations.
++$ErrorActionPreference='Stop'
++Set-StrictMode -Version Latest
++$tokens=$null;$errors=$null
++$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'start-catdesk-stack.ps1'),[ref]$tokens,[ref]$errors)
++if($errors.Count){throw 'startup script parse failed'}
++foreach($name in @('Invoke-BootstrapSeam','New-LocalMcpReadinessResult','Get-LocalMcpReadiness')){
++    $nodes=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true))
++    if($nodes.Count -ne 1){throw 'readiness function is missing or ambiguous'}
++    . ([scriptblock]::Create($nodes[0].Extent.Text))
++}
++$script:BootstrapSeams=@{}
++$script:MaxMcpReplyBytes=1048576
++function Get-LocalMcpProbeHeaders { param($LocalMcp) @{} }
++function Get-LoopbackCatDeskListener { param($Port,$Canonical) [pscustomobject]@{MatchesCanonical=$true} }
++$endpoint=[pscustomobject]@{Uri='http://127.0.0.1:1/fixture/mcp';Port=1}
++$script:initializeBody='{"result":{"serverInfo":{}}}'
++$script:toolsBody='{"result":{"tools":[{"name":"catdesk_instruction"},{"name":"delegated_run_list"}]}}'
++$script:BootstrapSeams['LocalMcpHttp']={param($uri,$body)
++    [pscustomobject]@{StatusCode=200;Content=$(if($body -match 'initialize'){$script:initializeBody}else{$script:toolsBody})}
++}
++$goodInitialize=$script:initializeBody;$goodTools=$script:toolsBody;$cases=0
++function Check-Readiness([bool]$Expected,[string]$Gate){
++    $r=Get-LocalMcpReadiness -LocalMcp $endpoint -Canonical ([pscustomobject]@{})
++    if($r.Ready -ne $Expected -or $r.Gate -cne $Gate){throw "strict readiness case $script:cases expected $Expected/$Gate, observed $($r.Ready)/$($r.Gate)"}
++    $script:cases++
++}
++Check-Readiness $true 'READY'
++foreach($bad in @('{"error":{"code":-32000}}','{}','{"result":null}','{"result":{}}','{"result":{"serverInfo":null}}','{"result":{"serverInfo":"invalid"}}')){
++    $script:initializeBody=$bad;Check-Readiness $false 'LOCAL_MCP_PROTOCOL_UNREADY'
++}
++foreach($bad in @('null','[]','true','broken json')){
++    $script:initializeBody=$bad;Check-Readiness $false 'LOCAL_MCP_RESPONSE_INVALID'
++}
++$script:initializeBody=$goodInitialize
++foreach($bad in @('{}','{"result":{}}','{"result":{"tools":[{}]}}','{"result":{"tools":[null]}}','{"result":{"tools":[{"name":false}]}}','{"result":{"tools":[{"name":"catdesk_instruction"}]}}')){
++    $script:toolsBody=$bad;Check-Readiness $false 'LOCAL_MCP_PROTOCOL_UNREADY'
++}
++$script:toolsBody=$goodTools;Check-Readiness $true 'READY'
++[pscustomobject]@{state='STRICT_READINESS_REGRESSIONS_PASS';cases=$cases;powerShellVersion=$PSVersionTable.PSVersion.ToString();processStarts=0;networkCalls=0;runtimeWrites=0}|ConvertTo-Json -Compress
+diff --git a/scripts/test-promotion-handoff-script-status.ps1 b/scripts/test-promotion-handoff-script-status.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..2f23d169596226fc98d354f18b65099cff920ed1
+--- /dev/null
++++ b/scripts/test-promotion-handoff-script-status.ps1
+@@ -0,0 +1,62 @@
++[CmdletBinding()]
++param()
++$ErrorActionPreference='Stop'
++$source=Join-Path $PSScriptRoot 'promote-reviewed-catdesk-build.ps1'
++$tokens=$null;$errors=$null
++$ast=[Management.Automation.Language.Parser]::ParseFile($source,[ref]$tokens,[ref]$errors)
++if($errors.Count){throw 'promoter parse failed'}
++$functions=@(foreach($name in @('Invoke-PromotionSeam','Invoke-PromotionHandoff')){
++ $found=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true))
++ if($found.Count -ne 1){throw 'handoff function is ambiguous'}
++ $found[0].Extent.Text
++}) -join "`n"
++$temp=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
++$root=Join-Path $temp ('CatDesk-HandoffStatus-'+[guid]::NewGuid().ToString('N'))
++$null=New-Item -ItemType Directory -Path $root
++try{
++ $helper=@'
++param($OldPid,$ExpectedOldProcessStartedAtUtc,$ExpectedOldProcessPath,$ExpectedOldProcessSha256,$BuildPath,$Workspace,$McpPort,$ReadyTimeoutSeconds,[switch]$BackendOnly,[switch]$Execute)
++$mode=[IO.File]::ReadAllText((Join-Path $Workspace 'mode.txt'))
++if($mode -eq 'throw'){throw 'controlled fixture launcher failure'}
++if($mode -eq 'empty'){return}
++if($mode -eq 'exit'){exit 9}
++$dir=Join-Path $Workspace '.catdesk/restart-handoff';$null=New-Item -ItemType Directory -Path $dir -Force
++@{schemaVersion=4;profile='LOCAL_BACKEND_ONLY';mcpAuthenticated=$true;status='RECOVERED_PENDING_TRANSPORT_CHECK';completedAtUtc=[DateTime]::UtcNow.ToString('o');buildSha256=('a'*64)}|ConvertTo-Json -Compress|Set-Content -LiteralPath (Join-Path $dir 'latest.json') -Encoding UTF8
++'HANDOFF_DETACHED fixture only; no process launched'
++'@
++ $runner=@'
++param([string]$Workspace,[string]$Seed)
++$ErrorActionPreference='Stop'
++$BackendOnly=$true;$script:PromotionSeams=@{};$script:PromotionMcpPort=3200;$script:PromotionTimeoutSeconds=1
++function ConvertFrom-CatDeskLiteralJson([string]$Text){$Text|ConvertFrom-Json}
++'@
++ $runner+="`n"+$functions+"`n"+@'
++if($Seed -eq 'unset'){Remove-Variable LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue}else{$global:LASTEXITCODE=7}
++$from=[pscustomobject]@{Pid=42;ProcessStartedAtUtc='2026-10-28T00:00:00.0000000Z';BuildPath=(Join-Path $Workspace 'old.exe');BuildHash=('b'*64)}
++$threw=$false;$result=$false
++try{$result=Invoke-PromotionHandoff $Workspace $from (Join-Path $Workspace 'candidate.exe') ('a'*64)}catch{$threw=$true}
++@{result=$result;threw=$threw}|ConvertTo-Json -Compress
++'@
++ [IO.File]::WriteAllText((Join-Path $root 'restart_catdesk_daemon.ps1'),$helper)
++ $runnerPath=Join-Path $root 'runner.ps1';[IO.File]::WriteAllText($runnerPath,$runner)
++ $engine=Join-Path $PSHOME $(if($PSEdition -eq 'Core'){'pwsh.exe'}else{'powershell.exe'})
++ foreach($case in @(@{mode='success';seed='unset';expected=$true},@{mode='success';seed='stale';expected=$true},@{mode='empty';seed='unset';expected=$false},@{mode='throw';seed='unset';expected=$false},@{mode='exit';seed='unset';expected=$false})){
++  $workspace=Join-Path $root ($case.mode+'-'+$case.seed);$null=New-Item -ItemType Directory -Path $workspace
++  [IO.File]::WriteAllText((Join-Path $workspace 'mode.txt'),$case.mode)
++  $info=[Diagnostics.ProcessStartInfo]::new();$info.FileName=$engine;$info.Arguments='-NoProfile -NonInteractive -File "'+$runnerPath+'" -Workspace "'+$workspace+'" -Seed '+$case.seed
++  $info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true;$info.EnvironmentVariables.Remove('PSModulePath')
++  $process=[Diagnostics.Process]::Start($info);$null=$process.Handle
++  try{
++   $output=$process.StandardOutput.ReadToEndAsync();$err=$process.StandardError.ReadToEndAsync()
++   if(!$process.WaitForExit(15000)){throw 'fixture engine timeout'}
++   if(!$output.Wait(1000) -or !$err.Wait(1000) -or $process.ExitCode -ne 0 -or $err.Result.Length -or $output.Result.Length -gt 4096){throw 'fixture engine failed'}

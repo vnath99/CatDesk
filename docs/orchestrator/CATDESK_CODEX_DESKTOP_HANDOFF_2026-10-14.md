@@ -1,4 +1,505 @@
+## October 26 C249 — bounded helper rechecks qualified in source
+
+A real regression reproduced the one-shot helper-cleanup defect: an unknown Job
+member exited naturally after the first check, but the remaining pinned helper
+was never reconsidered and the four-second fixture deadline expired. The red
+test exited 101; the corrected test exited 0 with verified fixture cleanup.
+Source now repeats the complete existing helper identity/membership check no more
+often than every 250 ms within the unchanged deadline. Unknown members are never
+selectively stopped. Timeout diagnostics distinguish root running, descendants
+active and stderr EOF pending, using the existing failure record only after
+confirmed cleanup and EOF; the timeout error code and authority gates stay intact.
+
+Qualification passed 130 reviewed-build tests, 14 protected-filesystem tests,
+formatting and strict Clippy, with eight manual tests ignored. This proves the
+regression correction in source; the original production-build timeout's cause
+is still unproven. A qualified controller containing this new code and genuine
+review of its new frozen source are required before a fresh supported producer
+attempt. See [C249 source evidence](../verification/C249_BOUNDED_HELPER_RECHECK_AND_TIMEOUT_DIAGNOSTICS_2026_10_26.json).
+
+## October 26 C248 — actual Cargo probes did not reproduce the timeout
+
+Four isolated Cargo probes crossed version/tiny-build cases with both console
+settings. All exited naturally with code 0 in 206–406 ms, closed stderr and left
+empty owned Jobs. They created no release authority. The diagnostic overlay was
+removed and the original source restored before C249. These small probes did not
+reproduce or explain C247's full-build timeout.
+See [C248 diagnostic evidence](../verification/C248_ACTUAL_CARGO_GATE_PROBES_2026_10_26.json).
+
+## October 26 C247 — managed review accepted; real producer timed out
+
+Exact public source `98248023c8cd359476e5943d991c960354c5e168` has a verified
+remote SHA readback. Its genuine 5,389-byte review passed the strict frozen schema
+without an exception, then managed finalization and acknowledgment retained a
+217-entry snapshot. The real producer subsequently returned
+`REVIEWED_BUILD_TIMEOUT` without attestation. Temporary compiled bytes are not a
+release candidate; the validated terminal failure and original C208 remain
+preserved. Web work is now `COMPLETE`/`CLOSED`, with 8,159 protected pins verified;
+transport completion remains caller-reported separately from native review.
+See [C247 actual evidence](../verification/C247_MSVC_READ_ONLY_DIRECTORY_PIN_2026_10_26.json).
+
+No new executable was promoted. Keep the existing PREPARE/CONFIRM/RESULT workflow,
+using fresh qualified source and authority rather than repeating a failed CONFIRM.
+Installed health, different-version rollback and two actual independent Web coding
+conversations remain open. Exact-source CI is unverified, the connector's last
+HTTP 429 is separate, and recurring automation remains stopped.
+
+## October 26 C247 — read-only MSVC pin qualified in source
+
+The real C246 producer terminated `BUILD_FAILED_OR_AMBIGUOUS` before Cargo:
+`reviewed MSVC helper directory identity is unavailable`. No candidate or
+attestation was produced. A bounded native probe established that directory
+access mask 7 requested add rights and failed with Win32 error 5; read-only mask
+129 opened the same non-reparse directory and read its identity. No ACL or
+directory metadata changed. C247 uses an explicit read-only MSVC directory pin;
+protected writable-directory guards retain their existing rights and checks.
+
+Qualification passed 125 reviewed-build tests, 14 protected-filesystem tests,
+formatting and strict Clippy; eight manual tests remain ignored. The first run's
+one new test-only granted-access failure is preserved. Correcting its native
+56-byte buffer and signed 32-bit information-class ABI enabled the full passing second run.
+These are source results, not a new producer or installed acceptance.
+See [C247 evidence](../verification/C247_MSVC_READ_ONLY_DIRECTORY_PIN_2026_10_26.json).
+
+## October 26 C246 — actual review acknowledged; producer refusal retained
+
+The genuine cumulative review of exact published source
+`d9aed85d6a45ddb1b4a1dcb0a0d5205c5870188e` passed managed verification and
+acknowledgment with its faithful 4,960-byte response and 217-entry source snapshot.
+The original auxiliary schema failed because 23 limitation notes exceeded its
+20-item cap. Two independent reviews accepted only that count exception: the
+approved native contract imposed no cap and all other frozen rules passed.
+The raw reply, schema failure, review decision and all 4,585 prior native file pins
+remain preserved. A bounded fresh reobservation at 19:50:12 UTC proved the
+previously `OBSERVING` Wake timer `COMPLETE`, preserving 7,914 other pins and
+retaining two immutable witness logs with zero test owners left. No message was
+resent. Supported closure then marked its transport record `CLOSED`/`completed`
+at 19:54:54 UTC, preserving 7,916 pins with only the expected three ledger fields
+changed. The API's `taskCompletionVerified=false` remains caller-reported transport
+completion, separate from the accepted native review. No browser, send, native
+execution or production action occurred. See [C246 actual evidence](../verification/C246_GENUINE_REVIEW_AND_MANAGED_ACK_2026_10_26.json).
+
+Next: qualify a controller containing C247, obtain genuine acknowledged review and
+snapshot for its new frozen source, then use the existing supported failed-build
+generation succession with fresh PREPARE/CONFIRM evidence. Do not repeat the failed
+CONFIRM or relabel C246 authority. Installed C208, five bindings and native owners
+remain preserved. Promotion, installed health, different-version rollback and two
+actual Web coding conversations remain open; CI is unverified and the connector's
+last HTTP 429 is separate. Recurring automation stays stopped.
+
+## October 26 C246 — local promotion handoff qualified in source
+
+Normal reviewed-promotion preflight now has an explicit local-backend-only
+profile, pinned into authorization and the authenticated handoff receipt.
+Candidate capability, fixed loopback port 3200, configuration and authentication
+are checked before stopping the old owner. Review-hash and PowerShell timestamp
+compatibility corrections retain the existing integrity checks. Eight Rust
+promotion tests, both PowerShell suites under versions 5 and 7, formatting and
+strict Clippy passed. Actual read-only executable queries confirmed support in
+the qualified development image and refusal by installed C208.
+See [C246 source evidence](../verification/C246_LOCAL_PROMOTION_HANDOFF_SOURCE_2026_10_26.json).
+
+This is source qualification. New material source still needs its frozen review,
+producer attestation, candidate qualification and protected promotion. A bounded
+promotion result reports serving separately; it does not establish a persistent
+backend. Use the documented public `start -BackendOnly` only after qualifying a
+supporting installed release. C208 remains installed; different-version rollback,
+actual two-project Web coding and exact-source CI remain open. The connector's
+last HTTP 429 is separate, and recurring automation remains stopped.
+
+## October 26 C245 — genuine review acknowledged and transport completed
+
+The selected development backend passed 401/200 authentication checks with 79
+tools and natural cleanup. A new cumulative public-source review of exact
+`e5a3ca9a9fc713bfba5d6b7c21f2d6e8e32780d1` passed with a verified 3,206-byte
+reply and no actionable findings. Managed verification retained 217 snapshot
+entries covering all 202 required build inputs. Finalization committed despite
+an HTTP timeout; durable inspection established completion without replay.
+The exact review was acknowledged, then its transport record was closed through
+the supported completion API. That API still reports task completion as
+caller-reported, separately from managed review acceptance. All 7,545 protected
+files passed the closure check; only the expected transport-record fields changed.
+See [C245 actual evidence](../verification/C245_CURRENT_SOURCE_REVIEW_ACKNOWLEDGED_2026_10_26.json).
+
+Build preparation stopped in read-only harness preflight before any product
+request or attempt marker; the C208 producer selection stayed unchanged. No new
+candidate or production promotion followed. All five bindings, histories and
+native owners remain preserved. Do not resend the completed C245 review.
+
+## October 26 C244 — actual review snapshot verified
+
+The C243 frame correction passed a real bounded read of the existing completed
+review: exact USER attribution and the complete 6,397-byte assistant body were
+verified. No message was resent. Matching normal-debug development artifacts
+were built and selected through the existing guarded update. The older
+controller's source-mismatch refusal is preserved; no state changed on that
+failed preflight. The working previous package, profile, all five bindings and
+4,577 native-session files are preserved, with zero test-owned processes left.
+See [actual development evidence](../verification/C244_DEVELOPMENT_REVIEW_SNAPSHOT_LIVE_2026_10_26.json).
+
+The reply reports source-scope PASS with eight positive observations and all
+twelve required paths. It lists five additional public documentation paths,
+which fail the frozen report schema. Its nonrenewable managed claim also
+expired before finalization. The raw response and original contract are retained;
+no report, source integration, acknowledgment, new producer or promotion followed.
+
+The expired claim was cancelled through the supported API; its completed Web
+work was explicitly retired. Other native files and accounting remain unchanged.
+This closure does not grant review acceptance. Next: bounded development backend
+health and a fresh scoped review of the new transport fix under standing authorization. Production installation, trusted different-version rollback and
+two independent Web coding conversations remain separate open gates. Recurring
+automation stays stopped; the connector's last HTTP 429 remains separate.
+
+## October 26 C243 — private review snapshot frame
+
+One bounded routine review was delivered exactly once and its turn completed.
+The completed reply remains **unverified**: the old 8 KiB JSON frame trimmed
+its preceding USER witness, although both texts fit the raw text limit.
+No report finalization, new producer authority or promotion followed.
+
+Source now gives only private SOURCE_SNAPSHOT frames a bounded 64 KiB wire
+allowance. Other frames retain 8 KiB; text limits and exact USER/target checks
+remain unchanged. Qualification passed 32 adapter and 71 conversation Python
+tests, focused Rust framing/runtime/deadline checks, formatting and strict
+Wake Clippy. The initial legacy-fixture failures and zero-match filter are
+recorded with their corrections in [C243 evidence](../verification/C243_PRIVATE_REVIEW_SNAPSHOT_FRAME_2026_10_26.json).
+
+Next: qualify matching development artifacts and re-read the existing event
+without resending. Production, all five bindings and native owners are preserved.
+Source tests do not establish installed acceptance. Current-source managed
+review/snapshot, trusted different-version rollback and two Web coding
+conversations remain open; the connector's last HTTP 429 is separate.
+## October 26 C240/C241 — legacy producer compatibility verified
+
+C239's bounded read-only check returned `attention`: four authentic legacy
+failure audits omitted an optional field that current serialization added as
+null. Their original raw hashes and retained fields matched. Source
+`47922f3a6ad5af85a85e1bbd619cb758b24966f2` permits only that explicit schema1
+omission; raw audit/plan hashes and all other fields remain mandatory. Schema2
+success checks stay byte-exact. No historical file or digest was rewritten.
+All 123 reviewed-build tests, four review-authority checks, six release-pair
+checks, formatting and strict Clippy passed. [Source evidence](../verification/C240_LEGACY_AUDIT_COMPATIBILITY_2026_10_26.json).
+
+The rebuilt debug controller then returned `BUILD_ATTESTED` for real C208
+through 46 retained families/45 transitions. All 2,701 prior pins matched; no
+test process remained. This was one read-only result command within a 60-second
+owner, after the specific correction. C239 remains preserved, and no producer build,
+generation selection, promotion, native-session action, browser, Wake or
+recurring process ran. [Live read-only evidence](../verification/C241_EXISTING_PRODUCER_READONLY_2026_10_26.json).
+
+C238's qualified-controller-only release-writer migration rule still applies.
+Current source still needs genuine acknowledged review and an exact immutable
+snapshot before a new producer or promotion may run. Old C196/C208 authority
+cannot authorize it. The last connector result remains HTTP 429, and actual
+two-conversation Web coding/installed acceptance remain OPEN. No operator action
+is required for preparing the next source review within standing authorization.
+
+## October 26 C238 — successful producer succession source qualified
+
+Published source `f1f0fe24cf57581fac81fe959ef3aa384a137f4a` fixes a release-path
+gap: an attested successful build previously blocked a later reviewed binding,
+and producer replay could only read the active generation. The existing immutable
+generation/plan/atomic-pointer mechanism now preserves a validated successful
+predecessor and can replay exact reachable historical candidate authority.
+An exact already-successful review returns `BUILD_ATTESTED` without rebuilding
+or changing the active selection. No new registry or release command is added.
+
+The first suite passed 121 tests; one static guard rejected safe test-call
+syntax. Two test-only calls were retyped without weakening the guard or changing
+production code. The corrected guard, five succession rechecks, four authority
+checks, six release-pair checks, formatting and strict Clippy then passed.
+All 2,701 prior state pins matched; test owners were absent. GitHub showed zero
+Actions runs for this source; CI acceptance is not claimed. [Evidence](../verification/C238_SUCCESSFUL_BUILD_SUCCESSION_2026_10_26.json).
+
+**Migration:** before any live succession, retain the exact qualified controller
+and one release-management owner. Route all build and producer-dependent
+promotion/reconcile operations through it after cutover. C208 can still read the
+schema1 pointer but cannot replay old candidates; do not mix release writers.
+Ordinary project MCP serving and existing terminal-receipt/LKG startup checks
+remain independent. Existing PREPARE/CONFIRM/RESULT syntax is unchanged; do not
+confirm a prepare already returning `BUILD_ATTESTED`. Historical compiler
+identity checks remain strict.
+
+This is source/fixture qualification only. No live producer generation, installed
+binary, binding, native session, browser, Wake or recurring process changed.
+Fresh managed review/snapshot authority for current source is still required;
+old C196/C208 evidence cannot authorize it. Next is a bounded read-only current
+producer compatibility check using a separately built debug controller. Connector
+HTTP 429 and actual two-conversation Web coding remain open. No operator action
+is needed for that read-only development check.
+
+## October 26 C237 — development executable cold recovery LIVE PASS
+
+The normal debug executable built from published source
+`9eaa88c80cfd00432b34c37d3183c218a21b2a49` passed the 180-second local
+canary. A new isolated task reached READY with zero calls and was terminated
+through its retained process handle. Restarting the same assignment performed
+source-managed recovery, preserved the old claim, archived its marker and
+recorded all three recovery phases before creating a new owner claim.
+The recovered task applied one assigned probe and passed its fixed verification
+with zero model calls. It then exited naturally; its Job, process and pending
+marker were absent, and the writer lock reopened. [Evidence](../verification/C237_DEVELOPMENT_TASK_RECOVERY_2026_10_26.json).
+
+All 1,977 fixed prior pins remained unchanged; the one permitted context ledger
+preserved its prior events and appended attributable MCP traffic. Native
+sessions, original workspaces, legacy quarantine, installed C208 and all
+bindings remained intact. No browser, Wake, recurring job or promotion ran.
+Two preparation errors were corrected before any task launched. The completed
+canary must not be replayed. This advances development-runtime recovery only;
+installed qualification and genuine two-conversation ChatGPT Web coding remain
+open. The last connector result remains HTTP 429 and was not polled again.
+
+## October 26 C236 — zero-call task recovery source qualified
+
+Published source `922b8056651f1ec6aa78bd9844aea306d69c9e99` adds cold recovery
+for newly claimed, dedicated, bounded project-task processes. It reuses the
+existing project lease and workspace writer lock. Exact owner/Job death,
+unchanged assignment, clean worktree and zero tool activity are required.
+Durable authorization precedes exact-handle marker archival; interrupted
+recovery resumes without replay. Legacy or ambiguous markers remain blocked.
+Normal dirty-worktree resumption retains its prior behavior.
+
+All 60 focused tests, formatting and strict Clippy passed. Real Windows child
+fixtures cover interruption, both sides of archival, recorded-call refusal,
+legacy refusal and a warm resume with 90 retained dirty files. The first run's
+unsupported fixture tool name was corrected before this passing frozen run.
+All 1,978 prior state pins matched; test owners and test executables were absent
+afterward. The source commit has no visible GitHub Actions run; CI acceptance
+is not claimed. [Detailed evidence](../verification/C236_ZERO_CALL_TASK_RECOVERY_2026_10_26.json).
+
+This is source/process-fixture qualification, not installed or ChatGPT Web
+acceptance. C208 remains installed; no Wake, browser or recurring process was
+started. The old C234 quarantine remains preserved and ineligible. The next
+executable step is a bounded normal-debug canary using a fresh claimed task,
+then the existing reviewed release procedure where required. Connector HTTP
+429 and genuine two-conversation Web acceptance remain separate open gates.
+No operator action is required for the next development canary.
+
+## October 25 C235 — installed isolated task writes and verification LIVE PASS
+
+The existing trusted C208 executable completed two concurrent operator-assigned
+local tasks in separate linked worktrees of two registered projects. Each
+previewed/applied one scoped probe file, returned its actual diff and passed a
+fixed sandboxed verification command. Duplicate apply, wrong task, sibling
+read and sibling patch-preview were refused; the peer continued afterward.
+Both 120-second endpoints exited naturally within the 180-second test owner.
+New writer markers retired, locks reopened and test processes/listeners were
+absent. The test made no native-session call, original-checkout write, Wake/browser start or promotion.
+
+C234 had stopped before any tool call when its harness tried reading the
+endpoint's legitimate exclusive project lease. Its zero-call task, worktree,
+journal and pending writer marker remain quarantined. C235 uses fresh task
+identities; it exempts only the verified live endpoint's exact lease hash and
+rechecks after exit. Nineteen prior quarantine records remained unchanged.
+
+This is installed local write/command acceptance, not authenticated ChatGPT Web
+coding or delivery of a project MVP feature. The original marker exposes a
+remaining cold-task recovery gap: no supported retirement command exists. Never
+delete it or replay the task. Next is a narrow owner-proven recovery transition
+using the existing writer gate. Connector HTTP 429 remains separate and was not
+retried. The complete multi-project Web milestone remains OPEN.
+[Evidence](../verification/C235_INSTALLED_TASK_WRITES_2026_10_25.json).
+
+## October 25 C233 — independent installed project controllers LIVE PASS
+
+The corrected controller from `cf902361718ec36304c06b1d92aabdeb979dec3f`
+passed the monitored 180-second test against the existing trusted installed
+executable. One registered project's endpoint stayed active while the second
+controller started. Each released its startup lease before READY and retained
+separate process, port, project scope and target witness. Own-workspace reads
+passed; wrong witness, sibling path and wrong bearer were refused. The peer
+continued useful work after the refusal.
+
+Both 120-second-bounded controllers exited naturally with code 0. Owned Jobs,
+listeners and installed test processes were absent afterward. All 1,936 fixed
+prior pins and 15 historical runtime files were preserved; the two context
+ledgers only appended verified MCP traffic. Six attributed runtime files were
+added. All project bindings and native sessions remain intact. C231's failed
+history remains preserved; no browser, Wake, recurring automation or promotion
+was started. The exact source's Actions query returned zero runs.
+
+This qualifies the C230 `run-project` command using the fixed C232 controller
+(SHA-256 `0226b6e04cc996c35ed8082832bf38420ff03566b98f720fe58a691b1f09ace0`).
+It is actual installed local read-only operation, not authenticated ChatGPT Web
+coding, write ownership, unattended serving or different-version rollback.
+Simultaneous startup admission remains untested. Connector HTTP 429 remains a
+separate dependency; the full October multi-project Web milestone stays OPEN.
+[Evidence](../verification/C233_INDEPENDENT_PROJECT_CONTROLLERS_2026_10_25.json).
+
+## October 25 C232 — Windows owner-probe correction PASS; live retry pending
+
+The first C231 installed controller refused before READY. Its helper failure
+was not retained, so the original exact cause remains unknown. The second
+project never started. Exact-owner reconciliation preserved both new history
+files and all 1,938 prior pins; the Job, installed processes and listeners were
+gone, and the lifecycle lease was available. No message or binding changed.
+
+A real Windows listener fixture then exposed an unavailable `Get-FileHash`
+command in the probe environment. The correction reuses the existing pinned
+reconciliation helper's .NET hash routine and established process-path lookup.
+It preserves PID/path/hash/start/listener checks and adds bounded sanitized
+failure diagnostics. Ten project tests, the real listener/wrong-hash fixture,
+formatting and strict Clippy passed. Legacy release helpers are unchanged.
+
+Build a fresh fixed controller before the next bounded installed test. C230's
+controller is not live-qualified. Web coding, unattended service and a trusted
+different-version rollback remain OPEN; connector HTTP 429 was not retried.
+[Evidence](../verification/C232_OWNER_PROBE_CORRECTION_2026_10_25.json).
+
+## October 25 C230 — bounded per-project operator source PASS
+
+The existing registry now feeds independent `run-project` controllers. A short
+startup lease protects release selection; it is released before READY while
+immutable release/configuration pins remain. Scope, target witness, read-only
+access, finite ownership and per-project cleanup are enforced. Configuration
+requiring initialization or route migration refuses before launch.
+
+Forty-eight focused tests, formatting, strict Clippy and two reviews passed.
+Actual fixed-controller build/live qualification remains pending. Current
+installed recovery and C229 local MCP evidence are preserved. Authenticated
+Web coding, write ownership, unattended service and different-version rollback
+remain OPEN; no new connector check or browser/Wake startup was performed.
+[Evidence](../verification/C230_PROJECT_OPERATOR_SOURCE_2026_10_25.json).
+
 # CatDesk — Comprehensive handoff to Codex Desktop
+
+## Current multi-project local note — October 25 C229
+
+Two real registered workspaces passed concurrent installed project-scoped MCP:
+own reads, wrong witness/path/token refusals, peer continuation and independent
+context traffic appends. Both endpoints exited naturally; all protected metadata,
+configuration, bindings and native ownership remained intact. Source and private
+project content were not published.
+
+Next executable source task: expose the proven existing project-scoped launch
+through the bounded operator surface without a global project-work lock.
+Actual two-Web coding, project writes, native/unattended serving and trusted
+previous different-version rollback remain OPEN. Connector HTTP429 is separate
+and was not retried. Do not replay completed promotion, read/restart, review,
+foreground or rollover tests.
+[Evidence](../verification/C229_TWO_PROJECT_LOCAL_MCP_2026_10_25.json).
+
+## Current installed foreground note — October 25 C228
+
+Actual C227 foreground qualification passed: natural code-0 exit, exact MCP
+README read, wrong-token401 and deliberate controller interruption reaping both
+backend and lease holder. Final Jobs/listener/process inventory is empty, lease
+is available and protected state is unchanged. Controller source is
+`2e7260a8d76edc55ba0915c59016c5d142b85286`; immutable controller SHA is
+`95cb2afa04d906c5aca3655aca684a0c3284dc0b9304f475204890d2d3723d3f`.
+
+Do not replay completed promotion, restart, review, rollover or foreground tests.
+Next eligible work is project-bound serving using the current registry and
+existing scope authority. Native/unattended operation, trusted different-version
+rollback and two-Web coding remain OPEN; official connector HTTP429 is separate
+and unchanged. No operator action is required for the completed recovery/tests.
+[Evidence](../verification/C228_INSTALLED_FOREGROUND_LIVE_2026_10_25.json).
+
+## Current source note — October 25 C227
+
+The bounded `operator installed-backend run` action is source-qualified
+(30 cases, formatting, strict Clippy, two static reviews). It uses existing
+settled-release authority and an actual held lifecycle lease, with dedicated
+armed process ownership. Installed C208 remains unchanged.
+
+Next: exact reviewed source publication, immutable controller build and monitored
+live qualification of this new action. First slice remains unscoped/read-only
+on the known qualification route; native/persistent serving, official connector,
+previous-version rollback and two-Web coding are not accepted. No completed
+promotion, restart, review or rollover request should be replayed.
+[Evidence](../verification/C227_INSTALLED_FOREGROUND_SOURCE_2026_10_25.json).
+
+## Current installed test note — October 25 C226
+
+The restored installed image completed two natural 60-second headless cycles,
+401/200 authentication, exact ten-tool catalogue and byte-verified README reads.
+Cleanup and protected-state preservation passed. Do not replay completed tests.
+
+Next source increment: a supported installed-image foreground serving action,
+reusing the existing owned-child loop and trusted release reader without changing
+the development selector or detached-serving guard. Native lifecycle, unattended
+serving, trusted previous-version rollback and two-Web coding remain OPEN.
+Connector HTTP 429 is an independent dependency; do not repeatedly retry it.
+[Evidence](../verification/C226_INSTALLED_RESTART_2026_10_25.json).
+
+## Current installed recovery note — October 25 C225
+
+Do not repeat C224 reconciliation: it completed at 00:29:59 UTC October 26
+(October 25 locally). Canonical EXE/fingerprint and trusted slot B generation 2
+match the genuine C208 artifact. Actual installed headless MCP passed 401/200,
+initialize and 102-tool listing; the owned tree stopped and all transaction Jobs
+are absent. Original escrow, slot A, bindings, histories and native sessions
+remain preserved. Published controller source: `aa5aab69d76dc7419b2f63f9179a27ed8c2b1cfd`.
+
+Next executable task is bounded installed-image restart and public lifecycle
+readiness qualification. Full native serving is still OPEN because the installed
+older artifact lacks newer backend-only capability and its persistent owner
+has not qualified. A fresh connector call returned HTTP 429; do not repeatedly
+retry it. Previous different-version rollback and genuine two-project Web coding
+remain unaccepted. No operator action is required for the completed repair.
+[Evidence](../verification/C225_INSTALLED_STOPPED_RECOVERY_2026_10_25.json).
+
+## Current implementation note — October 25 C224
+
+The new stopped-only release-pair mode is source qualified: 36 Rust cases,
+five PowerShell invocations, formatting and strict Clippy passed. A dedicated
+finite CLI's armed lifetime Job covers children from creation; actual Windows
+canaries prove normal exit and pre-private-assignment crash cleanup. Legacy
+serving's outside-Job guard is preserved. Shared startup lease and pending-state
+checks prevent competing repair/launch; read-only plans create no control files.
+
+Next are source publication, a separately qualified immutable controller, the
+established guarded canonical source-only fast-forward, actual canonical helper
+qualification, and fresh stopped-mode preflight against the unchanged genuinely
+attested candidate. No protected migration or promotion has run. Never use the
+diagnostic C223 image as a candidate or invoke the ineligible old owner launcher.
+Use [the current command procedure](CATDESK_IMPORTANT_COMMANDS.md). Preserve all
+project/native ownership, unknown Web submissions, histories and stopped recurring
+controls. Installed/live acceptance remains separate from these source results.
+
+## Current ownership note — October 25 C223
+
+The manual ordinary-child probe completed with Job membership at both samples;
+the conditional C208 launcher is ineligible. Keep the frozen wrapper and native
+serving guards intact. The existing tasks/protected supervisor are absent and
+the Run entry provides no release-pair action. No creator or full Job chain has
+been established; do not repeat terminal probes or enable speculative tracing.
+
+An exact-source normal debug image passed actual capability and missing-config
+entry checks with bounded cleanup and eight protected pins preserved. It is not
+a release candidate or installed acceptance. Source assessment of a fully owned,
+stopped recovery outcome must preserve genuine review, qualification, quiescence
+and interruption authority; no new recovery command is currently supported.
+See [C223](../verification/C223_NATIVE_ENTRY_AND_OWNER_ELIGIBILITY_2026_10_25.json).
+
+## Current source note — October 25 C222
+
+The October 22–31 goal and current acceptance/development records supersede the
+dated priorities below. Production promotion remains separate from source work;
+the C221 ordinary-child qualification in the existing manual shell is pending.
+Do not relax the unchanged wrapper or native ownership guards, repeat ambiguous
+reviews, restart recurring automation or disturb other project sessions.
+
+New source adds opt-in public `start`/`recover -BackendOnly`, preserving existing
+canonical fingerprint and reviewed recovery/LKG gates. A new launch first needs
+the fixed native capability response to the closed
+`--catdesk-daemon --backend-only --check-support` tuple. Unsupported images are
+refused without full-start fallback. The scoped mode omits automatic GUI, Wake,
+browser, scheduler and external tunnel startup; it preserves initialized current
+and pending routes and saved UI settings. Valid process-only bearer readiness
+is restricted to the exact approved loopback endpoint. It does not change
+external Secure MCP ownership or authentication.
+
+Source qualification passed: ten Rust tests, both PowerShell suites, formatting
+and strict root Clippy. This source increment creates no
+release candidate or production authority and changes neither C208 nor the
+selected C218 development package. C208's reviewed `409513a` source lacks this
+capability; its actual executable safely refused the exact query once before
+startup. Installed startup/restart tests remain open. Read
+[the command reference](CATDESK_IMPORTANT_COMMANDS.md) before
+using a subsequently qualified matching release. Preserve source, development
+runtime and installed/live acceptance as separate evidence.
+
 **Date:** 2026-10-14  
 **Authority:** Operator-requested transfer of day-to-day CatDesk implementation to Codex Desktop. This document is an engineering handoff, **not** authority to modify protected production installations or bypass security controls.  
 **Source repository:** https://github.com/vnath99/CatDesk  

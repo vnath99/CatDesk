@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 104,
+  "entries": [
+    {
+      "file": "part-105.diff.txt",
+      "bytes": 8118,
+      "sha256": "40f2388417180e10a17c5b138904eb83f1b98eea74d4221c0d6933617a6dcb57",
+      "startByte": 848390,
+      "endByte": 856508,
+      "paths": [
+        "wake/src/store.rs",
+        "wake/tests/protocol_store.rs",
+        "wake/tests/test_adapter.py"
+      ]
+    },
+    {
+      "file": "part-106.diff.txt",
+      "bytes": 8151,
+      "sha256": "7e154f7ab30d906cc9d32d52f3f5bf71ad55030edcbe8487b754c3ab794d06ed",
+      "startByte": 856508,
+      "endByte": 864659,
+      "paths": [
+        "wake/tests/test_adapter.py"
+      ]
+    },
+    {
+      "file": "part-107.diff.txt",
+      "bytes": 5279,
+      "sha256": "dae72f591fd7ba501a1bccf6b01e8ce7494377d7414914c87911ebf6d00df5fd",
+      "startByte": 864659,
+      "endByte": 869938,
+      "paths": [
+        "wake/tests/test_adapter.py",
+        "wake/tests/test_new_conversation.py"
+      ]
+    }
+  ]
+}

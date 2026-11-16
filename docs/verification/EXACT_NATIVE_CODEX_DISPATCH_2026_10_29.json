@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T22:49:20.075346+00:00",
+  "classification": "TESTED_SOURCE_ONLY",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "sourceCommit": "f09a8ce8b966a30ddbbebadeccacb3e6185ee883",
+  "sourceFile": "src/operator_codex_cli/queue.rs",
+  "checkoutSha256": "774a5ea736a73fb2efd98adb8597d19a6597a9cf15b3885f53fb27bafa38d4d7",
+  "gitBlobSha256": "774a5ea736a73fb2efd98adb8597d19a6597a9cf15b3885f53fb27bafa38d4d7",
+  "finalQueueTests": {
+    "passed": 80,
+    "failed": 0,
+    "ignored": 2,
+    "includesNewTests": 2
+  },
+  "strictRootAllTargetClippy": "PASS",
+  "rustfmt": "PASS",
+  "logSha256": {
+    "oct29-native-exact-dispatch.log": "5b974b2401acf58eea65ab66fb99d504c381cca1dfd476596decda07a991c7e4",
+    "oct29-native-exact-dispatch-queue-suite.log": "f8daa916006fd07b1990786262d63ad0a414177e95573fc71628bedbda3515b6",
+    "oct29-native-exact-dispatch-final.log": "6b2589b9e991e88431483022a69184098c0bf1ef409e1ef6e5cdd315598a5e0c",
+    "oct29-native-exact-dispatch-clippy.log": "db27a7a0f5f54bf29e982c44ee0ac207ddf4104fc42f5303cb4852c6d4aabcef"
+  },
+  "behavior": [
+    "New local dispatch-task takes exact project/workspace/task/full binding hash, no prompt/model/profile overrides",
+    "Only selected job is eligible; valid foreign jobs with stale bindings remain byte-identical",
+    "Binding checked before state claim and after scheduler lease; claimed/unknown tasks never reselected",
+    "Explicit caller control root reaches both scoped and global dispatch; no native-workspace/current-directory fallback",
+    "Existing normal native runner, registry, scheduler, queue schema and guards reused"
+  ],
+  "scopeLimits": [
+    "No MCP execution capability or installed promotion added yet",
+    "No real Codex model turn or native project writer started",
+    "Tests establish metadata selection, not process-restart or real-native execution acceptance",
+    "Native run_queued_turn still records child_absent_proven=false; parent exit/EOF do not establish descendant exit",
+    "Next source task is reusing existing qualified owned-child Job mechanism for the native queue runner before MCP execution exposure",
+    "Connector/profile live gates unchanged; no new probe"
+  ],
+  "hostedCI": "UNVERIFIED_ZERO_VISIBLE_CHECKS_AND_RUNS"
+}

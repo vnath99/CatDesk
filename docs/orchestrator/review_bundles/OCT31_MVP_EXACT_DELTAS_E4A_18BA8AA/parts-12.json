@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 88,
+  "entries": [
+    {
+      "file": "part-089.diff.txt",
+      "bytes": 8160,
+      "sha256": "cce2e93316d7b4bcc79cfe159affea61461211d094a42d692477321a5efe1ced",
+      "startByte": 717757,
+      "endByte": 725917,
+      "paths": [
+        "wake/src/development_runtime.rs"
+      ]
+    },
+    {
+      "file": "part-090.diff.txt",
+      "bytes": 8138,
+      "sha256": "2e91238b76d87038333a24f8763010f989f87c7deb9e1e75f84ecb521d04ba4a",
+      "startByte": 725917,
+      "endByte": 734055,
+      "paths": [
+        "wake/src/development_runtime.rs"
+      ]
+    },
+    {
+      "file": "part-091.diff.txt",
+      "bytes": 8187,
+      "sha256": "417df3e2ef3d4e276b41f25cfc3b7cd3a648cb7b73ea4b9f7a2a134df53fa231",
+      "startByte": 734055,
+      "endByte": 742242,
+      "paths": [
+        "wake/src/development_runtime.rs"
+      ]
+    },
+    {
+      "file": "part-092.diff.txt",
+      "bytes": 8190,
+      "sha256": "bd2c71457a283ec3b77b6fa00d41b448b9860826cf70b507afb977d0b103cf5c",
+      "startByte": 742242,
+      "endByte": 750432,
+      "paths": [
+        "wake/src/development_runtime.rs",
+        "wake/src/lib.rs",
+        "wake/src/protocol.rs"
+      ]
+    },
+    {
+      "file": "part-093.diff.txt",
+      "bytes": 8174,
+      "sha256": "3a530f284fa56653a126c10a15c8b56f8648ac5d36cbc22b085cfc14a382814a",
+      "startByte": 750432,
+      "endByte": 758606,
+      "paths": [
+        "wake/src/protocol.rs",
+        "wake/src/readiness_probe.rs"
+      ]
+    },
+    {
+      "file": "part-094.diff.txt",
+      "bytes": 8103,
+      "sha256": "a33fd9adb66ea1180c599abe3cd8738b2ac86aa5ebfb43a4199eac4b9b6b8f41",
+      "startByte": 758606,
+      "endByte": 766709,
+      "paths": [
+        "wake/src/readiness_probe.rs"
+      ]
+    },
+    {
+      "file": "part-095.diff.txt",
+      "bytes": 8186,
+      "sha256": "b967ae0b22d1beb0c09a08f06f1619618d28f55d7e38df58e3961b4b774f9088",
+      "startByte": 766709,
+      "endByte": 774895,
+      "paths": [
+        "wake/src/readiness_probe.rs",
+        "wake/src/runtime_reobserve.rs"
+      ]
+    },
+    {
+      "file": "part-096.diff.txt",
+      "bytes": 8149,
+      "sha256": "089b614c914ac76fee12431eb16f07bd52dfc15003c473a952956217fe4b6d97",
+      "startByte": 774895,
+      "endByte": 783044,
+      "paths": [
+        "wake/src/runtime_reobserve.rs",
+        "wake/src/runtime_response.rs"
+      ]
+    }
+  ]
+}

@@ -140,6 +140,44 @@ impl<'a> PatchEngine<'a> {
     }
 
     pub fn apply(&self, proposal: &PatchProposalV1) -> Result<PatchApplyResultV1, PatchError> {
+        self.apply_with_scope(proposal, false)
+    }
+
+    pub(crate) fn apply_task_scoped(
+        &self,
+        proposal: &PatchProposalV1,
+    ) -> Result<PatchApplyResultV1, PatchError> {
+        self.apply_with_scope(proposal, true)
+    }
+
+    fn apply_with_scope(
+        &self,
+        proposal: &PatchProposalV1,
+        task_scoped: bool,
+    ) -> Result<PatchApplyResultV1, PatchError> {
+        if task_scoped {
+            let scope = crate::workspace_tools::TaskReadScope::new(
+                self.workspace_root,
+                &self.contract.allowed_paths,
+                &self.contract.forbidden_paths,
+            )
+            .map_err(PatchError::Validation)?;
+            for path in proposal
+                .target_paths
+                .iter()
+                .chain(proposal.operations.iter().map(|operation| &operation.path))
+                .chain(
+                    proposal
+                        .expected_preimage_hashes
+                        .iter()
+                        .map(|preimage| &preimage.path),
+                )
+            {
+                scope
+                    .resolve_requested(path, false)
+                    .map_err(PatchError::Validation)?;
+            }
+        }
         self.preview(proposal)?;
         let before_after = self.compute_before_after(proposal)?;
         if before_after.len() != 1 {
@@ -170,7 +208,12 @@ impl<'a> PatchEngine<'a> {
             actual_paths_changed: before_after.iter().map(|file| file.path.clone()).collect(),
             before_hashes,
             after_hashes,
-            actual_diff: self.actual_git_diff(&proposal.target_paths)?.diff,
+            actual_diff: if task_scoped {
+                self.actual_git_diff_task_scoped(&proposal.target_paths)?
+                    .diff
+            } else {
+                self.actual_git_diff(&proposal.target_paths)?.diff
+            },
             rejection_reason: None,
         })
     }
@@ -244,6 +287,188 @@ impl<'a> PatchEngine<'a> {
             diff_hash: stable_text_hash(&diff),
             diff,
         })
+    }
+
+    pub(crate) fn actual_git_diff_task_scoped(
+        &self,
+        paths: &[String],
+    ) -> Result<ActualDiffArtifactV1, PatchError> {
+        use crate::workspace_tools::TaskReadScope;
+        let scope = TaskReadScope::new(
+            self.workspace_root,
+            &self.contract.allowed_paths,
+            &self.contract.forbidden_paths,
+        )
+        .map_err(PatchError::Validation)?;
+        let selections = paths
+            .iter()
+            .map(|path| scope.resolve_requested(path, true))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(PatchError::Validation)?;
+
+        // Enumerate index path names only. A broad diff/name-only invocation
+        // could already read forbidden working-tree contents before filtering.
+        let index = self.task_scoped_git(&["ls-files", "--cached", "-z"], &[])?;
+        let index_paths = index
+            .split(|byte| *byte == 0)
+            .filter(|raw| !raw.is_empty())
+            .map(|raw| {
+                std::str::from_utf8(raw)
+                    .map(str::to_owned)
+                    .map_err(|_| PatchError::Git("task index path is not UTF-8".into()))
+            })
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        let mut tracked = BTreeSet::new();
+        for path in &index_paths {
+            let candidate = self.workspace_root.join(path);
+            if scope.selected_candidate(&candidate, &selections).is_some() {
+                // A tracked file replaced by a directory still has a deletion
+                // to report. Refuse an ambiguous index namespace before Git
+                // could expand that directory pathspec into indexed children.
+                let descendant_prefix = format!("{path}/");
+                if index_paths
+                    .range(descendant_prefix.clone()..)
+                    .next()
+                    .is_some_and(|other| other.starts_with(&descendant_prefix))
+                {
+                    return Err(PatchError::Validation(
+                        "task diff index has an ambiguous file/directory path".into(),
+                    ));
+                }
+                tracked.insert(path.to_owned());
+            }
+        }
+
+        let mut diff = String::new();
+        let mut changed_paths = BTreeSet::new();
+        let tracked = tracked.into_iter().collect::<Vec<_>>();
+        // Keep quoted Windows argv comfortably below 32K UTF-16 units. A broad
+        // directory selection is split rather than becoming an unscoped call.
+        let mut offset = 0;
+        while offset < tracked.len() {
+            let mut end = offset;
+            let mut units = 1024usize;
+            while end < tracked.len() && end - offset < 64 {
+                let next = tracked[end]
+                    .encode_utf16()
+                    .count()
+                    .saturating_mul(2)
+                    .saturating_add(3);
+                if units.saturating_add(next) > 24_000 {
+                    break;
+                }
+                units += next;
+                end += 1;
+            }
+            if end == offset {
+                return Err(PatchError::Validation(
+                    "task diff path exceeds the bounded command line".into(),
+                ));
+            }
+            let selected = &tracked[offset..end];
+            let body = self.task_scoped_git(
+                &[
+                    "diff",
+                    "--no-ext-diff",
+                    "--no-textconv",
+                    "--no-renames",
+                    "--no-color",
+                    "--ignore-submodules=all",
+                    "--",
+                ],
+                selected,
+            )?;
+            diff.push_str(&String::from_utf8_lossy(&body));
+            let names = self.task_scoped_git(
+                &[
+                    "diff",
+                    "--name-only",
+                    "-z",
+                    "--no-ext-diff",
+                    "--no-textconv",
+                    "--no-renames",
+                    "--ignore-submodules=all",
+                    "--",
+                ],
+                selected,
+            )?;
+            for raw in names.split(|byte| *byte == 0).filter(|raw| !raw.is_empty()) {
+                let path = std::str::from_utf8(raw)
+                    .map_err(|_| PatchError::Git("task diff path is not UTF-8".into()))?;
+                if !selected.iter().any(|selected| selected == path) {
+                    return Err(PatchError::Git(
+                        "literal task diff returned an unselected path".into(),
+                    ));
+                }
+                changed_paths.insert(path.to_owned());
+            }
+            offset = end;
+        }
+
+        for file in scope
+            .selected_files(&selections)
+            .map_err(PatchError::Validation)?
+        {
+            // Git tracks path names, not every object reachable through an
+            // indexed alias. The walker retains the lexical worktree path.
+            let path = scope.relative_path(&file).map_err(PatchError::Validation)?;
+            if index_paths.contains(&path) {
+                continue;
+            }
+            let Some(resolved) = scope.selected_candidate(&file, &selections) else {
+                continue;
+            };
+            let text = fs::read_to_string(&resolved)?;
+            changed_paths.insert(path.clone());
+            diff.push_str(&format!(
+                "--- /dev/null\n+++ b/{path}\n@@ untracked @@\n+{text}"
+            ));
+            if !diff.ends_with('\n') {
+                diff.push('\n');
+            }
+        }
+        // Empty selection is an explicit empty artifact: never git diff([]).
+        Ok(ActualDiffArtifactV1 {
+            base_ref: "HEAD".into(),
+            paths: changed_paths.into_iter().collect(),
+            diff_hash: stable_text_hash(&diff),
+            diff,
+        })
+    }
+
+    fn task_scoped_git(&self, args: &[&str], paths: &[String]) -> Result<Vec<u8>, PatchError> {
+        let mut command = Command::new("git");
+        command
+            .args([
+                "--no-pager",
+                "--no-optional-locks",
+                "--literal-pathspecs",
+                "-c",
+                "core.ignorecase=false",
+            ])
+            .args(args)
+            .args(paths)
+            .current_dir(self.workspace_root);
+        // Caller environment must not redirect the authoritative task index or
+        // turn this closed local read into another Git workspace operation.
+        for (name, _) in std::env::vars_os() {
+            if name
+                .to_string_lossy()
+                .to_ascii_uppercase()
+                .starts_with("GIT_")
+            {
+                command.env_remove(name);
+            }
+        }
+        let output = command
+            .output()
+            .map_err(|error| PatchError::Git(error.to_string()))?;
+        if !output.status.success() {
+            return Err(PatchError::Git(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+        Ok(output.stdout)
     }
 
     fn validate_proposal(&self, proposal: &PatchProposalV1) -> Result<(), PatchError> {

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C226",
+  "status": "INSTALLED_BOUNDED_HEADLESS_RESTART_AND_READ_PASS",
+  "startedUtc": "2026-10-26T00:42:11.6713123+00:00",
+  "finishedUtc": "2026-10-26T00:44:16.4597367+00:00",
+  "installedSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+  "candidateSourceCommit": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+  "canonicalSourceCommit": "aa5aab69d76dc7419b2f63f9179a27ed8c2b1cfd",
+  "priorPublishedAuditCommit": "dbb6d04cb442cfb602138dc0afefad339780a063",
+  "profile": "INSTALLED_HEADLESS_LOCAL",
+  "toolMode": "read-only",
+  "test": {
+    "cycles": 2,
+    "nativeRuntimeLimitSecondsPerCycle": 60,
+    "outerProcessLimitSeconds": 180,
+    "naturalExits": 2,
+    "exitCodes": [
+      0,
+      0
+    ],
+    "mcpRequests": 10,
+    "perCycle": {
+      "absentTokenStatus": 401,
+      "wrongTokenStatus": 401,
+      "authenticatedInitializeStatus": 200,
+      "authenticatedToolsListStatus": 200,
+      "exactReadOnlyToolCount": 10,
+      "writeToolsAbsent": true,
+      "readStatus": 200,
+      "readScope": "UNSCOPED_CANONICAL_READ",
+      "readPath": "README.md",
+      "readBytes": 24049,
+      "readSha256": "2a490d5686f63a8f892fb3f38220111bb73c5b3947ed39e0418fd682c7061060"
+    },
+    "privateConfigCopiesOnly": true,
+    "sourceAndProjectStatePreserved": true,
+    "finalInstalledListenerCount": 0,
+    "finalInstalledOwnerCount": 0,
+    "cleanupFailures": 0,
+    "timeout": false
+  },
+  "retainedFailure": {
+    "resultSha256": "218f7dead329145a0a70e3d63cb55eb24a987e108cf5bda77cb233cf6b392e4e",
+    "outerSha256": "3d6ac88c79e8178789c4337531d176a8de83571d76d583c29972fefc18a35ecc",
+    "cause": "Earlier local runner incorrectly required delegated_run_list in the read-only catalog. No natural cycle completed; owned cleanup and preservation were verified. Corrected ten-tool expectation, saved redacted probes before assertions, then ran two fresh local cycles.",
+    "unrunNativeReadinessProbe": "Omitted after source inspection showed the daemon owner contract requires --catdesk-daemon. No ownership guard was relaxed."
+  },
+  "proofSha256": {
+    "result": "d16245574128cbd17a3184d59dac376c4b147f00a7a01e67db6d05e1fc29ddb2",
+    "outer": "82ded4285b4d69428e1180595f0e904ab84866a82a16d873fb4d6366f897763c",
+    "containment": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "firstRead": "c947ddbb60d4904307282aef637eb84a4aaa86bf6bd3526ed219e94d2dd4691e",
+    "secondRead": "7d97b16bb9fb9be787c9316ca953bb3c5f5aaa38974a68d49ddbdaea86419d33"
+  },
+  "limits": {
+    "publicNativeLifecycleAccepted": false,
+    "persistentServingAccepted": false,
+    "differentVersionRollbackAccepted": false,
+    "projectScopedCodingAccepted": false,
+    "twoChatgptWebConversationsAccepted": false,
+    "secureMcpAccepted": false,
+    "browserWakeRecurringStarts": 0,
+    "productionReleaseChanges": 0,
+    "externalRuntimeChanges": 0
+  },
+  "nextExecutableSourceTask": "Reuse the existing foreground owned-child loop for an explicit installed-image serving action, validating the current trusted release and preserving the development selector and detached-serving guard.",
+  "independentDependency": "Official connector HTTP 429 remains open; not retried.",
+  "operatorActionRequiredForCompletedTests": false,
+  "milestoneComplete": false
+}

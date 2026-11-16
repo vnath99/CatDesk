@@ -256,9 +256,278 @@ fn resolve_target_path(workspace_root: &str, path: &str) -> Result<PathBuf, Stri
     command::resolve_workspace_path(workspace_root, Some(path))
 }
 
+// ProjectTask alone enables this strict view of its unchanged contract paths.
+// Allowed scope remains case-sensitive; forbidden scope is conservative on Windows.
+#[derive(Clone)]
+pub(crate) struct TaskReadScope {
+    root: PathBuf,
+    allowed: Vec<String>,
+    forbidden: Vec<String>,
+    resolved_allowed: Vec<String>,
+    resolved_forbidden: Vec<String>,
+}
+
+fn task_relative(path: &str) -> Result<String, String> {
+    let path = path.replace('\\', "/");
+    if path == "." {
+        return Ok(path);
+    }
+    if path.is_empty()
+        || path.split('/').any(|part| {
+            part.is_empty()
+                || matches!(part, "." | "..")
+                || part.contains(':')
+                || part.chars().any(char::is_control)
+                || (cfg!(windows) && (part.ends_with('.') || part.ends_with(' ')))
+        })
+    {
+        return Err("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT".into());
+    }
+    Ok(path)
+}
+
+fn task_ambiguous_windows_components(path: &Path) -> bool {
+    cfg!(windows)
+        && path.components().any(|component| {
+            if let std::path::Component::Normal(part) = component {
+                part.to_str()
+                    .is_none_or(|part| part.ends_with('.') || part.ends_with(' '))
+            } else {
+                false
+            }
+        })
+}
+
+fn task_under(path: &str, scope: &str, forbidden: bool) -> bool {
+    if scope == "." {
+        return true;
+    }
+    let (path, scope) = if cfg!(windows) && forbidden {
+        (path.to_lowercase(), scope.to_lowercase())
+    } else {
+        (path.to_owned(), scope.to_owned())
+    };
+    path == scope
+        || path
+            .strip_prefix(&scope)
+            .is_some_and(|tail| tail.starts_with('/'))
+}
+
+fn task_reserved(path: &str) -> bool {
+    path.split('/').any(|part| {
+        if cfg!(windows) {
+            matches!(part.to_lowercase().as_str(), ".git" | ".catdesk")
+        } else {
+            matches!(part, ".git" | ".catdesk")
+        }
+    })
+}
+
+fn task_permitted(path: &str, allowed: &[String], traversal: bool) -> bool {
+    allowed.iter().any(|scope| {
+        (if scope == "." {
+            path == "." || !path.starts_with('.')
+        } else {
+            task_under(path, scope, false)
+        }) || (traversal && task_under(scope, path, false))
+    })
+}
+
+// Resolve the nearest existing ancestor without creating missing directories.
+// This keeps assigned new-file checks while comparing actual scope/case aliases.
+fn task_resolve(root: &Path, relative: &str) -> Result<PathBuf, String> {
+    let candidate = root.join(relative);
+    let mut existing = candidate.as_path();
+    let mut tail = Vec::new();
+    loop {
+        match fs::symlink_metadata(existing) {
+            Ok(_) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                tail.push(
+                    existing
+                        .file_name()
+                        .ok_or("PROJECT_TASK_PATH_UNAVAILABLE")?
+                        .to_os_string(),
+                );
+                existing = existing.parent().ok_or("PROJECT_TASK_PATH_UNAVAILABLE")?;
+            }
+            Err(_) => return Err("PROJECT_TASK_PATH_UNAVAILABLE".into()),
+        }
+    }
+    let mut resolved = command::normalize_windows_verbatim_path(
+        existing
+            .canonicalize()
+            .map_err(|_| "PROJECT_TASK_PATH_UNAVAILABLE")?,
+    );
+    if task_ambiguous_windows_components(&resolved) {
+        return Err("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT".into());
+    }
+    if !resolved.starts_with(root) {
+        return Err("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT".into());
+    }
+    if !tail.is_empty() && !resolved.is_dir() {
+        return Err("PROJECT_TASK_PATH_UNAVAILABLE".into());
+    }
+    for part in tail.into_iter().rev() {
+        resolved.push(part);
+    }
+    Ok(resolved)
+}
+
+impl TaskReadScope {
+    pub(crate) fn new(
+        root: &Path,
+        allowed: &[String],
+        forbidden: &[String],
+    ) -> Result<Self, String> {
+        let root = workspace_root_path(&root.display().to_string())?;
+        if task_ambiguous_windows_components(&root) {
+            return Err("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT".into());
+        }
+        let allowed = allowed
+            .iter()
+            .map(|path| task_relative(path))
+            .collect::<Result<Vec<_>, _>>()?;
+        let forbidden = forbidden
+            .iter()
+            .map(|path| task_relative(path))
+            .collect::<Result<Vec<_>, _>>()?;
+        let resolve = |paths: &[String]| -> Result<Vec<String>, String> {
+            paths
+                .iter()
+                .map(|path| {
+                    let resolved = task_resolve(&root, path)?;
+                    Self::relative_to(&root, &resolved)
+                })
+                .collect()
+        };
+        let resolved_allowed = resolve(&allowed)?;
+        let resolved_forbidden = resolve(&forbidden)?;
+        Ok(Self {
+            root,
+            allowed,
+            forbidden,
+            resolved_allowed,
+            resolved_forbidden,
+        })
+    }
+
+    fn relative_to(root: &Path, path: &Path) -> Result<String, String> {
+        let path = command::normalize_windows_verbatim_path(path.to_path_buf());
+        let relative = path
+            .strip_prefix(root)
+            .map_err(|_| "PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT")?;
+        if relative.as_os_str().is_empty() {
+            return Ok(".".into());
+        }
+        task_relative(relative.to_str().ok_or("PROJECT_TASK_PATH_UNAVAILABLE")?)
+    }
+
+    fn denied(&self, path: &str, resolved: bool) -> bool {
+        let forbidden = if resolved {
+            &self.resolved_forbidden
+        } else {
+            &self.forbidden
+        };
+        task_reserved(path) || forbidden.iter().any(|scope| task_under(path, scope, true))
+    }
+
+    pub(crate) fn resolve_requested(&self, path: &str, traversal: bool) -> Result<PathBuf, String> {
+        let relative = task_relative(path)?;
+        if self.denied(&relative, false) || !task_permitted(&relative, &self.allowed, traversal) {
+            return Err("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT".into());
+        }
+        let target = task_resolve(&self.root, &relative)?;
+        let resolved = Self::relative_to(&self.root, &target)?;
+        if self.denied(&resolved, true)
+            || !task_permitted(&resolved, &self.resolved_allowed, traversal)
+        {
+            return Err("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT".into());
+        }
+        Ok(target)
+    }
+
+    fn resolve_candidate(&self, path: &Path, directory: bool) -> Option<PathBuf> {
+        let relative = Self::relative_to(&self.root, path).ok()?;
+        if self.denied(&relative, false) {
+            return None;
+        }
+        let target = task_resolve(&self.root, &relative).ok()?;
+        let resolved = Self::relative_to(&self.root, &target).ok()?;
+        (!self.denied(&resolved, true)
+            && task_permitted(&resolved, &self.resolved_allowed, directory))
+        .then_some(target)
+    }
+
+    fn candidate_allowed(&self, path: &Path, directory: bool) -> bool {
+        self.resolve_candidate(path, directory).is_some()
+    }
+
+    pub(crate) fn selected_candidate(
+        &self,
+        path: &Path,
+        selections: &[PathBuf],
+    ) -> Option<PathBuf> {
+        let resolved = self.resolve_candidate(path, false)?;
+        selections
+            .iter()
+            .any(|selection| resolved.starts_with(selection))
+            .then_some(resolved)
+    }
+
+    pub(crate) fn relative_path(&self, path: &Path) -> Result<String, String> {
+        Self::relative_to(&self.root, path)
+    }
+
+    pub(crate) fn selected_files(&self, selections: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
+        let mut files = std::collections::BTreeSet::new();
+        // File enumeration only: reuse the same pre-content scoped walker. No
+        // Git ignore metadata is read, so authorized ignored files may appear.
+        let options = ResolvedSearchTextOptions {
+            pattern: "",
+            glob: None,
+            fixed_strings: true,
+            case_insensitive: false,
+            before: 0,
+            after: 0,
+            max_matches: HARD_SEARCH_LIMIT,
+            max_matches_per_file: None,
+            include_hidden: true,
+            no_ignore: true,
+        };
+        for selection in selections {
+            if !selection.exists() {
+                continue;
+            }
+            files.extend(collect_search_files_scoped(
+                &self.root,
+                selection,
+                options,
+                Some(self),
+            )?);
+        }
+        Ok(files.into_iter().collect())
+    }
+}
+
+pub(crate) fn read_file_task_scoped(
+    workspace_root: &str,
+    path: &str,
+    allowed: &[String],
+    forbidden: &[String],
+) -> Result<ReadFileOutput, String> {
+    let scope = TaskReadScope::new(Path::new(workspace_root), allowed, forbidden)?;
+    let target = scope.resolve_requested(path, false)?;
+    read_file_resolved(&scope.root, &target)
+}
+
 pub fn read_file(workspace_root: &str, path: &str) -> Result<ReadFileOutput, String> {
     let root = workspace_root_path(workspace_root)?;
     let target = resolve_target_path(workspace_root, path)?;
+    read_file_resolved(&root, &target)
+}
+
+fn read_file_resolved(root: &Path, target: &Path) -> Result<ReadFileOutput, String> {
     if !target.exists() {
         return Err(format!("File not found: {}", target.display()));
     }
@@ -267,8 +536,8 @@ pub fn read_file(workspace_root: &str, path: &str) -> Result<ReadFileOutput, Str
     }
 
     let size_bytes = target.metadata().map_err(|e| e.to_string())?.len();
-    let line_count = count_file_lines(&target)?;
-    let mut file = fs::File::open(&target).map_err(|e| e.to_string())?;
+    let line_count = count_file_lines(target)?;
+    let mut file = fs::File::open(target).map_err(|e| e.to_string())?;
     let mut buf = vec![0_u8; MAX_READ_BYTES + 1];
     let read_n = file.read(&mut buf).map_err(|e| e.to_string())?;
     let truncated = read_n > MAX_READ_BYTES;
@@ -276,7 +545,7 @@ pub fn read_file(workspace_root: &str, path: &str) -> Result<ReadFileOutput, Str
     let text = String::from_utf8_lossy(data).into_owned();
 
     Ok(ReadFileOutput {
-        path: to_workspace_relative(&root, &target),
+        path: to_workspace_relative(root, target),
         bytes: data.len(),
         size_bytes,
         line_count,
@@ -457,12 +726,33 @@ pub fn search_text(
     workspace_root: &str,
     options: SearchTextOptions<'_>,
 ) -> Result<SearchTextOutput, String> {
+    search_text_with_scope(workspace_root, options, None)
+}
+
+pub(crate) fn search_text_task_scoped(
+    workspace_root: &str,
+    options: SearchTextOptions<'_>,
+    allowed: &[String],
+    forbidden: &[String],
+) -> Result<SearchTextOutput, String> {
+    let scope = TaskReadScope::new(Path::new(workspace_root), allowed, forbidden)?;
+    search_text_with_scope(workspace_root, options, Some(&scope))
+}
+
+fn search_text_with_scope(
+    workspace_root: &str,
+    options: SearchTextOptions<'_>,
+    scope: Option<&TaskReadScope>,
+) -> Result<SearchTextOutput, String> {
     if options.pattern.trim().is_empty() {
         return Err("Pattern must not be empty".into());
     }
 
     let root = workspace_root_path(workspace_root)?;
-    let start = command::resolve_workspace_path(workspace_root, options.path)?;
+    let start = match scope {
+        Some(scope) => scope.resolve_requested(options.path.unwrap_or("."), true)?,
+        None => command::resolve_workspace_path(workspace_root, options.path)?,
+    };
     if !start.exists() {
         return Err(format!("Path not found: {}", start.display()));
     }
@@ -493,6 +783,12 @@ pub fn search_text(
         include_hidden: options.include_hidden,
         no_ignore: options.no_ignore,
     };
+
+    if let Some(scope) = scope {
+        return search_text_rust_scoped(&root, &start, resolved,
+            "ProjectTask contract-scoped built-in search; ignore files are not read; allowed ignored files may appear".into(),
+            Some(scope));
+    }
 
     if command_available("rg") {
         return search_text_rg(&root, &start, resolved).map_err(|e| match e {
@@ -776,8 +1072,18 @@ fn search_text_rust(
     options: ResolvedSearchTextOptions<'_>,
     backend_note: String,
 ) -> Result<SearchTextOutput, String> {
+    search_text_rust_scoped(root, start, options, backend_note, None)
+}
+
+fn search_text_rust_scoped(
+    root: &Path,
+    start: &Path,
+    options: ResolvedSearchTextOptions<'_>,
+    backend_note: String,
+    scope: Option<&TaskReadScope>,
+) -> Result<SearchTextOutput, String> {
     let matcher = SearchMatcher::new(options)?;
-    let files = collect_search_files(root, start, options)?;
+    let files = collect_search_files_scoped(root, start, options, scope)?;
     let mut results = Vec::new();
     let mut returned_matches = 0_usize;
     let mut truncated = false;
@@ -786,6 +1092,9 @@ fn search_text_rust(
         if returned_matches >= options.max_matches {
             truncated = true;
             break;
+        }
+        if scope.is_some_and(|scope| !scope.candidate_allowed(file, false)) {
+            continue;
         }
         let data = fs::read(file).map_err(|e| e.to_string())?;
         if data.iter().any(|b| *b == 0) {
@@ -944,6 +1253,15 @@ fn collect_search_files(
     start: &Path,
     options: ResolvedSearchTextOptions<'_>,
 ) -> Result<Vec<PathBuf>, String> {
+    collect_search_files_scoped(root, start, options, None)
+}
+
+fn collect_search_files_scoped(
+    root: &Path,
+    start: &Path,
+    options: ResolvedSearchTextOptions<'_>,
+    scope: Option<&TaskReadScope>,
+) -> Result<Vec<PathBuf>, String> {
     let glob = compile_search_glob(options.glob)?;
     let mut builder = WalkBuilder::new(start);
     builder
@@ -954,6 +1272,26 @@ fn collect_search_files(
         .git_ignore(!options.no_ignore)
         .git_exclude(!options.no_ignore);
 
+    if let Some(scope) = scope {
+        // Ignore metadata itself may be outside assignment scope. Do not read
+        // it: prune directories using only the authoritative task path policy.
+        builder
+            .standard_filters(false)
+            .hidden(!options.include_hidden)
+            .parents(false)
+            .ignore(false)
+            .git_global(false)
+            .git_ignore(false)
+            .git_exclude(false)
+            .follow_links(false);
+        let scope = scope.clone();
+        builder.filter_entry(move |entry| {
+            entry.file_type().is_some_and(|kind| {
+                (kind.is_dir() || kind.is_file())
+                    && scope.candidate_allowed(entry.path(), kind.is_dir())
+            })
+        });
+    }
     let mut files = Vec::new();
     for entry_result in builder.build() {
         let entry = entry_result.map_err(|e| e.to_string())?;

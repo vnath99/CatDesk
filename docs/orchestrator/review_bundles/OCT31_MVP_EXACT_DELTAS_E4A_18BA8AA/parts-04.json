@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 24,
+  "entries": [
+    {
+      "file": "part-025.diff.txt",
+      "bytes": 8185,
+      "sha256": "c341f09a2b21655aab826fe2726751607fd0fab88d34b6fca035927a33e63180",
+      "startByte": 195499,
+      "endByte": 203684,
+      "paths": [
+        "src/mcp.rs",
+        "src/operator_codex_cli.rs",
+        "src/operator_codex_cli/queue.rs"
+      ]
+    },
+    {
+      "file": "part-026.diff.txt",
+      "bytes": 8171,
+      "sha256": "07ce409b71126e5f9606e4e9bc4a52ce28914f70df93c846855cfe5880d3b7a9",
+      "startByte": 203684,
+      "endByte": 211855,
+      "paths": [
+        "src/operator_codex_cli/queue.rs"
+      ]
+    },
+    {
+      "file": "part-027.diff.txt",
+      "bytes": 8185,
+      "sha256": "7e3f2c18124af850ffa3ae33a3f5a739a9bc0b0936343a8585dcd3aa8496d741",
+      "startByte": 211855,
+      "endByte": 220040,
+      "paths": [
+        "src/operator_codex_cli/queue.rs"
+      ]
+    },
+    {
+      "file": "part-028.diff.txt",
+      "bytes": 8187,
+      "sha256": "3a246c789f9878b192dd519deb09ad7c1383d767591e519bbacc0394d9030184",
+      "startByte": 220040,
+      "endByte": 228227,
+      "paths": [
+        "src/operator_codex_cli/queue.rs"
+      ]
+    },
+    {
+      "file": "part-029.diff.txt",
+      "bytes": 8133,
+      "sha256": "72705c0bd0ec9a83a181aa2da2c09c4a7c7d6476fc48d0af1edf614311dac4b5",
+      "startByte": 228227,
+      "endByte": 236360,
+      "paths": [
+        "src/operator_codex_cli/queue.rs"
+      ]
+    },
+    {
+      "file": "part-030.diff.txt",
+      "bytes": 8151,
+      "sha256": "8a8786d095d258aa2b7cdcf4af008accdadcd01e7db63980b6cb74b159a72abe",
+      "startByte": 236360,
+      "endByte": 244511,
+      "paths": [
+        "src/operator_codex_cli/queue.rs"
+      ]
+    },
+    {
+      "file": "part-031.diff.txt",
+      "bytes": 8192,
+      "sha256": "de36a8008003e6893daea0d0129126edb229b216f1d5defce7aaaf061a11b293",
+      "startByte": 244511,
+      "endByte": 252703,
+      "paths": [
+        "src/operator_codex_cli/queue.rs",
+        "src/operator_codex_cli/queue/native_continuation.rs"
+      ]
+    },
+    {
+      "file": "part-032.diff.txt",
+      "bytes": 8158,
+      "sha256": "01551112d04ae24b6d4fb5896468f256c065e7208c6f32236ad299db8709981c",
+      "startByte": 252703,
+      "endByte": 260861,
+      "paths": [
+        "src/operator_codex_cli/queue/native_continuation.rs"
+      ]
+    }
+  ]
+}

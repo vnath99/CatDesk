@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T18:45:30.153605+00:00",
+  "classification": "TESTED_OPERATOR_ASSISTED_WEB_CONTEXT_AND_CANONICAL_PAIRING",
+  "sourceBaseCommit": "b06f02d518c2e0eed294b1ff8353bd588074f517",
+  "registeredIndependentProjects": 2,
+  "operatorCreatedFreshChats": true,
+  "existingAppSelectionVerified": true,
+  "frozenContextFollowups": 2,
+  "completedScopedAcknowledgments": 2,
+  "duplicateFollowups": 0,
+  "historyProjectionDifference": "ONE_TRAILING_LF_OMITTED_OTHER_TEXT_UNCHANGED",
+  "nativeExecutionAuthorityCreated": false,
+  "operatorAssistedSetupIsAutonomousInitialization": false,
+  "pairing": {
+    "supportedGuardedOperations": 2,
+    "generationEach": 1,
+    "registryAndIndependentWakeAgree": true,
+    "originalCanonicalRowsPreserved": 4,
+    "originalWakeTargetsAndHistoryPreserved": true,
+    "protectedPinsPreserved": 354,
+    "elapsedSeconds": 2.671
+  },
+  "context": {
+    "actualObservedTextEventsEach": 4,
+    "textProxyTokens": [
+      729,
+      757
+    ],
+    "rawMcpBodiesObserved": false,
+    "observedToolArgumentTokensEach": 0,
+    "observedToolResultTokensEach": 0,
+    "separateProcessReplayByteIdempotent": true,
+    "coverage": "UNKNOWN_OR_INCOMPLETE",
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "rawTextStoredInLedger": false,
+    "defaultAutomaticPoliciesEnabled": false,
+    "protectedPinsPreserved": 399,
+    "elapsedSeconds": 3.61
+  },
+  "processes": {
+    "wakeHostStarted": false,
+    "browserStarted": false,
+    "nativeCodingStarted": false,
+    "recurringAutomationEnabled": false
+  },
+  "protectedProductionOrSelectedDevelopmentChanged": false,
+  "existingOwnersAndUnknownSubmissionsPreserved": true,
+  "installedTwoProjectCodingAcceptance": "OPEN",
+  "currentSourceProducerAuthority": false,
+  "operatorActionRequiredForCompletedSetup": false
+}

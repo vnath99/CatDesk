@@ -1,0 +1,174 @@
++            "editor":"READY","composer":"EMPTY","generation":"IDLE","assistant":"LOAD_ERROR",
++            "exchange":"UNATTRIBUTED","recovery":"OBSERVATION_ONLY"})
++    }
++    fn tab() -> serde_json::Value {
++        serde_json::json!({"schemaVersion":1,"tabCount":2,"metadataMatches":1,
++            "unreadableMetadata":0,"candidateShape":"STRING","candidateRoute":"HOME",
++            "candidateFrame":"TOP","controlledShape":"STRING","controlledRoute":"HOME",
++            "alternateRoute":false,"stage":"DOCUMENT","state":"TARGET_TAB_DRIFT"})
++    }
++    #[test]
++    fn tab_protocol_accepts_only_bounded_counts_shapes_and_closed_routes() {
++        let value = tab();
++        assert_eq!(
++            tab_observation(&format!("PROBE:TAB:{value}")),
++            Some(value.clone())
++        );
++        for (key, invalid) in [
++            ("tabCount", serde_json::json!(33)),
++            ("metadataMatches", serde_json::json!(3)),
++            ("metadataMatches", serde_json::json!(true)),
++            ("schemaVersion", serde_json::json!(true)),
++            (
++                "candidateRoute",
++                serde_json::json!("https://chatgpt.com/c/private"),
++            ),
++            ("candidateShape", serde_json::json!("PRIVATE_CONTENT")),
++            ("alternateRoute", serde_json::json!("true")),
++        ] {
++            let mut changed = value.clone();
++            changed[key] = invalid;
++            assert!(tab_observation(&format!("PROBE:TAB:{changed}")).is_none());
++        }
++        let mut changed = value;
++        changed["privateBody"] = serde_json::json!("PRIVATE_DRAFT");
++        assert!(tab_observation(&format!("PROBE:TAB:{changed}")).is_none());
++    }
++    #[test]
++    fn surface_protocol_accepts_only_closed_metadata_vocabulary() {
++        let value = surface();
++        assert_eq!(
++            surface_observation(&format!("PROBE:SURFACE:{value}")),
++            Some(value.clone())
++        );
++        for changed in [
++            serde_json::json!({"draft":"PRIVATE_CONTENT"}),
++            serde_json::json!([]),
++            serde_json::Value::Null,
++        ] {
++            assert!(surface_observation(&format!("PROBE:SURFACE:{changed}")).is_none());
++        }
++        for (key, bad) in [
++            ("composer", serde_json::json!("PRIVATE_DRAFT")),
++            ("route", serde_json::json!("https://chatgpt.com/c/private")),
++            ("generation", serde_json::json!(true)),
++            ("exchange", serde_json::json!("CURRENT_EXACT_USER")),
++        ] {
++            let mut changed = value.clone();
++            changed[key] = bad;
++            assert!(surface_observation(&format!("PROBE:SURFACE:{changed}")).is_none());
++        }
++        let mut extra = value;
++        extra["body"] = serde_json::json!("PRIVATE_ANSWER");
++        assert!(surface_observation(&format!("PROBE:SURFACE:{extra}")).is_none());
++    }
++    #[cfg(windows)]
++    #[test]
++    fn bounded_probe_accepts_near_limit_output_and_canonicalizes_metadata() {
++        let shell = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
++            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
++        let mut command = Command::new(shell);
++        let row = surface()
++            .to_string()
++            .replacen('{', "{\"composer\":\"PRIVATE_SENTINEL\",", 1);
++        let tab_row = tab()
++            .to_string()
++            .replacen('{', "{\"state\":\"PRIVATE_TAB_SENTINEL\",", 1);
++        let script = format!(
++            "if([Console]::In.ReadLine() -cne 'START'){{exit 2}}; for($i=0;$i -lt 90;$i++){{[Console]::Out.WriteLine(('x'*150))}}; [Console]::Out.WriteLine('PROBE:SURFACE:{row}'); [Console]::Out.WriteLine('PROBE:TAB:{tab_row}'); [Console]::Out.WriteLine('PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR')"
++        );
++        command.args(["-NoProfile", "-NonInteractive", "-Command", &script]);
++        let rows = run_bounded(&mut command, Duration::from_secs(5)).unwrap();
++        assert_eq!(rows.len(), 3);
++        assert_eq!(surface_observation(&rows[0]), Some(surface()));
++        assert_eq!(tab_observation(&rows[1]), Some(tab()));
++        assert_eq!(rows[2], "PROBE:FINAL:EXACT_READY_RESPONSE_LOAD_ERROR");
++        assert!(!rows.join(" ").contains("PRIVATE_SENTINEL"));
++        assert!(!rows.join(" ").contains("PRIVATE_TAB_SENTINEL"));
++    }
++}
+diff --git a/wake/src/runtime_reobserve.rs b/wake/src/runtime_reobserve.rs
+index c6e65b2a42c52f6e76b78f5de1082958a6c2a711..e6018abf836d0b11cc2eb1ac8ec3e169200f69cd 100644
+--- a/wake/src/runtime_reobserve.rs
++++ b/wake/src/runtime_reobserve.rs
+@@ -93,10 +93,15 @@ where
+             owner_guard()?;
+             store.finish_response_reobservation(&attempt, &witness)
+         })?;
+-        Ok(
+-            json!({"responseState":if complete {"COMPLETE"} else {"PENDING"},
+-            "alreadyComplete":false,"browserStarted":true,"sendAttempted":false}),
+-        )
++        let mut result = json!({"responseState":if complete {"COMPLETE"} else {"PENDING"},
++            "alreadyComplete":false,"browserStarted":true,"sendAttempted":false});
++        if let Some(reason) = witness.get("diagnosticReason") {
++            result["diagnosticReason"] = reason.clone();
++        }
++        if let Some(controls) = witness.get("completionControls") {
++            result["completionControls"] = controls.clone();
++        }
++        Ok(result)
+     })();
+     if let Err(reason) = result.as_ref() {
+         // A failed outcome append never changes the timer; an existing outcome
+@@ -223,6 +228,107 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn pending_diagnostic_is_returned_and_journaled_without_timer_change() {
++        let (store, delivery) = ready_fixture("reobserve-diagnostic");
++        let before = timer_bytes(&store);
++        let result = reobserve_with_observer(
++            &store,
++            "alpha",
++            &delivery.target,
++            "alpha-1",
++            &|| Ok(()),
++            |commit| commit(),
++            |current, _, _| {
++                let mut value = witness(current, "RESPONSE_PENDING");
++                value["diagnosticReason"] = json!("ASSISTANT_COMPLETION_ACTION_UNPROVEN");
++                value["completionControls"] = json!({"semanticAssistantUnits":1,"roleAssistantNodes":0,
++                    "copyTestIdInTurn":0,"copyLabelInTurn":0,"copyResponseLabelInTurn":1,
++                    "copyMessageLabelInTurn":0,"copyTextInTurn":0,"knownCopyInAssistant":0,
++                    "knownCopyInBody":0,"sharedCopyAfterAssistant":0,"toolbarContainersInTurn":1,
++                    "buttonsInTurn":1,"copyTestIdInParent":0,"copyLabelInParent":0,
++                    "copyResponseLabelInParent":1,"copyMessageLabelInParent":0,
++                    "pairedTurn":true,"assistantBodyPresent":true,"completionActionFound":false,
++                    "assistantInsideSemanticUnit":true});
++                Ok(value)
++            },
++        )
++        .unwrap();
++        assert_eq!(result["responseState"], "PENDING");
++        assert_eq!(
++            result["diagnosticReason"],
++            "ASSISTANT_COMPLETION_ACTION_UNPROVEN"
++        );
++        assert_eq!(timer_bytes(&store), before);
++        assert_eq!(result["completionControls"]["copyResponseLabelInTurn"], 1);
++        let outcomes: Vec<Value> = std::fs::read_dir(store.root().join("logs"))
++            .unwrap()
++            .filter_map(|entry| entry.ok())
++            .filter(|entry| {
++                entry
++                    .file_name()
++                    .to_string_lossy()
++                    .starts_with("response-reobserve-")
++                    && entry
++                        .file_name()
++                        .to_string_lossy()
++                        .ends_with("-outcome.json")
++            })
++            .map(|entry| read(&entry.path()).unwrap())
++            .collect();
++        assert_eq!(outcomes.len(), 1);
++        assert_eq!(
++            outcomes[0]["witness"]["diagnosticReason"],
++            result["diagnosticReason"]
++        );
++        assert_eq!(
++            outcomes[0]["witness"]["completionControls"],
++            result["completionControls"]
++        );

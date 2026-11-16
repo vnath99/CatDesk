@@ -1,0 +1,204 @@
+{
+  "recordedUtc": "2026-10-23T10:18:15.4873831Z",
+  "localDate": "2026-10-23",
+  "task": "C23-ACTUAL-TWO-PROJECT-SERIALIZED-ROLLOVER",
+  "classification": "ACTUAL_SELECTED_BROWSER_COMPETING_CREATION_PAIRED_BIND_AND_CONTINUATION",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "3829749371c2b9f39907e2b9d2ce439af0c52b3b",
+  "qualifiedSource": "bf62b48945903e69ab02a7cf0e07f6a48b8feadb",
+  "sourceFiles": [
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "48e2720401bcd462b59c5d8969870faefae958d4b97c3e8f67a37c3aa82a0087"
+    },
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+    },
+    {
+      "path": "src/project_task_command.rs",
+      "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+    },
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "c41e5d2eb1c697fdd6d820725e3899edc2a11dba4e28dfe34f74b8cf47c0a255"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "c544b9b2370c840d9b56726c47d8432be2c5a84d4fa6de7eac82a60ef09cdae3"
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "sha256": "bebd6d8fb4b6a6e3ea2a17944c82e6dfdc967dfa6c5b0d8683375abb4cc8b02c"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "sha256": "6e730dfc30ed0ff73a5913f372369d77540db9c4759a54ba6b767a7e96fd973e"
+    }
+  ],
+  "selectedPackage": "1.0.0-dev.85-69e6ba62417255411269b645ea7b55afdc6451795c99b4414b21eddeb1206a69",
+  "requests": {
+    "betaElapsedSeconds": 117.2001996,
+    "firstOutcome": "ALPHA_ADVANCED_BETA_DURABLY_QUEUED_WITHOUT_SUBMISSION",
+    "firstStartedUtc": "2026-10-23T09:52:59.2091812Z",
+    "firstFinishedUtc": "2026-10-23T09:54:58.5399935Z",
+    "betaFirstSubmissionFinishedUtc": "2026-10-23T09:57:30.2520938Z",
+    "outerMaximumSeconds": 180,
+    "betaFirstSubmissionStartedUtc": "2026-10-23T09:55:33.0518942Z",
+    "waitingTicketRestart": "NEW_CLI_REOPENED_EXACT_PREPARED_UNSUBMITTED_WAITING_INTENT",
+    "initialPairElapsedSeconds": 119.3308123,
+    "blindResend": false,
+    "startGapMilliseconds": 23.2165,
+    "simultaneousExecuteCommands": 2
+  },
+  "serialization": {
+    "admissionSamples": 118,
+    "sequences": [
+      1,
+      2
+    ],
+    "finalPhases": [
+      "CREATION_RECORDED",
+      "CREATION_RECORDED"
+    ],
+    "maximumSampledActiveCreators": 1,
+    "stableEntries": 2,
+    "sharedProfileExclusiveOwnershipRetained": true,
+    "independentTasksNotUnderCreationAdmission": true,
+    "queuedBetaKeptIdentity": true,
+    "alphaActiveBetaWaitingSamples": 35
+  },
+  "projects": [
+    {
+      "continuationTaskIdObserved": true,
+      "sourceGeneration": 1,
+      "testPolicyRestored": true,
+      "sourceSnapshotVerifiedBeforeCommit": true,
+      "responseCharacters": 1419,
+      "continuationMarkerObserved": true,
+      "contextHistory": 2,
+      "boundGeneration": 2,
+      "phase": "CONTINUATION_QUEUED",
+      "creationRecordedUtc": "2026-10-23T09:54:11.0000000Z",
+      "registryPredecessors": 1,
+      "responseSha256": "10222fd2b4ba6bcaf4f5ac7514985c29851c2a5e0ef7537b20f731890f047237",
+      "exactBootstrapUserReceipt": true,
+      "singleBootstrapUserProved": true,
+      "independentIssuedUrlVerified": true,
+      "admissionPhase": "CREATION_RECORDED",
+      "role": "alpha",
+      "continuationEventReceiptAndTimerVerified": true,
+      "admissionSequence": 1,
+      "oldConversationPreserved": true
+    },
+    {
+      "continuationTaskIdObserved": true,
+      "sourceGeneration": 1,
+      "testPolicyRestored": true,
+      "sourceSnapshotVerifiedBeforeCommit": true,
+      "responseCharacters": 1251,
+      "continuationMarkerObserved": true,
+      "contextHistory": 2,
+      "boundGeneration": 2,
+      "phase": "CONTINUATION_QUEUED",
+      "creationRecordedUtc": "2026-10-23T09:56:42.0000000Z",
+      "registryPredecessors": 1,
+      "responseSha256": "f82034e2c52557181301aa085f2b44c9d1907c1490f241ab7834608e534353a4",
+      "exactBootstrapUserReceipt": true,
+      "singleBootstrapUserProved": true,
+      "independentIssuedUrlVerified": true,
+      "admissionPhase": "CREATION_RECORDED",
+      "role": "beta",
+      "continuationEventReceiptAndTimerVerified": true,
+      "admissionSequence": 2,
+      "oldConversationPreserved": true
+    }
+  ],
+  "continuationDelivery": {
+    "unexpectedNewRecords": 0,
+    "hostMaximumSeconds": 130,
+    "ownedProcesses": 0,
+    "newMessages": 2,
+    "outcome": "BOTH_RESPONSE_TIMERS_COMPLETE",
+    "startedUtc": "2026-10-23T10:00:32.2219005Z",
+    "elapsedSeconds": 114.0858839,
+    "finishedUtc": "2026-10-23T10:02:26.3077844Z",
+    "hostTreeExitProved": true,
+    "outerMaximumSeconds": 180,
+    "unexpectedChanges": 0
+  },
+  "verification": {
+    "duplicateContinuationEvents": 0,
+    "bootstrapMessages": 2,
+    "workspaceCanariesUnchanged": true,
+    "sourceOrHandoffMessagesResent": 0,
+    "rawUrlsTranscriptsProfilesPublished": false,
+    "originalSevenPairsAndHistoryPreserved": true,
+    "freshProcessContinuationProved": 2,
+    "originalFiveNativeSessionActions": 0,
+    "ownedProcesses": 0,
+    "continuationMessages": 2,
+    "recordsChecked": 170,
+    "freshProcessPairedRows": 9,
+    "bothIssuedUrlsAlsoSeenInAuthenticatedAppInventory": true,
+    "duplicateBootstrapMessages": 0,
+    "changedRecords": 0
+  },
+  "policyRestore": {
+    "atUtc": "2026-10-23T09:59:38.3247254Z",
+    "productionProjectPoliciesChanged": false,
+    "automaticRolloverEnabled": false,
+    "triggerTokens": 72000,
+    "onlyTwoControlledPolicyFilesChanged": true,
+    "automaticObservationEnabled": false,
+    "controlledProjects": 2
+  },
+  "harness": {
+    "betaRead": "CORRECTED_OPTIONAL_HASH_CHECK_PASSED",
+    "sourceRuntimeChanged": false,
+    "alphaRecovery": "SAVED_EVENT_BOUND_BODY_HASHED_AND_VERIFIED_WITHOUT_REPEATED_BROWSER_READ",
+    "alphaRead": "LOCAL_CLI_SUCCEEDED_WRAPPER_HASH_FIELD_ASSUMPTION_FAILED"
+  },
+  "dependencies": {
+    "connectorCalls": 1,
+    "connectorCheckedUtc": "2026-10-23T10:11:13Z",
+    "connectorCode": "UNAVAILABLE",
+    "connectorRetried": false,
+    "connectorHttpStatus": 429,
+    "settingsOrTunnelChanged": false,
+    "ci": "UNVERIFIED"
+  },
+  "cleanup": {
+    "allHandlesTerminal": true,
+    "ownedProcesses": 0,
+    "boundedForegroundHostStarts": 1,
+    "nativeMessagesPausesResumesOrReplacement": 0,
+    "nativeChatsInspectedReadOnly": true,
+    "recurringStarts": 0,
+    "oldUnknownSubmissionJournalsPreserved": true,
+    "controls": "BOTH_STOPPED",
+    "completedHistoricalCanaryReplayed": false,
+    "productionChanged": false
+  },
+  "acceptance": {
+    "I": "PREPARED_WAITING_TICKET_AND_COMPLETED_STATE_FRESH_PROCESS_RECOVERY_PASS_CRASH_PHASES_OPEN",
+    "automaticMonitoring": "NOT_YET_LIVE_QUALIFIED",
+    "protectedInstalled": "NOT_ACCEPTED",
+    "unattended": "NOT_ACTIVATED",
+    "F": "TWO_ADDITIONAL_FRESH_CONTROLLED_ROLLOVERS_VERIFIED",
+    "milestone": "PARTIAL",
+    "C": "OPEN_ACTUAL_BLOCKED_WEB_PROJECT_CODING_SIBLING",
+    "B": "OPEN_ACTUAL_CONCURRENT_CHATGPT_WEB_MCP_CODING",
+    "H": "OPEN_CRITICAL_SUBMISSION_AMBIGUITY_AND_CRASH_PHASES",
+    "G": "PASS_SELECTED_CONTROLLED_TWO_SIMULTANEOUS_REQUESTS_SERIALIZED_AND_BOTH_CONTINUED"
+  },
+  "nextTask": "Exercise interruption/recovery at critical phases with a fresh controlled operation and no blind resend. Qualify a bounded automatic monitoring/rollover driver; continue scoped tool integration independently of connector429. Preserve these completed rollovers and all original project bindings."
+}

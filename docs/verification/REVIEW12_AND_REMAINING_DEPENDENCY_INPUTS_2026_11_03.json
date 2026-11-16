@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T01:38:38.455169+00:00",
+  "classification": "CONTROLLED_LIVE_REVIEW12_AND_PREPARED_NOT_EXECUTED_DEPENDENCY_INPUTS",
+  "frozenSourceCommit": "6d737c9a0f6f34496fc88b9fec02433bd1599117",
+  "completedCheckpoint": 12,
+  "verdict": "REVIEWED_PARTIAL",
+  "exactUserReceipt": true,
+  "completedResponseVerified": true,
+  "responseSha256": "cfcd962ba73e4d879485b9b7e37623cfde6fee27efd009a501d309194003741c",
+  "gitCallsIndependentlyCorroborated": 7,
+  "matchingCommandLogCounts": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "allSuccessfulCheckpoints": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "totalCorroboratedGitCalls": 82,
+  "retired6IsNotPassedOrReplayed": true,
+  "contextGeneration": 3,
+  "observedProxyTokens": 21589,
+  "toolArgumentTokens": 906,
+  "toolResultTokens": 18599,
+  "repeatImportByteIdempotent": true,
+  "originAuthenticated": false,
+  "providerContextExact": false,
+  "coverageKnown": false,
+  "rawTextPersisted": false,
+  "additionalSourceLines": 5146,
+  "additionalCommandsPrepared": 120,
+  "preparedBatches": [
+    {
+      "batch": 1,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_1_2026_11_03.json",
+      "sha256": "020278ddab702fe167c1d1992d6378f132b1527d4f12ff6ea658fb29fe4958f2",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 18722
+    },
+    {
+      "batch": 2,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_2_2026_11_03.json",
+      "sha256": "3ca5a5fde78f48ec670d6e23e349ee900f84b36f928f04be2d4232d142c30e3c",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 21410
+    },
+    {
+      "batch": 3,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_3_2026_11_03.json",
+      "sha256": "f909f94e4cf725a7d65dd802939089a359176b6d1fa6d9210679edc1da9cbbcc",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 17114
+    },
+    {
+      "batch": 4,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_4_2026_11_03.json",
+      "sha256": "1a915833017620b43dcef56ff5782ea046dc6492721dc5d6f32f0431cfdd2eaf",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 12299
+    },
+    {
+      "batch": 5,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_5_2026_11_03.json",
+      "sha256": "1bf8b90d9cf775df2fc845f1c90eeb101bc956592d36a43ca6ded54f8c2c5ebb",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 16242
+    },
+    {
+      "batch": 6,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_6_2026_11_03.json",
+      "sha256": "3de0b4e9242ffc8b1a730e3ee3507abe6e1bb14ea37722c8d62d2fd2cfa81fc3",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 16122
+    },
+    {
+      "batch": 7,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_7_2026_11_03.json",
+      "sha256": "a484079a6434c6e414af8c0d0e85a02b0b6f68be708a754f4053515d66d846c4",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 13978
+    },
+    {
+      "batch": 8,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_8_2026_11_03.json",
+      "sha256": "2d5ac8dfbb3c2cd1de854bc7f4301b61dc1bb8fb69f80378541b6a077a107a1d",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 13700
+    },
+    {
+      "batch": 9,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_9_2026_11_03.json",
+      "sha256": "e1351a1d1084e13cfbb82fcf45e1f8d49c155b0ee635c20e0fc12039d14a65ac",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 16231
+    },
+    {
+      "batch": 10,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_10_2026_11_03.json",
+      "sha256": "b6a3816f066e9f0b4ca911b704d0e69d6647ef299519376a8b3285df8b81eaa4",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 21090
+    },
+    {
+      "batch": 11,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_11_2026_11_03.json",
+      "sha256": "3076c8b13319ec7b1591d14324749ce23dbc0d1660b708ba90890190f72f7219",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 19175
+    },
+    {
+      "batch": 12,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_12_2026_11_03.json",
+      "sha256": "98f7dfd81240db9a0aa17177f8415e151e718eeab736ef8949d907191fb3504f",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 13620
+    },
+    {
+      "batch": 13,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_13_2026_11_03.json",
+      "sha256": "71196f58c485e31dc95be6831a86506acab090aff3c168e11c91ad587007e3eb",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 20636
+    },
+    {
+      "batch": 14,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_14_2026_11_03.json",
+      "sha256": "e24ba75f0429b2ef52a30f9d26ee7e6077fb6a8863ee533ab397687221a32fe8",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 14887
+    },
+    {
+      "batch": 15,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_15_2026_11_03.json",
+      "sha256": "50850ac0ef3bed7ad4068ce2a6e4dff661c8f30199a5a7afc1a83ea1eef98e3c",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 19602
+    },
+    {
+      "batch": 16,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_16_2026_11_03.json",
+      "sha256": "fbeb613e685662a3ce312d041a2f78f43c9268a4a865ba68a9cf14df7ec317f3",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 22059
+    },
+    {
+      "batch": 17,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_17_2026_11_03.json",
+      "sha256": "13b3c935bef3cb2e140531c0e6a612993dfa350f6468e16bf6622de45ced334c",
+      "sourceCommands": 7,
+      "sourceOutputBytes": 22428
+    },
+    {
+      "batch": 18,
+      "path": "docs/verification/CURRENT_6D_DEPENDENCY_REVIEW_INPUTS_18_2026_11_03.json",
+      "sha256": "c7fbf7bc2d4f033cd57ba7341c8b5d5e622352b2ecfcbf6f64624293207a171c",
+      "sourceCommands": 1,
+      "sourceOutputBytes": 2863
+    }
+  ],
+  "dependencyMessagesSent": 0,
+  "newNativeClaims": 0,
+  "cumulativeSourceAccepted": false,
+  "producerAuthority": false,
+  "installedTwoWebCodingAcceptance": false,
+  "operatorActionRequired": false
+}

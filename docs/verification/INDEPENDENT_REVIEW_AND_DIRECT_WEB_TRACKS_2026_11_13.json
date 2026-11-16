@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-13T12:20:01.907006+00:00",
+  "documentationParent": "873e9b6a9da126228ef8b75944d6d95097acdd36",
+  "stage": "REVIEW_DRAFT_ADMITTED_NO_REVIEW_OR_RELEASE_AUTHORITY",
+  "preservedAcceptance": [
+    "Installed backend startup and controlled restart",
+    "Authenticated MCP and missing/wrong bearer rejection",
+    "One genuine v5 connector response"
+  ],
+  "tracks": {
+    "operatorWakeMigration": {
+      "status": "BLOCKED",
+      "prerequisite": "The one pending intended-operator root comparison; preserve expired proposals. No collector or signing retry."
+    },
+    "independentBackendReview": {
+      "status": "ACTIVE",
+      "draftCreated": true,
+      "draftValidated": true,
+      "approved": false,
+      "claimed": false,
+      "independentReviewerStarted": false,
+      "nextSupportedActions": [
+        "Exact source-bound contract work authorization through the existing start gate",
+        "Read current session state/version, approve exact decision hash, claim direct work with stable idempotency identities",
+        "Genuine independent review and attributable output, finalization, completed record acknowledgment, immutable source snapshot and reviewed-build producer"
+      ],
+      "backgroundReviewerRunning": false
+    },
+    "directWebMvp": {
+      "status": "BLOCKED",
+      "reason": "Qualified control-scope owner refused DEV_PRODUCTION_ROOT_MISMATCH before backend readiness; installed assigned-task interface lacks task-scoped Git checkpoint.",
+      "newHistoricalTaskReplay": false,
+      "nextSupportedActions": [
+        "Reconcile existing control authority through supported root comparison; do not replace recorded identities",
+        "Qualify the intended project scope once after that prerequisite changes",
+        "Use a reviewed backend with scoped checkpoint or demonstrate an existing equally scoped supported equivalent before assigning a fresh full-cycle task"
+      ]
+    }
+  },
+  "reviewSourceBinding": {
+    "candidateCommit": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+    "candidateTree": "b3cefeeb74dc0e8763b50adb5929d35cdb94857c",
+    "candidateSha256": "625feffdd31dfaa33a22c15f91b4b5d1560074be71eedcc0586e771b79896ab1",
+    "isolatedOfficialGitWorktreeCreated": true,
+    "committedSourceClean": true,
+    "sourceInputsCompared": 476,
+    "rawBuildSnapshotKeptSeparate": true,
+    "lineEndingOnlyCheckoutDifferences": 165,
+    "firstCanonicalReportCarrierDraftNotClaimed": true,
+    "carrierDraftNotD22ProducerAuthority": true,
+    "reason": "Native completion snapshots the actual session workspace, not a report hyperlink or candidate hash. Review of another workspace cannot authorize this build."
+  },
+  "boundedDraftAdmission": {
+    "startedUtc": "2026-11-13T12:14:36.918788+00:00",
+    "finishedUtc": "2026-11-13T12:15:18.463442+00:00",
+    "maximumOwnerSeconds": 150,
+    "backendSeconds": 40,
+    "containment": "KILL_ON_JOB_CLOSE",
+    "installedExecutableSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "backendExited": true,
+    "ephemeralEndpointClosed": true,
+    "port3200ClosedAfterward": true
+  },
+  "preservation": {
+    "totalPins": 1685,
+    "nonUsageConfigPinsVerified": 1684,
+    "nonUsagePinMismatches": 0,
+    "pinSetUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "rawPinCheckPassed": false,
+    "rawPinException": "Existing four lifetime usage counters changed during actual MCP calls. Existing approved configuration-authority hash still matches; no bytes reverted and no other config changes ignored.",
+    "authorityRuleSha256": "1dae1c9348689d8351ed0468707b20e403b2fdc7a362faf81187f6cbda3bb30d"
+  },
+  "retainedPreparationFailures": [
+    "Initial report-carrier create refused before persistence because its allowed report directory was absent; native create and validation succeeded after creating only that empty directory.",
+    "Exact raw line-ending alignment made the new review checkout dirty. Only those freshly generated changes were restored through Git. Frozen exact raw inputs remain separate; no existing checkout was restored.",
+    "First source-bound private harness compared Windows extended workspace spelling as literal text; refused before API calls, backend exited normally. Successor compared actual same-file identity and reused frozen contract bytes. Product guards unchanged.",
+    "Configuration-authority read helper initially omitted its Need dependency; stopped before output or mutation. Existing hash-pinned helper and dependency then passed."
+  ],
+  "controlScope": {
+    "actualProductRefusal": "DEV_PRODUCTION_ROOT_MISMATCH",
+    "refusalBeforeBackendReady": true,
+    "preservationPinsMatched": 1685,
+    "relevantOldNewControllerSourceIdentical": true,
+    "newerControllerNotRetried": true,
+    "installedTaskTools": [
+      "read",
+      "search",
+      "patch.preview",
+      "patch.apply",
+      "patch.compare",
+      "diff.actual",
+      "verify.command"
+    ],
+    "genericGitToolNotAssumedProjectScoped": true
+  },
+  "proofHashes": {
+    "sourceBoundContract": "3eb038540386f0a65655a8dbbfc61ab6b2687a4fb54f61b993cb06ccdcdce522",
+    "sourceBoundApiCreate": "182f3533b56e92c6560235334c63747f032b61369714b61ae32bc789f9bf5a18",
+    "sourceBoundApiValidate": "aeeb9e22a99eb02d26a9844833161bf4f40feb3609b05281246483ae673c4578",
+    "boundedOwner": "49297f31e48aa041b4f4cae8c581372a243d0b401b75be9c72a2e2816d58f764",
+    "boundedResult": "570f7922ff987acc9ef2d0068306ad83ec26b9edda1b5fe9f560461081e65fe8",
+    "configurationAuthority": "ba6fc2ed69ebab852315801e14bff1371c4a4885c3dd27d98ef34ebd21df2de4",
+    "controlScopeRefusal": "3bcd548dd6520114a35a9becfb5e84b28c7d3599a064484df45ca3694e052345"
+  },
+  "sourceCodeChanged": false,
+  "regressionTestsRepeated": false,
+  "candidateExecuted": false,
+  "newCandidateBuilt": false,
+  "reviewVerdictSupplied": false,
+  "producerAuthority": false,
+  "releaseAuthority": false,
+  "installationChanges": 0,
+  "browserStarts": 0,
+  "wakeStarts": 0,
+  "tunnelStarts": 0,
+  "webMessagesSent": 0,
+  "historicalTasksReplayed": 0,
+  "recurringAutomationEnabled": false,
+  "overallMvpAccepted": false
+}

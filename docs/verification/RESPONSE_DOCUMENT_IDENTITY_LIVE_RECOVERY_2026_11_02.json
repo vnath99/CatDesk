@@ -1,0 +1,82 @@
+{
+  "observedUtc": "2026-11-02T21:07:14.361515+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_NOT_INSTALLED_TWO_WEB_CODING",
+  "sourceCommit": "6d737c9a0f6f34496fc88b9fec02433bd1599117",
+  "developmentControllerSha256": "ff32608bd32b81c0bf82eef2efc0e600f8992f79eb2aa9578f578a51598b3372",
+  "retainedPreviousDevelopmentSha256": "583acbc4fbd526280571dc2e8cc658659aa627fbc6a7dec3d09d7f3356fdea15",
+  "buildSeconds": 44.687,
+  "packageQualification": {
+    "seconds": 45.032,
+    "unauthorizedHttp": 401,
+    "authenticatedInitializeHttp": 200,
+    "authenticatedCatalogHttp": 200,
+    "catalogTools": 79,
+    "registeredProjectsRead": true,
+    "ownedTreeExit": true,
+    "endpointClosed": true,
+    "oldPackageAndJournalMismatches": 0,
+    "profileIdentityPreserved": true
+  },
+  "responseRecovery": {
+    "observedUtc": "2026-11-02T21:03:01.202402+00:00",
+    "seconds": 62.812,
+    "actualBrowserObservation": "COMPLETE",
+    "existingCoordinatorClosed": true,
+    "responseVerdict": "REVIEWED_PARTIAL",
+    "responseSha256": "336d8babf362fa6d8091f8752bf5353a2151e54b875571d2ea3716feaca61e3d",
+    "cumulativeSourceAccepted": false,
+    "messagesSent": 0,
+    "submissionRetries": 0,
+    "bodyReexported": false,
+    "preservedPins": 4891,
+    "pinMismatches": 0,
+    "originalFailuresPreserved": true,
+    "earlierLiveDriftSoleCauseProved": false
+  },
+  "contextAccounting": {
+    "calls": 15,
+    "observations": 30,
+    "generation": 1,
+    "observedTokenProxy": 46779,
+    "toolArgumentTokens": 1604,
+    "toolResultTokens": 43626,
+    "assessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "repeatImportChangedLedger": false,
+    "rawTextPersisted": false,
+    "otherLedgersAndJournalsPreserved": true
+  },
+  "obsoleteNativeReportClaim": {
+    "state": "CANCELLED",
+    "active": false,
+    "stateVersion": 5,
+    "preexistingFiles": 4708,
+    "oldEventPrefixPreserved": true,
+    "providerThreadAbsent": true,
+    "projectGoalPaused": false,
+    "sourceAccepted": false,
+    "newClaimCreated": false,
+    "unusedExpiredMessageNeverSent": true
+  },
+  "productionChanges": 0,
+  "bindingChanges": 0,
+  "nativeProjectTasksStarted": 0,
+  "recurringAutomationActivated": false,
+  "remainingAcceptance": [
+    "Fresh exact-source independent review and protected producer authority for later changes",
+    "Canonical/control authority and reviewed Wake publication integration",
+    "Actual two independent ChatGPT Web callers editing separate approved fixtures through native execution",
+    "Installed first-install, interruption and unattended supervisor recovery",
+    "Full T-0484 uncertainty/calibration and later CD-P7 provider clients"
+  ],
+  "finalCleanup": {
+    "observedUtc": "2026-11-02T21:07:29.7694159+00:00",
+    "testOwnedProcesses": 0,
+    "recurringWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "intentionalTrustedBackendAndExistingTunnelRetained": true,
+    "processActions": 0
+  }
+}

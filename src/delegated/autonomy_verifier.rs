@@ -8,7 +8,9 @@ use std::process::Command;
 
 use serde_json::json;
 
-use super::autonomous_contract::{AutonomousCommandProfileV1, AutonomousPolicyEngineV1};
+use super::autonomous_contract::{
+    AutonomousCommandProfileV1, AutonomousGitPolicyV1, AutonomousPolicyEngineV1,
+};
 use super::autonomous_controller::AutonomousVerifierV1;
 use super::coordinator::{VerificationStatusV1, VerificationSummaryV1};
 use super::runtime::RuntimeError;
@@ -90,6 +92,7 @@ impl ContractVerifierV1 {
 
 impl AutonomousVerifierV1 for ContractVerifierV1 {
     fn verify(&mut self) -> Result<(VerificationSummaryV1, String), RuntimeError> {
+        verify_git_identity(&self.policy)?;
         let mut successful_summaries = Vec::new();
         let mut failure_summaries = Vec::new();
         for profile in &self.policy.contract().verification_policy.required_commands {
@@ -116,6 +119,7 @@ impl AutonomousVerifierV1 for ContractVerifierV1 {
             command: "contract-approved verification profiles".into(),
             summary,
         };
+        verify_git_identity(&self.policy)?;
         let diff = self.authoritative_diff()?;
         self.last_verification = Some(verification.clone());
         Ok((verification, diff))
@@ -160,8 +164,61 @@ fn bounded_verification_summary(
 }
 
 fn verify_git_identity(policy: &AutonomousPolicyEngineV1) -> Result<(), RuntimeError> {
+    let contract = policy.contract();
     let branch = run_git(policy, ["branch", "--show-current"])?;
-    if branch.trim() != policy.contract().feature_branch || branch.trim() == "main" {
+    if contract.feature_branch == "HEAD" && contract.base_branch == "HEAD" {
+        // Explicit detached direct work cannot create or publish Git history.
+        // Unlike named-branch work, ancestry is insufficient: its complete
+        // immutable source commit must still be selected at verification.
+        let git_read_only = matches!(
+            &contract.git_policy,
+            AutonomousGitPolicyV1 {
+                create_branch: false,
+                create_worktree: false,
+                local_commits: false,
+                push_feature_branch: false,
+                open_pull_request: false,
+                merge: false,
+                force_push: false,
+                modify_main: false,
+            }
+        );
+        if !contract.is_direct_chatgpt()
+            || !git_read_only
+            || !branch.trim().is_empty()
+            || contract.base_commit.len() != 40
+            || !contract
+                .base_commit
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        {
+            return Err(RuntimeError::Validation(
+                "autonomous detached verification requires an exact read-only Git contract".into(),
+            ));
+        }
+        if run_git(policy, ["rev-parse", "--verify", "HEAD"])?.trim() != contract.base_commit {
+            return Err(RuntimeError::Validation(
+                "autonomous detached verification requires the exact base commit".into(),
+            ));
+        }
+        run_git(
+            policy,
+            [
+                "diff",
+                "--quiet",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--ignore-submodules=none",
+                "HEAD",
+                "--",
+            ],
+        )
+        .map_err(|_| {
+            RuntimeError::Validation(
+                "autonomous detached verification requires unchanged tracked source".into(),
+            )
+        })?;
+    } else if branch.trim() != contract.feature_branch || branch.trim() == "main" {
         return Err(RuntimeError::Validation(
             "autonomous verifier requires the contract feature branch".into(),
         ));
@@ -271,7 +328,234 @@ fn redact_text(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::autonomous_contract::AutonomousDevelopmentContractV1;
     use super::*;
+
+    struct GitFixture {
+        root: std::path::PathBuf,
+        temp_root: std::path::PathBuf,
+        commit: String,
+    }
+
+    impl GitFixture {
+        fn new() -> Self {
+            let temp_root = std::env::temp_dir().canonicalize().expect("temporary root");
+            let root = temp_root.join(format!("catdesk-detached-review-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir(&root).expect("new temporary Git repository");
+            let mut fixture = Self {
+                root,
+                temp_root,
+                commit: String::new(),
+            };
+            fixture.git(&["init", "-q", "--initial-branch=codex/review-fixture"]);
+            fixture.git(&[
+                "remote",
+                "add",
+                "origin",
+                "https://example.invalid/review.git",
+            ]);
+            std::fs::write(fixture.root.join("source.txt"), "review baseline\n").expect("source");
+            fixture.git(&["add", "source.txt"]);
+            fixture.git(&["commit", "-q", "--allow-empty", "-m", "fixture base"]);
+            fixture.commit = fixture.git(&["rev-parse", "HEAD"]).trim().into();
+            fixture
+        }
+
+        fn git(&self, args: &[&str]) -> String {
+            let output = Command::new("git")
+                .args([
+                    "-c",
+                    "user.name=Review Fixture",
+                    "-c",
+                    "user.email=fixture@example.invalid",
+                ])
+                .arg("-c")
+                .arg(format!(
+                    "core.hooksPath={}",
+                    self.root.join("no-hooks").display()
+                ))
+                .args(["-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"])
+                .args(args)
+                .current_dir(&self.root)
+                .stdin(std::process::Stdio::null())
+                .output()
+                .expect("fixture Git process");
+            assert!(output.status.success(), "fixture Git failed: {:?}", args);
+            String::from_utf8(output.stdout).expect("fixture Git UTF-8")
+        }
+
+        fn contract(&self, detached: bool) -> AutonomousDevelopmentContractV1 {
+            let branch = if detached {
+                "HEAD"
+            } else {
+                "codex/review-fixture"
+            };
+            serde_json::from_value(json!({
+                "schemaVersion":1, "contractId":"detached-review", "taskId":"source-assessment",
+                "projectId":"fixture", "mode":"chatgpt_web_direct_autonomous",
+                "objective":"Read source and retain only an authorized review report",
+                "workspace":self.root, "baseBranch":branch, "featureBranch":branch,
+                "baseCommit":self.commit, "expectedOrigin":"https://example.invalid/review.git",
+                "orderedSteps":["review"], "allowedPaths":[self.root], "forbiddenPaths":[],
+                "allowedCommandProfiles":["GIT_STATUS","GIT_DIFF"],
+                "gitPolicy":{"createBranch":false,"createWorktree":false,"localCommits":false,
+                    "pushFeatureBranch":false,"openPullRequest":false,"merge":false,"forcePush":false,"modifyMain":false},
+                "providerPolicy":{"primaryProvider":"chatgpt-web","primaryModel":"conversation-selected",
+                    "routineProvider":"none","routineModel":"none","allowPaidFallback":false,"allowCloudFallback":false},
+                "verificationPolicy":{"profile":"source-review","requiredCommands":["GIT_STATUS","GIT_DIFF"],
+                    "maxRepairCycles":1,"requireAuthoritativeDiff":true,"requireFinalReview":true},
+                "rateLimitPolicy":{"automaticPause":true,"automaticResume":true,"initialBackoffSeconds":1,
+                    "maximumBackoffSeconds":2,"maximumRateLimitedSeconds":5,"honorProviderRetryAfter":true},
+                "autonomyLease":{"startApprovalRequired":true,"renewalAllowed":false,"issuedAtUnix":10,
+                    "expiresAtUnix":1000,"maximumTotalElapsedSeconds":90,"maximumProviderTurns":2,
+                    "maximumToolCalls":8,"maximumConsecutiveFailures":1,"maximumRepairCycles":1},
+                "hardStopConditions":["CANCELLATION_REQUESTED"], "completionArtifactIds":["review.json"]
+            })).expect("fixture contract")
+        }
+
+        fn detached(&self) {
+            self.git(&["checkout", "-q", "--detach", &self.commit]);
+            assert!(self.git(&["branch", "--show-current"]).trim().is_empty());
+        }
+    }
+
+    impl Drop for GitFixture {
+        fn drop(&mut self) {
+            // Delete only our still-identical immediate child of the canonical
+            // temporary directory; never follow a replaced fixture root.
+            let resolved = self.root.canonicalize().expect("fixture root still exists");
+            assert_eq!(resolved, self.root);
+            assert_eq!(resolved.parent(), Some(self.temp_root.as_path()));
+            let cleanup = std::fs::remove_dir_all(&resolved);
+            if !std::thread::panicking() {
+                cleanup.expect("remove owned temporary Git repository");
+            }
+        }
+    }
+
+    fn admitted(contract: AutonomousDevelopmentContractV1) -> bool {
+        AutonomousPolicyEngineV1::new(contract)
+            .is_ok_and(|policy| ContractVerifierV1::new(policy).is_ok())
+    }
+
+    #[test]
+    fn exact_detached_direct_read_only_git_contract_verifies_without_branch_changes() {
+        let fixture = GitFixture::new();
+        fixture.detached();
+        let policy = AutonomousPolicyEngineV1::new(fixture.contract(true)).expect("valid policy");
+        let mut verifier = ContractVerifierV1::new(policy).expect("exact detached source admitted");
+        let (result, _) = verifier.verify().expect("read-only verification");
+        assert_eq!(result.status, VerificationStatusV1::Passed);
+        assert!(fixture.git(&["branch", "--show-current"]).trim().is_empty());
+        assert_eq!(fixture.git(&["rev-parse", "HEAD"]).trim(), fixture.commit);
+    }
+
+    #[test]
+    fn detached_contract_refuses_every_git_mutation_permission() {
+        let fixture = GitFixture::new();
+        fixture.detached();
+        for flag in [
+            "createBranch",
+            "createWorktree",
+            "localCommits",
+            "pushFeatureBranch",
+            "openPullRequest",
+            "merge",
+            "forcePush",
+            "modifyMain",
+        ] {
+            let mut value = serde_json::to_value(fixture.contract(true)).expect("contract JSON");
+            value["gitPolicy"][flag] = json!(true);
+            let contract = serde_json::from_value(value).expect("modified fixture contract");
+            assert!(!admitted(contract), "detached contract must refuse {flag}");
+        }
+    }
+
+    #[test]
+    fn detached_contract_refuses_wrong_commit_origin_and_abbreviated_identity() {
+        let fixture = GitFixture::new();
+        fixture.detached();
+        let mut contract = fixture.contract(true);
+        contract.base_commit = "0".repeat(40);
+        assert!(!admitted(contract));
+        let mut contract = fixture.contract(true);
+        contract.base_commit = fixture.commit[..7].into();
+        assert!(!admitted(contract));
+        let mut contract = fixture.contract(true);
+        contract.expected_origin = "https://example.invalid/other.git".into();
+        assert!(!admitted(contract));
+    }
+
+    #[test]
+    fn detached_contract_requires_explicit_head_descriptors_and_direct_provider() {
+        let fixture = GitFixture::new();
+        fixture.detached();
+        let mut contract = fixture.contract(true);
+        contract.base_branch = "main".into();
+        assert!(!admitted(contract));
+        let mut contract = fixture.contract(true);
+        contract.mode = "chatgpt_web_codex_autonomous".into();
+        contract.provider_policy.primary_provider = "codex-cli".into();
+        contract.provider_policy.primary_model = "gpt-5.6-terra".into();
+        contract.provider_policy.routine_provider = "ollama".into();
+        contract.provider_policy.routine_model = "qwen3.6:35b-a3b".into();
+        assert!(!admitted(contract));
+    }
+
+    #[test]
+    fn named_branch_rules_still_require_the_exact_feature_branch_and_refuse_main() {
+        let fixture = GitFixture::new();
+        assert!(admitted(fixture.contract(false)));
+        assert!(!admitted(fixture.contract(true)));
+        let mut contract = fixture.contract(false);
+        contract.feature_branch = "codex/wrong".into();
+        assert!(!admitted(contract));
+        fixture.git(&["checkout", "-q", "-b", "main"]);
+        let mut contract = fixture.contract(false);
+        contract.feature_branch = "main".into();
+        assert!(!admitted(contract));
+    }
+
+    #[test]
+    fn verification_rechecks_detached_commit_and_branch_after_construction() {
+        let fixture = GitFixture::new();
+        fixture.detached();
+        let policy = AutonomousPolicyEngineV1::new(fixture.contract(true)).expect("valid policy");
+        let mut verifier = ContractVerifierV1::new(policy).expect("initial identity");
+        fixture.git(&[
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "unexpected advancement",
+        ]);
+        assert!(verifier.verify().is_err());
+        fixture.detached();
+        let policy = AutonomousPolicyEngineV1::new(fixture.contract(true)).expect("valid policy");
+        let mut verifier = ContractVerifierV1::new(policy).expect("initial identity");
+        fixture.git(&["checkout", "-q", "-b", "codex/drift"]);
+        assert!(verifier.verify().is_err());
+    }
+
+    #[test]
+    fn detached_review_refuses_tracked_changes_and_allows_a_new_untracked_report() {
+        let fixture = GitFixture::new();
+        fixture.detached();
+        std::fs::write(fixture.root.join("source.txt"), "changed\n").expect("fixture change");
+        assert!(!admitted(fixture.contract(true)));
+        fixture.git(&["add", "source.txt"]);
+        assert!(!admitted(fixture.contract(true)));
+        fixture.git(&["reset", "--hard", "-q", &fixture.commit]);
+        let policy = AutonomousPolicyEngineV1::new(fixture.contract(true)).expect("valid policy");
+        let mut verifier = ContractVerifierV1::new(policy).expect("immutable source");
+        std::fs::write(fixture.root.join("review.json"), "{}\n").expect("new report");
+        assert_eq!(
+            verifier.verify().expect("report verification").0.status,
+            VerificationStatusV1::Passed
+        );
+        std::fs::write(fixture.root.join("source.txt"), "later change\n").expect("fixture drift");
+        assert!(verifier.verify().is_err());
+    }
 
     #[test]
     fn output_is_bounded_on_utf8_boundaries() {

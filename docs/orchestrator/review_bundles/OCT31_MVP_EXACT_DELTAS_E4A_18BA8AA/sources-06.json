@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "sources",
+  "offset": 40,
+  "entries": [
+    {
+      "path": "src/web_review_work.rs",
+      "baseBlob": "fa34a0cd560835de3424f3fc1cbef064db4424a6",
+      "targetBlob": "c3b6e1c02dc0e5ec0cb8f204d2bc7de6e51208ad",
+      "patchSha256": "0dd9a3a0dcc02f7e570ec74f5e849b998df93b31cccba903d07579e8e9602dbf",
+      "startByte": 480429,
+      "endByte": 497532
+    },
+    {
+      "path": "src/web_task_dispatch.rs",
+      "baseBlob": "ce4aebb213bb37a3f21071f5259e979dca2724b6",
+      "targetBlob": "ae3718722ecb0530c08a7914507dc30b77721967",
+      "patchSha256": "4a44f9e4988e1b72d690209bf078f101d9ad8072b2feca0200fb0fc9cec4590a",
+      "startByte": 497532,
+      "endByte": 600349
+    },
+    {
+      "path": "src/web_work.rs",
+      "baseBlob": "534ada25535b3371fbd54252c4f8ef8654928cbc",
+      "targetBlob": "9b6d94c47e2844670dc493a78b1bedec52c4aad5",
+      "patchSha256": "7caedfa9e46dbb54b32dba39e1766edbfa0b8361b63dbf587b7e810ed883245a",
+      "startByte": 600349,
+      "endByte": 621081
+    },
+    {
+      "path": "src/windows_protected_fs.rs",
+      "baseBlob": "855b4dd14a502463792a7aa2c2cd7983e08eb4e9",
+      "targetBlob": "8685c3f0f25b73a74a62fd9717a311368ea404f8",
+      "patchSha256": "0d7b7df49360ec11a7ccebedd5ad47f2ee75bb462403669ba2fad0e21de19fcc",
+      "startByte": 621081,
+      "endByte": 621881
+    },
+    {
+      "path": "src/windows_supervisor_startup.rs",
+      "baseBlob": "1665a9f45e9c3306b0a33c44f32eae4ea25f3d9f",
+      "targetBlob": "5db1048720e83635dd7cdf7b199838d3452b525a",
+      "patchSha256": "82e7a0cfc640348f41864c02dfe218f2c1bf3eeb2cf19311ff68e8fbc52df99a",
+      "startByte": 621881,
+      "endByte": 625270
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "baseBlob": "ac9bb2736979c7f5970844c72595323abd03b813",
+      "targetBlob": "ff0b1fc3e3303b4c6a238d4327ea62be47fef282",
+      "patchSha256": "4a83c7d78659dc0e9847eb09e38a3ba7062f8f9b3d802fe83209ed1ab49d0c2a",
+      "startByte": 625270,
+      "endByte": 626389
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "baseBlob": "9d477ae0a23b3b11c7e95ea23b0db54a56fa3dfe",
+      "targetBlob": "51eacfbb1693e619ac3472c1a9c5c851895c27dc",
+      "patchSha256": "41950b1115cdd7b63389be9e26374cc4feeaa138a5dd00267d048874e944b578",
+      "startByte": 626389,
+      "endByte": 654639
+    },
+    {
+      "path": "tests/test_wake_profile_quiescence.py",
+      "baseBlob": null,
+      "targetBlob": "1212f35682f715e8ddbe4113e93de17e463451a8",
+      "patchSha256": "1d919349f4f9fe6425debb46c580a6e7ca99b0099afd74a545704e32c39d0c78",
+      "startByte": 654639,
+      "endByte": 659532
+    }
+  ]
+}

@@ -1,0 +1,136 @@
++    [Environment]::SetEnvironmentVariable('CONTROL_PLANE_API_KEY','synthetic-existing-runtime-key','Process')
++    $config=[pscustomobject]@{Found=$true;BindHost='127.0.0.1';Port=3200;Route='abcdefghijklmnopqrstuvwxyz012345'}
++    $ForwardLocalMcpBearer=$false;$null=Connect-Runtime -ClientPath $hostImage -McpConfig $config;$checks++
++    $ForwardLocalMcpBearer=$true;$script:expectedAuthorization=$authorization;$null=Connect-Runtime -ClientPath $hostImage -McpConfig $config;$checks++
++    Need ($script:connectCalls -eq 2) 'CONNECT_COUNT_WRONG'
++    [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN','invalid','Process')
++    Refuses {Connect-Runtime -ClientPath $hostImage -McpConfig $config} 'LOCAL_MCP_AUTH_TOKEN_INVALID'
++    Need ($script:connectCalls -eq 2) 'INVALID_AUTH_STARTED_RUNTIME';$checks++
++    [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$token,'Process')
++    $config.BindHost='example.com'
++    try{$null=Connect-Runtime -ClientPath $hostImage -McpConfig $config;throw 'REMOTE_TARGET_ACCEPTED'}catch{Need ($_.Exception.Message -ne 'REMOTE_TARGET_ACCEPTED') 'REMOTE_TARGET_ACCEPTED'}
++    Need ($script:connectCalls -eq 2) 'REMOTE_TARGET_STARTED_RUNTIME';$checks++
++    @{state='PASS';checks=$checks;actualOwnedChild=$true;officialRuntimeStarts=0;operatorProfileReads=0;productionAuthChanges=0;parentEnvironmentPreserved=$true}|ConvertTo-Json -Compress
++}finally{
++    foreach($name in $names){[Environment]::SetEnvironmentVariable($name,$before[$name],'Process')}
++    if(Test-Path -LiteralPath $child){Remove-Item -LiteralPath $child -Force}
++    Remove-Item -LiteralPath $root -Force
++}
+diff --git a/scripts/test-start-catdesk-stack.ps1 b/scripts/test-start-catdesk-stack.ps1
+index ddfaad3c85b1268164e41a5632efd0e7af0698ad..3f9f635b91eb5d149bb0cd2f690bfebf56952b99 100644
+--- a/scripts/test-start-catdesk-stack.ps1
++++ b/scripts/test-start-catdesk-stack.ps1
+@@ -180,6 +180,10 @@ try {
+     if(($authorized|ConvertTo-Json -Compress) -match [regex]::Escape($fixtureToken)){throw 'native auth leaked into readiness output'}
+     foreach($invalid in @('', 'short',(('x'*24)+"`n"),(('x'*24)+' '),('é'*24))){
+       [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$invalid,'Process')
++      # .NET Framework removes a variable when assigned an empty string.
++      # That host cannot exercise present-but-empty environment state; do not
++      # confuse the documented absent-token path with invalid configured auth.
++      if($invalid -ceq '' -and -not [Environment]::GetEnvironmentVariables('Process').Contains('CATDESK_MCP_AUTH_TOKEN')){continue}
+       $refused=Get-LocalMcpReadiness -LocalMcp $authLocal -Canonical ([pscustomobject]@{})
+       if($refused.Ready -or $refused.Gate -cne 'LOCAL_MCP_AUTH_TOKEN_INVALID' -or $script:authRequests.Count -ne 2){throw 'invalid native auth reached HTTP or downgraded'}
+     }
+diff --git a/scripts/wake_bridge.py b/scripts/wake_bridge.py
+index d4fa11e7f1e3aeedcea245169b4c21e7ac7a83a2..507f109f0619642b4ed207fb5c90b18473be05eb 100644
+--- a/scripts/wake_bridge.py
++++ b/scripts/wake_bridge.py
+@@ -43,6 +43,16 @@ const composerText = root => {
+     return text.endsWith('\n') ? text.slice(0, -1) : text;
+ };
+ """
++USER_BODY_TEXT_READER = COMPOSER_TEXT_READER + r"""
++const userBodyText = content => {
++    // Only detach presentation controls from a copy of a known USER body.
++    // Preserve authored text and paragraph/BR boundaries; never edit the DOM.
++    const copy = content.cloneNode(true);
++    copy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
++        .forEach(control => control.remove());
++    return composerText(copy);
++};
++"""
+ EDITOR_SELECTORS = (
+     "#prompt-textarea",
+     "div.ProseMirror[contenteditable='true']",
+@@ -86,6 +96,55 @@ RESPONSE_RETRY_START_WINDOW_SECONDS = 15.0
+ RESPONSE_GENERATION_WINDOW_SECONDS = 35.0 * 60.0
+ RESPONSE_TOTAL_WINDOW_SECONDS = 90.0 * 60.0
+ RESPONSE_MAX_RETRIES = 3
++RESPONSE_CONTROL_COUNTS = (
++    "semanticAssistantUnits", "roleAssistantNodes", "copyTestIdInTurn",
++    "copyLabelInTurn", "copyResponseLabelInTurn", "copyMessageLabelInTurn",
++    "copyTextInTurn", "knownCopyInAssistant", "knownCopyInBody",
++    "sharedCopyAfterAssistant", "toolbarContainersInTurn", "buttonsInTurn",
++    "copyTestIdInParent", "copyLabelInParent", "copyResponseLabelInParent",
++    "copyMessageLabelInParent",
++)
++RESPONSE_CONTROL_FLAGS = (
++    "pairedTurn", "assistantBodyPresent", "completionActionFound", "assistantInsideSemanticUnit",
++)
++
++
++def valid_response_control_diagnostics(value: Any) -> bool:
++    """Closed, capped DOM-shape metadata; never text or action authority."""
++    return (isinstance(value, dict) and set(value) == set(RESPONSE_CONTROL_COUNTS + RESPONSE_CONTROL_FLAGS)
++            and all(type(value[key]) is int and 0 <= value[key] <= 64 for key in RESPONSE_CONTROL_COUNTS)
++            and all(type(value[key]) is bool for key in RESPONSE_CONTROL_FLAGS))
++
++
++RESPONSE_LOAD_ERROR_DETECTOR = """
++const assistantLoadError = element => {
++    if (!element || typeof element.cloneNode !== 'function') return false;
++    const clean = node => {
++        const copy = node.cloneNode(true);
++        copy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], h4[data-conversation-role]')
++            .forEach(control => control.remove());
++        return String(copy.textContent || '').replace(/[‘’]/g, "'").replace(/\\s+/g, ' ').trim().toLowerCase().replace(/\\.$/, '');
++    };
++    const marker = "this response couldn't load";
++    const bodySelector = '[data-message-content], .markdown, [class~="prose"], [data-markdown-text-style="assistant-message"]';
++    const body = element.matches(bodySelector) ? element : element.querySelector(bodySelector);
++    // A normal answer discussing the error is not the UI error placeholder.
++    if (body && clean(body) && clean(body) !== marker) return false;
++    return [element, ...element.querySelectorAll('div, p, span')]
++        .some(node => visible(node) && clean(node) === marker);
++};
++"""
++# Shared by observation and the sole qualified assistant Retry action. Never
++# climb out of the wake's assistant/exchange boundary or borrow USER controls.
++RESPONSE_ASSISTANT_SCOPE = """
++const userNodeSelector = "[data-message-author-role='user'], [data-turn='user'], " +
++    "[data-user-message-bubble], [class~='group/user-message']";
++const responseBoundary = latestUser.matches('[data-content-search-turn-key]')
++    ? latestUser : (turnsAfterWake.length === 1 ? turnsAfterWake[0] : null);
++const assistantResponseNode = element => Boolean(element && responseBoundary &&
++    inWakeExchange(element) && responseBoundary.contains(element) &&
++    !element.closest(userNodeSelector));
++"""
+ POST_SUBMIT_DIAGNOSTICS = frozenset({
+     "SUBMIT_CLICK_UNKNOWN",
+     "SUBMIT_ENTER_UNKNOWN",
+@@ -125,6 +184,10 @@ POST_SUBMIT_DIAGNOSTICS = frozenset({
+     "RESPONSE_NETWORK_ERROR",
+     "RESPONSE_GENERATION_TIMEOUT",
+     "RESPONSE_COMPLETION_UNPROVEN",
++    "RESPONSE_LOAD_ERROR",
++    "RESPONSE_RETRY_BLOCKED_DRAFT",
++    "RESPONSE_RETRY_BLOCKED_GENERATION",
++    "RESPONSE_RETRY_EDITOR_UNAVAILABLE",
+     "RESPONSE_TIMEOUT_RETRY_AMBIGUOUS",
+     "RESPONSE_RETRY_EXHAUSTED",
+     "RESPONSE_TIMEOUT_STATE_LOST",
+@@ -469,6 +532,85 @@ class CdpSink:
+     def visible(cdp: Any, selector: str) -> bool:
+         try: return bool(cdp.is_element_visible(selector))
+         except Exception: return False
++    def browser_surface_observation(self, cdp: Any) -> dict[str, str]:
++        """Metadata only, with the route checked inside the same DOM read.
++
++        This is not a wake receipt or caller identity. An assistant failure on
++        an unbound inspection is unattributed; it never authorizes Retry/send.
++        Draft text and conversation bodies never cross the CDP return boundary.
++        """
++        vocab = {
++            "route": {"EXACT", "HOME", "AUTH_REQUIRED", "SECURITY_CHECK", "NETWORK_ERROR", "TARGET_DRIFT", "UNKNOWN"},
++            "document": {"COMPLETE", "LOADING", "UNKNOWN"},
++            "history": {"PRESENT", "ABSENT", "UNKNOWN"},

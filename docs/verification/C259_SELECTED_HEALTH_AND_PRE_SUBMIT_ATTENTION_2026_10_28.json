@@ -1,0 +1,74 @@
+{
+  "development": {
+    "protectedPins": 8459,
+    "previousVerifiedPackagePreserved": true,
+    "naturalParentAndChildExit": true,
+    "appSha256": "df0cab8196c889b72fa3fd3c7dc0b5c1ccc1b202897d8c161655ce7a0593496b",
+    "actualSelectedChildVerified": true,
+    "statuses": [
+      401,
+      200
+    ],
+    "evidenceAuthority": "LOCAL_OPERATOR_PROVIDED_NOT_PRODUCTION",
+    "packageId": "1.0.0-dev.85-765edfd674c3bfca65e699a9f0dc430176278e1538ae53c16ee1558844549018",
+    "maximumSeconds": 6,
+    "toolCount": 79
+  },
+  "sourceCi": "UNVERIFIED_ZERO_CHECK_RUNS",
+  "date": "2026-10-28",
+  "connector": "NOT_RECHECKED_SEPARATE_DEPENDENCY",
+  "review": {
+    "noSendPreflight": "ELIGIBLE",
+    "responseVerified": false,
+    "nativeErrorCode": "LOGIN_OR_PROFILE_REQUIRED",
+    "submissionBoundary": "NOT_REACHED_CONFIRMED_FROM_DURABLE_WITNESSES",
+    "protectedPriorPins": 8469,
+    "dispatchRecorded": false,
+    "standingAuthorizationRegistry": "REGISTERED",
+    "frozenPayloadPreserved": true,
+    "timer": false,
+    "automaticRetry": false,
+    "receipt": false,
+    "nativeExitCode": 2,
+    "deliveryPhase": "ATTENTION",
+    "nativeClaim": "WAITING_FOR_CHATGPT_ACTIVE_VERSION_4",
+    "sourceAccepted": false,
+    "ownersRemaining": 0,
+    "derivedBaselinePins": 8471,
+    "boundedAttempts": 1
+  },
+  "sourceCommit": "28af7fe8a8aa5dc066df0de0263b34d52fab85d7",
+  "installedRollbackAcceptance": "OPEN",
+  "producerController": {
+    "currentFailureRetained": "REVIEWED_BUILD_TIMEOUT_DESCENDANTS_ACTIVE",
+    "newProducerScheduled": false,
+    "readOnlyNativeResultValidated": true,
+    "newBuildAttestation": false,
+    "trustedC208ArtifactPreserved": true
+  },
+  "recovery": {
+    "authenticationReadinessProvedByLoginClosure": false,
+    "supportedProfileInspection": "operator web-dev-runtime login --project-id <registered-project>",
+    "developmentRetryCommand": "Not applicable: its dev-event prefix restriction must not be bypassed",
+    "requiresInteractiveTerminal": true,
+    "operatorAction": "Inspect existing browser and sign in only if requested there; never enter credentials into AI conversation",
+    "nextDeliveryAction": "Fresh supported review resume eligibility and immutable request checks after actual authentication/readiness recovery; no blind replay",
+    "profileReuse": "EXISTING_SELECTED_DEVELOPMENT_PROFILE"
+  },
+  "preservation": {
+    "fiveProjectBindings": true,
+    "historicalConversations": true,
+    "productionChanged": false,
+    "externalTunnelChanged": false,
+    "ambiguousHistoricalRequests": "NO_REPLAY",
+    "browserProfileIdentity": true,
+    "nativeSessions": true,
+    "recurringAutomationEnabled": false
+  },
+  "productionPromotion": "NOT_PERFORMED",
+  "installedBackendAcceptance": "OPEN",
+  "twoIndependentWebCodingAcceptance": "OPEN",
+  "sourcePublicationRemoteShaVerified": true,
+  "checkpoint": "C259",
+  "milestoneComplete": false
+}

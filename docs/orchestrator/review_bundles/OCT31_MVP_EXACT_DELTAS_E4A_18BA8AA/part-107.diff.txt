@@ -1,0 +1,80 @@
++                    with self.assertRaisesRegex(bridge.Attention, 'RESPONSE_PROBE_DIAGNOSTIC_INVALID'):
++                        adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
++                else:
++                    adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
++                self.assertFalse(cdp.sent); self.assertEqual(cdp.keys, [])
++        terminal = [frame for frame in frames if 'completionControls' in frame]
++        self.assertEqual(len(terminal), 1)
++        self.assertEqual(terminal[0]['eventId'], 'valid')
++        self.assertEqual(terminal[0]['completionControls'], controls)
++        self.assertNotIn('PRIVATE_DRAFT', json.dumps(terminal))
++
+     def test_probe_rejects_boolean_generation_and_schema_before_browser_open(self):
+         class NoBrowser:
+             @property
+@@ -740,7 +873,7 @@ class AdapterTests(unittest.TestCase):
+                 bridge.CdpSink, "response_snapshot", return_value=(0, 0, True, False)
+             ) as response:
+                 self.assertEqual(sink.observe_cooperative_response(cdp, "bounded wake", expected), "RESPONSE_PENDING")
+-                response.assert_called_once_with(cdp, "bounded wake", require_usable_body=True)
++                response.assert_called_once_with(cdp, "bounded wake", require_usable_body=True, diagnostic={})
+             with patch.object(bridge.CdpSink, "post_submit_visible_any", return_value=False), patch.object(
+                 bridge.CdpSink, "document_ready_state", return_value="complete"
+             ), patch.object(bridge.CdpSink, "trusted_turn_anchor_state", return_value=(1, 0)), patch.object(
+@@ -759,6 +892,16 @@ class AdapterTests(unittest.TestCase):
+             ):
+                 with self.assertRaisesRegex(bridge.Attention, "RESPONSE_STATE_UNPROVEN"):
+                     sink.observe_cooperative_response(cdp, "bounded wake", expected)
++            with patch.object(bridge.CdpSink, "post_submit_visible_any", return_value=False), patch.object(
++                bridge.CdpSink, "document_ready_state", return_value="complete"
++            ), patch.object(bridge.CdpSink, "trusted_turn_anchor_state", return_value=(1, 0)), patch.object(
++                bridge.CdpSink, "user_message_digests", return_value=[expected]
++            ), patch.object(bridge.CdpSink, "editor_state", return_value=("ready", True)), patch.object(
++                bridge.CdpSink, "response_snapshot", side_effect=bridge.PostSubmitUnknown("RESPONSE_LOAD_ERROR")
++            ), patch.object(bridge.CdpSink, "click_response_timeout_retry") as retry:
++                with self.assertRaisesRegex(bridge.Attention, "^RESPONSE_LOAD_ERROR$"):
++                    sink.observe_cooperative_response(cdp, "bounded wake", expected)
++                retry.assert_not_called()
+ 
+     def test_controls_only_assistant_is_not_usable_or_complete(self):
+         node_exe = shutil.which("node")
+diff --git a/wake/tests/test_new_conversation.py b/wake/tests/test_new_conversation.py
+index eb9bae7c05beeb66897998f4cc234762373f5d98..bfb9d7b98689812afc0c7d7c92711ce89b6705e0 100644
+--- a/wake/tests/test_new_conversation.py
++++ b/wake/tests/test_new_conversation.py
+@@ -290,6 +290,10 @@ class AttemptSink:
+         if cdp.scenario == "incomplete_body":
+             message["textComplete"] = False
+             coverage["textIncomplete"] = 1
++        if cdp.scenario == "load_error_body":
++            message["text"] = cdp.load_error_text
++            message["visibleUnits"] = len(message["text"])
++            message["revisionHash"] = bridge.digest(message["text"])
+         if cdp.scenario == "large_snapshot":
+             message["text"] = "😀" * 4096
+             message["visibleUnits"] = 4096
+@@ -1126,6 +1130,24 @@ class NewConversationTests(unittest.TestCase):
+             frame_limit,
+         )
+ 
++    def test_load_error_snapshot_retains_shape_diagnostic_without_browser_action(self):
++        for text in ("This response couldn't load", "This RESPONSE\ncouldn’t\tload"):
++            with self.subTest(text=text):
++                cdp = AttemptCdp("load_error_body")
++                cdp.load_error_text = text
++                sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
++                emitted = []
++                request = {"snapshot": True, "projectId": "project-one", "source": self.request()["source"]}
++                with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(
++                    adapter, "emit", emitted.append
++                ), patch.object(adapter.time, "sleep"):
++                    adapter.source_snapshot(bridge, sb, request)
++                snapshot = emitted[-1]["snapshot"]
++                self.assertEqual(snapshot["bodyDiagnostics"], {"status": "UNAVAILABLE"})
++                self.assertEqual(snapshot["messages"][-1]["text"], text)
++                self.assertEqual(cdp.timeline, ["snapshot", "snapshot", "body-diagnostics"])
++                self.assertEqual((cdp.sent, cdp.draft, cdp.navigation), (0, "", [SOURCE]))
++
+     def test_incomplete_snapshot_adds_private_shape_without_promoting_text(self):
+         cdp = AttemptCdp("incomplete_body")
+         sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)

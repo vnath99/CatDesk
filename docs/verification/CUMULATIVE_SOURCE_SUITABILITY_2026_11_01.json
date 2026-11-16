@@ -1,0 +1,60 @@
+{
+  "observedUtc": "2026-11-01T20:58:57.906232+00:00",
+  "status": "TESTED_CONTROLLED_LIVE",
+  "classification": "INDEPENDENT_CUMULATIVE_SOURCE_SUITABILITY_NOT_RELEASE_AUTHORITY",
+  "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "scopePathCount": 84,
+  "scopeNarrowed": false,
+  "verdict": "PASS",
+  "findingsCount": 0,
+  "responseSha256": "5471731f2f3c5214b589dc6b84df6feff15d3ce0b06e8b4accbeb6ffaffbd86d",
+  "responseUtf8Bytes": 3407,
+  "exactUserReceiptAndCompletedEventRead": true,
+  "sourceReadsCorroborated": 11,
+  "sourceReadLogCounts": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "earlierPartialEvidenceRetainsItsLimits": true,
+  "independentTestsExecutedByReviewer": false,
+  "observationRecovery": {
+    "initialRefusal": "RESPONSE_USER_REPRESENTATION_MISMATCH",
+    "originalFailureRetained": true,
+    "freshExactEventReadVerified": true,
+    "oneSupportedNoSendReobservation": true,
+    "durableTimer": "COMPLETE",
+    "userMessageResent": false,
+    "rootCauseEstablished": false
+  },
+  "connectorPreflight": {
+    "initialFailure": "TRANSPORT_SEND_ERROR_NO_HTTP_STATUS",
+    "localAuthenticatedCatalogStatus": 200,
+    "oneLaterReadOnlyRecovery": "PASS_FOUR_EXACT_INPUT_HASHES",
+    "servingProcessesRestarted": false
+  },
+  "cleanup": {
+    "testOwnedProcesses": 0,
+    "trustedBackendAndExistingTunnelRetained": true,
+    "sharedWakeHostStopped": true
+  },
+  "remaining": [
+    "Guarded source integration and byte-faithful canonical report creation.",
+    "Existing managed completion, verification, review-inbox ACK and immutable source snapshot.",
+    "Dedicated reviewed producer/attestation, protected promotion and installed lifecycle/authentication/rollback tests.",
+    "Canonical/control authority reconciliation and two actual Web project edits/native verification.",
+    "Installed Wake/recovery qualification, remaining full T-0484 meter acceptance and later CD-P7 client integration."
+  ],
+  "canonicalCompletionArtifactCreated": false,
+  "producerAuthority": false,
+  "productionChanges": 0,
+  "coreAcceptance": "OPEN"
+}

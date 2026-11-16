@@ -1,0 +1,138 @@
+{
+  "checkpoint": "C246",
+  "date": "2026-10-26",
+  "classification": "SOURCE_QUALIFIED_NOT_REVIEWED_OR_INSTALLED",
+  "sourceParent": "e5a3ca9a9fc713bfba5d6b7c21f2d6e8e32780d1",
+  "sourceWorkingPins": [
+    {
+      "sha256": "c7f9ab1a514bcd3a6fbb652db5b3d50d94031d4439f6af2d544a4cdcc2ccb5cf",
+      "path": "src/daemon_reload.rs"
+    },
+    {
+      "sha256": "1cc84d81c6089b6c599d7783f001e0828ac38db2445f864edc3e283c8685ae9d",
+      "path": "src/operator_facade.rs"
+    },
+    {
+      "sha256": "d54d744f78c44471bbfe269d87741df09aabc3d0af9a3a468eceb62c8e1d6402",
+      "path": "src/delegated/autonomy_supervisor.rs"
+    },
+    {
+      "sha256": "d9a6303fcc6a89804c0dfb343ae1c94f84e0c1811e886f78d95dae37f0955fa6",
+      "path": "scripts/promote-reviewed-catdesk-build.ps1"
+    },
+    {
+      "sha256": "c7674269581872605031a4cd034c715c5cbfaa75cd99d53e434298c23643f901",
+      "path": "scripts/restart_catdesk_daemon.ps1"
+    },
+    {
+      "sha256": "6a808ab32f20fa6717b63ad168e2fcf1dfcb11a3cb7dbc7281d3c2b2e0d4b690",
+      "path": "scripts/restart_catdesk_daemon_worker.ps1"
+    },
+    {
+      "sha256": "3a175de244716a67e60a249825dd7e9d6faffc753ebe9fec07a53e2049546700",
+      "path": "scripts/test-promote-reviewed-catdesk-build.ps1"
+    },
+    {
+      "sha256": "1a42f25d8c05318da882e647529332e7061d08f0b8033daec2b9a021de3d8dfc",
+      "path": "scripts/test-restart-catdesk-daemon-process-identity.ps1"
+    }
+  ],
+  "changes": [
+    "Optional localBackendOnly boolean is admitted only by normal reviewed-promotion PREFLIGHT and is retained in the exact authorization. CONFIRM cannot override it.",
+    "Backend-only handoff requires a supporting candidate, validated loopback configuration on port 3200, process-local MCP authentication and an exact schema4 LOCAL_BACKEND_ONLY authenticated receipt.",
+    "Candidate support and configuration are checked before the old owner can be stopped; no external transport or recurring activation is part of the profile.",
+    "Release consumers accept the exact existing managed review contract-hash format without relaxing source, snapshot or attestation checks.",
+    "Existing PowerShell JSON readers preserve timestamp strings across supported interpreter versions.",
+    "Promotion disk completion reports bounded-owner serving state separately; persistent startup remains a separate public lifecycle operation."
+  ],
+  "tests": [
+    {
+      "command": "cargo test --locked --offline --bin catdesk promotion -- --test-threads=1",
+      "passed": 8,
+      "failed": 0,
+      "ignored": 0,
+      "ownerMaximumSeconds": 600,
+      "timedOut": false,
+      "terminationFailed": false,
+      "ownerExitCode": 0
+    },
+    {
+      "command": "cargo clippy --locked --offline --tests --bin catdesk -- -D warnings",
+      "ownerMaximumSeconds": 600,
+      "exitCode": 0,
+      "timedOut": false,
+      "terminationFailed": false
+    },
+    {
+      "command": "scripts/test-promote-reviewed-catdesk-build.ps1",
+      "ownerMaximumSeconds": 120,
+      "exitCodes": [
+        0,
+        0
+      ],
+      "interpreters": [
+        "PowerShell7",
+        "WindowsPowerShell5"
+      ]
+    },
+    {
+      "command": "scripts/test-restart-catdesk-daemon-process-identity.ps1",
+      "ownerMaximumSeconds": 120,
+      "exitCodes": [
+        0,
+        0
+      ],
+      "interpreters": [
+        "PowerShell7",
+        "WindowsPowerShell5"
+      ],
+      "actualUnsupportedTargetPreservedOldProcess": true,
+      "fixed3200GuardChecked": true
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "priorFailuresPreserved": [
+    "PS7 literal timestamp coercion fixed by existing reader",
+    "New test seam counted failure audit as handoff; assertion corrected",
+    "WindowsPowerShell5 Get-FileHash absence fixed with .NET hash helper"
+  ],
+  "independentStaticReview": "PASS",
+  "actualWindowsReadOnlySupportQueries": {
+    "browserActions": 0,
+    "qualifiedDevelopmentImageSource": "48625826f2241edc0e25151ad8c32b5e7942dafe",
+    "developmentImageSupported": true,
+    "installedC208Supported": false,
+    "wakeActions": 0,
+    "maximumPerChildMilliseconds": 5000,
+    "scope": "CLOSED_READ_ONLY_CAPABILITY_QUERY_NOT_NEW_HANDOFF_OR_PROMOTION",
+    "productionChanges": 0
+  },
+  "cleanup": {
+    "terminationFailures": 0,
+    "rootTargetedInventoryUtc": "2026-10-26T13:37:13Z",
+    "rootMatchingSourceTestScriptProcessCount": 0,
+    "originalIndependentCimQuery": "ACCESS_DENIED_NOT_ABSENCE_PROOF",
+    "broaderProcessAbsenceClaimed": false,
+    "boundedTestOwnersExited": true
+  },
+  "release": {
+    "candidate": "NOT_BUILT",
+    "differentVersionRollback": "OPEN",
+    "protectedPromotion": "NOT_RUN",
+    "newMaterialSourceReview": "PENDING_FROZEN_COMMIT",
+    "exactSourceGithubCi": "UNVERIFIED",
+    "twoIndependentChatgptWebCodingConversations": "OPEN",
+    "installed": "C208_UNCHANGED_UNSUPPORTED_FOR_BACKEND_ONLY",
+    "newProducer": "NOT_PREPARED",
+    "connector": "LAST_HTTP_429_SEPARATE_DEPENDENCY",
+    "servingAcceptance": "NOT_ESTABLISHED"
+  },
+  "milestoneComplete": false
+}

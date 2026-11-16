@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "fullDeclaredCodePaths": 84,
+  "scope": "REMAINING_TASK_CONTEXT_PRODUCTION_VISIBILITY",
+  "reason": "Earlier large combined source output had a visibility limit. Exact current ranges 189-309 and 601-745 have separate bounded inspection; this packet covers only the remaining production ranges.",
+  "existingQualifiedTestCases": 14,
+  "testExecutionMeaning": "Previously qualified unchanged-source tests; not rerun or independently re-executed by this packet.",
+  "reads": [
+    {
+      "path": "src/project_task_context.rs",
+      "firstLine": 1,
+      "lastLine": 100,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1,100 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/project_task_context.rs",
+      "bytes": 4445,
+      "sha256": "c4cbadc37949609177346983f0978803936eed92ef497b6b47c72f4c5b3dc32a"
+    },
+    {
+      "path": "src/project_task_context.rs",
+      "firstLine": 101,
+      "lastLine": 188,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 101,188 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/project_task_context.rs",
+      "bytes": 4943,
+      "sha256": "64fb5254a53e94501267cab8b4e15f675420c729018c489e0dacf70e5a9ba95d"
+    },
+    {
+      "path": "src/project_task_context.rs",
+      "firstLine": 310,
+      "lastLine": 409,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 310,409 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/project_task_context.rs",
+      "bytes": 5674,
+      "sha256": "78d909d80f8c6e13b1bea10148c5d652f439f9852178603e517ad0197cc1c0ae"
+    },
+    {
+      "path": "src/project_task_context.rs",
+      "firstLine": 410,
+      "lastLine": 509,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 410,509 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/project_task_context.rs",
+      "bytes": 5344,
+      "sha256": "20d8306a550898cb77c54736c261f5b9b70cab005fce7acc9c1e3929ae4adca0"
+    },
+    {
+      "path": "src/project_task_context.rs",
+      "firstLine": 510,
+      "lastLine": 600,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 510,600 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/project_task_context.rs",
+      "bytes": 4596,
+      "sha256": "9d7b184b24e25597a070857c7f9cd77a4f88107ff3c0cadc537c7f591426471c"
+    }
+  ],
+  "totalCodeBytes": 25002,
+  "questions": [
+    "Assess granted task/project/workspace identity and private context ownership.",
+    "Assess source generation and CAS, unknown-submission no-resend, receipts and retry/continuation admission.",
+    "Identify actionable defects or exact needed reads; source suitability and installed/native execution remain separate."
+  ],
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

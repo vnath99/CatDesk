@@ -9,6 +9,7 @@ param(
     [int]$HealthPollSeconds = 60,
     [int]$FailureCooldownSeconds = 300,
     [int]$MaximumMonitorCycles = 0,
+    [switch]$BackendOnly,
     [switch]$LoadOnly
 )
 
@@ -22,10 +23,25 @@ function Invoke-SupervisorSeam {
 }
 
 function Get-SupervisorWorkspaceId {
-    param([string]$Root)
+    param([string]$Root, [switch]$Legacy)
+    $identity = $Root
+    if (-not $Legacy) {
+        # Resolve-Path and Windows PowerShell's Get-Item retain caller casing.
+        # Resolve one exact existing component at a time; do not case-fold
+        # directory names or merge distinct case-sensitive siblings.
+        $full = [IO.Path]::GetFullPath($Root)
+        if (-not [IO.Directory]::Exists($full)) { throw 'supervisor workspace is not a directory' }
+        $base = [IO.Path]::GetPathRoot($full)
+        $identity = $base.ToUpperInvariant()
+        foreach ($part in $full.Substring($base.Length).Split([char[]]'\/', [StringSplitOptions]::RemoveEmptyEntries)) {
+            $matches = @([IO.Directory]::GetDirectories($identity, $part, [IO.SearchOption]::TopDirectoryOnly))
+            if ($matches.Count -ne 1) { throw 'supervisor workspace spelling is unavailable' }
+            $identity = $matches[0]
+        }
+    }
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
-        $digest = (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Root)) | ForEach-Object { $_.ToString('x2') }) -join '')
+        $digest = (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($identity)) | ForEach-Object { $_.ToString('x2') }) -join '')
         return $digest.Substring(0, 16)
     } finally {
         $sha.Dispose()
@@ -36,17 +52,38 @@ function Acquire-SupervisorGuard {
     param([string]$Root)
     Invoke-SupervisorSeam -Name 'AcquireGuard' -Arguments @($Root) -Default {
         param($workspaceRoot)
-        $created = $false
-        $mutex = [Threading.Mutex]::new($true, "Local\CatDesk.Autostart.$(Get-SupervisorWorkspaceId $workspaceRoot)", [ref]$created)
-        [pscustomobject]@{ Acquired = $created; Handle = $mutex }
+        $held = [Collections.Generic.List[Threading.Mutex]]::new()
+        try {
+            # Keep the original input-spelling reservation for compatibility
+            # with an existing monitor and its unchanged persistence record.
+            $ids = @(Get-SupervisorWorkspaceId $workspaceRoot; Get-SupervisorWorkspaceId $workspaceRoot -Legacy) | Select-Object -Unique
+            foreach ($id in $ids) {
+                $created = $false
+                $mutex = [Threading.Mutex]::new($true, "Local\CatDesk.Autostart.$id", [ref]$created)
+                if (-not $created) {
+                    $mutex.Dispose()
+                    foreach ($owned in $held) { $owned.ReleaseMutex(); $owned.Dispose() }
+                    return [pscustomobject]@{ Acquired = $false; Handle = $null; CompatibilityHandle = $null }
+                }
+                $held.Add($mutex)
+            }
+            return [pscustomobject]@{ Acquired = $true; Handle = $held[0]; CompatibilityHandle = if ($held.Count -gt 1) { $held[1] } else { $null } }
+        } catch {
+            foreach ($owned in $held) { try { $owned.ReleaseMutex() } catch {}; $owned.Dispose() }
+            throw
+        }
     }
 }
 
 function Release-SupervisorGuard {
     param($Guard)
     if ($null -eq $Guard -or $null -eq $Guard.Handle) { return }
-    try { $Guard.Handle.ReleaseMutex() } catch {}
-    $Guard.Handle.Dispose()
+    $handles = @($Guard.Handle)
+    if ($Guard.PSObject.Properties['CompatibilityHandle'] -and $null -ne $Guard.CompatibilityHandle) { $handles += $Guard.CompatibilityHandle }
+    foreach ($handle in $handles) {
+        try { $handle.ReleaseMutex() } catch {}
+        $handle.Dispose()
+    }
 }
 
 function Resolve-TrustedLifecycleFacadePath {
@@ -89,19 +126,40 @@ function Get-SupervisorRecoveryGateClass {
 }
 
 function Invoke-PublicLifecycle {
-    param([string]$Root, [ValidateSet('status', 'recover')][string]$Action)
-    Invoke-SupervisorSeam -Name 'Lifecycle' -Arguments @($Root, $Action) -Default {
-        param($workspaceRoot, $command)
+    param([string]$Root, [ValidateSet('status', 'recover')][string]$Action, [switch]$BackendOnly)
+    Invoke-SupervisorSeam -Name 'Lifecycle' -Arguments @($Root, $Action, [bool]$BackendOnly) -Default {
+        param($workspaceRoot, $command, $localOnly)
         $facade = Resolve-TrustedLifecycleFacadePath -Root $workspaceRoot
-        $raw = @(& $facade $command -Workspace $workspaceRoot)
+        $publicCommand = if($localOnly -and $command -ceq 'status'){'diagnose'}else{$command}
+        $options=@{Workspace=$workspaceRoot}
+        if($localOnly -and $command -ceq 'recover'){$options.BackendOnly=$true}
+        $raw = @(& $facade $publicCommand @options)
         $text = [string]::Join("`n", [string[]]$raw)
         if ($text.Length -gt 4096) { return 'ACTION_REQUIRED' }
         try {
             $parsed = $text | ConvertFrom-Json -ErrorAction Stop
             if ($null -eq $parsed -or $parsed -is [array]) { return 'ACTION_REQUIRED' }
-            if ($parsed.command -isnot [string] -or $parsed.command -cne $command) { return 'ACTION_REQUIRED' }
+            if ($parsed.command -isnot [string] -or $parsed.command -cne $publicCommand) { return 'ACTION_REQUIRED' }
             if ($parsed.state -isnot [string]) { return 'ACTION_REQUIRED' }
+            if($localOnly -and $command -ceq 'status'){
+                # Public diagnose is bounded and read-only. Do not restart a
+                # healthy backend for Wake or external-owner degradation.
+                if($parsed.layers -isnot [array]){return 'ACTION_REQUIRED'}
+                foreach($id in @('CANONICAL_RELEASE','LOCAL_MCP_CONFIG','LOCAL_DAEMON','LOCAL_MCP_PROTOCOL')){
+                    $matches=@($parsed.layers|Where-Object {$_.layer -ceq $id})
+                    if($matches.Count -ne 1 -or $matches[0].state -isnot [string] -or $matches[0].gate -isnot [string]){return 'ACTION_REQUIRED'}
+                }
+                $release=@($parsed.layers|Where-Object layer -CEQ 'CANONICAL_RELEASE')[0]
+                $config=@($parsed.layers|Where-Object layer -CEQ 'LOCAL_MCP_CONFIG')[0]
+                $daemon=@($parsed.layers|Where-Object layer -CEQ 'LOCAL_DAEMON')[0]
+                $protocol=@($parsed.layers|Where-Object layer -CEQ 'LOCAL_MCP_PROTOCOL')[0]
+                if($release.state -cne 'READY' -or $config.state -cne 'READY'){return 'ACTION_REQUIRED'}
+                if($daemon.state -ceq 'FAILED' -and $daemon.gate -ceq 'LOCAL_MCP_LISTENER_MISSING'){return 'LOCAL_DAEMON_PENDING'}
+                if($daemon.state -ceq 'READY' -and $protocol.state -ceq 'READY'){return 'READY'}
+                return 'ACTION_REQUIRED'
+            }
             $state = $parsed.state
+            if($localOnly -and $command -ceq 'recover' -and $state -ceq 'LOCAL_BACKEND_READY'){return 'CONNECTED_VERIFIED'}
             if ($command -eq 'recover' -and $state -ceq 'TRANSPORT_VERIFICATION_FAILED') {
                 if ($parsed.detail -isnot [string]) { return 'ACTION_REQUIRED' }
                 return Get-SupervisorRecoveryGateClass -Detail $parsed.detail
@@ -132,10 +190,10 @@ function Write-SupervisorState {
 }
 
 function Invoke-RecoveryBurst {
-    param([string]$Root, [int]$Attempts, [int]$InitialBackoff, [int]$MaximumBackoff)
+    param([string]$Root, [int]$Attempts, [int]$InitialBackoff, [int]$MaximumBackoff, [switch]$BackendOnly)
     $backoff = $InitialBackoff
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
-        $recovery = Invoke-PublicLifecycle -Root $Root -Action recover
+        $recovery = Invoke-PublicLifecycle -Root $Root -Action recover -BackendOnly:$BackendOnly
         if ($recovery -in @('CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'EXTERNAL_RUNTIME_VERIFICATION_FAILED',
             'LOCAL_MCP_VERIFICATION_FAILED', 'ACTION_REQUIRED')) { return $recovery }
         if ($attempt -lt $Attempts) {
@@ -154,7 +212,8 @@ function Invoke-CatDeskAutostartSupervisor {
         [int]$MaximumBackoffSeconds = 60,
         [int]$HealthPollSeconds = 60,
         [int]$FailureCooldownSeconds = 300,
-        [int]$MaximumMonitorCycles = 0
+        [int]$MaximumMonitorCycles = 0,
+        [switch]$BackendOnly
     )
     if ($InitialDelaySeconds -lt 0 -or $InitialDelaySeconds -gt 300 -or $MaximumAttempts -lt 1 -or $MaximumAttempts -gt 16 -or $InitialBackoffSeconds -lt 1 -or $MaximumBackoffSeconds -lt $InitialBackoffSeconds -or $MaximumBackoffSeconds -gt 300 -or $HealthPollSeconds -lt 15 -or $HealthPollSeconds -gt 3600 -or $FailureCooldownSeconds -lt 30 -or $FailureCooldownSeconds -gt 900 -or $MaximumMonitorCycles -lt 0 -or $MaximumMonitorCycles -gt 100000) {
         throw 'supervisor retry configuration is invalid'
@@ -166,7 +225,7 @@ function Invoke-CatDeskAutostartSupervisor {
         if ($InitialDelaySeconds -gt 0) { Wait-SupervisorDelay -Seconds $InitialDelaySeconds }
         $cycles = 0
         while ($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles) {
-            $status = Invoke-PublicLifecycle -Root $root -Action status
+            $status = Invoke-PublicLifecycle -Root $root -Action status -BackendOnly:$BackendOnly
             if ($status -eq 'READY') {
                 Write-SupervisorState 'READY'
                 $cycles++
@@ -181,10 +240,19 @@ function Invoke-CatDeskAutostartSupervisor {
                 if ($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles) { Wait-SupervisorDelay -Seconds $HealthPollSeconds }
                 continue
             }
+            if($BackendOnly -and $status -cne 'LOCAL_DAEMON_PENDING'){
+                # Only a proven absent listener is eligible for this narrow
+                # owner. Authentication, release and foreign-owner failures
+                # require diagnosis, never an automatic broader recovery.
+                Write-SupervisorState 'DEGRADED'
+                $cycles++
+                if($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles){Wait-SupervisorDelay -Seconds $FailureCooldownSeconds}
+                continue
+            }
             # The public recovery facade owns canonical release validation. This
             # supervisor never compiles, provisions, or assumes ownership of
             # an externally started runtime.
-            $recovery = Invoke-RecoveryBurst -Root $root -Attempts $MaximumAttempts -InitialBackoff $InitialBackoffSeconds -MaximumBackoff $MaximumBackoffSeconds
+            $recovery = Invoke-RecoveryBurst -Root $root -Attempts $MaximumAttempts -InitialBackoff $InitialBackoffSeconds -MaximumBackoff $MaximumBackoffSeconds -BackendOnly:$BackendOnly
             if ($recovery -eq 'CONNECTED_VERIFIED') {
                 Write-SupervisorState 'RECOVERED'
                 $cycles++
@@ -217,5 +285,5 @@ function Invoke-CatDeskAutostartSupervisor {
 }
 
 if (-not $LoadOnly) {
-    Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds $InitialDelaySeconds -MaximumAttempts $MaximumAttempts -InitialBackoffSeconds $InitialBackoffSeconds -MaximumBackoffSeconds $MaximumBackoffSeconds -HealthPollSeconds $HealthPollSeconds -FailureCooldownSeconds $FailureCooldownSeconds -MaximumMonitorCycles $MaximumMonitorCycles
+    Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds $InitialDelaySeconds -MaximumAttempts $MaximumAttempts -InitialBackoffSeconds $InitialBackoffSeconds -MaximumBackoffSeconds $MaximumBackoffSeconds -HealthPollSeconds $HealthPollSeconds -FailureCooldownSeconds $FailureCooldownSeconds -MaximumMonitorCycles $MaximumMonitorCycles -BackendOnly:$BackendOnly
 }

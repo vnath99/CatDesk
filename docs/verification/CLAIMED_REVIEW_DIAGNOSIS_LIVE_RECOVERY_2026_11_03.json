@@ -1,0 +1,151 @@
+{
+  "observedUtc": "2026-11-03T00:22:41.003983+00:00",
+  "classification": "TESTED_QUALIFIED_DEVELOPMENT_AND_CONTROLLED_LIVE_RECOVERY_NOT_UNATTENDED_PRODUCTION_ACCEPTANCE",
+  "implementationSourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "developmentBuild": {
+    "seconds": 46.031,
+    "controllerSha256": "d2bfe7796865152f530ca5c43495d9530625712ef5180e447584542de3c0e713",
+    "controllerBytes": 75176448,
+    "matchedHostAndAdapterPackage": true
+  },
+  "developmentQualification": {
+    "seconds": 42.234,
+    "packageId": "1.0.0-dev.85-53d4fa6bcb46da26b7931ec6a31fc2fae6a2d67b7ac9d79ac68175f4b0ae1e37",
+    "selectedSha256": "d2bfe7796865152f530ca5c43495d9530625712ef5180e447584542de3c0e713",
+    "verifiedPreviousSha256": "ff32608bd32b81c0bf82eef2efc0e600f8992f79eb2aa9578f578a51598b3372",
+    "olderVerifiedVersionPreserved": true,
+    "oldOrOlderPackageMismatches": 0,
+    "projectAndJournalMismatches": 0,
+    "profileIdentityPreserved": true,
+    "health": {
+      "label": "matched-v5-package",
+      "maximumRuntimeSeconds": 15,
+      "expectedSha256": "d2bfe7796865152f530ca5c43495d9530625712ef5180e447584542de3c0e713",
+      "actualSha256": "d2bfe7796865152f530ca5c43495d9530625712ef5180e447584542de3c0e713",
+      "recovery": "CURRENT_PACKAGE_VERIFIED",
+      "packageId": "1.0.0-dev.85-53d4fa6bcb46da26b7931ec6a31fc2fae6a2d67b7ac9d79ac68175f4b0ae1e37",
+      "unauthorizedStatus": 401,
+      "initializeStatus": 200,
+      "catalogStatus": 200,
+      "toolCount": 79,
+      "registeredProjectsRead": true,
+      "ownerExitCode": 0,
+      "readersClosed": true,
+      "ownedTreeExitProved": true,
+      "endpointClosed": true,
+      "observedUtc": "2026-11-03T00:03:40.651254+00:00"
+    },
+    "productionAuthorityCreated": false
+  },
+  "actualBrowserDiagnosis": {
+    "seconds": 67.031,
+    "deliveryPhase": "CLAIMED",
+    "observation": {
+      "composerBytes": 1,
+      "composerClass": "EMPTY",
+      "coverage": "VISIBLE_BOUNDED_ONLY",
+      "expectedUserCount": 0,
+      "lastUserMatches": false,
+      "legacyAvailable": true,
+      "legacyMatchesExpected": false,
+      "readersAgree": true,
+      "stable": true,
+      "trustedMatches": 0,
+      "turnsAfter": 0
+    },
+    "retryAuthorized": false,
+    "browserReadOnly": true,
+    "preservationPinsChecked": 468,
+    "preservationMismatches": 0,
+    "afterProfile": "PROFILE_QUIESCENT",
+    "messagesSent": 0,
+    "receiptCreated": false,
+    "noReceiptInferredFromVisibleAbsence": true
+  },
+  "existingSupportedRetirement": {
+    "operation": "operator web work resolve",
+    "outcome": "retired",
+    "seconds": 17.641,
+    "deliveryPhase": "STALE",
+    "reason": "OPERATOR_RETIRED",
+    "coordinatorPhase": "CLOSED",
+    "originalEventArchived": true,
+    "originalAttemptEvidencePreserved": true,
+    "originalDispatchReservationUnchanged": true,
+    "grantRefunded": false,
+    "messagesSent": 0,
+    "retryOrCompletionAuthorityCreated": false,
+    "unrelatedWorkAndBindingsPreserved": true,
+    "implementationBlobsMatchAcceptedBaseline": {
+      "src/web_work.rs": "ca37f4a328661dcc1dce64f28a8327e2caa751af",
+      "wake/src/store.rs": "a4efac11a50312b636b4faa8f247d7a09c211e38"
+    }
+  },
+  "retirementSourceTests": {
+    "enabledProtocolTestsPassed": 6,
+    "grantReplayRefusalPassed": 1,
+    "initialProtocolSelectionWithoutTestSupportSelected": 0,
+    "zeroSelectionNotCountedAsAcceptance": true,
+    "covers": [
+      "exact archive and idempotency",
+      "target and message scope",
+      "partial timer or send witness refusal",
+      "SUBMITTING and SENT refusal",
+      "retire-versus-submit race",
+      "queue identity mismatch",
+      "equivalent retired requests cannot acquire another reservation"
+    ]
+  },
+  "resumedControlledWebWork": {
+    "checkpoint": 7,
+    "originalInterruptedCheckpointNotResent": true,
+    "singleExactUserReceipt": true,
+    "responseCompleteAndExactBodyVerified": true,
+    "coordinatorClosed": true,
+    "verdict": "REVIEWED_PARTIAL",
+    "responseSha256": "74a0b4da9f462be4cd764562ca4c90a1391b4d246a991204d2b1ed124b4e26ad",
+    "taskCorrelatedGitCalls": 5,
+    "oneLogPerDeclaredCommand": true,
+    "successfulCheckpoints": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      7
+    ],
+    "totalCorroboratedGitCalls": 46,
+    "unreadCheckpoint6SourceRangesStillRequired": true,
+    "frozenSourceCommit": "6d737c9a0f6f34496fc88b9fec02433bd1599117",
+    "current90PathSourceAccepted": false
+  },
+  "context": {
+    "generation": 2,
+    "observedTokenProxy": 37169,
+    "toolArgumentTokens": 1749,
+    "toolResultTokens": 32797,
+    "coverage": "UNKNOWN_OR_INCOMPLETE",
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "separateProcessRepeatChangedLedger": false,
+    "predecessorAndSiblingLedgersPreserved": true,
+    "rawTranscriptStored": false,
+    "thresholdOrPolicyChanged": false
+  },
+  "cleanup": {
+    "observedUtc": "2026-11-03T00:21:04.0038960+00:00",
+    "testOwnedProcesses": 0,
+    "sameTrustedProductionBackendAndExistingTunnelRetained": true,
+    "recurringWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "processActions": 0
+  },
+  "protectedProductionChanges": 0,
+  "nativeProjectTasksStarted": 0,
+  "newAuthorizationsOrClaims": 0,
+  "newUnattendedRecoveryPolicyEnabled": false,
+  "originalC49OrLegacyQuarantineReplayed": false,
+  "fullTwoWebNativeEditingAcceptance": false,
+  "operatorActionRequired": false,
+  "nextTask": "Continue untouched frozen checkpoint8 through the qualified carrier, preserve original expiry and missing checkpoint6/dependency ranges, obtain genuine cumulative source judgment, and separately cover the later90-path implementation before producer/promotion. Complete installed two-Web native coding, independent Wake, canonical/control and reviewed Wake publication, and persistent restart/recovery gates."
+}

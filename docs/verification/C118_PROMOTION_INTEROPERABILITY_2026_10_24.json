@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C118_COMPLETE_PROMOTION_CONSUMER_PATH_AND_RESUME_INTEROPERABILITY",
+  "recordedUtc": "2026-10-25T01:53:41.4130460+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "sourceBaseCommit": "1d746c04c02d34777a228c7cb491bc612233a505",
+  "sourceQualification": "MODIFIED_WORKTREE_BOUND_BY_RAW_SOURCE_PINS",
+  "sourcePins": [
+    {
+      "sha256": "585b7910343760f905e21eb5ec028691ce07a3c7b478633529fe637485e9eea1",
+      "path": "src/operator_development_backend.rs",
+      "utf8TextWithLfSha256": "585b7910343760f905e21eb5ec028691ce07a3c7b478633529fe637485e9eea1"
+    },
+    {
+      "sha256": "79b36774509921761b0d09326823e903cd50293f08602df372b720b1e6eb433d",
+      "path": "src/reviewed_candidate_owner.rs",
+      "utf8TextWithLfSha256": "79b36774509921761b0d09326823e903cd50293f08602df372b720b1e6eb433d"
+    },
+    {
+      "sha256": "1d707699188daa1e66a3ec9b4ebecd93bb84381b29ca9dbc470bc27fd39805c2",
+      "path": "src/daemon_reload.rs",
+      "utf8TextWithLfSha256": "1d707699188daa1e66a3ec9b4ebecd93bb84381b29ca9dbc470bc27fd39805c2"
+    },
+    {
+      "sha256": "4285eb0706d3e47bb9cfb724a752f024e84c5132a0eabb3aabe45026e5617a76",
+      "path": "scripts/promote-reviewed-catdesk-build.ps1",
+      "utf8TextWithLfSha256": "00be5c51ff2ceae0a46b5d84de0ce211d14fb93a8547f13107b5fea07576c9df"
+    },
+    {
+      "sha256": "eb3e77d3268c5e7c05bb883565424eb21bbcde3cbed81995a6978acfb21de348",
+      "path": "scripts/catdesk-release-recovery.ps1",
+      "utf8TextWithLfSha256": "c70e696904fc158fe043de326992ed9be1a715930843d1ec62192c6f5424fa9a"
+    },
+    {
+      "sha256": "c0dfe8641c8fedb68478219c8fdb62e545c0880bdc06315c328b4cf28ccbefdf",
+      "path": "scripts/test-promote-reviewed-catdesk-build.ps1",
+      "utf8TextWithLfSha256": "981cde02641dcd02ad644c4ffe8b7f224192a0e8e7ae3f8c293afa8ee94fde29"
+    }
+  ],
+  "textNormalizationPurpose": "REVIEW_TEXT_EQUIVALENCE_ONLY_NOT_ARTIFACT_AUTHORITY",
+  "branch": "codex/web-rollover-oct17",
+  "qualification": "LOCAL_NATIVE_SOURCE_FIXTURES_NOT_PRODUCTION_PROMOTION",
+  "review": {
+    "reviewedCommit": "1d746c04c02d34777a228c7cb491bc612233a505",
+    "findingsSource": "C117_GENUINE_COMPLETED_INLINE_REVIEW_RETAINED_WITHOUT_REPLAY",
+    "remainingFindings": [
+      "Nested Windows candidate paths rejected by slash mismatch",
+      "Proven Phase1 resume discarded timestamp/path/hash before actual handback"
+    ],
+    "sourceFixReview": "PENDING_FRESH_INDEPENDENT_FOLLOWUP",
+    "oldNativeReviewHarnessError": "MANIFEST_REVIEW_HEAD_COMPARED_TO_INTENTIONALLY_OLDER_CANONICAL_PREPARATION_HEAD",
+    "previousTwoFixes": "CONFIRMED_BY_REVIEW",
+    "producerAndSnapshotReview": "PENDING",
+    "rawReviewPreserved": true
+  },
+  "implementation": {
+    "legacyRetired": 0,
+    "phase1Resume": "RETURN_FRESH_VERIFIED_PID_CREATION_TIME_IMAGE_PATH_AND_HASH",
+    "hashing": "EXISTING_SHARED_RECOVERY_SHA256_HELPER_STREAMS_RAW_BYTES_THROUGH_DOTNET_NO_OPTIONAL_CMDLET",
+    "newRecoveryMechanism": false,
+    "trustOrAuthorityRelaxed": false,
+    "pathRepresentation": "WORKSPACE_RELATIVE_FORWARD_SLASHES_MATCH_RUST_AUTHORIZATION_NEW_TRANSACTIONS",
+    "promotionHash": "DELEGATES_SHARED_HELPER_NO_DUPLICATE_HASH_IMPLEMENTATION",
+    "legacyTransactionReaders": "UNCHANGED_EXISTING_BACKSLASH_FIXTURES_RETAINED"
+  },
+  "verification": {
+    "steps": [
+      {
+        "seconds": 39.3777333,
+        "logSha256": "c409e604b57a4cdaa29239c9521f392d474274370e1ade197fd3fca197adf042",
+        "exitCode": 0,
+        "name": "canonical-full-consumer",
+        "summaries": [
+          "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 1682 filtered out; finished in 4.01s"
+        ]
+      },
+      {
+        "seconds": 18.0746242,
+        "logSha256": "d70886883585cc39d242b900f7dfbf8655619a6a67e6c5163e1dc50f1d85e60a",
+        "exitCode": 0,
+        "name": "strict-root-clippy",
+        "summaries": []
+      },
+      {
+        "seconds": 3.0666172,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "exitCode": 0,
+        "name": "root-format",
+        "summaries": []
+      }
+    ],
+    "wireCases": [
+      "valid",
+      "legacy",
+      "bad-hash",
+      "wrong-session",
+      "wrong-output",
+      "wrong-path",
+      "extra"
+    ],
+    "powershellMaximumSeconds": 180,
+    "installedRollback": "NOT_TESTED",
+    "strictClippy": "PASS_WORKSPACE_ALL_TARGETS_ALL_FEATURES",
+    "wireCandidatePath": "build/candidate.exe",
+    "rustTestsPassed": 18,
+    "format": "PASS",
+    "newNormalReleaseBuild": "NOT_YET_RUN",
+    "resumedMetadata": "FAILED_BEFORE_FIX_PASSED_AFTER_WITH_REAL_HANDOFF_REQUIRED_FIELDS_AND_ONE_SIMULATED_HANDBACK",
+    "powershellFixtureSuites": [
+      {
+        "exitCode": 0,
+        "sourceSha256": "ad9e5e7f9b8bd25f27d64ccd3986705cc3e43a977b9faf8729ea3dc37b2dc2de",
+        "name": "scripts/test-reconcile-reviewed-catdesk-release-pair.ps1",
+        "seconds": 1.5953138,
+        "logSha256": "c68347acfc360c1b365e88c54d12a1ce44ff44cc465b1eb853943effc12d39a9"
+      },
+      {
+        "exitCode": 0,
+        "sourceSha256": "c0dfe8641c8fedb68478219c8fdb62e545c0880bdc06315c328b4cf28ccbefdf",
+        "name": "scripts/test-promote-reviewed-catdesk-build.ps1",
+        "seconds": 5.0858106,
+        "logSha256": "554737e9489b54469a8ee8a7fbee0b0bf32099a1b772d77159e8c9f624f293dd"
+      }
+    ],
+    "optionalHashCmdlet": "THROWING_FUNCTION_FORCES_UNAVAILABLE_REAL_SHARED_HASH_MUST_SUCCEED",
+    "rustIgnored": 0,
+    "wireConsumer": "ACTUAL_RUST_SERIALIZED_AUTHORIZATION_AND_CLAIM_THROUGH_FULL_GET_PROTECTED_PROMOTION_AUTHORIZATION_WITHOUT_AUTHORIZATION_SEAMS",
+    "rustMaximumSeconds": 600,
+    "powershellInterpreter": "FIXED_WINDOWS_POWERSHELL_5",
+    "sourceFrozen": true,
+    "oldOwnerAndSnapshotRegressions": "C116_PRESERVED_NOT_RERUN",
+    "scriptIdentity": "ACTUAL_TEMPORARY_SCRIPT_CONTAINING_UNCHANGED_PRODUCTION_FUNCTION_BODIES_CHECKSUM_BOUND_BY_RUST"
+  },
+  "retainedFailures": {
+    "correction": "LOAD_IDENTICAL_FUNCTION_BODIES_FROM_A_REAL_TEMPORARY_SCRIPT_BIND_ACTUAL_SCRIPT_HASH_NO_PRODUCTION_CHECK_BYPASS",
+    "wireRedLimitation": "SUBSEQUENT_GENERIC_AUTHORIZATION_REFUSAL_ALSO_INCLUDED_AST_LOADER_LOSS_OF_SCRIPT_IDENTITY_NO_ISOLATED_PATH_CAUSALITY_CLAIM",
+    "failedEvidencePreserved": true,
+    "resumedMetadataRed": true,
+    "wireRedClassifier": "MISSING_STDOUT_MARKER_IN_OLD_FAILURE_ASSERTION_RECORDED_FALSE_NOT_RELABELED",
+    "firstGreenHarness": "PATH_MATCH_TRUE_BUT_AST_DEFINED_FUNCTIONS_LACKED_SCRIPT_FILE_IDENTITY",
+    "initialHashDependency": "FULL_CONSUMER_STOPPED_BECAUSE_NATIVE_CHILD_GET_FILE_HASH_UNAVAILABLE"
+  },
+  "preservation": {
+    "developmentV77V76": "UNCHANGED",
+    "runtimeRecordsExact": 306,
+    "externalRuntimeActions": 0,
+    "canonicalBinarySha256": "9a8f4ebf6ea57cbb61efaa12e8afa54d18b8db7374b9884067325bc84565568c",
+    "nativeSessionActions": 0,
+    "historicalFilesExact": 55,
+    "canonicalPairChanged": false,
+    "productionPromoted": false,
+    "browserWakeStarts": 0,
+    "oldNormalCandidate": "HELD_NOT_APPROVED_FOR_PRODUCTION",
+    "projectBindingChanges": 0,
+    "completedCanariesReplayed": 0,
+    "canonicalSidecarFileSha256": "c030e9f10275432743e5fd07987ebf9425ca44b1fa3d516ca2ff4f417afdb58c"
+  },
+  "acceptance": {
+    "protectedRollback": "OPEN",
+    "operatorDateDeferral": "SUPERSEDED_AUTHORIZED_NOW",
+    "fullOctoberMilestone": "OPEN",
+    "remoteCi": "UNVERIFIED",
+    "productionBackend": "NOT_RESTORED",
+    "actualWebCodingBC": "OPEN"
+  },
+  "nextTask": "Review the fixed release path and source/producer admission, build and qualify the exact normal fixed controller separately, then establish a genuine supported completed-review/snapshot and producer-attestation chain. Execute release-pair prepare/confirm/result only when those gates pass. Preserve all project state and distinguish local backend, external runtime/429, installed rollback and actual Web coding acceptance. No operator date hold remains."
+}

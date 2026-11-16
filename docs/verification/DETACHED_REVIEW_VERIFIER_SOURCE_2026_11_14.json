@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-14",
+  "task": "nov14-detached-review-verifier-source",
+  "sourceBase": "bc3130f69849f95dfe09625882444416efff9bd4",
+  "component": "src/delegated/autonomy_verifier.rs",
+  "componentSha256": "126c3d8f54f7aa6f638c4be8b8267114463d1e73a89994bf0a968caedaf77659",
+  "state": "SOURCE_IMPLEMENTED_AND_SOURCE_TESTED",
+  "problem": "Contract schema accepted explicit HEAD descriptors for an exact detached source checkout, while the verifier compared the empty current branch to literal HEAD and refused before task execution.",
+  "behavior": {
+    "requiresDirectChatgptMode": true,
+    "requiresBothBranchDescriptorsHead": true,
+    "requiresActualDetachedHead": true,
+    "requiresEveryGitMutationAndPublicationFlagFalse": true,
+    "requiresFullLowercase40CharacterCommit": true,
+    "requiresHeadExactlyBaseCommitNotJustAncestor": true,
+    "requiresExpectedOrigin": true,
+    "requiresUnchangedTrackedSource": true,
+    "allowsNewUntrackedReport": true,
+    "namedBranchAndMainRefusalsPreserved": true,
+    "identityRecheckedBeforeAndAfterVerificationCommands": true,
+    "approvalPathAndNoReplayRulesChanged": false
+  },
+  "qualification": {
+    "startedUtc": "2026-11-14T16:19:28.5054756+00:00",
+    "finishedUtc": "2026-11-14T16:21:58.2282888+00:00",
+    "maximumSeconds": 720,
+    "containment": "Existing KILL_ON_JOB_CLOSE owner",
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "sourceAndLockUnchangedDuringChecks": true,
+    "fmt": "PASS",
+    "verifierTests": 12,
+    "directControllerTests": 6,
+    "directWorkSupervisorTests": 2,
+    "strictClippy": "PASS: cargo clippy --locked --offline --bin catdesk --tests -- -D warnings",
+    "testEnvironment": "Offline, one Cargo job, credentials removed; temporary Git repositories with hooks and signing disabled for fixture commits",
+    "fixtureCleanup": "Canonical owned temporary children removed on Drop; no real project branch or commit changed",
+    "initialFailureRetained": "First compile used an undeclared tempfile crate. Corrected to the existing UUID dependency without Cargo manifest or lock changes."
+  },
+  "negativeCases": [
+    "Each of eight Git mutation/publication permissions",
+    "Wrong commit or origin and abbreviated commit identity",
+    "Missing explicit HEAD descriptors or native provider mode",
+    "Named branch mismatch and main",
+    "Commit or branch drift after verifier construction",
+    "Staged and unstaged tracked-source changes"
+  ],
+  "preservation": {
+    "approvedContractOrCheckoutChanged": false,
+    "nativeClaimRetried": false,
+    "unknownReviewSendRetried": false,
+    "reviewFollowupsSent": 0,
+    "productionOrProtectedInstallationChanged": false,
+    "browserWakeOrNativeProviderStarted": false,
+    "newDependencies": false
+  },
+  "limits": [
+    "This is a source/test-target qualification, not an installed runtime or protected release qualification.",
+    "The existing live claim remains pending recovery; no original queued intent, grant or uncertainty fence was reset.",
+    "The public review send remains unknown and its remaining messages are held.",
+    "Any development-controller build or supported claim recovery requires separate exact artifact and ownership verification.",
+    "Independent review, producer authority, installed promotion and full Web-to-Wake acceptance remain open."
+  ],
+  "goalComplete": false
+}

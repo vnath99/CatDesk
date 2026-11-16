@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T10:12:30.443453+00:00",
+  "classification": "USER_BODY_FALLBACK_INCONSISTENCY_REPRODUCED_AND_SOURCE_FIXED_LIVE_CAUSAL_PROOF_PENDING",
+  "actualControlledReview": {
+    "delivery": "SENT_EXACT_USER_MESSAGE_APPENDED",
+    "cooperativeObservation": "RESPONSE_USER_REPRESENTATION_MISMATCH",
+    "independentReceiptBoundSnapshot": "VERIFIED_EXACT_USER_AND_ASSISTANT_RESPONSE",
+    "responseVerdict": "REVIEWED_PARTIAL",
+    "coordinatorClosure": "REFUSED_WEB_WORK_COMPLETED_RESPONSE_REQUIRED",
+    "unknownSubmission": false,
+    "messagesResent": 0,
+    "completionMetadataForced": false
+  },
+  "sourceCorrection": {
+    "existingBridgeAndOwnerReused": true,
+    "oldFallback": "Raw container innerText/textContent when dedicated USER body selector is absent.",
+    "newFallback": "Same clone-only canonical userBodyText extraction used by the trusted-turn reader.",
+    "selectorsExpanded": false,
+    "exactDigestChecksRetained": true,
+    "duplicateAndSequenceChecksRetained": true,
+    "liveFailureCauseEstablished": false,
+    "newBrowserOwnerOrRecoveryFramework": false
+  },
+  "tests": {
+    "red": "Old reader fails deterministic actual-JavaScript DOM fixture.",
+    "focusedCasesPassed": 2,
+    "fullDomCasesPassed": 65,
+    "bridgeReceiptCasesPassed": 6,
+    "adapterCasesPassed": 43,
+    "focusedCasesOverlapDomTotal": true,
+    "unknownNonControlTextPreserved": true,
+    "authoredControlWordsPreserved": true,
+    "duplicateUsersRemainDistinct": true,
+    "domMutations": 0,
+    "initialBroadHarnessRuns": "INCOMPLETE_AT_50_SECOND_CALLER_LIMIT; logs preserved, not claimed as product failures.",
+    "rustSourceChanged": false
+  },
+  "nextExecutableTask": "Build and qualify the matching development package, then run one supported no-send reobservation of the existing exact delivery. Only positive normal completion may permit the unchanged closure.",
+  "productionChanged": false,
+  "newProducerAuthority": false,
+  "operatorActionRequired": false,
+  "fullMilestoneAccepted": false
+}

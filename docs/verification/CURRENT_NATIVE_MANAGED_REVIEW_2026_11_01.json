@@ -1,0 +1,168 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T08:16:12.906142+00:00",
+  "classification": "EXISTING_MANAGED_REVIEW_CLAIM_AND_REAL_CURRENT_SOURCE_INSPECTIONS_NOT_PRODUCER_AUTHORITY",
+  "frozenSourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+  "trustedReviewedBase": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "fullDeclaredChangedCodePaths": 84,
+  "scopeNarrowed": false,
+  "managedClaim": {
+    "existingContractApiUsed": true,
+    "validated": true,
+    "standingScopedAuthorizationUsed": true,
+    "state": "WAITING_FOR_CHATGPT",
+    "priorNativeMismatchCount": 0,
+    "allOldAccountingRowsPreserved": true,
+    "newAccountingRowsForThisClaim": 1,
+    "newFilesConfinedToClaim": true,
+    "sourceReportAbsent": true,
+    "acknowledged": false,
+    "producerAuthority": false,
+    "priorNativeFilesAccountedFor": 4657,
+    "priorNativeByteIdenticalFiles": 4656,
+    "accountingStoreComparedByRowsWithOneExpectedAddition": true
+  },
+  "inputMethod": {
+    "existingV5RunCommand": true,
+    "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L START,END SOURCE_COMMIT -- PUBLIC_SOURCE_PATH",
+    "separateCallsNoPipes": true,
+    "coordinatorPreflightMatchedExactLocalGitOutput": true,
+    "actualWebReadsCorroboratedByTaskTimedServerCommandLogs": true,
+    "newPublishedSourceFragments": 0,
+    "newReadToolOrAuthorizationSystem": false,
+    "universalOutputLimitEstablished": false
+  },
+  "completedCurrentSourceInspections": [
+    {
+      "marker": "NOV01_NATIVE_1",
+      "verdict": "REVIEWED_PARTIAL",
+      "ranges": [
+        {
+          "path": "src/operator_codex_cli/queue/native_dispatch.rs",
+          "start": 1,
+          "end": 209,
+          "gitOutputBytes": 10738,
+          "gitOutputSha256": "64f3add55339cc1ba696c9dcdaadb296f16d5a845c223f687dcefbb00496b436"
+        },
+        {
+          "path": "src/operator_codex_cli/queue/owned_native.rs",
+          "start": 1,
+          "end": 266,
+          "gitOutputBytes": 12632,
+          "gitOutputSha256": "cb4504966696ea5eb57f7f0893b8a3be5c9c46e8c0a4a3574b8dc206c7ef7277"
+        }
+      ],
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "responseSha256": "c9cf8506a9b184a5df79ed47a3eb49a1ddd029f0f434ed79ceddf7db5f859e30",
+      "matchingServerCommandLogCounts": [
+        1,
+        1
+      ],
+      "matchingServerCommandLogSha256": [
+        "4994f17f4ffa168a2964aca3e1fbed68d82cb6c550173c4974d560c66e641579",
+        "569b7d98fb2e4b31fa13a7b313cedb646fce69e71b4182d3d33dbd6bf283b17a"
+      ],
+      "sendElapsedSeconds": 134.969,
+      "sourceAccepted": false
+    },
+    {
+      "marker": "NOV01_NATIVE_2",
+      "verdict": "REVIEWED_PARTIAL",
+      "ranges": [
+        {
+          "path": "src/operator_codex_cli/queue/native_continuation.rs",
+          "start": 1,
+          "end": 391,
+          "gitOutputBytes": 20121,
+          "gitOutputSha256": "862fbaa584c10fbc03a98fd92c73fa88aaeec643b35b12e04e3f891e43ee0740"
+        },
+        {
+          "path": "src/web_task_dispatch.rs",
+          "start": 1,
+          "end": 380,
+          "gitOutputBytes": 25821,
+          "gitOutputSha256": "7696ac3d2d33f1c46be2ebf917bb3194eb0eaa035f4f50b07046b059b49e7247"
+        }
+      ],
+      "exactUserReceipt": true,
+      "completedResponseVerified": true,
+      "responseSha256": "03a5d4fd5df6246e039abac7e70a2b1beba553e994551db6756ba131265f047f",
+      "matchingServerCommandLogCounts": [
+        1,
+        1
+      ],
+      "matchingServerCommandLogSha256": [
+        "f1787ccb6856609190f549d008a9a8149fa49cc390a7159686fa9a7b05209401",
+        "618df3d17851361d256e00f6f7b93a55d1e47987e3366627f1151e13995903b1"
+      ],
+      "sendElapsedSeconds": 133.188,
+      "sourceAccepted": false
+    }
+  ],
+  "reviewLimitations": [
+    "Four production ranges reviewed; tests and dependencies outside them are not implicitly reviewed.",
+    "Durable claim/finalization, owned-process helper changes, HTTP authorization and call journals need independent source inspection.",
+    "Continuation crash checkpoints and runtime cancellation/interruption need cumulative review of existing evidence.",
+    "No genuine cumulative verdict, immutable reviewed snapshot, acknowledgement or producer authority yet."
+  ],
+  "targetedRegressionEvidence": {
+    "classification": "SOURCE_TESTS_WITH_REAL_WINDOWS_FIXTURE_PROCESSES_NOT_INSTALLED_CODEX_ACCEPTANCE",
+    "results": [
+      {
+        "phase": "transport",
+        "passed": 2,
+        "timedOut": false
+      },
+      {
+        "phase": "unknown",
+        "passed": 1,
+        "timedOut": false
+      },
+      {
+        "phase": "prompt",
+        "passed": 1,
+        "timedOut": false
+      }
+    ],
+    "coverage": [
+      "Observed descendant exit for successful/nonzero/timeout/blocked-prompt/cancelled fixture turns.",
+      "Dropping async transport requests bounded owned cleanup.",
+      "Unknown child outcome retains lease and prevents replay.",
+      "Uncertain prompt retains exact writer marker and lease for owner recovery."
+    ],
+    "productionDeadlinesOrGuardsRelaxed": false
+  },
+  "auditClarification": "Coordinator resolution intentionally changes its own OPEN work row to completed. The historical oldWorkRecordsPreserved flag compares all rows including that owned row and is false at resolution; pinned registry/rollover checks remain zero-mismatch. No blanket unchanged-work-row claim is made. Native byte comparison excludes the accounting store, which is checked by preservation of every old row and exactly one expected new claim row.",
+  "preparationFailures": [
+    {
+      "phase": "offline first input preparation",
+      "reason": "Range-output size assertion before authorization or sends; preserved failed packet and qualified revised no-show-name ranges."
+    },
+    {
+      "phase": "private metadata audit serialization",
+      "reason": "PowerShell rejected smart quotation before command execution; corrected JSON escaping, no project mutation."
+    }
+  ],
+  "nativeCoordination": {
+    "existingHumanAuthorizedPeerContacted": true,
+    "newWorktreeOrThreadCreated": false,
+    "originalNativeTaskInterrupted": false,
+    "waitsForExplicitOwnerAllocation": true
+  },
+  "cleanup": {
+    "testOwnedBrowserPythonWakeOrPipeFixtureProcesses": 0,
+    "trustedExistingBackendAndTunnelRetained": true,
+    "expectedInstalledImageMatches": true,
+    "productionPromotion": false,
+    "recurringAutomationEnabled": false
+  },
+  "remainingAcceptance": [
+    "Genuine cumulative review/acknowledgement/snapshot/producer and guarded promotion of later runtime source.",
+    "Two ChatGPT Web conversations making authorized workspace edits with native Codex verification.",
+    "Canonical project authority transfer, independent manual Wake delivery and installed persistent restart qualification."
+  ],
+  "operatorActionRequired": false,
+  "nextExecutableTask": "Inspect native claim_selected/complete_attempt, owned-process helper delta and central HTTP/call-journal dependencies under the same frozen source scope; do not create another managed claim.",
+  "fullMultiProjectAcceptance": false
+}

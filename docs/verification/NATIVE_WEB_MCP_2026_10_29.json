@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T00:14:00.892163+00:00",
+  "activityDateLocal": "2026-10-29",
+  "timezone": "America/New_York",
+  "classification": "TESTED_SOURCE_WINDOWS_PROCESSES_AND_LOOPBACK_HTTP_WITH_DISPOSABLE_PROVIDER",
+  "sourceCommit": "13e1aad35a18c4cf0c630bb83d1a56acfbfb61bc",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "sourceSha256": {
+    "src/operator_codex_cli.rs": "22411dfcf03dad144da2e56bd9212f3ad00568b5f0df6d89b62925676b2abc35",
+    "src/operator_codex_cli/queue.rs": "2e28e6848b4cfdf5a6f3477b5dd5639654c908b0b3dc3bdb242675abe0e45375",
+    "src/operator_codex_cli/queue/native_dispatch.rs": "a3a365a6ff57816f82c991e3a9fb32cdfd0f9c09d23fa9b7058fdac393720183",
+    "src/operator_web_cli.rs": "d35c48665a7f6847a4c5003cd05f7ab2d0b30fa985ffdc349c09bb2dd9e4b1e2",
+    "src/project_mcp_task.rs": "3fd0a5dc972b0444ed75da54953343aaec8aec85560679d1dd547eb9996fb968",
+    "src/web_task_dispatch.rs": "dd2acf39acf51ba3b77f71a47ca85fe9e5e7609106341c30df2a0528e5a9ff7e",
+    "src/web_work.rs": "64eaf1f881f6658431eaeae8c4da90c520af7b39114891d4723ac7df68444df7"
+  },
+  "tests": {
+    "dispatcherPassed": 17,
+    "assignmentPassed": 11,
+    "assignmentIgnored": 2,
+    "parserPassed": 1,
+    "distinctPassed": 29,
+    "finalNativeSubsetPassed": 4,
+    "finalSubsetOverlapsDistinctTotal": true,
+    "outerTestThreads": 2,
+    "concurrentClientsWithinHttpTests": true
+  },
+  "strictAllTargetClippy": "PASS",
+  "rustfmt": "PASS",
+  "verified": [
+    "Fresh optional nativeQueue selection in existing immutable WebExecutionGrant; legacy absence retains old bytes and permissions",
+    "Local --native-queue-task-id freezes existing READY native queue task, full project binding, request hash and normal turn bound",
+    "Dispatch and status use same private assignment key and paired target/source/assignment checks through direct and cached HTTP",
+    "Empty native arguments prevent caller prompt/model/sandbox/workspace/runtime overrides",
+    "Normal native invocation and private owned-child Job reused; no replacement native thread or policy downgrade",
+    "Existing project Web lease spans dispatch and journal finalization; shared registry/Wake locks end before native execution",
+    "One project held at admission while a sibling completes useful native fixture work through the same server",
+    "Wrong keys/overrides/changed task/revoked grants refused; absent capability cannot launch",
+    "Completed calls suppress replay; ambiguous admission fences new IDs without blocking peer",
+    "Known failed CLI preflight records FAILED before task claim/launch and recovers after the fixture prerequisite changes",
+    "Client awaiter cancellation does not abandon the admitted turn; status recovers its exact completed receipt without resubmission",
+    "Status stays available during the project lease, reads only the frozen task/receipt and does not change the assignment journal",
+    "Native selection and native status snapshot included in existing durable handoff context; regrant preserves frozen bytes after completion",
+    "Child tree quiescence and bounded endpoint closure proved in source HTTP fixtures"
+  ],
+  "provider": "DISPOSABLE_RUST_EXECUTABLE_NOT_REAL_CODEX_MODEL",
+  "modelCalls": 0,
+  "actualChatGPTWebCalls": 0,
+  "cleanup": {
+    "fixtureProcessesRemaining": 0,
+    "criticalPinnedFilesUnchanged": 6,
+    "protectedScope": "Selected existing baseline files, not a complete fresh topology inventory",
+    "browserWakeTunnelOrRecurringProcessesStarted": 0
+  },
+  "initialFailuresPreserved": [
+    "Compilation: return type, test variable shadowing and receipt-reader type inference corrected",
+    "Default broad parallel run:12 passed/4 failed from HTTP timing and immediate socket-close assertion",
+    "Final bounded dispatcher run:17 passed; endpoint closure uses a five-second bound; two-project concurrency remains inside tests"
+  ],
+  "logSha256": {
+    "oct29-native-mcp-check.log": "2137c085892f48ff59ac5aac22f0f5531d3fc94371f01133b580c06b19685ea1",
+    "oct29-native-mcp-capability-tests.log": "ddc113ece9623fae6e2237c22f46a221b1ba1fde468996cd3f9a0274660a26dd",
+    "oct29-native-mcp-capability-tests-fixed.log": "8601a8fe2f0ca7cf2d6ada95d32b10c6e70642364072d5a61e16ffbce1f1a847",
+    "oct29-native-mcp-dispatcher-suite.log": "9261cc8fbf4f8ecaa105a836e1a82ff129f818556a92d854308fc30a24ee1ed5",
+    "oct29-native-mcp-dispatcher-bounded-suite.log": "f41a6049c601ac3bd2e5363d2e17aa379798a6f4350f40aabaf84a653109b687",
+    "oct29-native-mcp-assignment-suite.log": "f2c609ce140bbf525ea0f52c93f0a95a90a9c7b079f7e36878971bac1e95b662",
+    "oct29-native-mcp-parser-test.log": "a13afb36f5b479e3fa45f8b402b045f03a9eea0a3263ab73c807d8b1ca7bffdd",
+    "oct29-native-mcp-status-http-tests.log": "668c7b265f25bc82480b2cb5344fd1258d561421be02ced2ee3b3c9e122d6ff1",
+    "oct29-native-mcp-status-http-tests-fixed.log": "4c35711a8e6bd2f065c95a4861978fe3d6d4afc397ed71abb61450b5606310ca",
+    "oct29-native-mcp-final-native-tests.log": "b1b5d1bb224a2c6428cd11db18d144ccc43e13701a873f125f596d6a0ea855ac",
+    "oct29-native-mcp-final-all-target-clippy.log": "08593c3a72fd7b1b103a76651da15dba06d4522d762815a1b38892da6d84398b"
+  },
+  "limits": [
+    "No new installed executable or selected development package",
+    "No genuine native provider/model turn or genuine Web caller acceptance",
+    "Conversation origin remains unverified; project authority is the exact private key and current target/source checks",
+    "Status is a metadata snapshot; process liveness and task quality are not inferred from claim/exit alone",
+    "Native permission pins full current project binding. Pending selections after proved ChatGPT rollover need supported migration; dispatch currently refuses stale binding. Existing ordinary-tool handoffs remain covered",
+    "Broad parallel stress remains unqualified; bounded two-project HTTP behavior is qualified",
+    "Non-Windows native capability refuses until equivalent ownership is qualified",
+    "No existing project binding/session, production fingerprint/release, browser authentication or official tunnel changed",
+    "Existing connector/profile prerequisites unchanged; no completed canary or uncertain request replayed"
+  ],
+  "hostedCI": "UNVERIFIED"
+}

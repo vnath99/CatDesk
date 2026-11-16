@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C101_T0476_INCREMENTAL_DEV_SELECTION_RECOVERY",
+  "observedUtc": "2026-10-24T13:55:02.9356422+00:00",
+  "recordedUtc": "2026-10-24T13:57:17.7750456+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "d41bd008da06ece1f4cb8e8daf34ac59e87ab557",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_FIXTURES_ONLY_NO_RUNTIME_SELECTION_OR_PRODUCTION_RECOVERY",
+  "proposal": {
+    "existingDocument": "docs/orchestrator/CATDESK_SIMPLIFIED_DEV_RELEASE_WAKE_MODEL.md",
+    "currentPreviousModel": "REUSE_EXISTING_USER_WORKER_RELEASE_AND_DEV_IMMUTABLE_PACKAGES",
+    "legacyMechanismsRetired": 0,
+    "compatibility": "RETAIN_OLD_READERS_AND_RECEIPTS_UNTIL_STARTUP_FAILURE_RECOVERY_AND_MIGRATION_PROOFS",
+    "productionInstallationChanged": false
+  },
+  "implementation": {
+    "command": "operator web-dev-runtime recover-package",
+    "callerSelectedPathHashVersionOptions": 0,
+    "newJournalOrLkgStore": false,
+    "existingJournal": "package-update-attempt.json",
+    "existingCompletionValidator": "complete_package_update",
+    "fix": "RECOVER_ALREADY_STAGED_IMMUTABLE_SELECTION_WITHOUT_ORIGINAL_BUILD_DIRECTORY",
+    "sourcePins": [
+      {
+        "path": "src/operator_facade.rs",
+        "sha256": "4280a35713fd77eb49666cca6d9fd31891b2415a35f6d6c29ddf141488dee7b0"
+      },
+      {
+        "path": "wake/src/development_runtime.rs",
+        "sha256": "8ea5db719ab371c06c6e87f628547f091930a17f4e0e72c4817175a24b36ba33"
+      }
+    ],
+    "hostStarted": false,
+    "browserAction": "NONE",
+    "noPendingAttempt": "VALIDATE_CURRENT_STOPPED_SELECTION_NO_POINTER_OR_AUTHORITY_MUTATION",
+    "independentProductionReviewOrLkgAuthorityCreated": false
+  },
+  "tests": {
+    "runtimeModulePassed": 17,
+    "operatorModulePassed": 12,
+    "newRecoveryTests": 5,
+    "interruptedSelectionPhases": 3,
+    "failed": 0,
+    "ignored": 0,
+    "steps": [
+      {
+        "summaries": [
+          "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 361 filtered out; finished in 3.47s"
+        ],
+        "logSha256": "14fcfdfde15733b6df5bce89ecf2809272f7e8d1a707956bf4aa2681ecaae65c",
+        "name": "wake-development-recovery",
+        "seconds": 10.8822765,
+        "exitCode": 0
+      },
+      {
+        "summaries": [
+          "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 1677 filtered out; finished in 0.09s"
+        ],
+        "logSha256": "1c982faedde24f15af1e5fe2a1e2ff70fc307d7ff14a4e9a0e5bb2cf92f16677",
+        "name": "operator-contract",
+        "seconds": 52.4842266,
+        "exitCode": 0
+      },
+      {
+        "summaries": [],
+        "logSha256": "6a296660f7866be9c010a54d736e4cce1665fe8ce498844615083ad866da0d35",
+        "name": "strict-root-clippy",
+        "seconds": 21.9431918,
+        "exitCode": 0
+      },
+      {
+        "summaries": [],
+        "logSha256": "025b0c76dec70f821933aecc96a90ce52c9bd5fe59472fccd0754c820b84fb7d",
+        "name": "strict-wake-clippy",
+        "seconds": 5.0800713,
+        "exitCode": 0
+      },
+      {
+        "summaries": [],
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "name": "root-format",
+        "seconds": 2.9465993,
+        "exitCode": 0
+      },
+      {
+        "summaries": [],
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "name": "wake-format",
+        "seconds": 0.7758813,
+        "exitCode": 0
+      }
+    ],
+    "rootStrictClippy": "PASS",
+    "wakeStrictClippy": "PASS",
+    "rootAndWakeFormat": "PASS",
+    "sourceFrozen": true,
+    "outerBudgetSeconds": 600,
+    "outerExitCode": 0,
+    "outerTimedOut": false,
+    "outerTerminationFailed": false,
+    "coverage": [
+      "MISSING_ORIGINAL_BUILD_DIRECTORY_AFTER_LOCAL_IMMUTABLE_PUBLICATION",
+      "BEFORE_POINTER_BETWEEN_POINTER_AUTHORITY_AND_AFTER_AUTHORITY_BEFORE_MARKER_REMOVAL",
+      "TARGET_PROFILE_QUEUE_AND_OLD_VERSION_PRESERVED",
+      "CHANGED_NEW_ARTIFACT_REFUSED_WITHOUT_OVERWRITE",
+      "UNKNOWN_POINTER_PRESERVED_NO_GUESS",
+      "EXCLUSIVE_HOST_BROWSER_AND_STOPPED_CONTROL_REQUIRED",
+      "NO_PENDING_TRANSACTION_BYTE_STABLE_AND_NONCREATING",
+      "FIXED_COMMAND_REJECTS_EXTRA_ROOT_OPTIONS"
+    ],
+    "actualProcessCrash": "NOT_TESTED_BY_THESE_PHASE_FIXTURES"
+  },
+  "preservation": {
+    "runtimeRecords": 306,
+    "runtimeRecordsChanged": 0,
+    "historicalFiles": 55,
+    "historicalFilesChanged": 0,
+    "scopedOwners": 0,
+    "controls": "BOTH_STOPPED",
+    "queueCount": 0,
+    "selectedPackage": "V76_UNCHANGED",
+    "browserWakeRecurringStarts": 0,
+    "officialRuntimeActions": 0,
+    "connectorCalls": 0,
+    "nativeActions": 0,
+    "productionInstallationChanges": 0,
+    "projectBindingChanges": 0,
+    "completedCanariesReplayed": 0
+  },
+  "remaining": {
+    "normalReleaseBuild": "NOT_YET_BUILT",
+    "installedCommand": "NOT_YET_QUALIFIED",
+    "previousWorkingReleaseFallback": "NOT_IMPLEMENTED_BY_THIS_INCREMENT",
+    "commitReviewHealthManifestAdmission": "NEXT_SOURCE_SLICE",
+    "legacyProductionRecovery": "AWAITING_APPROVED_AUTHORITY_OCT27",
+    "actualWebCodingBC": "OPEN_SERVING_AND_CONNECTOR_DEPENDENCIES",
+    "protectedOrUnattended": "UNQUALIFIED",
+    "fullMilestone": "OPEN"
+  },
+  "nextTask": "Tie immutable release admission to exact source/build/review/working-health evidence in the existing versioned model, then implement and test verified previous-release fallback before retiring legacy writers. Qualify normal developer backend recovery independently of protected production. Prioritize actual Web B/C when the approved serving path is restored."
+}

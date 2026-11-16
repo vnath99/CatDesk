@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C235",
+  "classification": "INSTALLED_LOCAL_ASSIGNED_TASK_WRITES_AND_SANDBOXED_VERIFICATION",
+  "installedSourceCommit": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+  "workingSourceHead": "a89c5220e33d6261f8a60bab1dd65dd1db997e0a",
+  "installedSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+  "startedUtc": "2026-10-26T02:54:12.9325643+00:00",
+  "finishedUtc": "2026-10-26T02:56:22.8542493+00:00",
+  "outerLimitSeconds": 180,
+  "endpointLimitSeconds": 120,
+  "newSourceRequired": false,
+  "results": {
+    "newContextEventCounts": [
+      38,
+      44
+    ],
+    "twoContextLedgersAppendOnly": true,
+    "originalProbePathsAbsent": true,
+    "promotionActions": 0,
+    "peerProgressAfterRefusal": true,
+    "naturalEndpointExitCodes": [
+      0,
+      0
+    ],
+    "commandModelCalls": 0,
+    "actualDiffsVerified": 2,
+    "newWriterLocksReopened": true,
+    "duplicateApplyRefusals": 2,
+    "commandsAndCleanupSucceeded": true,
+    "independentRegisteredProjects": 2,
+    "wrongTaskRefused": true,
+    "newWriterMarkersRetired": 2,
+    "separateLinkedTaskWorktrees": 2,
+    "verificationTimeoutSeconds": 20,
+    "parallelFixedVerificationCommands": 2,
+    "oldContextEventCounts": [
+      24,
+      32
+    ],
+    "scopedFilePreviewsAndApplications": 2,
+    "browserWakeRecurringStarts": 0,
+    "siblingPatchPreviewRefused": true,
+    "siblingReadRefused": true,
+    "nativeSessionActions": 0
+  },
+  "preservation": {
+    "sensitiveCodeFilesMetadataOnly": 2,
+    "noSensitiveFileContentRead": true,
+    "fixedPinsExcludingTwoLedgers": 1954,
+    "postBaselinePins": 1978,
+    "worktreeFilesByteChecked": 1940,
+    "baselinePins": 1956,
+    "quarantinedPriorFiles": 19
+  },
+  "priorFailure": {
+    "checkpoint": "C234",
+    "cause": "Test harness tried to hash a per-project lease file while the first assigned endpoint correctly held it exclusively.",
+    "toolCalls": 0,
+    "oldWorktreeReused": false,
+    "patches": 0,
+    "recovery": "No supported cold marker-retirement command. Preserve old task/journal/marker; fresh distinct tasks/worktrees perform this qualification.",
+    "firstTaskInterrupted": true,
+    "harnessCorrection": "Skip only exact verified live endpoint lease hash, then recheck after exit. No global lock exclusion.",
+    "pendingMarkerPreserved": true
+  },
+  "evidence": {
+    "contextSha256": "a9b18fb8dd4eae499c6e164e95111abe0a91834bb8960f19e354f6bebd6a52ba",
+    "postBaselineSha256": "ac0b634480194d70c3425ad2e51f68e19b925a1a98009bd163003f457509ff2b",
+    "runnerSha256": "f513079ed28ff797eb2dbe8f2cce43fdbc87c286b968eae8553a566039a499ef",
+    "manifestSha256": "db51188380e9ffaab6f583133eb7a917a637d732751f10d2eb526068b98c799d",
+    "resultSha256": "ceda1f04877e7bb28f4c3e7c2533d2e2f7fe70987f0eebf09604781ab15a8593",
+    "cleanupSha256": "dc55179e4bcece32f59000415a277f39d9a30bd240331def996a207f61950169",
+    "outerSha256": "fd4ac56032eb879ae802a4ae994bdde9f007e88bc5f7e6e53190e641592bf926"
+  },
+  "limits": [
+    "Local operator-assigned test writes through actual installed executable; no authenticated ChatGPT Web caller or natural project MVP feature delivery.",
+    "Test worktrees, assignments, journals and command evidence are retained privately. No original checkout was changed by this test.",
+    "Interrupted old task remains quarantined until a reviewed owner-proven recovery path exists. No marker was deleted or replayed.",
+    "Official connector HTTP 429 remains separate; no recurring automation, new promotion or different-version rollback acceptance."
+  ],
+  "milestoneComplete": false
+}

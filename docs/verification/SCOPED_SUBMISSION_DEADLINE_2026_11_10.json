@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-10T03:40:00Z",
+  "classification": "SOURCE_QUALIFIED_NOT_INSTALLED_OR_LIVE_ACCEPTANCE",
+  "sourceBase": "23c7ad0da69dd0e429fcaf35f19b48b352d84f74",
+  "sourcePaths": [
+    "wake/src/runtime.rs",
+    "wake/src/runtime_scoped_review.rs",
+    "wake/src/store.rs",
+    "wake/src/store_submission_deadline_tests.rs"
+  ],
+  "sourceQualificationSha256": "4a1439df6e49e72ea622dc3fff73f887b4d175d425fd884ba9beae271a41f160",
+  "changes": [
+    "Recheck the monotonic deadline after a slow scoped metadata callback",
+    "Check the deadline under the existing Store lock before starting a new witness",
+    "Recheck after fenced handoff before authorizing submission"
+  ],
+  "newTests": 4,
+  "distinctFocusedPassingTests": 35,
+  "passingChecks": [
+    {"command": "cargo test --manifest-path wake/Cargo.toml --lib deadline -- --test-threads=1", "passed": 13, "failed": 0, "exitCode": 0},
+    {"command": "cargo test --manifest-path wake/Cargo.toml --lib runtime::scoped_review::tests:: -- --test-threads=1", "passed": 33, "failed": 0, "exitCode": 0},
+    {"command": "cargo fmt --all -- --check", "exitCode": 0},
+    {"command": "cargo fmt --manifest-path wake/Cargo.toml --all -- --check", "exitCode": 0},
+    {"command": "cargo clippy --all-targets -- -D warnings", "exitCode": 0},
+    {"command": "cargo clippy --manifest-path wake/Cargo.toml --all-targets -- -D warnings", "exitCode": 0}
+  ],
+  "countingNote": "The deadline filter overlaps the full scoped sender module. Thirty-three module cases plus two Store deadline cases are thirty-five distinct checks.",
+  "earlierFailure": {"phase": "TEST_COMPILE", "diagnostic": "E0373 in scoped fixture closure", "correction": "Move owned channel bindings into the test worker"},
+  "ordinaryTransitionCompatibilityRetained": true,
+  "externalCallbacksUnderStoreLock": false,
+  "existingUnknownWitnessPreserved": true,
+  "hardRealtimeClaim": false,
+  "ioLimitation": "I/O initiated before expiry can finish afterward; no uncertain witness is undone.",
+  "actualInvitationRootCauseEstablished": false,
+  "liveEvidence": {
+    "taskAdmissionIndependentlyReconciled": true,
+    "invitationAttemptCount": 1,
+    "invitationResult": "SCOPED_REVIEW_TIMEOUT",
+    "originalSubmissionOutcome": "UNKNOWN",
+    "deliveryPhase": "SUBMITTING",
+    "receiptCreated": false,
+    "readonlyReceiptReconciliationAttempts": 1,
+    "receiptReconciliationResult": "WEB_WORK_RECEIPT_UNPROVEN",
+    "newObserverReadonlyInspectionAttempts": 1,
+    "observationResult": "PENDING_DRAFT_PRESERVED_NO_SEND",
+    "exactOwnedPlainDraftObserved": true,
+    "matchingVisibleUserTurns": 0,
+    "observationCoverage": "VISIBLE_BOUNDED_ONLY",
+    "absenceOfPriorSubmissionProved": false,
+    "resendAuthorizedByObservation": false,
+    "testOwnedProcessesRemaining": 0,
+    "localEndpointClosedAfterTests": true,
+    "projectBindingsPreserved": true,
+    "nativeSessionsPreserved": true,
+    "freshCodingGrantIssued": false,
+    "actualWebEditVerified": false,
+    "actualManualWakeDeliveryVerified": false
+  },
+  "installedDeadlineFix": false,
+  "protectedReleaseAuthorityChanged": false,
+  "installedAcceptance": false,
+  "unattendedAcceptance": false,
+  "fullMvpComplete": false,
+  "remainingGates": [
+    "Authoritative outcome evidence or a supported reviewed recovery transition for the held invitation; no blind resend",
+    "Actual scoped Web edit and independent offline verification",
+    "Appropriate installed qualification of the exact manual-Wake sender",
+    "Actual self-Wake receipt and completed continuation",
+    "Independent second-project execution and negative isolation tests"
+  ]
+}

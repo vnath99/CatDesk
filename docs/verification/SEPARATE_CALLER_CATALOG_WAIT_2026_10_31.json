@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T16:55:23.547740+00:00",
+  "classification": "USER_REPORTED_SEPARATE_CALLER_EVIDENCE_AND_EXPLICIT_EVENT_DRIVEN_WAIT",
+  "sourceBaseCommit": "a4648370d628652eae58a9ba9a9f659473986583",
+  "observation": {
+    "origin": "DIRECT_USER_REPORT",
+    "surface": "SEPARATE_CHATGPT_CONVERSATION_NOT_AFFECTED_CATDESK_WEB_CHAT",
+    "integration": "CATDESK_V4",
+    "exposedTools": 90,
+    "catdesk_web_task_toolListed": false,
+    "rawCatalogOrSchemaDigestProvided": false,
+    "affectedConversationCatalogEstablished": false,
+    "connectionKindEstablished": false
+  },
+  "separateIssues": {
+    "publicationAndDiscovery": {
+      "status": "AFFECTED_CALLER_UNVERIFIED",
+      "possibleLayers": [
+        "SERVER_ADVERTISED_CATALOG",
+        "CONNECTION_PUBLICATION_OR_CACHE",
+        "CONVERSATION_TOOL_SELECTION"
+      ],
+      "comparisonMustUseSameConnectionRoleAndServingVersion": true,
+      "missingInSeparateCallerProvesServerToolAbsent": false,
+      "globalTaskToolRequiredOnEveryProjectEndpoint": false,
+      "fixedProjectAssignedTaskTool": "catdesk_project_task_tool",
+      "centralTaskDispatcher": "catdesk_web_task_tool"
+    },
+    "authenticationAndProjectScope": {
+      "status": "LOCAL_QUALIFIED_PATHS_PRESERVED_AFFECTED_WEB_CALL_UNESTABLISHED",
+      "catalogPresenceProvesAuthenticationOrTaskAuthorization": false,
+      "observedCatalogAbsenceProvesAuthenticationFailure": false,
+      "heldC49Outcome": "UNESTABLISHED_NO_REPLAY",
+      "existingLeaseTargetGenerationDigestAssignmentAndKeyGuards": "UNCHANGED"
+    },
+    "protectedSourcePromotion": {
+      "status": "CURRENT_SOURCE_GENUINE_REVIEW_AND_PRODUCER_AUTHORITY_OPEN",
+      "lastMaterialReview": "INCONCLUSIVE",
+      "catalogRefreshOrSuccessfulLocalMcpCreatesReleaseAuthority": false,
+      "reviewAckSnapshotControlledProducerAndPromotionGuards": "UNCHANGED"
+    }
+  },
+  "prerequisitesOnSignal": [
+    "Affected CatDesk Web connection tool presence and direct-custom-MCP versus published-plugin identity, reported by operator without changes",
+    "Compare same-role server publication, connection discovery and affected-chat catalog under a qualified bounded owner only if new evidence warrants it",
+    "Establish affected-call authentication/project/task authority independently; preserve C49 and all ambiguous call identities until evidence supports a permitted transition",
+    "Obtain genuine current-source independent review, managed acknowledgment, immutable snapshot and controlled-producer authority before protected promotion",
+    "Then demonstrate two genuine Web callers using authorized normal native coding with separate project changes, tests and Git receipts; retain existing wake/rollover evidence without replay"
+  ],
+  "preservedEvidence": [
+    "PROJECT_DEVELOPMENT_BACKEND_SOURCE_2026_10_31.json",
+    "PROJECT_DEVELOPMENT_BACKEND_PROCESS_2026_10_31.json",
+    "WINDOWS_ROLLOVER_OWNER_EXIT_2026_10_31.json"
+  ],
+  "independentlyExecutableTaskCurrentlyIdentified": false,
+  "sourceCompletenessOrFullMilestoneCompletionClaimed": false,
+  "eventDrivenWait": {
+    "basis": "USER_EXPLICIT_CONDITION_IF_ONLY_EXTERNAL_ACCEPTANCE_GATES_REMAIN",
+    "wakeSignal": "AFFECTED_CONNECTION_REPORT_OR_OTHER_MATERIAL_NEW_ELIGIBLE_EVIDENCE",
+    "newPollingAutomationOrRecurringOwnerCreated": false,
+    "duplicateOperatorQuestionCreated": false,
+    "goalPauseRequested": true,
+    "otherProjectGoalOrSessionChanges": false
+  },
+  "actionsThisTurn": {
+    "sourceBehaviorChanges": 0,
+    "newTestsOrBuilds": 0,
+    "browserBackendWakeOfficialOrRecurringStarts": 0,
+    "connectionSettingOrAuthenticationChanges": 0,
+    "connectorOrHeldTaskProbes": 0,
+    "c49Retries": 0,
+    "existingProjectBindingOrNativeSessionChanges": 0
+  }
+}

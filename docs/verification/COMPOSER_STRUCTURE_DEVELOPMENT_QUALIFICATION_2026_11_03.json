@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T16:35:17.988364+00:00",
+  "classification": "IMMUTABLE_DEVELOPMENT_PACKAGE_QUALIFICATION_NOT_PROTECTED_PROMOTION",
+  "sourceCommit": "a868f6326cf822492dc0a2eb20eddb822a0b47e5",
+  "currentExecutableSha256": "fb866e287bc1c1899a3abaf29567ffe290391d01502c889d9e979ba0e436ad24",
+  "previousVerifiedExecutableSha256": "8c4fdde9037826b348f59b02ae5d5be7a28378daf6b5d1b7be4d57f5222f1ab7",
+  "buildElapsedSeconds": 73.719,
+  "qualificationElapsedSeconds": 44.593,
+  "health": {
+    "actualSha256": "fb866e287bc1c1899a3abaf29567ffe290391d01502c889d9e979ba0e436ad24",
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79,
+    "registeredProjectsRead": true,
+    "ownerExitCode": 0,
+    "readersClosed": true,
+    "ownedTreeExitProved": true,
+    "endpointClosed": true
+  },
+  "allOldAndOlderVerifiedArtifactPinsMatch": true,
+  "projectAndJournalPreservationMismatches": 0,
+  "profileIdentityPreserved": true,
+  "wakeHostStopped": true,
+  "productionChanged": false,
+  "hostedCiClaimed": false,
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

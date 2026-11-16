@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T01:46:02.597029+00:00",
+  "classification": "LOCAL_EXACT_GIT_DIFF_INPUT_NOT_REVIEW_ACCEPTANCE",
+  "repository": "https://github.com/vnath99/CatDesk",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "b25119e8c47cfe261aae06b461c3697e3841cdb6",
+  "sourcePathCount": 62,
+  "rootAdapterIncluded": true,
+  "parts": [
+    {
+      "file": "part-01.patch",
+      "sha256": "cdbc5a5ff2474d6d82f1139d13f4636845d1cb47ed4a708dc553b80fc2d7c0aa",
+      "bytes": 100700,
+      "paths": [
+        "scripts/catdesk-doctor.ps1",
+        "scripts/promote-reviewed-catdesk-build.ps1",
+        "scripts/setup-secure-mcp.ps1",
+        "scripts/start-catdesk-stack.ps1",
+        "scripts/test-backend-only-native-capability.ps1",
+        "scripts/test-catdesk-doctor.ps1",
+        "scripts/test-catdesk-lifecycle.ps1",
+        "scripts/test-local-mcp-readiness-strict.ps1",
+        "scripts/test-promotion-handoff-script-status.ps1",
+        "scripts/test-release-worker-command-line.ps1",
+        "scripts/test-secure-mcp-bearer-forwarding.ps1",
+        "scripts/test-start-catdesk-stack.ps1",
+        "scripts/wake_bridge.py",
+        "scripts/wake_profile_quiescence.py"
+      ]
+    },
+    {
+      "file": "part-02.patch",
+      "sha256": "3ab2d451fcfbec5944c8daab5ef1cf3c3b48bc5ced15c52fa3af44e95babe24d",
+      "bytes": 74533,
+      "paths": [
+        "scripts/wake_readiness_visual_probe.py",
+        "src/daemon_reload.rs",
+        "src/delegated/autonomy_projects.rs",
+        "src/delegated/autonomy_runtime.rs",
+        "src/delegated/autonomy_supervisor.rs",
+        "src/delegated/codex_app_server.rs",
+        "src/main.rs",
+        "src/mcp.rs",
+        "src/operator_codex_cli.rs"
+      ]
+    },
+    {
+      "file": "part-03.patch",
+      "sha256": "8e5326d9bef4e71d68b1c0cf51d3c6f913e9e0b8abde854691e2d37c4dcb56f0",
+      "bytes": 108022,
+      "paths": [
+        "src/operator_codex_cli/queue.rs",
+        "src/operator_codex_cli/queue/native_continuation.rs",
+        "src/operator_codex_cli/queue/native_dispatch.rs",
+        "src/operator_codex_cli/queue/owned_native.rs"
+      ]
+    },
+    {
+      "file": "part-04.patch",
+      "sha256": "8096b6594cbfd4a5e07fab02fc9f4177eaca21a88f0bf241b127d61594c946ac",
+      "bytes": 78622,
+      "paths": [
+        "src/operator_facade.rs",
+        "src/operator_installed_backend.rs",
+        "src/operator_installed_project.rs",
+        "src/operator_web_cli.rs",
+        "src/operator_web_rollover.rs",
+        "src/project_mcp.rs",
+        "src/project_mcp_task.rs"
+      ]
+    },
+    {
+      "file": "part-05.patch",
+      "sha256": "5854fc30d93601ae93afa4a8222e50147aa6fbf8e461991059dee6b902b51749",
+      "bytes": 111582,
+      "paths": [
+        "src/promotion_retirement.rs",
+        "src/promotion_source_bridge.rs",
+        "src/reviewed_build.rs",
+        "src/server.rs",
+        "src/wake_protocol_client.rs",
+        "src/web_review_work.rs"
+      ]
+    },
+    {
+      "file": "part-06.patch",
+      "sha256": "dd38b94ef43b49e3170546aa6180ad51ecc13b91879105c55010cb6955e1b3ba",
+      "bytes": 102996,
+      "paths": [
+        "src/web_task_dispatch.rs"
+      ]
+    },
+    {
+      "file": "part-07.patch",
+      "sha256": "adc31e86123bbf7f609f7d52f5461469dfbf543dd325519d3e6d375ba856b007",
+      "bytes": 88184,
+      "paths": [
+        "src/web_work.rs",
+        "src/windows_protected_fs.rs",
+        "src/windows_supervisor_startup.rs",
+        "tests/test_wake_bridge.py",
+        "tests/test_wake_bridge_current_dom.py",
+        "tests/test_wake_profile_quiescence.py",
+        "tests/test_wake_readiness_probe.py",
+        "wake/adapter.py",
+        "wake/src/bin/CatDeskWakeProfileProbe.rs",
+        "wake/src/development_login_recovery.rs"
+      ]
+    },
+    {
+      "file": "part-08.patch",
+      "sha256": "3b31c03be39af8334a35ecb847f546cf148a5f632922bc90a1e196fad57f0d18",
+      "bytes": 80007,
+      "paths": [
+        "wake/src/development_runtime.rs",
+        "wake/src/lib.rs",
+        "wake/src/protocol.rs",
+        "wake/src/readiness_probe.rs",
+        "wake/src/runtime_reobserve.rs",
+        "wake/src/runtime_scheduler.rs",
+        "wake/src/runtime_snapshot.rs"
+      ]
+    },
+    {
+      "file": "part-09.patch",
+      "sha256": "853938d037260787c545608e71264aee004ba2c8506ee82db6f60bb7a2e7273a",
+      "bytes": 49595,
+      "paths": [
+        "wake/src/store.rs",
+        "wake/tests/protocol_store.rs",
+        "wake/tests/test_adapter.py",
+        "wake/tests/test_new_conversation.py"
+      ]
+    }
+  ],
+  "priorAssessment": "INCONCLUSIVE_MISSING_PROVIDER_COMPARISON_PATCHES",
+  "sourceAccepted": false,
+  "releaseAuthority": false,
+  "generation": "git diff --no-ext-diff --no-textconv --no-renames --full-index BASE TARGET -- PATH",
+  "privacyScreen": "NO_PERSONAL_PATH_PRIVATE_CONVERSATION_OR_SECRET_LITERAL_FINDINGS"
+}

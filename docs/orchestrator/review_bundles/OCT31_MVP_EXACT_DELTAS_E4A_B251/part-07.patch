@@ -1,0 +1,1810 @@
+# CatDesk exact public-source review input. No approval or execution authority.
+# Base e4a99a8b6913c3db689a216f4ae4e0a7f6fff612
+# Target b25119e8c47cfe261aae06b461c3697e3841cdb6
+
+diff --git a/src/web_work.rs b/src/web_work.rs
+index 534ada25535b3371fbd54252c4f8ef8654928cbc..9b6d94c47e2844670dc493a78b1bedec52c4aad5 100644
+--- a/src/web_work.rs
++++ b/src/web_work.rs
+@@ -3,7 +3,8 @@
+ 
+ use crate::{
+     delegated::autonomy_projects::{
+-        AutonomousProjectRegistryStoreV1, resolve_registered_project_from_control_root,
++        AutonomousProjectRegistryStoreV1, PreparedProjectScopeV1,
++        resolve_registered_project_from_control_root,
+     },
+     mcp, wake_protocol_client,
+     web_work_state::WorkLedger,
+@@ -77,7 +78,255 @@ pub(crate) fn execution_permission(
+     args: Value,
+     revoke: bool,
+ ) -> Result<Value, String> {
+-    assigned_action(workspace, args, AssignmentAction::Permission(revoke))
++    execution_permission_with_manual_wake(workspace, args, revoke, false)
++}
++
++pub(crate) fn execution_permission_with_manual_wake(
++    workspace: &Path,
++    args: Value,
++    revoke: bool,
++    allow_manual_wake: bool,
++) -> Result<Value, String> {
++    execution_permission_with_capabilities(workspace, args, revoke, allow_manual_wake, None)
++}
++
++pub(crate) fn execution_permission_with_capabilities(
++    workspace: &Path,
++    args: Value,
++    revoke: bool,
++    allow_manual_wake: bool,
++    native_queue_task_id: Option<&str>,
++) -> Result<Value, String> {
++    if revoke && (allow_manual_wake || native_queue_task_id.is_some()) {
++        return Err("WEB_TASK_GRANT_ARGUMENTS_INVALID".into());
++    }
++    assigned_action(
++        workspace,
++        args,
++        AssignmentAction::Permission {
++            revoke,
++            allow_manual_wake,
++            native_queue_task_id,
++        },
++    )
++}
++
++pub(crate) struct NativeDispatchAdmission {
++    _lease: crate::operator_facade::WebWorkLease,
++    pub(crate) control: std::path::PathBuf,
++    pub(crate) project_id: String,
++    pub(crate) call: crate::project_mcp_task::NativeTaskCall,
++}
++
++impl NativeDispatchAdmission {
++    pub(crate) fn finish(self, result: &Result<Value, String>) -> Result<(), String> {
++        // Consume the complete admission so its project lease remains held
++        // until the exact journal outcome has been durably recorded.
++        self.call.finish(result)
++    }
++}
++
++pub(crate) fn prepare_native_dispatch(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++    call_id: &str,
++) -> Result<NativeDispatchAdmission, String> {
++    prepare_native_dispatch_with_inspection(
++        workspace,
++        pins,
++        key,
++        task_id,
++        call_id,
++        crate::project_mcp_task::inspect_native_task_call,
++    )
++}
++
++pub(crate) fn prepare_native_dispatch_with_inspection(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++    call_id: &str,
++    inspect: impl FnOnce(
++        &crate::delegated::autonomy_projects::ResolvedProjectScopeV1,
++        &crate::web_work_state::WorkRecord,
++        &str,
++        &str,
++    ) -> Result<crate::project_mcp_task::PreparedNativeTaskCall, String>,
++) -> Result<NativeDispatchAdmission, String> {
++    let request = AssignmentRequest::parse(pins)?;
++    let prepared = PreparedProjectScopeV1::resolve(workspace, &request.project_id)
++        .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
++    let control = prepared.scope().control_workspace.clone();
++    let lease = crate::operator_facade::acquire_web_work_lease(&control, &request.project_id)?;
++    let record =
++        with_native_dispatch_record(&prepared, &request, key, task_id, &lease, |record, _| {
++            Ok(record.clone())
++        })?;
++    // No shared registry/Wake lock spans Git/worktree inspection. This project's
++    // lease remains held; the second transaction rechecks authority before any
++    // continuation mutation or EXECUTING journal record.
++    let inspected = inspect(prepared.scope(), &record, key, task_id)?;
++    let call = with_native_dispatch_record(
++        &prepared,
++        &request,
++        key,
++        task_id,
++        &lease,
++        |record, current| inspected.commit(&prepared, record, key, call_id, &lease, current),
++    )?;
++    Ok(NativeDispatchAdmission {
++        _lease: lease,
++        control,
++        project_id: request.project_id,
++        call,
++    })
++}
++
++fn with_native_dispatch_record<T>(
++    prepared: &PreparedProjectScopeV1,
++    request: &AssignmentRequest,
++    key: &str,
++    task_id: &str,
++    lease: &crate::operator_facade::WebWorkLease,
++    operation: impl FnOnce(&crate::web_work_state::WorkRecord, &protocol::Target) -> Result<T, String>,
++) -> Result<T, String> {
++    mcp::with_current_project_web_target(
++        &prepared.scope().control_workspace,
++        &request.project_id,
++        request.expected_target_generation,
++        &request.expected_target_sha256,
++        |workspace, paired| {
++            let current = protocol::Target::new(paired.generation, paired.url.clone())?;
++            prepared
++                .revalidate_registration()
++                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
++            let scope = prepared.scope();
++            let record = WorkLedger::open(workspace, &request.project_id)?
++                .record(&request.request_id)?
++                .ok_or("WEB_WORK_REQUEST_MISSING")?;
++            if record.phase != "OPEN"
++                || record.event_id != request.source_event_id
++                || record.task_assignment.as_ref().is_none_or(|link| {
++                    link.task_id != task_id || link.assignment_sha256 != request.assignment_sha256
++                })
++            {
++                return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
++            }
++            lease.check_source_task(&record.target, &current, &record.event_id)?;
++            require_assignment_source(
++                workspace,
++                &request.project_id,
++                &record,
++                record.target == current,
++            )?;
++            crate::project_mcp_task::native_status_selection(scope, &record, key)?;
++            operation(&record, &current)
++        },
++    )
++}
++
++pub(crate) struct NativeStatusAdmission {
++    prepared: PreparedProjectScopeV1,
++    request: AssignmentRequest,
++    key: String,
++    task_id: String,
++    selection: crate::operator_codex_cli::NativeQueueSelection,
++}
++
++impl NativeStatusAdmission {
++    /// Slow Git/queue inspection occurs only after the shared admission locks
++    /// end. This remains a snapshot, not a writer/lease/liveness assertion.
++    pub(crate) fn snapshot(self) -> Result<Value, String> {
++        let result = crate::operator_codex_cli::native_queue_selection_status(
++            &self.prepared.scope().control_workspace,
++            &self.request.project_id,
++            &self.selection,
++        );
++        // An in-flight read is not durable permission: recheck bounded exact
++        // metadata before releasing data if authority changed during lookup.
++        let current =
++            authorize_native_status(&self.prepared, &self.request, &self.key, &self.task_id)?;
++        if current != self.selection {
++            return Err("WEB_TASK_NATIVE_REQUEST_CHANGED".into());
++        }
++        result
++    }
++}
++
++/// Authorize bounded metadata while retaining the paired target. Status takes
++/// no project writer/lease and changes no task journal. Queue inspection is a
++/// separate read, so a slow/missing queue cannot hold sibling admission locks.
++pub(crate) fn native_status(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++) -> Result<NativeStatusAdmission, String> {
++    native_status_with_preparation(workspace, pins, key, task_id, |root, project| {
++        PreparedProjectScopeV1::resolve(root, project)
++            .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE".into())
++    })
++}
++
++pub(crate) fn native_status_with_preparation(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++    prepare: impl FnOnce(&Path, &str) -> Result<PreparedProjectScopeV1, String>,
++) -> Result<NativeStatusAdmission, String> {
++    let request = AssignmentRequest::parse(pins)?;
++    let prepared = prepare(workspace, &request.project_id)?;
++    let selection = authorize_native_status(&prepared, &request, key, task_id)?;
++    Ok(NativeStatusAdmission {
++        prepared,
++        request,
++        key: key.into(),
++        task_id: task_id.into(),
++        selection,
++    })
++}
++
++fn authorize_native_status(
++    prepared: &PreparedProjectScopeV1,
++    request: &AssignmentRequest,
++    key: &str,
++    task_id: &str,
++) -> Result<crate::operator_codex_cli::NativeQueueSelection, String> {
++    mcp::with_current_project_web_target(
++        &prepared.scope().control_workspace,
++        &request.project_id,
++        request.expected_target_generation,
++        &request.expected_target_sha256,
++        |workspace, paired| {
++            prepared
++                .revalidate_registration()
++                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
++            let scope = prepared.scope();
++            let record = WorkLedger::open(workspace, &request.project_id)?
++                .record(&request.request_id)?
++                .ok_or("WEB_WORK_REQUEST_MISSING")?;
++            if record.phase != "OPEN"
++                || record.event_id != request.source_event_id
++                || record.task_assignment.as_ref().is_none_or(|link| {
++                    link.task_id != task_id || link.assignment_sha256 != request.assignment_sha256
++                })
++            {
++                return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
++            }
++            let current = protocol::Target::new(paired.generation, paired.url.clone())?;
++            require_assignment_source(
++                workspace,
++                &request.project_id,
++                &record,
++                record.target == current,
++            )?;
++            crate::project_mcp_task::native_status_selection(scope, &record, key)
++        },
++    )
+ }
+ 
+ pub(crate) fn authorized_assignment(
+@@ -100,11 +349,183 @@ pub(crate) fn authorized_assignment(
+     }
+ }
+ 
++/// Explicit granted manual continuation. Uses the publication lock order from
++/// request(), not with_current_project_web_target (which holds Wake's lock).
++/// No new work record, browser, endpoint or native writer is created here.
++pub(crate) fn manual_wake(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++    call_id: &str,
++    arguments: Value,
++) -> Result<Value, String> {
++    let request = AssignmentRequest::parse(pins)?;
++    let intent = crate::project_mcp_task::ManualWakeRequest::parse(arguments)?;
++    let workspace = workspace
++        .canonicalize()
++        .map_err(|_| "WEB_WORK_CONTROL_UNAVAILABLE")?;
++    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
++    loop {
++        let result = manual_wake_once(&workspace, &request, &intent, key, task_id, call_id);
++        // Only pre-effect admission contention is retryable. Journaled,
++        // submitted, unknown and arbitrary publisher errors never enter here.
++        if matches!(
++            result.as_ref().map_err(String::as_str),
++            Err("WEB_TASK_MANUAL_WAKE_ADMISSION_BUSY")
++        ) && std::time::Instant::now() < deadline
++        {
++            std::thread::sleep(std::time::Duration::from_millis(10));
++        } else {
++            return result;
++        }
++    }
++}
++
++fn manual_wake_once(
++    workspace: &Path,
++    request: &AssignmentRequest,
++    intent: &crate::project_mcp_task::ManualWakeRequest,
++    key: &str,
++    task_id: &str,
++    call_id: &str,
++) -> Result<Value, String> {
++    manual_wake_once_with_preparation(
++        workspace,
++        request,
++        intent,
++        key,
++        task_id,
++        call_id,
++        |root, project| {
++            PreparedProjectScopeV1::resolve(root, project)
++                .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE".into())
++        },
++    )
++}
++
++fn manual_wake_once_with_preparation(
++    workspace: &Path,
++    request: &AssignmentRequest,
++    intent: &crate::project_mcp_task::ManualWakeRequest,
++    key: &str,
++    task_id: &str,
++    call_id: &str,
++    prepare: impl FnOnce(&Path, &str) -> Result<PreparedProjectScopeV1, String>,
++) -> Result<Value, String> {
++    let prepared = prepare(workspace, &request.project_id)?;
++    let lease = crate::operator_facade::acquire_web_work_lease(workspace, &request.project_id)?;
++    let paired = mcp::operator_read_project_web_target_diagnosed(workspace, &request.project_id)
++        .map_err(|failure| {
++            if failure.code == "WEB_TARGET_WAKE_CONFIG_BUSY" {
++                "WEB_TASK_MANUAL_WAKE_ADMISSION_BUSY"
++            } else {
++                "WEB_WORK_PAIRED_TARGET_REQUIRED"
++            }
++        })?
++        .ok_or("WEB_WORK_PAIRED_TARGET_REQUIRED")?;
++    if paired.generation != request.expected_target_generation
++        || paired.sha256 != request.expected_target_sha256
++    {
++        return Err("WEB_WORK_TARGET_CHANGED".into());
++    }
++    let expected = protocol::Target::new(paired.generation, paired.url)?;
++    let registry =
++        AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
++            .map_err(|_| "WEB_WORK_REGISTRY_UNAVAILABLE")?;
++    let mut entered = false;
++    registry
++        .with_registration_lock(|| {
++            entered = true;
++            prepared
++                .revalidate_registration()
++                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
++            let scope = prepared.scope();
++            if scope.project.chatgpt_target_url.as_deref() != Some(expected.url.as_str())
++                || scope.project.chatgpt_target_sha256.as_deref() != Some(expected.digest.as_str())
++            {
++                return Err("WEB_WORK_TARGET_CHANGED".into());
++            }
++            let record = WorkLedger::open(workspace, &request.project_id)?
++                .record(&request.request_id)?
++                .ok_or("WEB_WORK_REQUEST_MISSING")?;
++            if record.phase != "OPEN"
++                || record.event_id != request.source_event_id
++                || record.task_assignment.as_ref().is_none_or(|link| {
++                    link.task_id != task_id || link.assignment_sha256 != request.assignment_sha256
++                })
++            {
++                return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
++            }
++            lease.check_source_task(&record.target, &expected, &record.event_id)?;
++            require_assignment_source(
++                workspace,
++                &request.project_id,
++                &record,
++                record.target == expected,
++            )?;
++            crate::project_mcp_task::authorized_manual_wake_assignment(scope, &record, key)?;
++            wake_protocol_client::preflight_prepared_invitation(&prepared, &expected)?;
++            crate::project_mcp_task::journal_manual_wake(
++                scope,
++                &record,
++                key,
++                call_id,
++                intent,
++                &expected,
++                || {
++                    wake_protocol_client::publish_registered_manual_wake(
++                        &prepared,
++                        &record.request_id,
++                        task_id,
++                        &expected,
++                        catdesk_wake::store::WakeIntent {
++                            purpose: protocol::WakePurpose::ManualEndTurn,
++                            source_event_id: &record.event_id,
++                            source_turn_id: &intent.source_turn_id,
++                            priority: intent.priority,
++                            ttl_seconds: intent.ttl_seconds,
++                        },
++                    )
++                },
++            )
++        })
++        .map_err(|reason| {
++            if !entered && reason == "project registration is already in progress" {
++                "WEB_TASK_MANUAL_WAKE_ADMISSION_BUSY".into()
++            } else {
++                reason
++            }
++        })
++}
++
++#[cfg(all(test, windows))]
++pub(crate) fn manual_wake_with_preparation(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++    call_id: &str,
++    arguments: Value,
++    prepare: impl FnOnce(&Path, &str) -> Result<PreparedProjectScopeV1, String>,
++) -> Result<Value, String> {
++    let request = AssignmentRequest::parse(pins)?;
++    let intent = crate::project_mcp_task::ManualWakeRequest::parse(arguments)?;
++    let root = workspace
++        .canonicalize()
++        .map_err(|_| "WEB_WORK_CONTROL_UNAVAILABLE")?;
++    manual_wake_once_with_preparation(&root, &request, &intent, key, task_id, call_id, prepare)
++}
++
+ #[derive(Clone, Copy)]
+ enum AssignmentAction<'a> {
+     Associate(&'a Path),
+     Prepare,
+-    Permission(bool),
++    Permission {
++        revoke: bool,
++        allow_manual_wake: bool,
++        native_queue_task_id: Option<&'a str>,
++    },
+     Authorize(&'a str),
+ }
+ 
+@@ -117,7 +538,7 @@ fn assigned_action(
+     let workspace = workspace
+         .canonicalize()
+         .map_err(|_| "WEB_WORK_CONTROL_UNAVAILABLE")?;
+-    resolve_registered_project_from_control_root(&workspace, &request.project_id)
++    let prepared = PreparedProjectScopeV1::resolve(&workspace, &request.project_id)
+         .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+     let lease = crate::operator_facade::acquire_web_work_lease(&workspace, &request.project_id)?;
+     mcp::with_current_project_web_target(
+@@ -127,9 +548,10 @@ fn assigned_action(
+         &request.expected_target_sha256,
+         |workspace, paired| {
+             let current = protocol::Target::new(paired.generation, paired.url.clone())?;
+-            let scope =
+-                resolve_registered_project_from_control_root(workspace, &request.project_id)
+-                    .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
++            prepared
++                .revalidate_registration()
++                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
++            let scope = prepared.scope();
+             let ledger = WorkLedger::open(workspace, &request.project_id)?;
+             let record = ledger
+                 .record(&request.request_id)?
+@@ -146,7 +568,7 @@ fn assigned_action(
+             )?;
+             if let AssignmentAction::Associate(path) = action {
+                 let link = crate::project_mcp_task::archive_work_assignment(
+-                    &scope,
++                    scope,
+                     path,
+                     &request.assignment_sha256,
+                     &request.request_id,
+@@ -166,14 +588,35 @@ fn assigned_action(
+             }
+             match action {
+                 AssignmentAction::Prepare => {
+-                    crate::project_mcp_task::prepare_work_resume(&scope, &record, &current)
++                    crate::project_mcp_task::prepare_work_resume(scope, &record, &current)
+                 }
+-                AssignmentAction::Permission(revoke) => {
+-                    crate::project_mcp_task::grant_web_execution(&scope, &record, &current, revoke)
++                AssignmentAction::Permission {
++                    revoke,
++                    allow_manual_wake,
++                    native_queue_task_id,
++                } => {
++                    if native_queue_task_id.is_some() {
++                        crate::project_mcp_task::grant_web_execution_with_capabilities(
++                            scope,
++                            &record,
++                            &current,
++                            revoke,
++                            allow_manual_wake,
++                            native_queue_task_id,
++                        )
++                    } else if allow_manual_wake {
++                        crate::project_mcp_task::grant_web_execution_with_manual_wake(
++                            scope, &record, &current, revoke, true,
++                        )
++                    } else {
++                        crate::project_mcp_task::grant_web_execution(
++                            scope, &record, &current, revoke,
++                        )
++                    }
+                 }
+                 AssignmentAction::Authorize(key) => {
+                     let archive =
+-                        crate::project_mcp_task::authorized_web_assignment(&scope, &record, key)?;
++                        crate::project_mcp_task::authorized_web_assignment(scope, &record, key)?;
+                     // Do not acquire the task writer during authorization: stale or
+                     // mismatched caller identity must refuse before task startup.
+                     Ok(
+
+diff --git a/src/windows_protected_fs.rs b/src/windows_protected_fs.rs
+index 855b4dd14a502463792a7aa2c2cd7983e08eb4e9..8685c3f0f25b73a74a62fd9717a311368ea404f8 100644
+--- a/src/windows_protected_fs.rs
++++ b/src/windows_protected_fs.rs
+@@ -752,7 +752,9 @@ impl ProtectedDirectoryGuard {
+     /// can only make this fail closed.
+     #[cfg(windows)]
+     pub(crate) fn reopen_direct_child_for_delete(mut self, label: &str) -> Result<Self, String> {
+-        if self.directories.len() != 2 {
++        // The final object is a direct child of the preceding pinned handle,
++        // including when that parent has its own retained ancestor chain.
++        if self.directories.len() < 2 {
+             return Err(format!("{label} is not a direct child"));
+         }
+         self.assert_stable(label)?;
+
+diff --git a/src/windows_supervisor_startup.rs b/src/windows_supervisor_startup.rs
+index 1665a9f45e9c3306b0a33c44f32eae4ea25f3d9f..5db1048720e83635dd7cdf7b199838d3452b525a 100644
+--- a/src/windows_supervisor_startup.rs
++++ b/src/windows_supervisor_startup.rs
+@@ -577,6 +577,15 @@ fn native_hresult_reason(
+     }
+ }
+ 
++/// GetTask reports HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) for an absent
++/// task. 0x8004130F is SCHED_E_ACCOUNT_INFORMATION_NOT_SET, not absence.
++/// A failed lookup must also return no object before absence can authorize
++/// the existing create-only registration path.
++fn native_task_lookup_is_absent(status: i32, object_is_null: bool) -> bool {
++    const HRESULT_FILE_NOT_FOUND: i32 = 0x8007_0002_u32 as i32;
++    status == HRESULT_FILE_NOT_FOUND && object_is_null
++}
++
+ #[cfg(windows)]
+ mod native {
+     use std::ffi::c_void;
+@@ -587,7 +596,6 @@ mod native {
+         SupervisorStartupDefinitionStateV1, SupervisorStartupErrorV1, xml_is_exact_owned,
+     };
+ 
+-    const SCHED_E_TASK_NOT_FOUND: i32 = 0x8004_130F_u32 as i32;
+     const TASK_CREATE: i32 = 0x2;
+     const TASK_UPDATE: i32 = 0x4;
+     const TASK_LOGON_INTERACTIVE_TOKEN: i32 = 3;
+@@ -841,7 +849,7 @@ mod native {
+         let mut task_raw = std::ptr::null_mut();
+         let get_task: ITaskFolderGetTask = unsafe { method(folder.0, I_TASK_FOLDER_GET_TASK_SLOT) };
+         let hr = unsafe { get_task(folder.0, name.as_ptr(), &mut task_raw) };
+-        if hr == SCHED_E_TASK_NOT_FOUND {
++        if super::native_task_lookup_is_absent(hr, task_raw.is_null()) {
+             return Ok(None);
+         }
+         if hr < 0 || task_raw.is_null() {
+@@ -967,6 +975,19 @@ mod native {
+     mod abi_tests {
+         use super::*;
+ 
++        #[test]
++        #[ignore = "read-only Windows host qualification; requires the fixed task to be absent"]
++        fn fixed_task_absence_is_observed_through_actual_com() {
++            let (_apartment, service) = connect_service().expect("Task Scheduler connection");
++            let folder = root_folder(&service).expect("Task Scheduler root");
++            assert!(
++                existing_task_xml(&folder)
++                    .expect("fixed task lookup must distinguish absence from lookup failure")
++                    .is_none(),
++                "qualification requires the fixed task to remain absent; no task is mutated"
++            );
++        }
++
+         #[derive(Default)]
+         struct FakeComVtable {
+             calls: Vec<usize>,
+@@ -1061,6 +1082,24 @@ mod native {
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn only_file_not_found_without_an_object_is_task_absence() {
++        assert!(native_task_lookup_is_absent(0x8007_0002_u32 as i32, true));
++        assert!(!native_task_lookup_is_absent(0x8007_0002_u32 as i32, false));
++        for status in [
++            0,
++            1,
++            0x8004_130F_u32 as i32, // account information is missing
++            0x8007_0005_u32 as i32, // access denied
++            0x8007_0003_u32 as i32, // folder/path unavailable
++            0x8007_06BA_u32 as i32, // scheduler RPC unavailable
++            -1,
++        ] {
++            assert!(!native_task_lookup_is_absent(status, true));
++            assert!(!native_task_lookup_is_absent(status, false));
++        }
++    }
++
+     #[test]
+     fn authority_accepts_only_non_system_interactive_sid_shape() {
+         assert!(
+
+diff --git a/tests/test_wake_bridge.py b/tests/test_wake_bridge.py
+index ac9bb2736979c7f5970844c72595323abd03b813..ff0b1fc3e3303b4c6a238d4327ea62be47fef282 100644
+--- a/tests/test_wake_bridge.py
++++ b/tests/test_wake_bridge.py
+@@ -1878,6 +1878,7 @@ class WakeBridgeTests(unittest.TestCase):
+         self.assertIn("inWakeExchange", response.script)
+ 
+         class RetryCdp:
++            def get_current_url(self): return "https://chatgpt.com/c/review-one"
+             def evaluate(self, script):
+                 self.script = script
+                 return "clicked"
+@@ -2530,6 +2531,10 @@ class WakeBridgeTests(unittest.TestCase):
+                 "RESPONSE_NETWORK_ERROR",
+                 "RESPONSE_GENERATION_TIMEOUT",
+                 "RESPONSE_COMPLETION_UNPROVEN",
++                "RESPONSE_LOAD_ERROR",
++                "RESPONSE_RETRY_BLOCKED_DRAFT",
++                "RESPONSE_RETRY_BLOCKED_GENERATION",
++                "RESPONSE_RETRY_EDITOR_UNAVAILABLE",
+                 "RESPONSE_TIMEOUT_RETRY_AMBIGUOUS",
+                 "RESPONSE_RETRY_EXHAUSTED",
+                 "RESPONSE_TIMEOUT_STATE_LOST",
+
+diff --git a/tests/test_wake_bridge_current_dom.py b/tests/test_wake_bridge_current_dom.py
+index 9d477ae0a23b3b11c7e95ea23b0db54a56fa3dfe..b8d91710b2cd6ec25ef0d41c6384c097edd34345 100644
+--- a/tests/test_wake_bridge_current_dom.py
++++ b/tests/test_wake_bridge_current_dom.py
+@@ -76,8 +76,10 @@ class Element {
+   }
+   cloneNode() { return new Element(this.tagName, {...this.attrs}, this.text, this.children.map(c => c.cloneNode())); }
+   remove() { this.parentElement.children = this.parentElement.children.filter(c => c !== this); }
++  click() { mutations++; }
+ }
+ const el = (tag, attrs = {}, text = '', children = []) => new Element(tag, attrs, text, children);
++const append = (parent, child) => { child.parentElement = parent; parent.children.push(child); };
+ const button = label => el('button', {'aria-label':label}, label);
+ const user = el('div', {'data-content-search-unit-key':'fallback-turn-0:0:user'}, '', [
+   el('div', options.userClassOnly ? {class:'group/user-message'} : {'data-user-message-bubble':'true'}, '', [
+@@ -121,6 +123,14 @@ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:a
+     ]),
+   ]),
+ ]);
++if (options.timeoutCard) append(assistant, el('div', {role:'alert'}, '', [
++  el('p', {}, 'Message delivery timed out. Please try again.'),
++  ...Array.from({length:options.retryOnlyOutside ? 0 : (options.retryCount ?? 1)}, () => button(options.retryLabel || 'Retry')),
++]));
++if (options.userTimeoutQuote) {
++  append(user.children[0], el('p', {}, 'Message delivery timed out. Please try again.'));
++  append(user.children[0], button('Retry'));
++}
+ const children = options.userOnly ? [user] : [user, assistant];
+ if (options.duplicateUser) children.splice(1, 0, user.cloneNode());
+ for (const control of options.submitControls || []) children.push(el('button', {
+@@ -137,6 +147,25 @@ if (options.bareUser) {
+   delete paired.attrs['data-content-search-turn-key'];
+ }
+ global.document = el('document', {}, '', [paired]);
++if (options.legacyTurns) {
++  delete user.attrs['data-content-search-unit-key'];
++  delete assistant.attrs['data-content-search-unit-key'];
++  user.attrs['data-message-author-role'] = 'user';
++  assistant.attrs['data-message-author-role'] = 'assistant';
++  document.children = [
++    el('div', {'data-testid':'conversation-turn-0'}, '', [user]),
++    el('div', {'data-testid':'conversation-turn-1'}, '', [assistant,
++      el('div', {class:'turn-action-controls'}, '', [el('button', {'data-testid':'copy-turn-action-button','aria-label':'Copy'}, 'Copy')])]),
++  ];
++}
++if (options.retryOnlyOutside) document.children.push(button('Retry'));
++if (options.historicalLoadError) document.children.unshift(el('div', {'data-message-author-role':'assistant'}, 'This response couldn’t load'));
++document.readyState = options.documentState || 'complete';
++if (options.observationEditor) document.children.push(el('div', {id:'prompt-textarea'}, options.observationDraft || ''));
++if (options.observationStop) document.children.push(el('button', {'data-testid':'stop-button'}));
++if (options.observationLogin) document.children.push(el('a', {href:'/auth/login'}));
++if (options.observationCaptcha) document.children.push(el('iframe', {title:'captcha'}));
++if (options.observationNetwork) document.children.push(el('div', {id:'main-frame-error'}), el('div', {id:'error-code'}));
+ global.window = {getComputedStyle: () => ({visibility:'visible', display:'block'})};
+ global.location = {href:options.location || 'https://chatgpt.com/c/current-dom'};
+ if (options.composerCount !== undefined) {
+@@ -196,7 +225,7 @@ const value = eval(fs.readFileSync(0, 'utf8'));
+ const editor = document.querySelector('#prompt-textarea');
+ process.stdout.write(JSON.stringify(options.normalizationTrace ? {
+   value, mutations, commands, editorText:editor?.textContent || '', linked:Boolean(editor?.querySelector('a[href], [text-link-href]'))
+-} : options.traceMutations ? {value, mutations} : value));
++} : (options.traceMutations || options.traceClicks) ? {value, mutations} : value));
+ """
+ 
+ 
+@@ -205,7 +234,7 @@ class CurrentDom:
+         self.options = options
+ 
+     def get_current_url(self):
+-        return self.options.get("location", "https://chatgpt.com/c/current-dom")
++        return self.options.get("metadataLocation", self.options.get("location", "https://chatgpt.com/c/current-dom"))
+ 
+     def get_attribute(self, selector, attribute, timeout):
+         return self.evaluate(f"document.querySelector({json.dumps(selector)})?.getAttribute({json.dumps(attribute)}) ?? null")
+@@ -230,7 +259,7 @@ class CurrentDom:
+             if not observed["linked"]:
+                 self.options.update(composerLink=False, composerText=observed["editorText"])
+             return observed["value"]
+-        if self.options.get("traceMutations"):
++        if self.options.get("traceMutations") or self.options.get("traceClicks"):
+             self.mutations = observed["mutations"]
+             return observed["value"]
+         return observed
+@@ -546,7 +575,7 @@ class CurrentDomTests(unittest.TestCase):
+                                                             require_usable_body=True)[3])
+ 
+     def test_error_placeholder_and_controls_only_are_not_usable(self):
+-        with self.assertRaisesRegex(bridge.PostSubmitUnknown, "RESPONSE_COMPLETION_UNPROVEN"):
++        with self.assertRaisesRegex(bridge.PostSubmitUnknown, "RESPONSE_LOAD_ERROR"):
+             self.sink.response_snapshot(CurrentDom(loadError=True), "exact wake message", require_usable_body=True)
+         with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER"):
+             self.sink.require_usable_latest_assistant(CurrentDom(loadError=True), source=True)
+@@ -555,6 +584,108 @@ class CurrentDomTests(unittest.TestCase):
+         self.assertFalse(self.sink.response_snapshot(CurrentDom(controlsOnly=True), "exact wake message",
+                                                    require_usable_body=True)[3])
+ 
++    def test_readonly_surface_separates_usable_conversation_and_unattributed_load_error(self):
++        result = self.sink.browser_surface_observation(CurrentDom(loadError=True, observationEditor=True))
++        self.assertEqual(result, dict(route="EXACT", document="COMPLETE", history="PRESENT",
++            editor="READY", composer="EMPTY", generation="IDLE", assistant="LOAD_ERROR",
++            exchange="UNATTRIBUTED", recovery="OBSERVATION_ONLY"))
++
++    def test_readonly_surface_exports_no_draft_or_assistant_text(self):
++        result = self.sink.browser_surface_observation(CurrentDom(observationEditor=True,
++            observationDraft="PRIVATE_DRAFT_MARKER", answer="PRIVATE_ANSWER_MARKER"))
++        self.assertEqual(result["composer"], "DRAFT_PRESENT")
++        self.assertEqual(result["assistant"], "PRESENT")
++        self.assertNotIn("PRIVATE_", json.dumps(result))
++
++    def test_readonly_surface_retains_exact_conversation_route_equivalence(self):
++        for path in ("/c/test", "/g/project/c/test"):
++            sink = bridge.CdpSink("https://chatgpt.com" + path, self.sink.profile, 30, 20)
++            for host in ("chatgpt.com", "chat.openai.com"):
++                for observed in ("/c/test", "/g/other-project/c/test"):
++                    self.assertEqual(sink.browser_surface_observation(
++                        CurrentDom(location="https://" + host + observed))["route"], "EXACT")
++            for observed in ("/c/other", "/g/project/c/other", "/c/test/", "/c/test?query=1"):
++                self.assertEqual(sink.browser_surface_observation(
++                    CurrentDom(location="https://chatgpt.com" + observed))["route"], "TARGET_DRIFT")
++
++    def test_readonly_surface_distinguishes_layers_without_recovery(self):
++        for options, key, expected in [
++            ({"observationStop": True}, "generation", "ACTIVE"),
++            ({"observationLogin": True}, "route", "AUTH_REQUIRED"),
++            ({"observationCaptcha": True}, "route", "SECURITY_CHECK"),
++            ({"observationNetwork": True}, "route", "NETWORK_ERROR"),
++            ({"location": "chrome-error://chromewebdata/"}, "route", "NETWORK_ERROR"),
++            ({"location": "https://chatgpt.com/"}, "route", "HOME"),
++            ({"location": "https://chatgpt.com/c/other"}, "route", "TARGET_DRIFT"),
++            ({"documentState": "loading"}, "document", "LOADING"),
++            ({}, "editor", "MISSING"),
++        ]:
++            with self.subTest(options=options):
++                result = self.sink.browser_surface_observation(CurrentDom(**options))
++                self.assertEqual(result[key], expected)
++                self.assertEqual(result["recovery"], "OBSERVATION_ONLY")
++
++    def test_historical_load_error_does_not_replace_current_completed_turn(self):
++        cdp = CurrentDom(historicalLoadError=True)
++        self.assertEqual(self.sink.browser_surface_observation(cdp)["assistant"], "PRESENT")
++        self.assertTrue(self.sink.response_snapshot(cdp, "exact wake message", require_usable_body=True)[3])
++
++    def test_answer_discussing_response_error_is_not_the_error_placeholder(self):
++        cdp = CurrentDom(answer="The UI may say This response couldn’t load. Preserve its receipt before recovery.", observationEditor=True)
++        self.assertEqual(self.sink.browser_surface_observation(cdp)["assistant"], "PRESENT")
++        self.assertTrue(self.sink.response_snapshot(cdp, "exact wake message", require_usable_body=True)[3])
++        self.sink.require_usable_latest_assistant(cdp, source=True)
++
++    def test_surface_uses_document_route_not_stale_driver_metadata(self):
++        cdp = CurrentDom(location="https://chatgpt.com/c/foreign", metadataLocation=self.sink.url,
++                         observationEditor=True)
++        self.assertEqual(self.sink.browser_surface_observation(cdp)["route"], "TARGET_DRIFT")
++
++    def test_unique_assistant_timeout_retry_is_scoped_and_not_a_user_submit(self):
++        for legacy in [False, True]:
++            with self.subTest(legacy=legacy):
++                cdp = CurrentDom(timeoutCard=True, observationEditor=True, traceClicks=True, legacyTurns=legacy)
++                self.assertEqual(self.sink.response_snapshot(cdp, "exact wake message")[:2], (1, 1))
++                self.sink.click_response_timeout_retry(cdp, "exact wake message")
++                self.assertEqual(cdp.mutations, 1)
++
++    def test_current_receipt_attribution_distinguishes_failed_history_and_duplicates(self):
++        for options, expected in [
++            ({"historicalLoadError": True}, "RESPONSE_COMPLETE"),
++            ({"loadError": True}, "RESPONSE_LOAD_ERROR"),
++            ({"loadError": True, "observationStop": True}, "RESPONSE_PENDING"),
++            ({"loadError": True, "duplicateUser": True}, "RESPONSE_EXPECTED_USER_DUPLICATED"),
++        ]:
++            with self.subTest(options=options):
++                cdp = CurrentDom(observationEditor=True, **options)
++                if expected in {"RESPONSE_COMPLETE", "RESPONSE_PENDING"}:
++                    self.assertEqual(self.sink.observe_cooperative_response(cdp, "exact wake message",
++                        bridge.digest("exact wake message")), expected)
++                else:
++                    with self.assertRaisesRegex(bridge.Attention, expected):
++                        self.sink.observe_cooperative_response(cdp, "exact wake message",
++                            bridge.digest("exact wake message"))
++
++    def test_retry_refuses_user_quotes_foreign_controls_drafts_and_route_drift(self):
++        for options, reason in [
++            ({"userTimeoutQuote": True}, "RESPONSE_RETRY_CONTROL_AMBIGUOUS"),
++            ({"timeoutCard": True, "retryOnlyOutside": True}, "RESPONSE_RETRY_CONTROL_AMBIGUOUS"),
++            ({"timeoutCard": True, "retryCount": 2}, "RESPONSE_RETRY_CONTROL_AMBIGUOUS"),
++            ({"timeoutCard": True, "retryLabel": "Regenerate"}, "RESPONSE_RETRY_CONTROL_AMBIGUOUS"),
++            ({"timeoutCard": True, "observationDraft": "PRIVATE_DRAFT"}, "RESPONSE_RETRY_BLOCKED_DRAFT"),
++            ({"timeoutCard": True, "observationStop": True}, "RESPONSE_RETRY_BLOCKED_GENERATION"),
++            ({"timeoutCard": True, "location": "https://chatgpt.com/c/foreign", "metadataLocation": self.sink.url}, "RESPONSE_TARGET_DRIFT"),
++        ]:
++            with self.subTest(options=options):
++                cdp = CurrentDom(observationEditor=True, traceClicks=True, **options)
++                with self.assertRaisesRegex(bridge.PostSubmitUnknown, reason):
++                    self.sink.click_response_timeout_retry(cdp, "exact wake message")
++                self.assertEqual(getattr(cdp, "mutations", 0), 0)
++
++    def test_user_timeout_quote_is_not_an_assistant_timeout_card(self):
++        cdp = CurrentDom(userTimeoutQuote=True)
++        self.assertEqual(self.sink.response_snapshot(cdp, "exact wake message")[:2], (0, 0))
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+
+diff --git a/tests/test_wake_profile_quiescence.py b/tests/test_wake_profile_quiescence.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..1212f35682f715e8ddbe4113e93de17e463451a8
+--- /dev/null
++++ b/tests/test_wake_profile_quiescence.py
+@@ -0,0 +1,79 @@
++import importlib.util
++from pathlib import Path
++import unittest
++
++SPEC = importlib.util.spec_from_file_location("profile_quiescence", Path(__file__).resolve().parents[1] / "scripts/wake_profile_quiescence.py")
++probe = importlib.util.module_from_spec(SPEC)
++SPEC.loader.exec_module(probe)
++
++
++class ProfileQuiescenceTests(unittest.TestCase):
++    def row(self, pid, name, parent=0, created=1, image=None, args=None):
++        return dict(pid=pid, name=name, parent=parent, created=created,
++                    image=image or name, args=args or [name])
++
++    def classify(self, rows, samefile=lambda a, b: a == b):
++        return probe.classify(rows, "selected-profile", "selected-python", samefile)
++
++    def test_no_candidate_process_is_quiescent_not_a_submission_receipt(self):
++        self.assertEqual(self.classify([]), "PROFILE_QUIESCENT")
++
++    def test_selected_python_is_active_even_without_browser(self):
++        self.assertEqual(self.classify([self.row(1, "python.exe", image="selected-python")]), "PROFILE_HELPER_ACTIVE")
++
++    def test_profile_option_both_spellings_and_alias_identity_are_refused(self):
++        for args in (["chrome.exe", "--user-data-dir=selected-profile"],
++                     ["chrome.exe", "--user-data-dir", "selected-profile"],
++                     ["chrome.exe", "--user-data-dir=physical-alias"]):
++            with self.subTest(args=args):
++                self.assertEqual(self.classify([self.row(1, "chrome.exe", args=args)],
++                    lambda a, b: a == b or (a == "physical-alias" and b == "selected-profile")), "PROFILE_BROWSER_ACTIVE")
++
++    def test_unrelated_browser_and_children_do_not_globally_block_recovery(self):
++        rows = [self.row(1, "chrome.exe", args=["chrome.exe", "--user-data-dir=other-profile"]),
++                self.row(2, "chrome.exe", parent=1, created=2, args=["chrome.exe", "--type=renderer"]),
++                self.row(3, "chrome.exe", parent=2, created=3, args=["chrome.exe", "--type=utility"])]
++        self.assertEqual(self.classify(rows), "PROFILE_QUIESCENT")
++
++    def test_default_profile_cannot_own_the_qualified_explicit_profile(self):
++        self.assertEqual(self.classify([self.row(1, "chrome.exe")]), "PROFILE_QUIESCENT")
++
++    def test_orphan_browser_or_driver_is_unattributed_not_assumed_unrelated(self):
++        for row in [self.row(2, "chrome.exe", parent=1, args=["chrome.exe", "--type=renderer"]),
++                    self.row(2, "uc_driver.exe", parent=1), self.row(3, "selenium-manager.exe")]:
++            with self.subTest(name=row["name"]):
++                self.assertEqual(self.classify([row]), "PROFILE_OWNER_UNATTRIBUTED")
++
++    def test_known_other_project_python_driver_and_browser_are_independent(self):
++        rows = [self.row(1, "python.exe", image="other-python"),
++                self.row(2, "uc_driver.exe", parent=1, created=2),
++                self.row(3, "chrome.exe", parent=2, created=3, args=["chrome.exe", "--user-data-dir=other-profile"])]
++        self.assertEqual(self.classify(rows), "PROFILE_QUIESCENT")
++
++    def test_pid_reuse_or_ancestry_cycle_is_not_quiescence(self):
++        reused = [self.row(1, "chrome.exe", created=9),
++                  self.row(2, "chrome.exe", parent=1, created=2, args=["chrome.exe", "--type=renderer"])]
++        self.assertEqual(self.classify(reused), "PROFILE_OWNER_UNATTRIBUTED")
++        cycle = [self.row(1, "chrome.exe", parent=2, args=["chrome.exe", "--type=renderer"]),
++                 self.row(2, "chrome.exe", parent=1, args=["chrome.exe", "--type=utility"])]
++        with self.assertRaises(ValueError):
++            self.classify(cycle)
++        with self.assertRaises(ValueError):
++            self.classify([self.row(1, "chrome.exe"), self.row(1, "chrome.exe")])
++
++    def test_unknown_profile_identity_is_not_quiescence(self):
++        def unavailable(a, b): raise OSError("private path is not exported")
++        with self.assertRaises(OSError):
++            self.classify([self.row(1, "chrome.exe", args=["chrome.exe", "--user-data-dir=unknown"])], unavailable)
++
++    def test_duplicate_missing_or_empty_options_are_ambiguous(self):
++        for args in (["chrome.exe", "--user-data-dir"],
++                     ["chrome.exe", "--user-data-dir="],
++                     ["chrome.exe", "--user-data-dir=a", "--user-data-dir=b"],
++                     ["chrome.exe", "--user-data-dir", "--type=renderer"]):
++            with self.subTest(args=args), self.assertRaises(ValueError):
++                self.classify([self.row(1, "chrome.exe", args=args)])
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+diff --git a/tests/test_wake_readiness_probe.py b/tests/test_wake_readiness_probe.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4be25881565108803062140f2f909fa57ca436fc
+--- /dev/null
++++ b/tests/test_wake_readiness_probe.py
+@@ -0,0 +1,479 @@
++import contextlib
++import hashlib
++import asyncio
++import importlib.util
++import io
++import json
++import os
++from pathlib import Path
++import sys
++import tempfile
++import types
++import unittest
++from unittest import mock
++
++
++class ReadinessProbeTests(unittest.TestCase):
++    def setUp(self):
++        spec = importlib.util.spec_from_file_location(
++            "readiness_probe", Path(__file__).resolve().parents[1] / "scripts/wake_readiness_visual_probe.py")
++        self.probe = importlib.util.module_from_spec(spec)
++        with mock.patch.dict(os.environ, {"LOCALAPPDATA": tempfile.gettempdir()}):
++            spec.loader.exec_module(self.probe)
++
++    def test_inspection_reports_fixed_readiness_classes(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        for current, visible, expected in [
++            (target, {"#prompt-textarea"}, "EXACT_READY_IDLE"),
++            (target, {"#prompt-textarea", "button[data-testid='stop-button']"}, "EXACT_READY_BUSY"),
++            (target, set(), "EXACT_NO_EDITOR"),
++            ("https://chatgpt.com/auth/login", set(), "LOGIN_VISIBLE"),
++            (target, {"iframe[title*='captcha' i]"}, "CAPTCHA_VISIBLE"),
++            ("https://chatgpt.com/", set(), "HOME"),
++            ("https://chatgpt.com/c/another", set(), "TARGET_DRIFT"),
++            ("chrome-error://chromewebdata/", set(), "CHROME_ERROR"),
++        ]:
++            with self.subTest(expected=expected):
++                cdp = types.SimpleNamespace(get_current_url=lambda: current,
++                                            is_element_visible=lambda selector: selector in visible)
++                self.assertEqual(self.probe.classify(cdp, target), expected)
++
++    def test_verified_primitives_are_shared_and_rejected_before_execution_on_hash_drift(self):
++        path = Path(__file__).resolve().parents[1] / "scripts/wake_bridge.py"
++        content = path.read_bytes()
++        with tempfile.TemporaryDirectory() as profile:
++            sink = self.probe.load_observation_sink(path, hashlib.sha256(content).hexdigest(),
++                                                    Path(profile), "https://chatgpt.com/c/fixture")
++            self.assertTrue(callable(sink.browser_surface_observation))
++            with mock.patch("builtins.compile", side_effect=AssertionError("must not execute")):
++                with self.assertRaises(ValueError):
++                    self.probe.load_observation_sink(path, "0" * 64, Path(profile), "https://chatgpt.com/c/fixture")
++
++    def test_surface_error_is_not_home_or_missing_editor(self):
++        value = dict(route="EXACT", document="COMPLETE", editor="READY", composer="EMPTY", generation="IDLE", assistant="LOAD_ERROR")
++        self.assertEqual(self.probe.surface_state(value), "EXACT_READY_RESPONSE_LOAD_ERROR")
++        self.assertEqual(self.probe.surface_state(dict(value, generation="ACTIVE")), "EXACT_READY_BUSY")
++        self.assertEqual(self.probe.surface_state(dict(value, route="HOME")), "HOME")
++        self.assertEqual(self.probe.surface_state(dict(value, editor="MISSING")), "EXACT_NO_EDITOR")
++        self.assertEqual(self.probe.surface_state(dict(value, composer="DRAFT_PRESENT")), "EXACT_DRAFT_PRESENT")
++        self.assertEqual(self.probe.surface_state(dict(value, assistant="DELIVERY_TIMEOUT")), "EXACT_READY_RESPONSE_TIMEOUT")
++
++    def test_surface_unknown_state_cannot_be_reported_as_ready_idle(self):
++        value = dict(route="EXACT", document="COMPLETE", editor="READY", composer="EMPTY", generation="IDLE", assistant="PRESENT")
++        for key in ("document", "generation", "composer", "assistant"):
++            with self.subTest(key=key):
++                self.assertEqual(self.probe.surface_state(dict(value, **{key: "UNKNOWN"})), "OBSERVATION_UNAVAILABLE")
++
++    def test_readonly_inspection_never_recovers_home_or_exports_content(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp = mock.Mock()
++        cdp.get_current_url.return_value = "https://chatgpt.com/"
++        cdp.get_tabs.return_value = []
++        cdp.is_element_visible.return_value = False
++        browser = mock.MagicMock()
++        browser.cdp = cdp
++        factory = mock.Mock(return_value=mock.MagicMock(__enter__=mock.Mock(return_value=browser), __exit__=mock.Mock(return_value=False)))
++        elapsed = [0.0]
++        def sleep(seconds): elapsed[0] += seconds
++        with tempfile.TemporaryDirectory() as profile:
++            argv = ["probe", "--read-only", "--profile", profile, "--conversation-url", target, "--seconds", "5"]
++            output = io.StringIO()
++            with mock.patch.object(sys, "argv", argv), mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=factory)}), \
++                    mock.patch.object(self.probe.time, "monotonic", side_effect=lambda: elapsed[0]), \
++                    mock.patch.object(self.probe.time, "sleep", side_effect=sleep), contextlib.redirect_stdout(output):
++                self.assertEqual(self.probe.main(), 0)
++            cdp.get.assert_not_called()
++            cdp.evaluate.assert_not_called()
++            self.assertNotIn("HOME_CHECK", output.getvalue())
++            self.assertIn("PROBE:FINAL:HOME", output.getvalue())
++
++    def test_handshake_precedes_runtime_import_and_browser_creation(self):
++        argv = ["probe", "--await-start", "--conversation-url", "https://chatgpt.com/c/readiness-fixture"]
++        with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stdin", io.StringIO("NO\n")):
++            self.assertEqual(self.probe.main(), 2)
++
++    def test_network_detail_reads_only_an_internal_error_document(self):
++        cdp = mock.Mock()
++        for current in ["https://chatgpt.com/c/readiness-fixture", "https://chatgpt.com/",
++                        "https://other.example/", "about:blank"]:
++            cdp.get_current_url.return_value = current
++            self.assertEqual(self.probe.chrome_error_detail(cdp), "UNKNOWN")
++        cdp.evaluate.assert_not_called()
++        cdp.get.assert_not_called()
++
++    def test_network_detail_exports_only_fixed_codes(self):
++        cdp = mock.Mock()
++        cdp.get_current_url.return_value = "chrome-error://chromewebdata/"
++        for code in self.probe.NETWORK_ERRORS:
++            cdp.evaluate.return_value = " \n" + code + "\n"
++            self.assertEqual(self.probe.chrome_error_detail(cdp), code)
++        for value in [None, True, {"value": "ERR_CONNECTION_RESET"}, "ERR_PRIVATE_CONTENT",
++                      "ERR_CONNECTION_RESET private-page-text", "https://chatgpt.com/c/private"]:
++            cdp.evaluate.return_value = value
++            self.assertEqual(self.probe.chrome_error_detail(cdp), "UNKNOWN")
++        cdp.evaluate.side_effect = RuntimeError("private failure")
++        self.assertEqual(self.probe.chrome_error_detail(cdp), "UNKNOWN")
++        cdp.get.assert_not_called()
++
++    def test_development_owner_supplies_existing_profile_without_changing_default(self):
++        default = self.probe.PROFILE
++        target = "https://chatgpt.com/c/readiness-fixture"
++        calls = []
++
++        class Browser:
++            def __enter__(self):
++                self.cdp = types.SimpleNamespace(get_current_url=lambda: target,
++                    is_element_visible=lambda selector: selector == "#prompt-textarea")
++                return self
++            def __exit__(self, *args):
++                calls.append("closed")
++            def activate_cdp_mode(self, url):
++                calls.append(url)
++
++        def factory(**kwargs):
++            calls.append(kwargs)
++            return Browser()
++
++        with tempfile.TemporaryDirectory() as profile:
++            argv = ["probe", "--await-start", "--profile", profile,
++                    "--conversation-url", target, "--seconds", "5"]
++            output = io.StringIO()
++            with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stdin", io.StringIO("START\n")), \
++                    mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=factory)}), \
++                    mock.patch.object(self.probe.time, "monotonic", side_effect=[0, 0, 10]), \
++                    contextlib.redirect_stdout(output):
++                self.assertEqual(self.probe.main(), 0)
++            self.assertEqual(calls, [{"uc": True, "user_data_dir": profile}, target, "closed"])
++            rows = output.getvalue().splitlines()
++            self.assertTrue(rows[0].startswith("PROBE:TAB:"))
++            self.assertEqual(rows[1:], ["PROBE:TARGET_TAB_UNAVAILABLE", "PROBE:FINAL:EXACT_READY_IDLE"])
++        self.assertEqual(self.probe.PROFILE, default)
++
++    def test_home_recovery_requires_verified_empty_composer(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        for empty in ["EMPTY", True, False, None, "true", {"value": "EMPTY"}, "EMPTY private"]:
++            with self.subTest(empty=empty):
++                cdp = mock.Mock()
++                cdp.get_current_url.return_value = "https://chatgpt.com/"
++                cdp.is_element_visible.return_value = False
++                cdp.evaluate.return_value = empty
++                self.probe.recover_empty_home(cdp, target)
++                self.assertEqual(cdp.get.call_args_list, [mock.call(target)] if empty == "EMPTY" else [])
++
++    def test_home_refusal_reasons_are_fixed_and_do_not_navigate(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp = mock.Mock()
++        cdp.get_current_url.return_value = "https://chatgpt.com/"
++        cdp.is_element_visible.return_value = False
++        for reason in self.probe.HOME_CHECKS - {"EMPTY"}:
++            cdp.evaluate.return_value = reason
++            self.assertEqual(self.probe.recover_empty_home(cdp, target), reason)
++        for value in [True, None, "private draft", "EMPTY\n", {"value": "EMPTY"}]:
++            cdp.evaluate.return_value = value
++            self.assertEqual(self.probe.recover_empty_home(cdp, target), "EVALUATION_UNKNOWN")
++        cdp.evaluate.side_effect = RuntimeError("private failure")
++        self.assertEqual(self.probe.recover_empty_home(cdp, target), "EVALUATION_FAILED")
++        cdp.get.assert_not_called()
++
++    def test_home_route_change_or_busy_state_refuses_navigation_after_empty_check(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp = mock.Mock()
++        cdp.evaluate.return_value = "EMPTY"
++        cdp.is_element_visible.return_value = False
++        cdp.get_current_url.side_effect = ["https://chatgpt.com/", target]
++        self.assertEqual(self.probe.recover_empty_home(cdp, target), "NOT_HOME")
++        cdp.get.assert_not_called()
++        cdp.get_current_url.side_effect = None
++        cdp.get_current_url.return_value = "https://chatgpt.com/"
++        def evaluation(_):
++            cdp.is_element_visible.side_effect = lambda selector: selector in self.probe.STOP
++            return "EMPTY"
++        cdp.evaluate.side_effect = evaluation
++        self.assertEqual(self.probe.recover_empty_home(cdp, target), "BUSY")
++        cdp.get.assert_not_called()
++
++    def test_recovery_refuses_login_security_drift_busy_and_unknown_state(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        for current, visible in [
++                ("https://chatgpt.com/auth/login", set()),
++                ("https://chatgpt.com/", {"iframe[title*='captcha' i]"}),
++                ("https://chatgpt.com/", {"button[data-testid='stop-button']"}),
++                ("https://chatgpt.com/c/other", set()),
++                (target, {"#prompt-textarea"})]:
++            with self.subTest(current=current, visible=visible):
++                cdp = mock.Mock()
++                cdp.get_current_url.return_value = current
++                cdp.is_element_visible.side_effect = lambda selector: selector in visible
++                cdp.evaluate.return_value = "EMPTY"
++                self.probe.recover_empty_home(cdp, target)
++                cdp.get.assert_not_called()
++        cdp = mock.Mock()
++        cdp.get_current_url.return_value = "https://chatgpt.com/"
++        cdp.is_element_visible.return_value = False
++        cdp.evaluate.side_effect = RuntimeError("unavailable")
++        self.probe.recover_empty_home(cdp, target)
++        cdp.get.assert_not_called()
++
++    def test_home_navigation_is_attempted_only_once_within_original_deadline(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp = mock.Mock()
++        cdp.get_current_url.return_value = "https://chatgpt.com/"
++        cdp.is_element_visible.return_value = False
++        cdp.evaluate.return_value = "EMPTY"
++        browser = mock.MagicMock()
++        browser.__enter__.return_value = browser
++        browser.cdp = cdp
++        clock = [0]
++
++        def sleep(seconds):
++            clock[0] += seconds
++
++        with tempfile.TemporaryDirectory() as profile:
++            argv = ["probe", "--profile", profile, "--conversation-url", target, "--seconds", "5"]
++            with mock.patch.object(sys, "argv", argv), \
++                    mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=lambda **kwargs: browser)}), \
++                    mock.patch.object(self.probe.time, "monotonic", side_effect=lambda: clock[0]), \
++                    mock.patch.object(self.probe.time, "sleep", side_effect=sleep), \
++                    contextlib.redirect_stdout(io.StringIO()):
++                self.assertEqual(self.probe.main(), 0)
++        cdp.get.assert_called_once_with(target)
++        self.assertEqual(clock[0], 5)
++
++    def target_tabs(self, metadata_urls, document_urls, selected_url=None):
++        tabs = []
++        for metadata, document in zip(metadata_urls, document_urls):
++            async def read_url(value=document):
++                return value
++            tabs.append(types.SimpleNamespace(target=types.SimpleNamespace(url=metadata),
++                                             get_current_url=read_url))
++        cdp = mock.Mock()
++        cdp.get_tabs.return_value = tabs
++        cdp.get_current_url.return_value = selected_url
++        cdp.loop = asyncio.new_event_loop()
++        self.addCleanup(cdp.loop.close)
++        return cdp, tabs
++
++    def test_target_aliases_match_bridge_identity_without_relaxing_route_guards(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        alternatives = [target, "https://chatgpt.com/g/project/c/readiness-fixture",
++                        "https://chat.openai.com/c/readiness-fixture"]
++        for metadata in alternatives:
++            for document in alternatives:
++                with self.subTest(metadata=metadata, document=document):
++                    cdp, tabs = self.target_tabs([metadata], [document], selected_url=document)
++                    facts = []
++                    self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_EXACT")
++                    cdp.switch_to_tab.assert_called_once_with(tabs[0])
++                    self.assertEqual(facts[0]["stage"], "VERIFIED")
++                    self.assertEqual(facts[0]["alternateRoute"], document != target)
++        for invalid in [target + "/", target + "?query=private", target + "#fragment",
++                        "https://user@chatgpt.com/c/readiness-fixture", "https://chatgpt.com:443/c/readiness-fixture",
++                        "https://foreign.test/c/readiness-fixture", "https://chatgpt.com/c/other",
++                        "https://chatgpt.com/c/readiness%2Dfixture", "https://chatgpt.com/c/with space"]:
++            with self.subTest(invalid=invalid):
++                self.assertFalse(self.probe.exact_url(invalid, target))
++                cdp, _ = self.target_tabs([target], [invalid], selected_url=target)
++                self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_DRIFT")
++                cdp.switch_to_tab.assert_not_called()
++
++    def test_route_contract_matches_owner_verified_bridge(self):
++        path = Path(__file__).resolve().parents[1] / "scripts/wake_bridge.py"
++        expected = "https://chatgpt.com/c/fixture"
++        with tempfile.TemporaryDirectory() as profile:
++            sink = self.probe.load_observation_sink(path, hashlib.sha256(path.read_bytes()).hexdigest(), Path(profile), expected)
++            for value in [expected, "https://chat.openai.com/g/project/c/fixture",
++                          expected + "/", expected + "?query=1", expected + "#fragment",
++                          "https://user@chatgpt.com/c/fixture", "https://chatgpt.com:443/c/fixture",
++                          "http://chatgpt.com/c/fixture", "https://foreign.test/c/fixture",
++                          "https://chatgpt.com/g/project/c/other", "https://chatgpt.com/c/fixture extra", None, {}]:
++                with self.subTest(value=value):
++                    self.assertEqual(self.probe.exact_url(value, expected), sink.exact(value))
++
++    def test_main_accepts_registered_project_route_and_rejects_invalid_route_before_browser(self):
++        target = "https://chatgpt.com/g/project/c/fixture"
++        cdp = mock.Mock()
++        cdp.get_current_url.return_value = target
++        cdp.get_tabs.return_value = []
++        cdp.is_element_visible.side_effect = lambda selector: selector == "#prompt-textarea"
++        browser = mock.MagicMock();browser.__enter__.return_value = browser;browser.cdp = cdp
++        factory = mock.Mock(return_value=browser)
++        with tempfile.TemporaryDirectory() as profile:
++            args = ["probe", "--profile", profile, "--read-only", "--conversation-url", target, "--seconds", "5"]
++            output = io.StringIO()
++            with mock.patch.object(sys, "argv", args), mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=factory)}), \
++                    mock.patch.object(self.probe.time, "monotonic", side_effect=[0, 0, 10]), contextlib.redirect_stdout(output):
++                self.assertEqual(self.probe.main(), 0)
++            self.assertTrue(output.getvalue().endswith("PROBE:FINAL:EXACT_READY_IDLE\n"))
++            factory.reset_mock()
++            for invalid in [target + "/", target + "?query=1", "https://user@chatgpt.com/c/fixture", "https://chatgpt.com:443/c/fixture"]:
++                args[5] = invalid
++                with mock.patch.object(sys, "argv", args), mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=factory)}), contextlib.redirect_stdout(io.StringIO()):
++                    self.assertEqual(self.probe.main(), 2)
++            factory.assert_not_called()
++
++    def test_metadata_match_with_home_document_is_precise_and_does_not_switch(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp, _ = self.target_tabs([target], ["https://chatgpt.com/"], selected_url="https://chatgpt.com/")
++        facts = []
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_DRIFT")
++        self.assertEqual((facts[0]["metadataMatches"], facts[0]["candidateRoute"], facts[0]["stage"]), (1, "HOME", "DOCUMENT"))
++        cdp.switch_to_tab.assert_not_called()
++        cdp.get.assert_not_called()
++
++    def test_wrapped_document_and_metadata_remain_unproven_without_export(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        for metadata, document, state, key in [
++                (target, {"value": "PRIVATE_ROUTE"}, "TARGET_TAB_DRIFT", "candidateShape"),
++                ({"value": "PRIVATE_ROUTE"}, target, "TARGET_TAB_UNAVAILABLE", "controlledShape")]:
++            cdp, _ = self.target_tabs([metadata], [document], selected_url=None)
++            facts = []
++            self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), state)
++            if key == "candidateShape":self.assertEqual(facts[0][key], "WRAPPED")
++            else:self.assertEqual(facts[0]["unreadableMetadata"], 1)
++            self.assertNotIn("PRIVATE_ROUTE", json.dumps(facts))
++            cdp.switch_to_tab.assert_not_called()
++
++    def test_post_selection_drift_is_distinct_from_candidate_document_drift(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp, tabs = self.target_tabs([target], [target], selected_url="https://chatgpt.com/")
++        facts = []
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_DRIFT")
++        self.assertEqual((facts[0]["candidateRoute"], facts[0]["controlledRoute"], facts[0]["stage"]), ("EXACT", "HOME", "SWITCH"))
++        cdp.switch_to_tab.assert_called_once_with(tabs[0])
++        cdp.get.assert_not_called()
++
++    def test_duplicate_aliases_and_unreadable_sibling_cannot_select(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        for metadata, documents, expected in [
++                ([target, "https://chatgpt.com/g/project/c/readiness-fixture"], [target, target], "TARGET_TAB_AMBIGUOUS"),
++                ([target, None], [target, target], "TARGET_TAB_UNAVAILABLE")]:
++            cdp, _ = self.target_tabs(metadata, documents, selected_url=target)
++            self.assertEqual(self.probe.select_registered_target_tab(cdp, target), expected)
++            cdp.switch_to_tab.assert_not_called()
++
++    def test_metadata_diagnostics_never_export_private_urls_and_errors(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp, tabs = self.target_tabs([target], [target], selected_url=target)
++        async def frame(_):return False
++        tabs[0].evaluate = frame
++        facts = []
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_EXACT")
++        self.assertEqual(facts[0]["candidateFrame"], "SUBFRAME")
++        self.assertNotIn("chatgpt.com", json.dumps(facts))
++        cdp.get_tabs.side_effect = RuntimeError("PRIVATE_ERROR")
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target, facts.append), "TARGET_TAB_UNAVAILABLE")
++        self.assertNotIn("PRIVATE_ERROR", json.dumps(facts))
++
++    def test_loading_registered_tab_is_reselected_without_home_navigation(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        home = "https://chatgpt.com/"
++        clock = [0]
++        selected_url = [home]
++        cdp = mock.Mock()
++        cdp.get_current_url.side_effect = lambda: selected_url[0]
++        cdp.is_element_visible.side_effect = lambda selector: selector == "#prompt-textarea"
++        # An unknown Home composer must remain untouched. Selecting a separate
++        # verified existing tab does not require reading or changing that draft.
++        cdp.evaluate.return_value = False
++        async def document_url():
++            return target if clock[0] >= 3 else home
++        tab = types.SimpleNamespace(target=types.SimpleNamespace(url=target), get_current_url=document_url)
++        cdp.get_tabs.return_value = [tab]
++        cdp.loop = asyncio.new_event_loop()
++        self.addCleanup(cdp.loop.close)
++        cdp.switch_to_tab.side_effect = lambda _: selected_url.__setitem__(0, target)
++        browser = mock.MagicMock()
++        browser.__enter__.return_value = browser
++        browser.cdp = cdp
++        def sleep(seconds):
++            clock[0] += seconds
++        with tempfile.TemporaryDirectory() as profile:
++            argv = ["probe", "--profile", profile, "--conversation-url", target, "--seconds", "5"]
++            output = io.StringIO()
++            with mock.patch.object(sys, "argv", argv), \
++                    mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=lambda **kwargs: browser)}), \
++                    mock.patch.object(self.probe.time, "monotonic", side_effect=lambda: clock[0]), \
++                    mock.patch.object(self.probe.time, "sleep", side_effect=sleep), \
++                    contextlib.redirect_stdout(output):
++                self.assertEqual(self.probe.main(), 0)
++        self.assertIn("PROBE:TARGET_TAB_DRIFT\n", output.getvalue())
++        self.assertIn("PROBE:TARGET_TAB_EXACT\n", output.getvalue())
++        self.assertTrue(output.getvalue().endswith("PROBE:FINAL:EXACT_READY_IDLE\n"))
++        self.assertEqual(clock[0], 5)
++        cdp.switch_to_tab.assert_called_once_with(tab)
++        cdp.get.assert_not_called()
++
++    def test_tab_reinspection_is_bounded_when_target_remains_missing(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        clock = [0]
++        cdp = mock.Mock()
++        cdp.get_current_url.return_value = "https://chatgpt.com/"
++        cdp.get_tabs.return_value = []
++        cdp.is_element_visible.return_value = False
++        cdp.evaluate.return_value = False
++        browser = mock.MagicMock()
++        browser.__enter__.return_value = browser
++        browser.cdp = cdp
++        def sleep(seconds):
++            clock[0] += seconds
++        with tempfile.TemporaryDirectory() as profile:
++            argv = ["probe", "--profile", profile, "--conversation-url", target, "--seconds", "30"]
++            with mock.patch.object(sys, "argv", argv), \
++                    mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=lambda **kwargs: browser)}), \
++                    mock.patch.object(self.probe.time, "monotonic", side_effect=lambda: clock[0]), \
++                    mock.patch.object(self.probe.time, "sleep", side_effect=sleep), \
++                    contextlib.redirect_stdout(io.StringIO()):
++                self.assertEqual(self.probe.main(), 0)
++        self.assertEqual(cdp.get_tabs.call_count, 4)
++        self.assertEqual(clock[0], 30)
++        cdp.switch_to_tab.assert_not_called()
++        cdp.get.assert_not_called()
++
++    def test_unique_tab_requires_independent_metadata_and_document_agreement(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        home = "https://chatgpt.com/"
++        cdp, tabs = self.target_tabs([home, target], [home, target], target)
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_EXACT")
++        cdp.switch_to_tab.assert_called_once_with(tabs[1])
++        cdp.get.assert_not_called()
++
++    def test_missing_or_ambiguous_target_does_not_select_a_tab(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        for urls, expected in [(["https://chatgpt.com/"], "TARGET_TAB_MISSING"),
++                               ([target, target], "TARGET_TAB_AMBIGUOUS")]:
++            cdp, _ = self.target_tabs(urls, urls)
++            self.assertEqual(self.probe.select_registered_target_tab(cdp, target), expected)
++            cdp.switch_to_tab.assert_not_called()
++
++    def test_stale_metadata_and_changed_selected_document_fail_closed(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        home = "https://chatgpt.com/"
++        cdp, _ = self.target_tabs([target], [home], target)
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_DRIFT")
++        cdp.switch_to_tab.assert_not_called()
++        cdp, _ = self.target_tabs([target], [target], home)
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_DRIFT")
++
++    def test_unavailable_or_excessive_tab_inventory_never_selects(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        cdp = mock.Mock()
++        for inventory in [None, [], [None] * 33]:
++            cdp.get_tabs.return_value = inventory
++            expected = "TARGET_TAB_MISSING" if inventory == [] else "TARGET_TAB_UNAVAILABLE"
++            self.assertEqual(self.probe.select_registered_target_tab(cdp, target), expected)
++        cdp.get_tabs.side_effect = RuntimeError("unavailable")
++        self.assertEqual(self.probe.select_registered_target_tab(cdp, target), "TARGET_TAB_UNAVAILABLE")
++        cdp.switch_to_tab.assert_not_called()
++
++    def test_target_comparison_refuses_credentials_ports_and_other_projects(self):
++        target = "https://chatgpt.com/c/readiness-fixture"
++        for current in ["http://chatgpt.com/c/readiness-fixture", target + "?query=1",
++                        target + "#fragment", "https://user@chatgpt.com/c/readiness-fixture",
++                        "https://chatgpt.com:443/c/readiness-fixture",
++                        "https://other.example/c/readiness-fixture",
++                        "https://chatgpt.com/c/other"]:
++            self.assertFalse(self.probe.exact_url(current, target))
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+diff --git a/wake/adapter.py b/wake/adapter.py
+index 348d5085292eae2bcd0104edd292e32c487f63e6..e4ed76456cdab4e8c643ef65006a7784c37da55f 100644
+--- a/wake/adapter.py
++++ b/wake/adapter.py
+@@ -696,9 +696,11 @@ def source_snapshot(bridge, sb, request):
+     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
+         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+     snapshot = bounded_source_snapshot(bridge, sink, cdp, max_message_bytes=8192)
+-    if (snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT" and
+-            not snapshot["messages"][-1]["textComplete"]):
+-        snapshot["bodyDiagnostics"] = sink.message_body_diagnostics(cdp)
++    if snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT":
++        last = snapshot["messages"][-1]
++        normalized = bridge.normalize_message(last["text"]).replace("’", "'").replace("‘", "'").lower()
++        if not last["textComplete"] or "this response couldn't load" in normalized:
++            snapshot["bodyDiagnostics"] = sink.message_body_diagnostics(cdp)
+     if not sink.exact(cdp.get_current_url()):
+         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+     payload = {
+
+diff --git a/wake/src/bin/CatDeskWakeProfileProbe.rs b/wake/src/bin/CatDeskWakeProfileProbe.rs
+index 1388796b803ff241e37ba6cad078c21d046fda08..e66c442a4735017c4960cad8d4658105d779acb4 100644
+--- a/wake/src/bin/CatDeskWakeProfileProbe.rs
++++ b/wake/src/bin/CatDeskWakeProfileProbe.rs
+@@ -1,8 +1,7 @@
+ use catdesk_wake::store::Store;
+-use std::io::{Read, Write};
+ use std::path::{Path, PathBuf};
+-use std::process::{Command, Stdio};
+-use std::time::{Duration, Instant};
++use std::process::Command;
++use std::time::Duration;
+ 
+ fn main() {
+     if let Err(error) = run() {
+@@ -75,107 +74,55 @@ fn run() -> Result<(), &'static str> {
+ }
+ 
+ fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
+-    #[cfg(windows)]
+-    {
+-        use std::os::windows::process::CommandExt;
+-        command.creation_flags(0x08000000);
+-    }
+-    let mut child = command
+-        .stdin(Stdio::piped())
+-        .stdout(Stdio::piped())
+-        .stderr(Stdio::null())
+-        .spawn()
+-        .map_err(|_| "PROBE_LAUNCH_FAILED")?;
+-    let job = match catdesk_wake::process_job::Job::assign(&child) {
+-        Ok(job) => job,
+-        Err(_) => {
+-            let _ = child.kill();
+-            let _ = child.wait();
+-            return Err("PROBE_CONTAINMENT_FAILED");
+-        }
+-    };
+-    // The script waits for this handshake before importing Selenium or opening Chrome.
+-    let result = (|| {
+-        child
+-            .stdin
+-            .take()
+-            .ok_or("PROBE_PIPE_FAILED")?
+-            .write_all(b"START\n")
+-            .map_err(|_| "PROBE_PIPE_FAILED")?;
+-        let deadline = Instant::now() + timeout;
+-        loop {
+-            if let Some(status) = child.try_wait().map_err(|_| "PROBE_WAIT_FAILED")? {
+-                return if status.success() {
+-                    Ok(())
+-                } else {
+-                    Err("PROBE_FAILED")
+-                };
+-            }
+-            if Instant::now() >= deadline {
+-                return Err("PROBE_PROCESS_TIMEOUT");
+-            }
+-            std::thread::sleep(Duration::from_millis(25));
+-        }
+-    })();
+-    // Close only this probe's job, including any child retaining its output pipe.
+-    drop(job);
+-    let _ = child.kill();
+-    let _ = child.wait();
+-    result?;
+-    let mut bytes = Vec::new();
+-    child
+-        .stdout
+-        .take()
+-        .ok_or("PROBE_PIPE_FAILED")?
+-        .take(16_385)
+-        .read_to_end(&mut bytes)
+-        .map_err(|_| "PROBE_OUTPUT_FAILED")?;
+-    if bytes.len() > 16_384 {
+-        return Err("PROBE_OUTPUT_TOO_LARGE");
+-    }
+-    let text = std::str::from_utf8(&bytes).map_err(|_| "PROBE_OUTPUT_INVALID")?;
+-    Ok(text
+-        .lines()
+-        .filter(|line| {
+-            let Some(state) = line.strip_prefix("PROBE:") else {
+-                return false;
+-            };
+-            let state = state.strip_prefix("FINAL:").unwrap_or(state);
+-            matches!(
+-                state,
+-                "EXACT_READY_IDLE"
+-                    | "EXACT_READY_BUSY"
+-                    | "EXACT_NO_EDITOR"
+-                    | "LOGIN_VISIBLE"
+-                    | "CAPTCHA_VISIBLE"
+-                    | "HOME"
+-                    | "TARGET_DRIFT"
+-                    | "CHROME_ERROR"
+-                    | "URL_UNAVAILABLE"
+-                    | "URL_INVALID"
+-            )
+-        })
+-        .take(64)
+-        .map(str::to_owned)
+-        .collect())
++    catdesk_wake::readiness_probe::run_bounded(command, timeout)
+ }
+ 
+ #[cfg(all(test, windows))]
+ mod tests {
+     use super::*;
++    use std::time::Instant;
+ 
+     #[test]
++    // This fixture intentionally exits before its child. The enclosing
++    // run_bounded owner terminates its retained Job and proves all members exit.
++    #[allow(clippy::zombie_processes)]
+     fn fixture() {
+         let Ok(mode) = std::env::var("CATDESK_PROBE_TEST_MODE") else {
+             return;
+         };
++        if mode == "descendant" {
++            std::thread::sleep(Duration::from_secs(30));
++            return;
++        }
+         let mut line = String::new();
+         std::io::stdin().read_line(&mut line).unwrap();
+         assert_eq!(line, "START\n");
+         if mode == "hang" {
+             std::thread::sleep(Duration::from_secs(30));
+         }
++        if mode == "parent" {
++            let _child = Command::new(std::env::current_exe().unwrap())
++                .args(["--exact", "tests::fixture", "--nocapture"])
++                .env("CATDESK_PROBE_TEST_MODE", "descendant")
++                .stdin(std::process::Stdio::null())
++                .spawn()
++                .unwrap();
++        }
+         println!("PROBE:arbitrary-private-content");
++        println!("PROBE:TARGET_TAB_EXACT private-content-must-be-filtered");
++        println!("PROBE:NETWORK:ERR_PROXY_CONNECTION_FAILED");
++        println!("PROBE:NETWORK:UNKNOWN");
++        println!("PROBE:NETWORK:ERR_PRIVATE_CONTENT");
++        println!("PROBE:NETWORK:ERR_CONNECTION_RESET private-content-must-be-filtered");
++        println!("PROBE:FINAL:NETWORK:ERR_CONNECTION_RESET");
++        println!("PROBE:HOME_CHECK:DRAFT_PRESENT");
++        println!("PROBE:HOME_CHECK:NAVIGATION_ATTEMPTED");
++        println!("PROBE:HOME_CHECK:private-draft-content");
++        println!("PROBE:HOME_CHECK:EMPTY private-draft-content");
++        println!("PROBE:FINAL:HOME_CHECK:EMPTY");
++        for state in ["EXACT", "MISSING", "AMBIGUOUS", "DRIFT", "UNAVAILABLE"] {
++            println!("PROBE:TARGET_TAB_{state}");
++        }
+         println!("PROBE:EXACT_READY_IDLE");
+         println!("PROBE:FINAL:EXACT_READY_IDLE");
+     }
+@@ -193,7 +140,19 @@ mod tests {
+         let rows = run_bounded(&mut fixture_command("success"), Duration::from_secs(5)).unwrap();
+         assert_eq!(
+             rows,
+-            ["PROBE:EXACT_READY_IDLE", "PROBE:FINAL:EXACT_READY_IDLE"]
++            [
++                "PROBE:NETWORK:ERR_PROXY_CONNECTION_FAILED",
++                "PROBE:NETWORK:UNKNOWN",
++                "PROBE:HOME_CHECK:DRAFT_PRESENT",
++                "PROBE:HOME_CHECK:NAVIGATION_ATTEMPTED",
++                "PROBE:TARGET_TAB_EXACT",
++                "PROBE:TARGET_TAB_MISSING",
++                "PROBE:TARGET_TAB_AMBIGUOUS",
++                "PROBE:TARGET_TAB_DRIFT",
++                "PROBE:TARGET_TAB_UNAVAILABLE",
++                "PROBE:EXACT_READY_IDLE",
++                "PROBE:FINAL:EXACT_READY_IDLE"
++            ]
+         );
+     }
+ 
+@@ -206,4 +165,12 @@ mod tests {
+         );
+         assert!(start.elapsed() < Duration::from_secs(5));
+     }
++
++    #[test]
++    fn probe_closes_owned_descendant_and_its_inherited_output_pipe() {
++        let start = Instant::now();
++        let rows = run_bounded(&mut fixture_command("parent"), Duration::from_secs(5)).unwrap();
++        assert!(rows.contains(&"PROBE:FINAL:EXACT_READY_IDLE".to_string()));
++        assert!(start.elapsed() < Duration::from_secs(5));
++    }
+ }
+
+diff --git a/wake/src/development_login_recovery.rs b/wake/src/development_login_recovery.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..e159f49fc232e7ab1f2c04e9c897052a07121e0b
+--- /dev/null
++++ b/wake/src/development_login_recovery.rs
+@@ -0,0 +1,165 @@
++//! One explicit recovery transition for login-only markers. No queue, rollover,
++//! delivery, draft, release selection or authentication state is edited here.
++use super::*;
++
++#[derive(Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++struct LoginMarker {
++    schema_version: u32,
++    purpose: String,
++    target_sha256: String,
++    started_utc: u64,
++}
++
++fn marker_target(path: &Path, expected: &str) -> Result<LoginMarker> {
++    if expected.len() != 64
++        || !expected
++            .bytes()
++            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
++        || hash_file(path, 4096)? != expected
++    {
++        return Err("DEV_LOGIN_RECOVERY_MARKER_CHANGED".into());
++    }
++    let value: LoginMarker = read_json(path, 4096)?;
++    if value.schema_version != 1
++        || value.purpose != "DEV_LOGIN_OWNED_BROWSER_V1"
++        || value.target_sha256.len() != 64
++        || value.started_utc == 0
++        || value.started_utc > now()
++    {
++        return Err("DEV_LOGIN_RECOVERY_MARKER_UNSUPPORTED".into());
++    }
++    Ok(value)
++}
++
++fn observe_profile(root: &Path) -> Result<()> {
++    let python = runtime::browser_process_root(&root.join("runtime/python.exe"))?;
++    let profile = runtime::browser_process_root(&root.join("browser-profile"))?;
++    plain(&profile, true)?;
++    let mut command = Command::new(&python);
++    command.args([
++        "-I",
++        "-c",
++        include_str!("../../scripts/wake_profile_quiescence.py"),
++    ]);
++    command.arg(&profile).arg(&python).current_dir(root);
++    let rows = crate::readiness_probe::run_bounded(&mut command, Duration::from_secs(15))
++        .map_err(|_| "DEV_LOGIN_RECOVERY_INVENTORY_UNVERIFIED")?;
++    match rows.as_slice() {
++        [row] if row == "PROBE:FINAL:PROFILE_QUIESCENT" => Ok(()),
++        [row] if row == "PROBE:FINAL:PROFILE_HELPER_ACTIVE" => {
++            Err("DEV_LOGIN_RECOVERY_HELPER_ACTIVE".into())
++        }
++        [row] if row == "PROBE:FINAL:PROFILE_BROWSER_ACTIVE" => {
++            Err("DEV_LOGIN_RECOVERY_BROWSER_ACTIVE".into())
++        }
++        [row] if row == "PROBE:FINAL:PROFILE_OWNER_UNATTRIBUTED" => {
++            Err("DEV_LOGIN_RECOVERY_OWNER_UNATTRIBUTED".into())
++        }
++        _ => Err("DEV_LOGIN_RECOVERY_INVENTORY_UNVERIFIED".into()),
++    }
++}
++
++/// `paired` must read the existing project registry and this exact selected
++/// store, under the caller's existing binding read lock. It must not mutate.
++/// Preflight obtains the same leases and performs the same native observation
++/// as commit. A free lock is never treated as process-tree exit proof.
++pub fn reconcile_login(
++    workspace: &Path,
++    expected_marker_sha256: &str,
++    execute: bool,
++    paired: impl Fn(&Store) -> Result<protocol::Target>,
++) -> Result<Value> {
++    reconcile_with_observer(
++        workspace,
++        expected_marker_sha256,
++        execute,
++        paired,
++        observe_profile,
++    )
++}
++
++pub(super) fn reconcile_with_observer(
++    workspace: &Path,
++    expected: &str,
++    execute: bool,
++    paired: impl Fn(&Store) -> Result<protocol::Target>,
++    observe: impl Fn(&Path) -> Result<()>,
++) -> Result<Value> {
++    let workspace = canonical_workspace(workspace)?;
++    let dev = dev_dir(&workspace);
++    let marker = dev.join("login-active.json");
++    let value = marker_target(&marker, expected)?;
++    let (root, authority) =
++        validated_authority_for_login_recovery(&workspace, false, false, Some(expected))?
++            .ok_or("DEV_RUNTIME_NOT_PREPARED")?;
++    let _backend = backend_lock(&workspace)?;
++    let store = Store::open(&root)?;
++    let _host = store.host_lock()?;
++    let _browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
++    require_stopped_control(&root)?;
++    let target = paired(&store)?;
++    target.validate()?;
++    if target.digest != value.target_sha256 {
++        return Err("DEV_LOGIN_RECOVERY_TARGET_CHANGED".into());
++    }
++    validate_against_production(&authority, &target.url)?;
++    let archive = dev.join(format!("login-recovered-{expected}.json"));
++    let journal = dev.join(format!("login-recovery-{expected}.json"));
++    if present(&archive)? {
++        return Err("DEV_LOGIN_RECOVERY_ARCHIVE_EXISTS".into());
++    }
++    // This is current independent native evidence, not a claim about the old
++    // Job or a historical message. Unrelated proven browser trees may run.
++    observe(&root)?;
++    if validated_authority_for_login_recovery(&workspace, false, false, Some(expected))?
++        != Some((root.clone(), authority))
++        || paired(&store)? != target
++    {
++        return Err("DEV_LOGIN_RECOVERY_AUTHORITY_CHANGED".into());
++    }
++    require_stopped_control(&root)?;
++    marker_target(&marker, expected)?;
++    let result = json!({"schemaVersion":1,"mode":"DEVELOPMENT_UNPROTECTED",
++        "status":if execute {"LOGIN_ONLY_MARKER_ARCHIVED"} else {"LOGIN_RECOVERY_PREFLIGHT_PASSED"},
++        "markerSha256":expected,"targetSha256":target.digest,"targetGeneration":target.generation,
++        "currentProfileQuiescenceVerified":true,"historicalJobExitInferred":false,
++        "historicalSubmissionOutcome":"UNCHANGED_UNPROVEN","markerArchived":execute,
++        "browserStarted":false,"hostStarted":false,"messagesSent":0,
++        "bindingChanged":false,"draftsInspected":false,"releaseSelectionChanged":false});
++    if !execute {
++        return Ok(result);
++    }
++    let intent = json!({"schemaVersion":1,"purpose":"DEV_LOGIN_ONLY_RECOVERY_V1",
++        "markerSha256":expected,"targetSha256":target.digest,"targetGeneration":target.generation,
++        "phase":"PREPARED_ARCHIVE_EXISTENCE_IS_COMMIT_WITNESS",
++        "historicalSubmissionOutcome":"UNCHANGED_UNPROVEN"});
++    if present(&journal)? {
++        if read_json::<Value>(&journal, 4096)? != intent {
++            return Err("DEV_LOGIN_RECOVERY_JOURNAL_CHANGED".into());
++        }
++    } else {
++        write_json_new(&journal, &intent)?;
++    }
++    marker_target(&marker, expected)?;
++    // Same-directory, write-through, no replacement: preserve the original
++    // bytes as the commit witness. A crash before this leaves the active fence.
++    #[link(name = "kernel32")]
++    unsafe extern "system" {
++        fn MoveFileExW(from: *const u16, to: *const u16, flags: u32) -> i32;
++    }
++    if unsafe {
++        MoveFileExW(
++            wide(marker.as_os_str()).as_ptr(),
++            wide(archive.as_os_str()).as_ptr(),
++            8,
++        )
++    } == 0
++    {
++        return Err("DEV_LOGIN_RECOVERY_ARCHIVE_FAILED".into());
++    }
++    if hash_file(&archive, 4096)? != expected || present(&marker)? {
++        return Err("DEV_LOGIN_RECOVERY_COMMIT_UNVERIFIED".into());
++    }
++    Ok(result)
++}

@@ -1,0 +1,302 @@
+{
+  "recordedUtc": "2026-10-23T16:14:09.7045767Z",
+  "localDate": "2026-10-23",
+  "task": "C39-ATOMIC-DRAFT-AND-WITNESSED-REPAIR",
+  "classification": "SOURCE_AND_SELECTED_CONTROLLED_NO_SEND_REPAIR_QUALIFIED",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "b692ffbc14d3133a7fe5eabb5db68de5cb5ff3e7",
+  "publication": {
+    "atUtc": "2026-10-23T16:02:56.4775335Z",
+    "exactRemoteSha": "b692ffbc14d3133a7fe5eabb5db68de5cb5ff3e7",
+    "privacyScan": "PASS",
+    "force": false,
+    "visibilityChanged": false,
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED"
+  },
+  "sourceFiles": [
+    {
+      "sha256": "9fd042f671874f96699a54a9e321e5f76c0cd0bf6375e5c7dee72c5e8191fbf0",
+      "path": "scripts/wake_bridge.py"
+    },
+    {
+      "sha256": "0686ae77d3f4ed7ff6fc1dcfcffe07c212f8e4aea515ed069c73e11993782b97",
+      "path": "wake/adapter.py"
+    },
+    {
+      "sha256": "eb27d6be74a9c8acff34cd0cdce2e1e9c691c9588c4e1673631a4d460fa8d7c7",
+      "path": "wake/tests/test_new_conversation.py"
+    },
+    {
+      "sha256": "fadb757f51dc6084c6de51f0002f99237252c67443d0c3ac54a0f834d4451cb9",
+      "path": "src/operator_web_cli.rs"
+    },
+    {
+      "sha256": "a28507512a1b0df81ed32a90b67b0549da617bef4967ad12ac7409898b0da846",
+      "path": "src/operator_web_rollover.rs"
+    },
+    {
+      "sha256": "ee6143a55859a37704651da99ed357a82f542d36aeab9f144758e3bb02b06c64",
+      "path": "wake/src/runtime.rs"
+    }
+  ],
+  "sourceGate": {
+    "startedUtc": "2026-10-23T16:01:05.4384337Z",
+    "finishedUtc": "2026-10-23T16:02:01.6056484Z",
+    "distinctTests": 143,
+    "newTestsAgainstCorrespondingBaselines": 27,
+    "cliTests": 14,
+    "rolloverTests": 47,
+    "wakeBootstrapTests": 16,
+    "pythonTests": 66,
+    "strictClippy": "PASS_ROOT_AND_WAKE",
+    "format": "PASS_ROOT_AND_WAKE",
+    "checks": [
+      {
+        "logSha256": "1bb6f6e38016e1858f7118d2ca1453e1b3531f450f6b60837de120d606d9de8b",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T16:01:05.4384337Z",
+        "finishedUtc": "2026-10-23T16:01:06.1113402Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "testsPassed": 14,
+        "label": "operator-web-cli"
+      },
+      {
+        "logSha256": "ce7eaeda3fce743958f95bdce6430164a76ddac89093e2033fdb486c2fcd6bb6",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T16:01:06.1339372Z",
+        "finishedUtc": "2026-10-23T16:01:10.4935607Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::rollover::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "testsPassed": 47,
+        "label": "rollover-regressions"
+      },
+      {
+        "logSha256": "4c2bb12f3d94c9cb49775531630bc5ff68a2454c77ee74eb9e062f33a0f5e424",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T16:01:10.4992407Z",
+        "finishedUtc": "2026-10-23T16:01:11.4763766Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "bootstrap_runtime_tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "testsPassed": 16,
+        "label": "wake-bootstrap-runtime"
+      },
+      {
+        "logSha256": "18ae4bdf82dc48d94909436850073de90094b4837769a6a773dd5aba141f7a37",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T16:01:11.480301Z",
+        "finishedUtc": "2026-10-23T16:01:16.342871Z",
+        "arguments": [
+          "-I",
+          "-B",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "wake/tests",
+          "-p",
+          "test_new_conversation.py"
+        ],
+        "testsPassed": 66,
+        "label": "python-new-conversation"
+      },
+      {
+        "logSha256": "ccf20559fe573469d9e2f7e8de5f120dfeff2b944ebd5256dde06295e1bae09e",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T16:01:16.3464002Z",
+        "finishedUtc": "2026-10-23T16:01:52.5532631Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "testsPassed": 0,
+        "label": "strict-root-clippy"
+      },
+      {
+        "logSha256": "c4e48f219e9d5b4f0335a199690847ee87eec9a6bde2daf94365e5fc1b49ec67",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T16:01:52.563465Z",
+        "finishedUtc": "2026-10-23T16:01:58.0559435Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "testsPassed": 0,
+        "label": "strict-wake-clippy"
+      },
+      {
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T16:01:58.0662545Z",
+        "finishedUtc": "2026-10-23T16:02:00.8448117Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "testsPassed": 0,
+        "label": "root-format"
+      },
+      {
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T16:02:00.8483467Z",
+        "finishedUtc": "2026-10-23T16:02:01.6056484Z",
+        "arguments": [
+          "fmt",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "testsPassed": 0,
+        "label": "wake-format"
+      }
+    ],
+    "initialRestrictedFilesystemFixtureFailures": 2,
+    "laterFixtureResult": "PASS_WITH_REQUIRED_ACCESS",
+    "optionalBroaderSuite": "INTERRUPTED_NOT_PASSING_EVIDENCE",
+    "focusedTestCounts": "OVERLAP_FINAL_GATE_DO_NOT_SUM",
+    "initialFixtureFailure": "CONFIG_ROOT_UNAVAILABLE_DURING_FIXTURE_SETUP"
+  },
+  "behavior": {
+    "freshDraftEntry": "ONE_NATIVE_EDITOR_TRANSACTION_WITH_SAME_EVALUATION_EMPTY_HOME_GUARDS",
+    "repair": "EXPLICIT_PROJECT_INTENT_RAW_DIGEST",
+    "identityWitness": "WHOLE_PROJECT_AND_SOURCE_TASK_IDENTIFIER_TOKENS",
+    "rawWitnessArchivedBeforeAttempt": true,
+    "immutableWriteAttemptBeforeAcknowledgement": true,
+    "ambiguousRepair": "READ_ONLY_FULL_DRAFT_RECONCILIATION_ONLY",
+    "repairSendsMessages": false,
+    "repairSetsDraftReady": false,
+    "ordinaryExactOwnedResumeUnchanged": true
+  },
+  "acceptance": {
+    "sourceQualified": true,
+    "normalReleaseQualified": true,
+    "selectedRuntimeIncludesFix": true,
+    "liveRepairQualified": true,
+    "automaticChain": "PARTIAL_C38_PRESERVED",
+    "protectedInstalled": false,
+    "unattended": false,
+    "earlierCompletedFAndG": "PRESERVED",
+    "freshEmptyHomeAtomicInsertionLiveQualified": false
+  },
+  "next": "Bounded normal automatic resume of the same preserved intent; no new handoff or replay of completed deliveries",
+  "normalApplicationBuild": {
+    "startedUtc": "2026-10-23T16:03:24.0136444Z",
+    "bytes": 34161152,
+    "sha256": "75b9b91e75b28a006a599f3366a70bc8f9513ba15eae33ca4acdea329d19a594",
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "finishedUtc": "2026-10-23T16:10:00.4361868Z",
+    "elapsedSeconds": 396.4225424,
+    "exitCode": 0
+  },
+  "normalHostBuild": {
+    "exitCode": 0,
+    "startedUtc": "2026-10-23T16:11:03.8276905Z",
+    "runtimeStateCreated": false,
+    "sha256": "de2c86395a28ddacae6c543af3413de619cf6c25519d59f2cff70857359cbf6b",
+    "ownedProcessExited": true,
+    "finishedUtc": "2026-10-23T16:11:22.6275860Z",
+    "profile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+    "bytes": 2053120,
+    "ownerEofGate": "PASS",
+    "ownerGateExitCode": 1
+  },
+  "selection": {
+    "unexpectedChanges": 0,
+    "recordsChecked": 210,
+    "previousPackagePreserved": true,
+    "protectedRecordsExact": 208,
+    "ownedProcesses": 0,
+    "newRecords": 0,
+    "elapsedSeconds": 4.3155923,
+    "selectedPackage": "1.0.0-dev.85-b9225382aae13473e6f4d6087dec24a559c6b2addcd095b5ee33ea2d437a5920",
+    "packagePointersChanged": 2,
+    "protectedInstalledAcceptance": false,
+    "atUtc": "2026-10-23T16:12:10.8322647Z"
+  },
+  "liveRepair": {
+    "outerMaximumSeconds": 180,
+    "elapsedSeconds": 32.3027294,
+    "messageDigestMatched": true,
+    "terminationFailed": false,
+    "freshSecondInspectionBytes": 3855,
+    "repairReported": true,
+    "startedUtc": "2026-10-23T16:12:22.4265425Z",
+    "bindingsChanged": false,
+    "freshSecondBrowserInspection": "EXACT_OWNED",
+    "outerTimedOut": false,
+    "newConversationCreated": false,
+    "wakeHostStarted": false,
+    "unexpectedNewRecords": 0,
+    "recordsChecked": 210,
+    "messagesSent": 0,
+    "nativeSessionsChanged": false,
+    "productionChanged": false,
+    "ownedProcesses": 0,
+    "outerExitCode": 0,
+    "finishedUtc": "2026-10-23T16:12:54.7292719Z",
+    "unexpectedChanges": 0,
+    "repairJournalRecordsCreated": 3,
+    "originalBootstrapProgress": "TEXT_ENTRY_AUTHORIZED",
+    "expectedAdmissionChanges": 1,
+    "originalRolloverRecordExact": true,
+    "recurringStarted": false
+  },
+  "sourceGateActions": {
+    "browserActions": 0,
+    "wakeHostStarted": false,
+    "runtimeStateChanged": false,
+    "packageSelectionChanged": false,
+    "productionChanged": false,
+    "nativeSessionActions": 0
+  },
+  "dependencies": {
+    "nativeSessionObservation": "READ_ONLY_FOUR_SIBLINGS_ACTIVE_AT_16_03_59_UTC",
+    "nativeSessionActions": 0,
+    "connectorObservation": "ONE_READ_HTTP429_AT_15_53_UTC_NO_RETRY"
+  }
+}

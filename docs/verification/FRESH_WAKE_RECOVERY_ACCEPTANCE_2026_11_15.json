@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T02:28:05.372894+00:00",
+  "sourceCommit": "f7f1dedeb2584469e252969f195c43c5b4d3aa6a",
+  "scope": "UNPROTECTED_DEVELOPMENT_EXACT_PREINPUT_RECOVERY_AND_FRESH_TWO_TURN_WAKE",
+  "goalState": "ACTIVE",
+  "maturity": "CONTROLLED_LIVE",
+  "protectedProductionAcceptance": false,
+  "causalPerformanceProbe": {
+    "sameSourceAndRetainedRuntime": true,
+    "sourceCommit": "ea210c0305951701e5524af8c23388a2ca2e2811",
+    "normalDevelopmentMs": 1931,
+    "sha2OnlyOptimizedMs": 39,
+    "fullyOptimizedMs": 37,
+    "rootAndStandaloneHostProfilesUpdated": true,
+    "integrityChecksRemoved": 0,
+    "validationCachingAdded": false,
+    "browserStarts": 0
+  },
+  "sourceChecks": {
+    "targetedRustTests": {
+      "wake-ordinary-retry": 10,
+      "wake-timeout-frame": 2,
+      "wake-entry-compatibility": 5,
+      "root-ordinary-retry": 3,
+      "root-metadata-recovery": 1,
+      "root-recovery-errors": 1
+    },
+    "totalPassed": 22,
+    "strictRootClippy": "PASS",
+    "strictWakeClippy": "PASS",
+    "pythonBehaviorChanged": false
+  },
+  "candidate": {
+    "sourceCleanAtBuild": true,
+    "buildProfile": "dev with sha2 opt-level 3",
+    "artifacts": {
+      "adapter.py": "d9e1e68a6e48ccb45d132e287d2f13cdbef9c75d252ad64123ef73eb5d0ee118",
+      "CatDeskWakeHost.exe": "5f99c45b9bcf161fae57aea8fcc02f8db304ed9b707fe29a51c93ccb1d763a5a",
+      "wake_bridge.py": "eea29aff3cb6518a2c03e97bbb361d3e52357b5e47a81ca63fdaaa69da890f5d",
+      "CatDeskBinagotchy.exe": "d280e3ad0eb8d94e08abe20d83e6e2ffb3ae8daa6f04ff1d7e3d20b8f3be3a0e"
+    },
+    "installedProtected": false
+  },
+  "recovery": {
+    "sameOriginalTaskRequestEventAndPayload": true,
+    "priorDeliveryCasRequired": true,
+    "exactClosedNativeTimeoutProofRequired": true,
+    "originalFrameStillReportsUnknownAndNoRetryAuthority": true,
+    "beforeSubmitStageAndLocalWitnessAbsenceRequired": true,
+    "submissionWitnessTimerArchiveAllAbsentBeforeRecovery": true,
+    "existingStoppedHostAndProfileQuiescenceGuards": true,
+    "originalFailureAndProofRetained": true,
+    "recoverySends": 0,
+    "claimTransition": "ATTENTION_TO_CLAIMED",
+    "genericUnknownOrSubmittingRetryPermitted": false,
+    "newGrantCreated": false
+  },
+  "liveWake": {
+    "startedUtc": "2026-11-15T02:23:07.219749+00:00",
+    "finishedUtc": "2026-11-15T02:24:12.870473+00:00",
+    "deliveryInvocations": 1,
+    "deliveryPhase": "SENT",
+    "targetReadElapsedMs": 687,
+    "exactReceipt": true,
+    "timerExists": true,
+    "timerProjectAndTargetMatch": true,
+    "timerCompleted": true,
+    "profileQuiescentAfter": true,
+    "otherRegistrationsUnchanged": true,
+    "otherWakeTargetsUnchanged": true,
+    "originalBoundInitializationUnchanged": true,
+    "nativeModelInvocations": 0
+  },
+  "readback": {
+    "userCount": 2,
+    "originalInitializationCount": 1,
+    "frozenWakeCount": 1,
+    "paginationComplete": true,
+    "completedAssistantMatchesOriginalProjectAndTask": true,
+    "browserKeptThroughCompletionAndFreshLoad": true,
+    "assistantReportedTransportCallSuccess": true,
+    "independentServerToolReceiptEstablished": false,
+    "operatorMessageRelayRequired": false,
+    "privateBodyExported": false
+  },
+  "closure": {
+    "readOnlyCanaryRequest": "CLOSED_COMPLETED",
+    "verifiedCodeWorkClaimed": false,
+    "productGoalCompleted": false
+  },
+  "preservation": {
+    "pinsChecked": 1698,
+    "expectedPinChanges": 4,
+    "expectedChangesOnly": true,
+    "previousVerifiedArtifactsRetained": true,
+    "profileIdentitiesUnchanged": true,
+    "protectedAndOtherProjectPinsUnchanged": true,
+    "testOwnedProcessesRemaining": 0,
+    "existingBackendAndTunnelOwnersRetained": true,
+    "recurringAutomationEnabled": false,
+    "sharedWakeHostStarted": false
+  },
+  "remaining": {
+    "freshOneProjectTwoTurnWakeAndTimer": "ACCEPTED_DEVELOPMENT_SCOPE",
+    "directWebEditCheckpointSelfWake": "OPEN",
+    "serialMultiProject": "OPEN",
+    "installedWakeProductionQualification": "NOT_CLAIMED",
+    "contextRollover": "OPEN",
+    "operatorActionRequiredNow": false,
+    "nextExecutableTask": "Qualify a new scoped direct-Web file-edit, independent verification and Git checkpoint assignment with self-Wake permission; preserve all historical uncertain tasks"
+  }
+}

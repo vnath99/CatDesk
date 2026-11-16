@@ -1,0 +1,149 @@
+{
+  "recordedUtc": "2026-11-01T18:11:39.091286+00:00",
+  "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "classification": "FOURTEEN_CURRENT_PATH_DELTAS_REVIEWED_PARTIALLY_WITH_BOUNDED_READONLY_RESPONSE_RECOVERY",
+  "sameManagedClaim": true,
+  "fullDeclaredCodePaths": 84,
+  "scopeReduced": false,
+  "reviewedCurrentDeltaPaths": 14,
+  "reviews": [
+    {
+      "reviewNumber": 1,
+      "verdict": "REVIEWED_PARTIAL",
+      "inspectedPaths": [
+        "scripts/catdesk-doctor.ps1",
+        "scripts/setup-secure-mcp.ps1",
+        "scripts/start-catdesk-stack.ps1",
+        "scripts/test-catdesk-doctor.ps1",
+        "scripts/test-secure-mcp-bearer-forwarding.ps1",
+        "scripts/test-start-catdesk-stack.ps1",
+        "src/operator_facade.rs"
+      ],
+      "outputTruncated": false,
+      "pinnedUtf8OutputBytesLocallyVerified": 38605,
+      "webIndependentUtf8ByteCountClaimed": false,
+      "coordinatorClosed": true,
+      "responseSha256": "f7f96fa9bcff1871a6f0decd7d4221d9ce77179cb0db5c9e9bff0bde82a5dd61",
+      "matchingSourceLogCounts": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfPinnedInputs": true
+    },
+    {
+      "reviewNumber": 2,
+      "verdict": "REVIEWED_PARTIAL",
+      "inspectedPaths": [
+        "src/operator_installed_project.rs",
+        "tests/test_wake_bridge.py",
+        "wake/adapter.py",
+        "wake/src/development_runtime.rs",
+        "wake/src/runtime_snapshot.rs",
+        "wake/src/store.rs",
+        "wake/tests/test_new_conversation.py"
+      ],
+      "outputTruncated": false,
+      "pinnedUtf8OutputBytesLocallyVerified": 32834,
+      "webIndependentUtf8ByteCountClaimed": false,
+      "coordinatorClosed": true,
+      "responseSha256": "9e7b59b89981ddcf3c8c616d7976addb4d6b5ac255e3f6e07170447c8679ca38",
+      "matchingSourceLogCounts": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "sourceLogMatchesExistingPrivacyRedactionOfPinnedInputs": true
+    }
+  ],
+  "sourceOutcome": {
+    "confirmedDefectReported": false,
+    "cumulativeSourceAccepted": false,
+    "producerAuthority": false,
+    "priorPartialReportsRemainLimited": true,
+    "unreadMaterialScopeRemains": true
+  },
+  "sourceOnlyFindings": [
+    "Doctor retains configured authentication and supervisor signals as UNVERIFIED until independently qualified",
+    "Canonical startup and bearer forwarding preserve explicit process configuration and child environment isolation",
+    "Sent-event snapshots bind exact message/receipt/target and limit exported exchange",
+    "Shared project backend selections and exclusive package mutation use existing locks",
+    "Tests distinguish read-only tool visibility from execution evidence and exact USER identity from substring matches"
+  ],
+  "responseReadRecovery": {
+    "originalError": "WEB_REVIEW_READ_TIMEOUT",
+    "originalReadSeconds": 91.922,
+    "originalFailureRetained": true,
+    "supportedReadonlyFollowupCount": 1,
+    "recoverySeconds": 75.734,
+    "diagnostic": {
+      "budgetMillis": 90000,
+      "elapsedMillis": 65843,
+      "phase": "COMPLETE"
+    },
+    "eventVerified": true,
+    "responseSha256": "9e7b59b89981ddcf3c8c616d7976addb4d6b5ac255e3f6e07170447c8679ca38",
+    "sendAttempted": false,
+    "userMessagesResent": 0,
+    "statePinMismatches": 0
+  },
+  "context": {
+    "generation": 4,
+    "knownMcpCalls": 16,
+    "observations": 32,
+    "observedTokenProxy": 44932,
+    "observedToolArgumentTokens": 2077,
+    "observedToolResultTokens": 39714,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "separateCliProcessesReopenedDurableLedger": true,
+    "rawTextPersisted": false,
+    "preservationMismatches": 0
+  },
+  "extraExecutionWitnessPolicy": {
+    "observedExtraMatchingLogCount": 1,
+    "countedAsKnownDeliveredContext": false,
+    "selection": "Exactly one declared response artifact corroborated by task-timed source log per expected input",
+    "duplicateUserSubmissionEstablished": false,
+    "remainingUncertainty": "A matching extra server execution log alone does not establish another tool-result delivery; retain coverage uncertainty"
+  },
+  "remainingPreparedInputs": {
+    "largeChangedPaths": 2,
+    "boundedCodeReadsPrepared": 38,
+    "sourceCodeBytesPrepared": 102184,
+    "maximumCodeReadBytes": 7728,
+    "backendProductionLines": 1231,
+    "preparedIsNotReviewed": true
+  },
+  "preservation": {
+    "testOwnedProcessesRemaining": 0,
+    "trustedInstalledBackendRetained": true,
+    "hostStopped": true,
+    "loginMarkerPresent": false,
+    "productionChanges": 0,
+    "nativeSessionActions": 0,
+    "bindingChanges": 0,
+    "recurringAutomationEnabled": false
+  },
+  "acceptance": {
+    "protectedUpgrade": "NOT_PERFORMED",
+    "connectedCanonicalControlAuthorityTransfer": "OPEN",
+    "twoWebNativeCoding": "OPEN",
+    "installedPersistentRecovery": "OPEN"
+  },
+  "nextExecutableTask": "Review the prepared current backend production and changed-test/prior-code inputs under the same source claim; use existing context handoff when genuinely due",
+  "operatorActionRequired": false
+}

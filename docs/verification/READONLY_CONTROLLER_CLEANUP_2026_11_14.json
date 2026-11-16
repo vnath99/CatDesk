@@ -1,0 +1,18 @@
+{
+  "observedUtc": "2026-11-14T17:08:37.782917+00:00",
+  "rawPinsChecked": 1685,
+  "rawMismatchCount": 1,
+  "onlyApprovedUsageCountersDiffer": true,
+  "approvedNormalizerUnchanged": true,
+  "approvedAuthorityMatches": true,
+  "newExclusions": 0,
+  "profileIdentitiesUnchanged": true,
+  "testBackendExited": true,
+  "testEndpointClosed": true,
+  "browserStarts": 0,
+  "wakeStarts": 0,
+  "tunnelStarts": 0,
+  "messagesSent": 0,
+  "protectedChanges": 0,
+  "rawFailureRetained": true
+}

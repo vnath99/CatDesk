@@ -1,0 +1,2684 @@
+//! One explicit, grant-guarded event; no persistent host or scheduler.
+use super::*;
+use crate::protocol::Event;
+use serde_json::{Value, json};
+
+enum Selection<'a> {
+    Review,
+    TaskContinuation(&'a Event, &'a Target),
+    RolloverContinuation(&'a Event, &'a Target),
+    RolloverHandoff(&'a Event, &'a Target),
+    WorkRequest(&'a Event, &'a Target),
+    ManualEndTurn(&'a Event, &'a Target),
+}
+
+#[derive(Default)]
+struct ScopedCallbackTiming {
+    calls: std::cell::Cell<u32>,
+    maximum_ms: std::cell::Cell<u32>,
+    capped: std::cell::Cell<bool>,
+}
+
+impl ScopedCallbackTiming {
+    fn record(&self, started: Instant) {
+        let millis = started.elapsed().as_millis();
+        self.capped
+            .set(self.capped.get() || millis > u32::MAX as u128 || self.calls.get() == u32::MAX);
+        self.calls.set(self.calls.get().saturating_add(1));
+        self.maximum_ms.set(
+            self.maximum_ms
+                .get()
+                .max(millis.min(u32::MAX as u128) as u32),
+        );
+    }
+}
+
+fn scoped_adapter_stage(value: &str) -> &'static str {
+    const STAGES: &[&str] = &[
+        "UNCLASSIFIED",
+        "NOT_OBSERVED",
+        "READINESS_OBSERVED",
+        "UC_OPEN_BEGIN",
+        "UC_OPEN_DONE",
+        "CDP_ACTIVATE_BEGIN",
+        "CDP_ACTIVATE_DONE",
+        "CDP_REUSE_BEGIN",
+        "CDP_REUSE_DONE",
+        "TARGET_OPEN",
+        "PAGE_READY",
+        "CHAT_IDLE",
+        "PREWRITE_READY",
+        "RECEIPT_BASELINE_READY",
+        "PREWRITE_CONFIRMED",
+        "BEFORE_SUBMIT",
+        "GENERATION_WAIT",
+        "GENERATION_ACTIVE",
+        "RESPONSE_TIMEOUT_DETECTED",
+        "RESPONSE_RETRYING",
+        "RESPONSE_RETRY_STARTED",
+        "RESPONSE_COMPLETED",
+        "RESPONSE_COMPLETED_AFTER_REOPEN",
+    ];
+    STAGES
+        .iter()
+        .copied()
+        .find(|stage| *stage == value)
+        .unwrap_or("UNCLASSIFIED")
+}
+
+fn scoped_work_timeout_frame(
+    event: &Event,
+    target: &Target,
+    delivery: &crate::store::Delivery,
+    status: &Status,
+    selection: (bool, u64),
+    elapsed: Duration,
+    timings: (&ScopedCallbackTiming, &ScopedCallbackTiming),
+) -> Value {
+    let (manual, maximum_seconds) = selection;
+    let (guard, before_submit) = timings;
+    json!({"action":if manual {"scoped_manual_end_turn_run"} else {"scoped_work_request_run"},
+        "status":"attention", "errorCode":"SCOPED_REVIEW_TIMEOUT", "projectId":event.project_id,
+        "eventId":event.event_id, "targetGeneration":target.generation, "targetDigest":target.digest,
+        "messageSha256":delivery.message_digest, "deliveryPhase":delivery.phase, "receiptPresent":delivery.receipt.is_some(),
+        "submissionOutcome":if delivery.receipt.is_some() {"RECEIPT_RETAINED"} else {"UNKNOWN"},
+        "retryAuthorized":false, "nativeGrantCreatedBySender":false, "workResolved":false,
+        "diagnosis":{"schemaVersion":1, "lastAdapterStage":scoped_adapter_stage(&status.browser),
+            "elapsedMs":elapsed.as_millis().min(u32::MAX as u128) as u32, "maximumSeconds":maximum_seconds,
+            "guardCheckCalls":guard.calls.get(), "guardCheckMaxMs":guard.maximum_ms.get(),
+            "beforeSubmitCalls":before_submit.calls.get(), "beforeSubmitMaxMs":before_submit.maximum_ms.get(),
+            "timingCapped":guard.capped.get() || before_submit.capped.get() || elapsed.as_millis() > u32::MAX as u128}})
+}
+
+/// Only this closed native timeout envelope retains the CLI's existing exit2.
+pub fn is_scoped_work_timeout(value: &Value) -> bool {
+    const FIELDS: &[&str] = &[
+        "action",
+        "status",
+        "errorCode",
+        "projectId",
+        "eventId",
+        "targetGeneration",
+        "targetDigest",
+        "messageSha256",
+        "deliveryPhase",
+        "receiptPresent",
+        "submissionOutcome",
+        "retryAuthorized",
+        "nativeGrantCreatedBySender",
+        "workResolved",
+        "diagnosis",
+    ];
+    const DIAGNOSTIC: &[&str] = &[
+        "schemaVersion",
+        "lastAdapterStage",
+        "elapsedMs",
+        "maximumSeconds",
+        "guardCheckCalls",
+        "guardCheckMaxMs",
+        "beforeSubmitCalls",
+        "beforeSubmitMaxMs",
+        "timingCapped",
+    ];
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    let d = &value["diagnosis"];
+    let hash = |v: &Value| {
+        v.as_str().is_some_and(|s| {
+            s.len() == 64
+                && s.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+    };
+    object.len() == FIELDS.len()
+        && object.keys().all(|k| FIELDS.contains(&k.as_str()))
+        && matches!(
+            value["action"].as_str(),
+            Some("scoped_work_request_run" | "scoped_manual_end_turn_run")
+        )
+        && value["status"] == "attention"
+        && value["errorCode"] == "SCOPED_REVIEW_TIMEOUT"
+        && value["projectId"]
+            .as_str()
+            .is_some_and(crate::protocol::valid_id)
+        && value["eventId"]
+            .as_str()
+            .is_some_and(crate::protocol::valid_id)
+        && value["targetGeneration"].as_u64().is_some_and(|n| n > 0)
+        && hash(&value["targetDigest"])
+        && hash(&value["messageSha256"])
+        && matches!(
+            value["deliveryPhase"].as_str(),
+            Some("ATTENTION" | "SUBMITTING" | "SENT")
+        )
+        && value["receiptPresent"].is_boolean()
+        && (value["deliveryPhase"] == "SENT") == (value["receiptPresent"] == true)
+        && value["submissionOutcome"]
+            == (if value["receiptPresent"] == true {
+                "RECEIPT_RETAINED"
+            } else {
+                "UNKNOWN"
+            })
+        && [
+            "retryAuthorized",
+            "nativeGrantCreatedBySender",
+            "workResolved",
+        ]
+        .iter()
+        .all(|key| value[key] == false)
+        && d.as_object().is_some_and(|o| {
+            o.len() == DIAGNOSTIC.len() && o.keys().all(|k| DIAGNOSTIC.contains(&k.as_str()))
+        })
+        && d["schemaVersion"] == 1
+        && d["timingCapped"].is_boolean()
+        && d["lastAdapterStage"]
+            .as_str()
+            .is_some_and(|s| scoped_adapter_stage(s) == s)
+        && d["maximumSeconds"]
+            .as_u64()
+            .is_some_and(|n| (1..=180).contains(&n))
+        && [
+            "elapsedMs",
+            "guardCheckCalls",
+            "guardCheckMaxMs",
+            "beforeSubmitCalls",
+            "beforeSubmitMaxMs",
+        ]
+        .iter()
+        .all(|key| d[key].as_u64().is_some_and(|n| n <= u32::MAX as u64))
+}
+
+struct FencedAdapter<'a, A> {
+    inner: A,
+    handoff: &'a mut dyn FnMut(&Event, &Target) -> Result<()>,
+}
+impl<A: SubmissionAdapter> SubmissionAdapter for FencedAdapter<'_, A> {
+    fn submit_fenced(&mut self, event: &Event, target: &Target) -> Result<()> {
+        self.inner.submit_fenced(event, target)?;
+        (self.handoff)(event, target)
+    }
+    fn send(&mut self, value: Value) -> Result<()> {
+        self.inner.send(value)
+    }
+    fn receive(
+        &mut self,
+        timeout: Duration,
+    ) -> std::result::Result<Result<Value>, mpsc::RecvTimeoutError> {
+        self.inner.receive(timeout)
+    }
+    fn finish(&mut self, grace: Duration) {
+        self.inner.finish(grace)
+    }
+}
+
+fn scoped_work_package_preflight(store: &Store, event: &Event) -> Result<()> {
+    event.validate()?;
+    if desired(store)? != "STOPPED" {
+        return Err("SCOPED_REVIEW_HOST_NOT_STOPPED".into());
+    }
+    // Existing ambiguous/terminal work is never reclassified as a package
+    // problem, nor does a missing or unreadable witness permit a fresh claim.
+    if store
+        .delivery(&event.event_id)?
+        .is_some_and(|d| d.phase != Phase::Claimed)
+        || store.submission_witness_present(&event.event_id)?
+    {
+        return Err("SCOPED_REVIEW_REPLAY_REFUSED".into());
+    }
+    installed_scoped_work_browser_directory(store).map(|_| ())
+}
+
+/// Deliver one exact ordinary invitation chosen by its central work journal.
+/// Uses the existing sender/receipt protocol without starting the shared host.
+pub fn run_scoped_work_request(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<Value> {
+    scoped_work_package_preflight(store, event)?;
+    run_selected_with_adapter(
+        store,
+        &event.event_id,
+        maximum_seconds,
+        Selection::WorkRequest(event, target),
+        before_submit,
+        keep_running,
+        |deadline, guard| {
+            let installed = installed_scoped_work_browser_directory(store)?;
+            Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )
+        },
+    )
+}
+
+/// Deliver only the source-handoff request selected by its retained project
+/// journal owner. The shared host stays stopped and sibling queues are unread.
+pub fn run_scoped_rollover_handoff(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<Value> {
+    run_selected_with_adapter(
+        store,
+        &event.event_id,
+        maximum_seconds,
+        Selection::RolloverHandoff(event, target),
+        before_submit,
+        keep_running,
+        |deadline, guard| {
+            let installed = installed_bootstrap_directory(store)?;
+            Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )
+        },
+    )
+}
+
+/// Deliver only the rollover event selected and revalidated by its journal
+/// owner. This uses the same bounded sender and never drains sibling queues.
+pub fn run_scoped_rollover_continuation(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<Value> {
+    run_selected_with_adapter(
+        store,
+        &event.event_id,
+        maximum_seconds,
+        Selection::RolloverContinuation(event, target),
+        before_submit,
+        keep_running,
+        |deadline, guard| {
+            let installed = installed_bootstrap_directory(store)?;
+            Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )
+        },
+    )
+}
+
+/// The local task owner supplies the immutable event selected from its existing
+/// receipt-checked context. This path never scans or dispatches sibling queues.
+pub fn run_scoped_task_continuation(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<Value> {
+    run_scoped_task_continuation_handoff(
+        store,
+        event,
+        target,
+        maximum_seconds,
+        before_submit,
+        keep_running,
+        &mut |_, _| Ok(()),
+    )
+}
+
+/// Handoff follows durable SUBMITTING and precedes the sole native ACK.
+pub fn run_scoped_task_continuation_handoff(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+    after_fence: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+) -> Result<Value> {
+    run_selected_with_adapter(
+        store,
+        &event.event_id,
+        maximum_seconds,
+        Selection::TaskContinuation(event, target),
+        before_submit,
+        keep_running,
+        |deadline, guard| {
+            let installed = installed_ordinary_browser_directory(store)?;
+            let inner = Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )?;
+            Ok(FencedAdapter {
+                inner,
+                handoff: after_fence,
+            })
+        },
+    )
+}
+
+/// Deliver only one previously journaled manual intent selected by its task
+/// owner. The callback releases that task's lease only after durable fencing.
+pub fn run_scoped_manual_end_turn_handoff(
+    store: &Store,
+    event: &Event,
+    target: &Target,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+    after_fence: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+) -> Result<Value> {
+    scoped_work_package_preflight(store, event)?;
+    run_selected_with_adapter(
+        store,
+        &event.event_id,
+        maximum_seconds,
+        Selection::ManualEndTurn(event, target),
+        before_submit,
+        keep_running,
+        |deadline, guard| {
+            let installed = installed_scoped_work_browser_directory(store)?;
+            let inner = Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )?;
+            Ok(FencedAdapter {
+                inner,
+                handoff: after_fence,
+            })
+        },
+    )
+}
+
+pub fn run_scoped_review(
+    store: &Store,
+    event_id: &str,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<Value> {
+    run_with_adapter(
+        store,
+        event_id,
+        maximum_seconds,
+        before_submit,
+        keep_running,
+        |deadline, guard| {
+            let installed = installed_bootstrap_directory(store)?;
+            Adapter::spawn_from_installed_guarded(
+                store.root(),
+                &installed,
+                deadline.saturating_duration_since(Instant::now()),
+                guard,
+            )
+        },
+    )
+}
+
+fn run_with_adapter<A: SubmissionAdapter>(
+    store: &Store,
+    event_id: &str,
+    maximum_seconds: u64,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+    connect: impl FnOnce(Instant, &dyn Fn() -> Result<()>) -> Result<A>,
+) -> Result<Value> {
+    run_selected_with_adapter(
+        store,
+        event_id,
+        maximum_seconds,
+        Selection::Review,
+        before_submit,
+        keep_running,
+        connect,
+    )
+}
+
+fn run_selected_with_adapter<A: SubmissionAdapter>(
+    store: &Store,
+    event_id: &str,
+    maximum_seconds: u64,
+    selection: Selection<'_>,
+    before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
+    keep_running: &dyn Fn() -> Result<()>,
+    connect: impl FnOnce(Instant, &dyn Fn() -> Result<()>) -> Result<A>,
+) -> Result<Value> {
+    if !crate::protocol::valid_id(event_id) || !(1..=180).contains(&maximum_seconds) {
+        return Err("SCOPED_REVIEW_ARGUMENTS_INVALID".into());
+    }
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(maximum_seconds);
+    let guard_timing = ScopedCallbackTiming::default();
+    let before_submit_timing = ScopedCallbackTiming::default();
+    let guard = || {
+        if Instant::now() >= deadline {
+            return Err("SCOPED_REVIEW_TIMEOUT".into());
+        }
+        let check_started = Instant::now();
+        let result = (|| {
+            keep_running()?;
+            if desired(store)? != "STOPPED" {
+                return Err("SCOPED_REVIEW_HOST_NOT_STOPPED".into());
+            }
+            Ok(())
+        })();
+        guard_timing.record(check_started);
+        result
+    };
+    guard()?;
+    let lease = store.host_lock()?;
+    guard()?;
+    if store
+        .delivery(event_id)?
+        .is_some_and(|delivery| delivery.phase != Phase::Claimed)
+    {
+        return Err("SCOPED_REVIEW_REPLAY_REFUSED".into());
+    }
+    // One validated key chooses one existing event. Never scan or dispatch a
+    // sibling project's queue, and never accept a caller-provided message.
+    let event: Event = read(&store.root().join("queue").join(format!("{event_id}.json")))?;
+    event.validate()?;
+    let review = event.event_type == "source_review"
+        && event
+            .audit_references
+            .iter()
+            .filter(|item| item.starts_with("catdesk-review-v1:"))
+            .count()
+            == 1
+        && !event
+            .audit_references
+            .iter()
+            .any(|item| item == "catdesk-review-v1:");
+    let rollover = matches!(&selection, Selection::RolloverContinuation(..));
+    let handoff = matches!(&selection, Selection::RolloverHandoff(..));
+    let work = matches!(&selection, Selection::WorkRequest(..));
+    let manual = matches!(&selection, Selection::ManualEndTurn(..));
+    let permitted = match selection {
+        Selection::Review => review,
+        Selection::ManualEndTurn(expected, target) => {
+            target.validate()?;
+            &event == expected
+                && event.event_type == "engineering_attention"
+                && event.audit_references.len() == 5
+                && store.config()?.targets.get(&event.project_id) == Some(target)
+                && event.wake_metadata()?.is_some_and(|metadata| {
+                    let Some(ttl_seconds) = metadata.expires_utc.checked_sub(event.created_utc)
+                    else {
+                        return false;
+                    };
+                    metadata.purpose == crate::protocol::WakePurpose::ManualEndTurn
+                        && crate::store::WakeIntent {
+                            purpose: metadata.purpose,
+                            source_event_id: &metadata.source_event_id,
+                            source_turn_id: &metadata.source_turn_id,
+                            priority: metadata.priority,
+                            ttl_seconds,
+                        }
+                        .event_id(&event.project_id)
+                        .ok()
+                        .as_deref()
+                            == Some(event.event_id.as_str())
+                })
+        }
+        Selection::WorkRequest(expected, target) => {
+            target.validate()?;
+            &event == expected
+                && event.event_type == "engineering_attention"
+                && event.audit_references.is_empty()
+                && event.event_id.strip_prefix("web-work-").is_some_and(|id| {
+                    id.len() == 64
+                        && id
+                            .bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+                && store.config()?.targets.get(&event.project_id) == Some(target)
+        }
+        Selection::RolloverHandoff(expected, target) => {
+            target.validate()?;
+            &event == expected
+                && event.event_type == "engineering_attention"
+                && event.audit_references.is_empty()
+                && event
+                    .event_id
+                    .strip_prefix("web-handoff-")
+                    .is_some_and(crate::protocol::valid_id)
+                && store.config()?.targets.get(&event.project_id) == Some(target)
+        }
+        Selection::RolloverContinuation(expected, target) => {
+            target.validate()?;
+            &event == expected
+                && event.event_type == "engineering_attention"
+                && event.audit_references.is_empty()
+                && event
+                    .event_id
+                    .strip_prefix("web-continue-")
+                    .is_some_and(crate::protocol::valid_id)
+                && store.config()?.targets.get(&event.project_id) == Some(target)
+        }
+        Selection::TaskContinuation(expected, target) => {
+            target.validate()?;
+            &event == expected
+                && event.event_type == "engineering_attention"
+                && !event
+                    .audit_references
+                    .iter()
+                    .any(|item| item.starts_with("catdesk-review-v1:"))
+                && store.config()?.targets.get(&event.project_id) == Some(target)
+                && event.wake_metadata()?.is_some_and(|metadata| {
+                    metadata.purpose == crate::protocol::WakePurpose::NewTask
+                        && metadata
+                            .source_turn_id
+                            .strip_prefix("initial-context-")
+                            .is_some_and(|id| {
+                                id.len() == 64
+                                    && id
+                                        .bytes()
+                                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                            })
+                })
+        }
+    };
+    if event.event_id != event_id || !permitted {
+        return Err("SCOPED_REVIEW_EVENT_INVALID".into());
+    }
+    if event.is_expired_at(now())? {
+        return Err("QUEUE_EVENT_EXPIRED".into());
+    }
+    if store
+        .timers_for_project(&event.project_id)?
+        .iter()
+        .any(|timer| timer.response_state != ResponseState::Complete)
+    {
+        return Err("SCOPED_REVIEW_PROJECT_BUSY".into());
+    }
+    let delivery = store.claim(&event, &lease)?;
+    let mut status = local_status(&delivery);
+    let mut timed_before_submit = |event: &Event, target: &Target| {
+        let callback_started = Instant::now();
+        let result = before_submit(event, target);
+        before_submit_timing.record(callback_started);
+        result
+    };
+    let result = (|| {
+        guard()?;
+        let mut adapter = connect(deadline, &guard)?;
+        let mut scoped = ScopedReviewGuard {
+            deadline,
+            review_event: review,
+            before_submit: &mut timed_before_submit,
+            keep_running: &guard,
+        };
+        let result = attempt_inner(
+            store,
+            &lease,
+            &mut adapter,
+            &delivery,
+            &mut status,
+            Some(&mut scoped),
+        );
+        adapter.finish(
+            deadline
+                .saturating_duration_since(Instant::now())
+                .min(Duration::from_secs(5)),
+        );
+        result
+    })();
+    if let Err(reason) = result {
+        match store.delivery(event_id)?.map(|delivery| delivery.phase) {
+            Some(Phase::Claimed) => {
+                store.transition(
+                    event_id,
+                    lease.owner(),
+                    Phase::Attention,
+                    None,
+                    Some(reason.clone()),
+                )?;
+            }
+            Some(Phase::Submitting) => {
+                store.note_submitting_attention(event_id, &reason)?;
+            }
+            Some(Phase::Sent) => {
+                let _ = store.set_timer_response_state(event_id, ResponseState::Attention);
+            }
+            _ => {}
+        }
+        if (work || manual) && reason == "SCOPED_REVIEW_TIMEOUT" {
+            let current = store
+                .delivery(event_id)?
+                .ok_or("SCOPED_REVIEW_RECEIPT_REQUIRED")?;
+            if current.event != event || current.target != delivery.target {
+                return Err("SCOPED_REVIEW_EVENT_INVALID".into());
+            }
+            return Ok(scoped_work_timeout_frame(
+                &event,
+                &delivery.target,
+                &current,
+                &status,
+                (manual, maximum_seconds),
+                started.elapsed(),
+                (&guard_timing, &before_submit_timing),
+            ));
+        }
+        return Err(reason);
+    }
+    let final_delivery = store
+        .delivery(event_id)?
+        .ok_or("SCOPED_REVIEW_RECEIPT_REQUIRED")?;
+    if final_delivery.phase != Phase::Sent || final_delivery.receipt.is_none() {
+        return Err("SCOPED_REVIEW_RECEIPT_REQUIRED".into());
+    }
+    Ok(
+        json!({"action":if review {"scoped_review_run"} else if handoff {"scoped_rollover_handoff_run"} else if rollover {"scoped_rollover_continuation_run"} else if work {"scoped_work_request_run"} else if manual {"scoped_manual_end_turn_run"} else {"scoped_task_continuation_run"},"eventId":event_id,"projectId":event.project_id,
+        "targetGeneration":final_delivery.target.generation,"targetDigest":final_delivery.target.digest,
+        "phase":final_delivery.phase,"receipt":final_delivery.receipt,"maximumSeconds":maximum_seconds,
+        "hostStarted":false,"schedulerStarted":false,"desiredStateChanged":false}),
+    )
+}
+
+fn local_status(delivery: &crate::store::Delivery) -> Status {
+    Status {
+        version: VERSION.into(),
+        protocol_version: 1,
+        host: "STOPPED".into(),
+        pid: 0,
+        browser_session_protocol: None,
+        updated_utc: now(),
+        targets: BTreeMap::from([(delivery.event.project_id.clone(), delivery.target.clone())]),
+        queue_depth: 1,
+        stale_count: 0,
+        browser: "NOT_OBSERVED".into(),
+        login: "NOT_OBSERVED".into(),
+        submission: "CLAIMED".into(),
+        last_event_id: Some(delivery.event.event_id.clone()),
+        last_attempt_utc: Some(now()),
+        last_success_utc: None,
+        last_receipt: None,
+        attention: None,
+        host_recovery_count: 0,
+        last_host_error: None,
+        last_host_error_utc: None,
+        turn_timers: vec![],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{cell::Cell, collections::VecDeque, rc::Rc};
+
+    struct FakeAdapter {
+        frames: VecDeque<Value>,
+        receipt: Receipt,
+        admitted: Rc<Cell<bool>>,
+        ack_count: Rc<Cell<u32>>,
+        cancelled: Rc<Cell<bool>>,
+        cancel_after_ack: bool,
+        delay: Duration,
+        terminal_refusal: Option<Value>,
+    }
+    impl SubmissionAdapter for FakeAdapter {
+        fn send(&mut self, value: Value) -> Result<()> {
+            if value.get("submit") == Some(&json!(true)) {
+                assert!(
+                    self.admitted.get(),
+                    "grant must be consumed before the submit ack"
+                );
+                self.ack_count.set(self.ack_count.get() + 1);
+                if self.cancel_after_ack {
+                    self.cancelled.set(true);
+                }
+                let terminal = self.terminal_refusal.clone().unwrap_or_else(
+                    || json!({"stage":"SENT_PENDING_RESPONSE","receipt":self.receipt}),
+                );
+                self.frames.push_back(terminal);
+            }
+            Ok(())
+        }
+        fn receive(
+            &mut self,
+            _: Duration,
+        ) -> std::result::Result<Result<Value>, mpsc::RecvTimeoutError> {
+            if !self.delay.is_zero() {
+                thread::sleep(self.delay);
+            }
+            self.frames
+                .pop_front()
+                .map(Ok)
+                .ok_or(mpsc::RecvTimeoutError::Disconnected)
+        }
+    }
+
+    fn fixture(label: &str) -> (Store, Event, Target) {
+        let (store, lease) = super::super::scheduler::tests::fixture(label);
+        drop(lease);
+        atomic(
+            &store.root().join("control.json"),
+            &json!({"schemaVersion":1,"desired":"STOPPED"}),
+        )
+        .unwrap();
+        let target = store.config().unwrap().targets["alpha"].clone();
+        let event = store
+            .produce_expected_with_audit(
+                "scoped-review",
+                "alpha",
+                "source_review",
+                "review public source",
+                &target,
+                &["catdesk-review-v1:grant-one:entry-one".into()],
+            )
+            .unwrap();
+        (store, event, target)
+    }
+
+    fn ordinary_package(store: &Store) -> PathBuf {
+        let directory = store.root().join("versions/ordinary-v1");
+        std::fs::create_dir_all(&directory).unwrap();
+        let host = b"synthetic host bytes; never executed";
+        let adapter = b"synthetic ordinary acknowledged-submit adapter; never executed";
+        let bridge = b"synthetic ordinary receipt primitives; never executed";
+        for (name, bytes) in [
+            ("CatDeskWakeHost.exe", host.as_slice()),
+            ("adapter.py", adapter.as_slice()),
+            ("wake_bridge.py", bridge.as_slice()),
+        ] {
+            std::fs::write(directory.join(name), bytes).unwrap();
+        }
+        let host_hash = crate::protocol::digest(std::str::from_utf8(host).unwrap());
+        let adapter_hash = crate::protocol::digest(std::str::from_utf8(adapter).unwrap());
+        let bridge_hash = crate::protocol::digest(std::str::from_utf8(bridge).unwrap());
+        atomic(
+            &store.root().join("current.json"),
+            &json!({
+                "schemaVersion":1,"directory":"ordinary-v1","hostSha256":host_hash,
+                "adapterSha256":adapter_hash,"wakeBridgeSha256":bridge_hash
+            }),
+        )
+        .unwrap();
+        atomic(&directory.join("manifest.json"), &json!({
+            "schemaVersion":1,"protocolVersion":1,"artifacts":{
+                "CatDeskWakeHost.exe":host_hash,"adapter.py":adapter_hash,"wake_bridge.py":bridge_hash
+            }
+        })).unwrap();
+        directory
+    }
+
+    fn current_native_entry_package(store: &Store, metadata_suffix: bool) -> PathBuf {
+        let directory = ordinary_package(store);
+        let mut pointer: Value = read(&store.root().join("current.json")).unwrap();
+        let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
+        for (name, pointer_key, bytes) in [
+            (
+                "adapter.py",
+                "adapterSha256",
+                include_bytes!("../adapter.py").as_slice(),
+            ),
+            (
+                "wake_bridge.py",
+                "wakeBridgeSha256",
+                include_bytes!("../../scripts/wake_bridge.py").as_slice(),
+            ),
+        ] {
+            let mut bytes = bytes.to_vec();
+            if metadata_suffix {
+                bytes.extend_from_slice(b"\n# unrelated diagnostic metadata\n");
+            }
+            std::fs::write(directory.join(name), &bytes).unwrap();
+            let digest = format!("{:x}", Sha256::digest(&bytes));
+            pointer[pointer_key] = json!(digest);
+            manifest["artifacts"][name] = json!(digest);
+        }
+        atomic(&store.root().join("current.json"), &pointer).unwrap();
+        atomic(&directory.join("manifest.json"), &manifest).unwrap();
+        directory
+    }
+
+    #[test]
+    fn scoped_native_entry_known_pair_accepts_and_unknown_installed_metadata_requires_review() {
+        for suffix in [false, true] {
+            let (store, _, _) = fixture("native-entry-current");
+            let directory = current_native_entry_package(&store, suffix);
+            if suffix {
+                assert_eq!(
+                    installed_scoped_work_browser_directory(&store).unwrap_err(),
+                    "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+                );
+            } else {
+                assert_eq!(
+                    installed_scoped_work_browser_directory(&store).unwrap(),
+                    directory
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn scoped_native_entry_accepts_reviewed_lf_or_crlf_with_exact_artifact_integrity() {
+        for crlf in [false, true] {
+            let (store, _, _) = fixture("native-entry-line-endings");
+            let directory = current_native_entry_package(&store, false);
+            let mut pointer: Value = read(&store.root().join("current.json")).unwrap();
+            let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
+            for (name, key) in [
+                ("adapter.py", "adapterSha256"),
+                ("wake_bridge.py", "wakeBridgeSha256"),
+            ] {
+                let lf = std::fs::read_to_string(directory.join(name))
+                    .unwrap()
+                    .replace("\r\n", "\n");
+                let bytes = if crlf { lf.replace('\n', "\r\n") } else { lf };
+                std::fs::write(directory.join(name), &bytes).unwrap();
+                let hash = crate::protocol::digest(&bytes);
+                pointer[key] = json!(hash);
+                manifest["artifacts"][name] = json!(hash);
+            }
+            atomic(&store.root().join("current.json"), &pointer).unwrap();
+            atomic(&directory.join("manifest.json"), &manifest).unwrap();
+            assert_eq!(
+                installed_scoped_work_browser_directory(&store).unwrap(),
+                directory
+            );
+        }
+    }
+
+    #[test]
+    fn scoped_native_entry_legacy_refuses_work_and_manual_before_claim_or_browser() {
+        let (store, _, target) = fixture("native-entry-legacy");
+        ordinary_package(&store);
+        let work = work_event(&store, "alpha", &target);
+        let manual = manual_event(&store, "alpha", &target);
+        let beta = store.config().unwrap().targets["beta"].clone();
+        let beta_event = work_event(&store, "beta", &beta);
+        let before_status = std::fs::read(store.root().join("status.json")).ok();
+        for event in [&work, &manual] {
+            let queue = store
+                .root()
+                .join("queue")
+                .join(format!("{}.json", event.event_id));
+            let before = std::fs::read(&queue).unwrap();
+            let mut before_submit =
+                |_: &Event, _: &Target| panic!("legacy package must not admit input");
+            let result = if event == &work {
+                run_scoped_work_request(&store, event, &target, 120, &mut before_submit, &|| Ok(()))
+            } else {
+                run_scoped_manual_end_turn_handoff(
+                    &store,
+                    event,
+                    &target,
+                    120,
+                    &mut before_submit,
+                    &|| Ok(()),
+                    &mut |_, _| panic!("legacy package must not hand off"),
+                )
+            };
+            assert_eq!(
+                result.unwrap_err(),
+                "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+            );
+            assert!(store.delivery(&event.event_id).unwrap().is_none());
+            assert!(!store.submission_witness_present(&event.event_id).unwrap());
+            assert_eq!(std::fs::read(queue).unwrap(), before);
+        }
+        assert_eq!(
+            std::fs::read(store.root().join("status.json")).ok(),
+            before_status
+        );
+        let round = super::super::scheduler::fair_round(
+            &store,
+            &store.config().unwrap().targets,
+            None,
+            &std::collections::BTreeMap::new(),
+            now(),
+        )
+        .unwrap();
+        assert!(
+            round
+                .iter()
+                .any(|event| event.project_id == beta_event.project_id)
+        );
+    }
+
+    #[test]
+    fn scoped_native_entry_does_not_trust_a_flag_or_reclassify_existing_uncertainty() {
+        let (store, _, target) = fixture("native-entry-flag");
+        let directory = ordinary_package(&store);
+        let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
+        manifest["fencedNativeEntryProtocol"] = json!(1);
+        atomic(&directory.join("manifest.json"), &manifest).unwrap();
+        assert_eq!(
+            installed_scoped_work_browser_directory(&store).unwrap_err(),
+            "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+        );
+        let event = work_event(&store, "alpha", &target);
+        let host = store.host_lock().unwrap();
+        let claimed = store.claim(&event, &host).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                &claimed.owner,
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        drop(host);
+        let before = store.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(
+            run_scoped_work_request(
+                &store,
+                &event,
+                &target,
+                120,
+                &mut |_, _| panic!("unknown cannot submit"),
+                &|| Ok(())
+            )
+            .unwrap_err(),
+            "SCOPED_REVIEW_REPLAY_REFUSED"
+        );
+        assert_eq!(store.delivery(&event.event_id).unwrap().unwrap(), before);
+        assert!(store.submission_witness_present(&event.event_id).unwrap());
+        let (other, _, target) = fixture("native-entry-attention");
+        ordinary_package(&other);
+        let event = work_event(&other, "alpha", &target);
+        let host = other.host_lock().unwrap();
+        let claimed = other.claim(&event, &host).unwrap();
+        other
+            .transition(
+                &event.event_id,
+                &claimed.owner,
+                Phase::Attention,
+                None,
+                Some("SCOPED_REVIEW_TIMEOUT".into()),
+            )
+            .unwrap();
+        drop(host);
+        let before = other.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(
+            run_scoped_work_request(
+                &other,
+                &event,
+                &target,
+                120,
+                &mut |_, _| panic!("attention cannot submit"),
+                &|| Ok(())
+            )
+            .unwrap_err(),
+            "SCOPED_REVIEW_REPLAY_REFUSED"
+        );
+        assert_eq!(other.delivery(&event.event_id).unwrap().unwrap(), before);
+    }
+
+    #[test]
+    fn scoped_native_entry_refuses_changed_critical_code_even_with_consistent_manifest() {
+        let (store, _, _) = fixture("native-entry-critical-change");
+        let directory = current_native_entry_package(&store, false);
+        let path = directory.join("adapter.py");
+        let source = std::fs::read_to_string(&path).unwrap();
+        let changed = source.replace(
+            "sink.insert_empty_conversation_draft(cdp, typed_message)",
+            "pass  # changed native entry",
+        );
+        assert_ne!(source, changed);
+        std::fs::write(&path, &changed).unwrap();
+        let hash = crate::protocol::digest(&changed);
+        let mut pointer: Value = read(&store.root().join("current.json")).unwrap();
+        let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
+        pointer["adapterSha256"] = json!(hash);
+        manifest["artifacts"]["adapter.py"] = json!(hash);
+        atomic(&store.root().join("current.json"), &pointer).unwrap();
+        atomic(&directory.join("manifest.json"), &manifest).unwrap();
+        // Integrity is intact in this disposable fixture, but the required
+        // reviewed entry protocol is not. No install/review authority is made.
+        installed_ordinary_browser_directory(&store).unwrap();
+        assert_eq!(
+            installed_scoped_work_browser_directory(&store).unwrap_err(),
+            "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED"
+        );
+    }
+
+    #[test]
+    fn ordinary_package_does_not_require_new_chat_but_bootstrap_still_does() {
+        let (store, event, _) = fixture("ordinary-v1-capability");
+        let directory = ordinary_package(&store);
+        let paths = [
+            store.root().join("current.json"),
+            store.root().join("config.json"),
+            store.root().join("control.json"),
+            store
+                .root()
+                .join("queue")
+                .join(format!("{}.json", event.event_id)),
+        ];
+        let before: Vec<_> = paths.iter().map(|p| std::fs::read(p).unwrap()).collect();
+        assert_eq!(
+            installed_ordinary_browser_directory(&store).unwrap(),
+            directory
+        );
+        assert_eq!(
+            installed_bootstrap_directory(&store).unwrap_err(),
+            "BOOTSTRAP_INSTALLED_PACKAGE_UNSUPPORTED"
+        );
+        assert!(store.delivery(&event.event_id).unwrap().is_none());
+        for (path, bytes) in paths.iter().zip(before) {
+            assert_eq!(std::fs::read(path).unwrap(), bytes);
+        }
+    }
+
+    #[test]
+    fn ordinary_package_keeps_host_adapter_and_manifest_hash_checks() {
+        for changed in [
+            "CatDeskWakeHost.exe",
+            "adapter.py",
+            "wake_bridge.py",
+            "manifest.json",
+        ] {
+            let (store, _, _) = fixture(&format!("ordinary-integrity-{changed}"));
+            let directory = ordinary_package(&store);
+            if changed == "manifest.json" {
+                let mut manifest: Value = read(&directory.join(changed)).unwrap();
+                manifest["artifacts"]["adapter.py"] = json!("0".repeat(64));
+                atomic(&directory.join(changed), &manifest).unwrap();
+            } else {
+                std::fs::write(directory.join(changed), b"unexpected bytes").unwrap();
+            }
+            assert!(
+                installed_ordinary_browser_directory(&store).is_err(),
+                "{changed}"
+            );
+        }
+    }
+
+    #[test]
+    fn ordinary_package_rejects_unknown_or_missing_protocol() {
+        for protocol in [Value::Null, json!(2), json!("1")] {
+            let (store, _, _) = fixture("ordinary-protocol");
+            let directory = ordinary_package(&store);
+            let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
+            manifest["protocolVersion"] = protocol;
+            atomic(&directory.join("manifest.json"), &manifest).unwrap();
+            assert_eq!(
+                installed_ordinary_browser_directory(&store).unwrap_err(),
+                "ORDINARY_INSTALLED_PACKAGE_UNSUPPORTED"
+            );
+        }
+    }
+
+    fn adapter(event: &Event, target: &Target) -> FakeAdapter {
+        FakeAdapter {
+            frames: VecDeque::from([
+                json!({"stage":"CHAT_IDLE"}),
+                json!({"stage":"BEFORE_SUBMIT"}),
+            ]),
+            receipt: Receipt {
+                schema_version: 1,
+                event_id: event.event_id.clone(),
+                target_generation: target.generation,
+                target_digest: target.digest.clone(),
+                message_digest: crate::protocol::digest(&event.message),
+                sent_utc: now(),
+                evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+            },
+            admitted: Rc::new(Cell::new(false)),
+            ack_count: Rc::new(Cell::new(0)),
+            cancelled: Rc::new(Cell::new(false)),
+            cancel_after_ack: false,
+            delay: Duration::ZERO,
+            terminal_refusal: None,
+        }
+    }
+
+    fn work_event(store: &Store, project: &str, target: &Target) -> Event {
+        store
+            .produce_expected(
+                &format!("web-work-{}", crate::protocol::digest(project)),
+                project,
+                "engineering_attention",
+                "Existing journal-owned work invitation",
+                target,
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn scoped_readiness_failure_is_retained_for_its_event_without_blocking_a_sibling() {
+        let (store, event, target) = fixture("scoped-readiness-failure");
+        let beta_target = store.config().unwrap().targets["beta"].clone();
+        let beta = work_event(&store, "beta", &beta_target);
+        let control = std::fs::read(store.root().join("control.json")).unwrap();
+        let status_before = std::fs::read(store.root().join("status.json")).ok();
+        let mut fake = adapter(&event, &target);
+        let ack = fake.ack_count.clone();
+        fake.frames = VecDeque::from([
+            json!({"stage":"READINESS_OBSERVED","route":"AUTH","reason":"LOGIN_OR_PROFILE_REQUIRED"}),
+            json!({"stage":"ATTENTION","reason":"LOGIN_OR_PROFILE_REQUIRED"}),
+        ]);
+        assert_eq!(
+            run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::Review,
+                &mut |_, _| panic!("readiness failure cannot authorize input"),
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            )
+            .unwrap_err(),
+            "LOGIN_OR_PROFILE_REQUIRED"
+        );
+        assert_eq!(ack.get(), 0);
+        let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(delivery.phase, Phase::Attention);
+        assert_eq!(delivery.target, target);
+        assert_eq!(delivery.event, event);
+        assert!(delivery.receipt.is_none());
+        assert!(store.timer(&event.event_id).unwrap().is_none());
+        let history = readiness_history(&store).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            history[0].event_id.as_deref(),
+            Some(event.event_id.as_str())
+        );
+        assert_eq!(history[0].route, "AUTH");
+        assert_eq!(history[0].reason, "LOGIN_OR_PROFILE_REQUIRED");
+
+        let mut sibling = adapter(&beta, &beta_target);
+        let admitted = sibling.admitted.clone();
+        sibling
+            .frames
+            .push_front(json!({"stage":"READINESS_OBSERVED",
+            "route":"SAME_CONVERSATION","reason":"READY"}));
+        assert_eq!(
+            run_selected_with_adapter(
+                &store,
+                &beta.event_id,
+                120,
+                Selection::WorkRequest(&beta, &beta_target),
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(sibling),
+            )
+            .unwrap()["phase"],
+            "SENT"
+        );
+        let history = readiness_history(&store).unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[1].event_id.as_deref(), Some(beta.event_id.as_str()));
+        assert_eq!(history[1].route, "SAME_CONVERSATION");
+        assert_eq!(history[1].reason, "READY");
+        assert_eq!(store.delivery(&event.event_id).unwrap().unwrap(), delivery);
+        assert_eq!(
+            std::fs::read(store.root().join("control.json")).unwrap(),
+            control
+        );
+        assert_eq!(
+            std::fs::read(store.root().join("status.json")).ok(),
+            status_before
+        );
+        let bytes = std::fs::read_to_string(readiness_history_path(&store)).unwrap();
+        assert!(!bytes.contains(&event.message));
+        assert!(!bytes.contains(&target.url));
+    }
+
+    #[test]
+    fn scoped_readiness_rejects_untrusted_or_corrupt_history_before_input() {
+        for corrupt in [false, true] {
+            let (store, event, target) = fixture("scoped-readiness-invalid");
+            let mut fake = adapter(&event, &target);
+            let ack = fake.ack_count.clone();
+            if corrupt {
+                std::fs::write(readiness_history_path(&store), b"preserved invalid journal")
+                    .unwrap();
+            }
+            let old_history = std::fs::read(readiness_history_path(&store)).ok();
+            fake.frames = VecDeque::from([json!({"stage":"READINESS_OBSERVED",
+                "route":if corrupt {"AUTH"} else {"https://private.example/route"},
+                "reason":"LOGIN_OR_PROFILE_REQUIRED"})]);
+            assert!(
+                run_selected_with_adapter(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::Review,
+                    &mut |_, _| panic!("untrusted readiness cannot authorize input"),
+                    &|| Ok(()),
+                    |_, _| Ok(fake),
+                )
+                .is_err()
+            );
+            assert_eq!(ack.get(), 0);
+            assert_eq!(
+                std::fs::read(readiness_history_path(&store)).ok(),
+                old_history
+            );
+            assert!(
+                store
+                    .delivery(&event.event_id)
+                    .unwrap()
+                    .unwrap()
+                    .receipt
+                    .is_none()
+            );
+            assert!(store.timer(&event.event_id).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn scoped_work_request_unknown_alpha_does_not_block_beta_and_never_replays() {
+        let (store, review, alpha) = fixture("work-independent");
+        let beta = store.config().unwrap().targets["beta"].clone();
+        let alpha_event = work_event(&store, "alpha", &alpha);
+        let beta_event = work_event(&store, "beta", &beta);
+        let foreign = store.root().join("queue/gamma-unreadable.json");
+        std::fs::write(&foreign, b"unrelated queue must stay unread").unwrap();
+        let control = std::fs::read(store.root().join("control.json")).unwrap();
+        for (event, target, unknown) in [(&alpha_event, &alpha, true), (&beta_event, &beta, false)]
+        {
+            let mut fake = adapter(event, target);
+            if unknown {
+                fake.receipt.message_digest = "0".repeat(64);
+            }
+            let admitted = fake.admitted.clone();
+            let acks = fake.ack_count.clone();
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::WorkRequest(event, target),
+                &mut |actual, actual_target| {
+                    assert_eq!(actual, event);
+                    assert_eq!(actual_target, target);
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            );
+            assert_eq!(result.is_err(), unknown);
+            if !unknown {
+                assert_eq!(result.unwrap()["action"], "scoped_work_request_run");
+            }
+            assert_eq!(acks.get(), 1);
+            assert_eq!(
+                store.delivery(&event.event_id).unwrap().unwrap().phase,
+                if unknown {
+                    Phase::Submitting
+                } else {
+                    Phase::Sent
+                }
+            );
+            assert_eq!(
+                run_selected_with_adapter::<FakeAdapter>(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::WorkRequest(event, target),
+                    &mut |_, _| panic!("no replay admission"),
+                    &|| Ok(()),
+                    |_, _| panic!("no replay browser")
+                )
+                .unwrap_err(),
+                "SCOPED_REVIEW_REPLAY_REFUSED"
+            );
+        }
+        assert!(store.delivery(&review.event_id).unwrap().is_none());
+        assert_eq!(
+            std::fs::read(&foreign).unwrap(),
+            b"unrelated queue must stay unread"
+        );
+        assert_eq!(
+            std::fs::read(store.root().join("control.json")).unwrap(),
+            control
+        );
+    }
+
+    #[test]
+    fn scoped_work_request_refuses_changed_roles_witness_and_target_before_claim() {
+        for change in ["role", "prefix", "audit", "message", "project", "target"] {
+            let (store, _, target) = fixture(&format!("work-reject-{change}"));
+            let mut event = work_event(&store, "alpha", &target);
+            let mut expected = event.clone();
+            let mut selected_target = target.clone();
+            match change {
+                "role" => event.event_type = "source_review".into(),
+                "prefix" => event.event_id = "web-work-not-a-digest".into(),
+                "audit" => event
+                    .audit_references
+                    .push("catdesk-review-v1:other".into()),
+                "message" => expected.message.push_str(" changed"),
+                "project" => expected.project_id = "beta".into(),
+                "target" => selected_target.generation += 1,
+                _ => unreachable!(),
+            }
+            if matches!(change, "role" | "prefix" | "audit") {
+                expected = event.clone();
+                std::fs::write(
+                    store
+                        .root()
+                        .join("queue")
+                        .join(format!("{}.json", event.event_id)),
+                    serde_json::to_vec(&event).unwrap(),
+                )
+                .unwrap();
+            }
+            assert_eq!(
+                run_selected_with_adapter::<FakeAdapter>(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::WorkRequest(&expected, &selected_target),
+                    &mut |_, _| panic!("no invalid admission"),
+                    &|| Ok(()),
+                    |_, _| panic!("no invalid browser")
+                )
+                .unwrap_err(),
+                "SCOPED_REVIEW_EVENT_INVALID",
+                "{change}"
+            );
+            assert!(store.delivery(&event.event_id).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn scoped_work_request_lost_owner_before_submit_never_acknowledges() {
+        let (store, _, target) = fixture("work-owner-lost");
+        let event = work_event(&store, "alpha", &target);
+        let fake = adapter(&event, &target);
+        let acks = fake.ack_count.clone();
+        assert_eq!(
+            run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::WorkRequest(&event, &target),
+                &mut |_, _| Err("WEB_WORK_PROJECT_REGISTRATION_CHANGED".into()),
+                &|| Ok(()),
+                |_, _| Ok(fake)
+            )
+            .unwrap_err(),
+            "WEB_WORK_PROJECT_REGISTRATION_CHANGED"
+        );
+        assert_eq!(acks.get(), 0);
+        assert_ne!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Sent
+        );
+    }
+
+    fn continuation(store: &Store, target: &Target) -> Event {
+        store
+            .produce_expected_wake(
+                "alpha",
+                "Continue the exact already-granted task",
+                target,
+                crate::store::WakeIntent {
+                    purpose: crate::protocol::WakePurpose::NewTask,
+                    source_event_id: "existing-source-task",
+                    source_turn_id: &format!("initial-context-{}", "a".repeat(64)),
+                    priority: 0,
+                    ttl_seconds: 600,
+                },
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn scoped_pre_edit_refusal_records_only_fresh_bound_before_input_evidence() {
+        for case in ["valid", "legacy", "foreign", "before-ack", "accepted"] {
+            let (store, event, target) = fixture(case);
+            let mut frame = json!({"stage":"ATTENTION","reason":"CONVERSATION_DRAFT_INSERT_UNVERIFIED_PRE_STRUCTURE",
+                "preEditRefusal":{"schemaVersion":1,"eventId":event.event_id,"projectId":event.project_id,
+                    "targetGeneration":target.generation,"targetDigest":target.digest,
+                    "messageDigest":crate::protocol::digest(&event.message),"nativeInputAttempted":false,
+                    "composerStructure":{"schemaVersion":1,"reason":"ATTRIBUTE_STYLE","nodesExamined":2}}});
+            if case == "legacy" {
+                frame.as_object_mut().unwrap().remove("preEditRefusal");
+            }
+            if case == "foreign" {
+                frame["preEditRefusal"]["projectId"] = json!("beta");
+            }
+            let mut fake = adapter(&event, &target);
+            if case == "before-ack" {
+                fake.frames = VecDeque::from([frame.clone()]);
+            }
+            if case == "accepted" {
+                fake.frames
+                    .push_back(json!({"stage":"SUBMISSION_ACCEPTED"}));
+            }
+            fake.terminal_refusal = Some(frame);
+            let admitted = fake.admitted.clone();
+            let acks = fake.ack_count.clone();
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                10,
+                Selection::Review,
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            );
+            assert!(result.is_err());
+            assert_eq!(acks.get(), u32::from(case != "before-ack"));
+            let proof = store
+                .root()
+                .join("logs")
+                .join(format!("pre-edit-refusal-{}.json", event.event_id));
+            assert_eq!(proof.exists(), case == "valid");
+            let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+            assert!(delivery.receipt.is_none());
+            assert_eq!(
+                delivery.phase,
+                if case == "before-ack" {
+                    Phase::Attention
+                } else {
+                    Phase::Submitting
+                }
+            );
+            if case == "valid" {
+                store
+                    .retire_stale_expected(
+                        &event.event_id,
+                        "alpha",
+                        &target,
+                        &crate::protocol::digest(&event.message),
+                    )
+                    .unwrap();
+                assert_eq!(
+                    store
+                        .delivery(&event.event_id)
+                        .unwrap()
+                        .unwrap()
+                        .reason
+                        .as_deref(),
+                    Some("PRE_EDIT_REFUSED_NO_SEND")
+                );
+                assert!(store.retry_pre_submit(&event.event_id).is_err());
+            } else if case != "before-ack" {
+                assert!(
+                    store
+                        .retire_stale_expected(
+                            &event.event_id,
+                            "alpha",
+                            &target,
+                            &crate::protocol::digest(&event.message)
+                        )
+                        .is_err()
+                );
+            }
+        }
+    }
+
+    fn rollover_selection<'a>(
+        handoff: bool,
+        event: &'a Event,
+        target: &'a Target,
+    ) -> Selection<'a> {
+        if handoff {
+            Selection::RolloverHandoff(event, target)
+        } else {
+            Selection::RolloverContinuation(event, target)
+        }
+    }
+
+    #[test]
+    fn scoped_rollover_events_isolated_delivery_and_unknown_outcome_never_replay() {
+        for handoff in [false, true] {
+            for unknown in [false, true] {
+                let (store, review, target) = fixture(if unknown {
+                    "rollover-unknown"
+                } else {
+                    "rollover-exact"
+                });
+                let event = store
+                    .produce_expected(
+                        if handoff {
+                            "web-handoff-stable-intent"
+                        } else {
+                            "web-continue-stable-intent"
+                        },
+                        "alpha",
+                        "engineering_attention",
+                        "Continue only the journal-owned rollover",
+                        &target,
+                    )
+                    .unwrap();
+                let foreign = store.root().join("queue/beta-unreadable.json");
+                std::fs::write(&foreign, b"preserve unrelated queue").unwrap();
+                let control = std::fs::read(store.root().join("control.json")).unwrap();
+                let mut fake = adapter(&event, &target);
+                if unknown {
+                    fake.receipt.message_digest = "0".repeat(64);
+                }
+                let admitted = fake.admitted.clone();
+                let acknowledgments = fake.ack_count.clone();
+                let result = run_selected_with_adapter(
+                    &store,
+                    &event.event_id,
+                    120,
+                    rollover_selection(handoff, &event, &target),
+                    &mut |actual, actual_target| {
+                        assert_eq!(actual, &event);
+                        assert_eq!(actual_target, &target);
+                        admitted.set(true);
+                        Ok(())
+                    },
+                    &|| Ok(()),
+                    |_, _| Ok(fake),
+                );
+                assert_eq!(result.is_err(), unknown);
+                if !unknown {
+                    assert_eq!(
+                        result.unwrap()["action"],
+                        if handoff {
+                            "scoped_rollover_handoff_run"
+                        } else {
+                            "scoped_rollover_continuation_run"
+                        }
+                    );
+                }
+                assert_eq!(acknowledgments.get(), 1);
+                assert!(store.delivery(&review.event_id).unwrap().is_none());
+                assert_eq!(
+                    std::fs::read(&foreign).unwrap(),
+                    b"preserve unrelated queue"
+                );
+                assert_eq!(
+                    std::fs::read(store.root().join("control.json")).unwrap(),
+                    control
+                );
+                assert_eq!(
+                    run_selected_with_adapter::<FakeAdapter>(
+                        &store,
+                        &event.event_id,
+                        120,
+                        rollover_selection(handoff, &event, &target),
+                        &mut |_, _| panic!("no replay authorization"),
+                        &|| Ok(()),
+                        |_, _| panic!("no replay browser"),
+                    )
+                    .unwrap_err(),
+                    "SCOPED_REVIEW_REPLAY_REFUSED"
+                );
+                assert_eq!(acknowledgments.get(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn scoped_rollover_events_refuse_changed_selection_and_owner_before_ack() {
+        for handoff in [false, true] {
+            for changed in ["body", "target", "owner"] {
+                let (store, _, target) = fixture(&format!("rollover-{changed}"));
+                let event = store
+                    .produce_expected(
+                        if handoff {
+                            "web-handoff-intent"
+                        } else {
+                            "web-continue-intent"
+                        },
+                        "alpha",
+                        "engineering_attention",
+                        "Continue exact rollover",
+                        &target,
+                    )
+                    .unwrap();
+                let mut expected = event.clone();
+                let mut selected_target = target.clone();
+                if changed == "body" {
+                    expected.message.push_str(" altered");
+                }
+                if changed == "target" {
+                    selected_target.generation += 1;
+                }
+                let fake = adapter(&event, &target);
+                let acknowledgments = fake.ack_count.clone();
+                let result = run_selected_with_adapter(
+                    &store,
+                    &event.event_id,
+                    120,
+                    rollover_selection(handoff, &expected, &selected_target),
+                    &mut |_, _| Err("JOURNAL_OWNER_CHANGED".into()),
+                    &|| Ok(()),
+                    |_, _| {
+                        assert_eq!(changed, "owner");
+                        Ok(fake)
+                    },
+                );
+                assert!(result.is_err());
+                assert_eq!(acknowledgments.get(), 0);
+            }
+        }
+    }
+
+    #[test]
+    fn scoped_handoff_refuses_other_event_roles_before_browser_or_claim() {
+        for changed in ["continuation", "review", "audit"] {
+            let (store, review, target) = fixture(&format!("handoff-role-{changed}"));
+            let mut event = if changed == "review" {
+                review
+            } else {
+                store
+                    .produce_expected(
+                        if changed == "continuation" {
+                            "web-continue-intent"
+                        } else {
+                            "web-handoff-intent"
+                        },
+                        "alpha",
+                        "engineering_attention",
+                        "Frozen handoff",
+                        &target,
+                    )
+                    .unwrap()
+            };
+            if changed == "audit" {
+                event
+                    .audit_references
+                    .push("catdesk-review-v1:foreign".into());
+                atomic(
+                    &store
+                        .root()
+                        .join("queue")
+                        .join(format!("{}.json", event.event_id)),
+                    &event,
+                )
+                .unwrap();
+            }
+            assert_eq!(
+                run_selected_with_adapter::<FakeAdapter>(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::RolloverHandoff(&event, &target),
+                    &mut |_, _| panic!("invalid selection must not authorize"),
+                    &|| Ok(()),
+                    |_, _| panic!("invalid selection must not open browser"),
+                )
+                .unwrap_err(),
+                "SCOPED_REVIEW_EVENT_INVALID"
+            );
+            assert!(store.delivery(&event.event_id).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn scoped_task_continuation_sends_only_exact_selection_while_foreign_queue_is_unreadable() {
+        let (store, review, target) = fixture("task-continuation-isolation");
+        let event = continuation(&store, &target);
+        let foreign = store.root().join("queue/beta-unreadable.json");
+        std::fs::write(&foreign, b"preserve unrelated invalid queue bytes").unwrap();
+        let fake = adapter(&event, &target);
+        let admitted = fake.admitted.clone();
+        let ack = fake.ack_count.clone();
+        let before_control = std::fs::read(store.root().join("control.json")).unwrap();
+        let result = run_selected_with_adapter(
+            &store,
+            &event.event_id,
+            120,
+            Selection::TaskContinuation(&event, &target),
+            &mut |actual, actual_target| {
+                assert_eq!(actual, &event);
+                assert_eq!(actual_target, &target);
+                admitted.set(true);
+                Ok(())
+            },
+            &|| Ok(()),
+            |_, _| Ok(fake),
+        )
+        .unwrap();
+        assert_eq!(result["action"], "scoped_task_continuation_run");
+        assert_eq!(result["phase"], "SENT");
+        assert_eq!(ack.get(), 1);
+        assert!(store.delivery(&review.event_id).unwrap().is_none());
+        assert!(store.delivery("beta-1").unwrap().is_none());
+        assert_eq!(
+            std::fs::read(&foreign).unwrap(),
+            b"preserve unrelated invalid queue bytes"
+        );
+        assert_eq!(
+            std::fs::read(store.root().join("control.json")).unwrap(),
+            before_control
+        );
+    }
+
+    #[test]
+    fn task_continuation_handoff_follows_durable_fence_and_precedes_the_only_ack() {
+        for deny in [false, true] {
+            let (store, _, target) = fixture(if deny {
+                "handoff-denied"
+            } else {
+                "handoff-admitted"
+            });
+            let event = continuation(&store, &target);
+            let fake = adapter(&event, &target);
+            let admitted = fake.admitted.clone();
+            let ack = fake.ack_count.clone();
+            let handoffs = Cell::new(0);
+            let mut handoff = |actual: &Event, actual_target: &Target| {
+                assert!(admitted.get());
+                assert_eq!(ack.get(), 0);
+                assert_eq!(actual, &event);
+                assert_eq!(actual_target, &target);
+                let delivery = store.delivery(&event.event_id)?.unwrap();
+                store.require_submitting_witness(&delivery)?;
+                handoffs.set(handoffs.get() + 1);
+                if deny {
+                    Err("TEST_HANDOFF_REFUSED".into())
+                } else {
+                    Ok(())
+                }
+            };
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::TaskContinuation(&event, &target),
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| {
+                    Ok(FencedAdapter {
+                        inner: fake,
+                        handoff: &mut handoff,
+                    })
+                },
+            );
+            assert_eq!(handoffs.get(), 1);
+            assert_eq!(ack.get(), u32::from(!deny));
+            let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+            if deny {
+                assert_eq!(result.unwrap_err(), "TEST_HANDOFF_REFUSED");
+                assert_eq!(delivery.phase, Phase::Submitting);
+                assert!(delivery.receipt.is_none());
+                assert!(store.timer(&event.event_id).unwrap().is_none());
+                assert_eq!(
+                    run_selected_with_adapter::<FakeAdapter>(
+                        &store,
+                        &event.event_id,
+                        120,
+                        Selection::TaskContinuation(&event, &target),
+                        &mut |_, _| panic!("cannot authorize replay"),
+                        &|| Ok(()),
+                        |_, _| panic!("cannot start replay"),
+                    )
+                    .unwrap_err(),
+                    "SCOPED_REVIEW_REPLAY_REFUSED"
+                );
+            } else {
+                assert_eq!(result.unwrap()["phase"], "SENT");
+                assert!(delivery.receipt.is_some());
+            }
+        }
+    }
+
+    fn manual_event(store: &Store, project: &str, target: &Target) -> Event {
+        store
+            .produce_expected_wake(
+                project,
+                "fixed journal-authorized continuation",
+                target,
+                crate::store::WakeIntent {
+                    purpose: crate::protocol::WakePurpose::ManualEndTurn,
+                    source_event_id: "original-task-event",
+                    source_turn_id: "finished-turn",
+                    priority: 1,
+                    ttl_seconds: 600,
+                },
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn scoped_manual_end_turn_is_exact_and_one_unknown_project_does_not_block_another() {
+        let (store, _, alpha) = fixture("manual-independent");
+        let beta = store.config().unwrap().targets["beta"].clone();
+        let ae = manual_event(&store, "alpha", &alpha);
+        let be = manual_event(&store, "beta", &beta);
+        let foreign = store.root().join("queue/gamma-unreadable.json");
+        std::fs::write(&foreign, b"preserved unrelated queue").unwrap();
+        for (event, target, unknown) in [(&ae, &alpha, true), (&be, &beta, false)] {
+            let mut fake = adapter(event, target);
+            if unknown {
+                fake.receipt.message_digest = "0".repeat(64);
+            }
+            let admitted = fake.admitted.clone();
+            let ack = fake.ack_count.clone();
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::ManualEndTurn(event, target),
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            );
+            assert_eq!(result.is_err(), unknown);
+            assert_eq!(ack.get(), 1);
+            if !unknown {
+                assert_eq!(result.unwrap()["action"], "scoped_manual_end_turn_run");
+            }
+            assert_eq!(
+                store.delivery(&event.event_id).unwrap().unwrap().phase,
+                if unknown {
+                    Phase::Submitting
+                } else {
+                    Phase::Sent
+                }
+            );
+            assert_eq!(
+                run_selected_with_adapter::<FakeAdapter>(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::ManualEndTurn(event, target),
+                    &mut |_, _| panic!("no replay admission"),
+                    &|| Ok(()),
+                    |_, _| panic!("no replay browser")
+                )
+                .unwrap_err(),
+                "SCOPED_REVIEW_REPLAY_REFUSED"
+            );
+        }
+        assert_eq!(
+            std::fs::read(foreign).unwrap(),
+            b"preserved unrelated queue"
+        );
+    }
+
+    #[test]
+    fn manual_end_turn_handoff_occurs_after_durable_fence_and_failure_never_reacks() {
+        for deny in [false, true] {
+            let (store, _, target) = fixture("manual-handoff");
+            let event = manual_event(&store, "alpha", &target);
+            let fake = adapter(&event, &target);
+            let admitted = fake.admitted.clone();
+            let ack = fake.ack_count.clone();
+            let handoffs = Cell::new(0);
+            let mut handoff = |actual: &Event, actual_target: &Target| {
+                assert!(admitted.get());
+                assert_eq!(ack.get(), 0);
+                assert_eq!(actual, &event);
+                assert_eq!(actual_target, &target);
+                store.require_submitting_witness(&store.delivery(&event.event_id)?.unwrap())?;
+                handoffs.set(handoffs.get() + 1);
+                if deny {
+                    Err("TEST_MANUAL_HANDOFF_REFUSED".into())
+                } else {
+                    Ok(())
+                }
+            };
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::ManualEndTurn(&event, &target),
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| {
+                    Ok(FencedAdapter {
+                        inner: fake,
+                        handoff: &mut handoff,
+                    })
+                },
+            );
+            assert_eq!(handoffs.get(), 1);
+            assert_eq!(ack.get(), u32::from(!deny));
+            if deny {
+                assert_eq!(result.unwrap_err(), "TEST_MANUAL_HANDOFF_REFUSED");
+                assert_eq!(
+                    store.delivery(&event.event_id).unwrap().unwrap().phase,
+                    Phase::Submitting
+                );
+                assert!(store.timer(&event.event_id).unwrap().is_none());
+                assert_eq!(
+                    run_selected_with_adapter::<FakeAdapter>(
+                        &store,
+                        &event.event_id,
+                        120,
+                        Selection::ManualEndTurn(&event, &target),
+                        &mut |_, _| panic!("no repeated fence"),
+                        &|| Ok(()),
+                        |_, _| panic!("no replay browser")
+                    )
+                    .unwrap_err(),
+                    "SCOPED_REVIEW_REPLAY_REFUSED"
+                );
+            } else {
+                assert_eq!(result.unwrap()["phase"], "SENT");
+            }
+        }
+    }
+
+    #[test]
+    fn scoped_manual_end_turn_refuses_wrong_purpose_changed_target_event_and_expiry_before_browser()
+    {
+        for changed in ["purpose", "target", "event", "expired"] {
+            let (store, _, target) = fixture(&format!("manual-invalid-{changed}"));
+            let mut event = manual_event(&store, "alpha", &target);
+            let mut expected = event.clone();
+            let mut selected_target = target.clone();
+            match changed {
+                "purpose" => {
+                    let mut metadata = event.wake_metadata().unwrap().unwrap();
+                    metadata.purpose = crate::protocol::WakePurpose::NewTask;
+                    event.audit_references.clear();
+                    event = event.with_wake_metadata(metadata).unwrap();
+                    expected = event.clone();
+                }
+                "target" => selected_target.generation += 1,
+                "event" => expected.message.push_str(" changed"),
+                _ => {
+                    let mut metadata = event.wake_metadata().unwrap().unwrap();
+                    event.created_utc = now() - 1000;
+                    metadata.expires_utc = now() - 1;
+                    event.audit_references.clear();
+                    event = event.with_wake_metadata(metadata).unwrap();
+                    expected = event.clone();
+                }
+            }
+            let queue = store
+                .root()
+                .join("queue")
+                .join(format!("{}.json", event.event_id));
+            atomic(&queue, &event).unwrap();
+            let before = std::fs::read(&queue).unwrap();
+            assert_eq!(
+                run_selected_with_adapter::<FakeAdapter>(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::ManualEndTurn(&expected, &selected_target),
+                    &mut |_, _| panic!("no invalid admission"),
+                    &|| Ok(()),
+                    |_, _| panic!("no invalid browser")
+                )
+                .unwrap_err(),
+                if changed == "expired" {
+                    "QUEUE_EVENT_EXPIRED"
+                } else {
+                    "SCOPED_REVIEW_EVENT_INVALID"
+                }
+            );
+            assert!(store.delivery(&event.event_id).unwrap().is_none());
+            assert_eq!(std::fs::read(queue).unwrap(), before);
+        }
+    }
+
+    #[test]
+    fn scoped_task_continuation_refuses_foreign_changed_or_review_selection_before_browser() {
+        for changed in ["body", "target", "review"] {
+            let (store, review, target) = fixture(&format!("task-selection-{changed}"));
+            let event = continuation(&store, &target);
+            let mut expected = event.clone();
+            let mut expected_target = target.clone();
+            let selected = match changed {
+                "body" => {
+                    expected.message.push_str(" changed");
+                    &event
+                }
+                "target" => {
+                    expected_target =
+                        Target::new(99, "https://chatgpt.com/c/foreign".into()).unwrap();
+                    &event
+                }
+                _ => {
+                    expected = review.clone();
+                    &review
+                }
+            };
+            let result = run_selected_with_adapter::<FakeAdapter>(
+                &store,
+                &selected.event_id,
+                120,
+                Selection::TaskContinuation(&expected, &expected_target),
+                &mut |_, _| panic!("invalid selection cannot authorize submission"),
+                &|| Ok(()),
+                |_, _| panic!("invalid selection cannot start browser"),
+            );
+            assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_EVENT_INVALID");
+            assert!(store.delivery(&selected.event_id).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn scoped_task_continuation_keeps_unknown_outcome_and_suppresses_completed_replay() {
+        for unknown in [false, true] {
+            let (store, _, target) = fixture(if unknown {
+                "task-unknown"
+            } else {
+                "task-complete"
+            });
+            let event = continuation(&store, &target);
+            let mut fake = adapter(&event, &target);
+            if unknown {
+                fake.receipt.message_digest = "0".repeat(64);
+            }
+            let admitted = fake.admitted.clone();
+            let ack = fake.ack_count.clone();
+            let result = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                120,
+                Selection::TaskContinuation(&event, &target),
+                &mut |_, _| {
+                    admitted.set(true);
+                    Ok(())
+                },
+                &|| Ok(()),
+                |_, _| Ok(fake),
+            );
+            assert_eq!(result.is_err(), unknown);
+            assert_eq!(ack.get(), 1);
+            let before = std::fs::read(
+                store
+                    .root()
+                    .join("deliveries")
+                    .join(format!("{}.json", event.event_id)),
+            )
+            .unwrap();
+            let result = run_selected_with_adapter::<FakeAdapter>(
+                &store,
+                &event.event_id,
+                120,
+                Selection::TaskContinuation(&event, &target),
+                &mut |_, _| panic!("replay cannot authorize submission"),
+                &|| Ok(()),
+                |_, _| panic!("replay cannot start browser"),
+            );
+            assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_REPLAY_REFUSED");
+            assert_eq!(
+                std::fs::read(
+                    store
+                        .root()
+                        .join("deliveries")
+                        .join(format!("{}.json", event.event_id))
+                )
+                .unwrap(),
+                before
+            );
+        }
+    }
+
+    #[test]
+    fn scoped_task_continuation_expired_intent_is_refused_before_claim_or_browser() {
+        let (store, _, target) = fixture("task-expired");
+        let created = now() - 601;
+        let event = Event {
+            schema_version: 1,
+            event_id: "expired-task-continuation".into(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc: created,
+            message: "Continue exact task".into(),
+            target_generation: target.generation,
+            audit_references: vec![],
+        }
+        .with_wake_metadata(crate::protocol::WakeMetadata {
+            purpose: crate::protocol::WakePurpose::NewTask,
+            source_event_id: "existing-source-task".into(),
+            source_turn_id: format!("initial-context-{}", "a".repeat(64)),
+            priority: 0,
+            expires_utc: created + 600,
+        })
+        .unwrap();
+        store.publish(&event).unwrap();
+        assert_eq!(
+            run_selected_with_adapter::<FakeAdapter>(
+                &store,
+                &event.event_id,
+                120,
+                Selection::TaskContinuation(&event, &target),
+                &mut |_, _| panic!(),
+                &|| Ok(()),
+                |_, _| panic!("expired intent cannot start browser")
+            )
+            .unwrap_err(),
+            "QUEUE_EVENT_EXPIRED"
+        );
+        assert!(store.delivery(&event.event_id).unwrap().is_none());
+    }
+
+    #[test]
+    fn scoped_review_consumes_immediately_before_one_ack_and_preserves_stopped_control() {
+        let (store, event, target) = fixture("scoped-success");
+        let fake = adapter(&event, &target);
+        let admitted = fake.admitted.clone();
+        let acknowledgments = fake.ack_count.clone();
+        let before = std::fs::read(store.root().join("control.json")).unwrap();
+        let result = run_with_adapter(
+            &store,
+            &event.event_id,
+            180,
+            &mut |actual, actual_target| {
+                assert_eq!(actual, &event);
+                assert_eq!(actual_target, &target);
+                assert_eq!(
+                    store.delivery(&event.event_id)?.unwrap().phase,
+                    Phase::Claimed
+                );
+                admitted.set(true);
+                Ok(())
+            },
+            &|| Ok(()),
+            |_, _| Ok(fake),
+        )
+        .unwrap();
+        assert_eq!(acknowledgments.get(), 1);
+        assert_eq!(result["phase"], "SENT");
+        assert_eq!(
+            std::fs::read(store.root().join("control.json")).unwrap(),
+            before
+        );
+        assert!(!store.root().join("status.json").exists());
+        assert!(!store.root().join("readiness-history.json").exists());
+        assert!(store.delivery("beta-1").unwrap().is_none());
+    }
+
+    #[test]
+    fn scoped_review_denial_or_pre_ack_cancellation_never_submits() {
+        for cancelled in [false, true] {
+            let (store, event, target) = fixture("scoped-denial");
+            let fake = adapter(&event, &target);
+            let ack = fake.ack_count.clone();
+            let stop = fake.cancelled.clone();
+            let result = run_with_adapter(
+                &store,
+                &event.event_id,
+                180,
+                &mut |_, _| {
+                    if cancelled {
+                        stop.set(true);
+                        Ok(())
+                    } else {
+                        Err("REVIEW_AUTH_REVOKED".into())
+                    }
+                },
+                &|| {
+                    if stop.get() {
+                        Err("TEST_CANCELLED".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                |_, _| Ok(fake),
+            );
+            assert!(result.is_err());
+            assert_eq!(ack.get(), 0);
+            assert_eq!(
+                store.delivery(&event.event_id).unwrap().unwrap().phase,
+                Phase::Attention
+            );
+            assert!(store.timer(&event.event_id).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn scoped_review_duplicate_submit_is_refused_without_second_consumption() {
+        let (store, event, target) = fixture("scoped-duplicate");
+        let mut fake = adapter(&event, &target);
+        fake.frames.push_back(json!({"stage":"BEFORE_SUBMIT"}));
+        let admitted = fake.admitted.clone();
+        let ack = fake.ack_count.clone();
+        let consumes = Cell::new(0);
+        let result = run_with_adapter(
+            &store,
+            &event.event_id,
+            180,
+            &mut |_, _| {
+                consumes.set(consumes.get() + 1);
+                admitted.set(true);
+                Ok(())
+            },
+            &|| Ok(()),
+            |_, _| Ok(fake),
+        );
+        assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_DUPLICATE_SUBMIT");
+        assert_eq!(consumes.get(), 1);
+        assert_eq!(ack.get(), 1);
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Submitting
+        );
+    }
+
+    #[test]
+    fn scoped_review_drains_exact_receipt_after_post_ack_cancellation_without_resend() {
+        let (store, event, target) = fixture("scoped-after-ack");
+        let mut fake = adapter(&event, &target);
+        fake.cancel_after_ack = true;
+        let admitted = fake.admitted.clone();
+        let stop = fake.cancelled.clone();
+        let ack = fake.ack_count.clone();
+        run_with_adapter(
+            &store,
+            &event.event_id,
+            180,
+            &mut |_, _| {
+                admitted.set(true);
+                Ok(())
+            },
+            &|| {
+                if stop.get() {
+                    Err("TEST_CANCELLED".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |_, _| Ok(fake),
+        )
+        .unwrap();
+        assert_eq!(ack.get(), 1);
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Sent
+        );
+    }
+
+    #[test]
+    fn scoped_review_progress_cannot_extend_absolute_deadline() {
+        let (store, event, target) = fixture("scoped-timeout");
+        let mut fake = adapter(&event, &target);
+        fake.frames = (0..100).map(|_| json!({"stage":"CHAT_IDLE"})).collect();
+        fake.delay = Duration::from_millis(25);
+        let ack = fake.ack_count.clone();
+        let start = Instant::now();
+        let result = run_with_adapter(
+            &store,
+            &event.event_id,
+            1,
+            &mut |_, _| panic!("no send stage"),
+            &|| Ok(()),
+            |_, _| Ok(fake),
+        );
+        assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_TIMEOUT");
+        assert!(start.elapsed() < Duration::from_secs(3));
+        assert_eq!(ack.get(), 0);
+    }
+
+    #[test]
+    fn scoped_guard_rechecks_deadline_after_slow_metadata_guard() {
+        let mut before = |_: &Event, _: &Target| Ok(());
+        let keep = || {
+            thread::sleep(Duration::from_millis(30));
+            Ok(())
+        };
+        let guard = ScopedReviewGuard {
+            deadline: Instant::now() + Duration::from_millis(10),
+            review_event: false,
+            before_submit: &mut before,
+            keep_running: &keep,
+        };
+        assert_eq!(guard.check().unwrap_err(), "SCOPED_REVIEW_TIMEOUT");
+    }
+
+    #[test]
+    fn scoped_deadline_after_fence_refuses_ack_and_keeps_unknown_without_replay() {
+        let (store, _, target) = fixture("deadline-after-fence");
+        let event = work_event(&store, "alpha", &target);
+        let fake = adapter(&event, &target);
+        let ack = fake.ack_count.clone();
+        let admitted = fake.admitted.clone();
+        let mut handoff = |actual: &Event, _: &Target| {
+            store.require_submitting_witness(&store.delivery(&actual.event_id)?.unwrap())?;
+            thread::sleep(Duration::from_millis(1100));
+            Ok(())
+        };
+        let result = run_selected_with_adapter(
+            &store,
+            &event.event_id,
+            1,
+            Selection::WorkRequest(&event, &target),
+            &mut |_, _| {
+                admitted.set(true);
+                Ok(())
+            },
+            &|| Ok(()),
+            |_, _| {
+                Ok(FencedAdapter {
+                    inner: fake,
+                    handoff: &mut handoff,
+                })
+            },
+        );
+        let frame = result.unwrap();
+        assert!(is_scoped_work_timeout(&frame));
+        assert_eq!(frame["diagnosis"]["lastAdapterStage"], "BEFORE_SUBMIT");
+        assert_eq!(frame["deliveryPhase"], "SUBMITTING");
+        assert_eq!(frame["retryAuthorized"], false);
+        assert_eq!(ack.get(), 0);
+        let retained = store.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(retained.phase, Phase::Submitting);
+        assert!(retained.receipt.is_none());
+        store.require_submitting_witness(&retained).unwrap();
+        assert!(store.timer(&event.event_id).unwrap().is_none());
+        assert_eq!(
+            run_selected_with_adapter::<FakeAdapter>(
+                &store,
+                &event.event_id,
+                1,
+                Selection::WorkRequest(&event, &target),
+                &mut |_, _| panic!("no repeated admission"),
+                &|| Ok(()),
+                |_, _| panic!("no replay browser")
+            )
+            .unwrap_err(),
+            "SCOPED_REVIEW_REPLAY_REFUSED"
+        );
+    }
+
+    #[test]
+    fn scoped_work_timeout_retains_actual_readiness_stage_without_private_status() {
+        struct Waiting {
+            observed: bool,
+        }
+        impl SubmissionAdapter for Waiting {
+            fn send(&mut self, _: Value) -> Result<()> {
+                Ok(())
+            }
+            fn receive(
+                &mut self,
+                _: Duration,
+            ) -> std::result::Result<Result<Value>, mpsc::RecvTimeoutError> {
+                if !self.observed {
+                    self.observed = true;
+                    Ok(Ok(
+                        json!({"stage":"READINESS_OBSERVED", "route":"SAME_CONVERSATION", "reason":"READY"}),
+                    ))
+                } else {
+                    thread::sleep(Duration::from_millis(1100));
+                    Err(mpsc::RecvTimeoutError::Timeout)
+                }
+            }
+        }
+        let (store, _, target) = fixture("work-timeout-readiness");
+        let event = work_event(&store, "alpha", &target);
+        let frame = run_selected_with_adapter(
+            &store,
+            &event.event_id,
+            1,
+            Selection::WorkRequest(&event, &target),
+            &mut |_, _| panic!("no submit"),
+            &|| Ok(()),
+            |_, _| Ok(Waiting { observed: false }),
+        )
+        .unwrap();
+        assert!(is_scoped_work_timeout(&frame));
+        assert_eq!(frame["diagnosis"]["lastAdapterStage"], "READINESS_OBSERVED");
+        assert_eq!(frame["diagnosis"]["beforeSubmitCalls"], 0);
+        assert_eq!(frame["deliveryPhase"], "ATTENTION");
+        assert!(!store.submission_witness_present(&event.event_id).unwrap());
+        let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+        let mut status = local_status(&delivery);
+        status.browser = "PRIVATE_CONTEXT https://private.invalid".into();
+        let safe = scoped_work_timeout_frame(
+            &event,
+            &target,
+            &delivery,
+            &status,
+            (false, 1),
+            Duration::from_secs(1),
+            (
+                &ScopedCallbackTiming::default(),
+                &ScopedCallbackTiming::default(),
+            ),
+        );
+        assert_eq!(safe["diagnosis"]["lastAdapterStage"], "UNCLASSIFIED");
+        assert!(!safe.to_string().contains("PRIVATE"));
+        for (key, bad) in [
+            ("errorCode", json!("PRIVATE_ERROR")),
+            ("retryAuthorized", json!(true)),
+            ("exitCode", json!(0)),
+        ] {
+            let mut changed = safe.clone();
+            changed[key] = bad;
+            assert!(!is_scoped_work_timeout(&changed), "{key}");
+        }
+        let mut changed = safe;
+        changed["diagnosis"]["body"] = json!("PRIVATE_DRAFT");
+        assert!(!is_scoped_work_timeout(&changed));
+    }
+
+    #[test]
+    fn scoped_work_timeout_distinguishes_metadata_guard_from_before_submit_cost() {
+        for slow_before_submit in [false, true] {
+            let (store, _, target) = fixture("work-timeout-callback-cost");
+            let event = work_event(&store, "alpha", &target);
+            let fake = adapter(&event, &target);
+            let calls = Cell::new(0);
+            let frame = run_selected_with_adapter(
+                &store,
+                &event.event_id,
+                1,
+                Selection::WorkRequest(&event, &target),
+                &mut |_, _| {
+                    if slow_before_submit {
+                        thread::sleep(Duration::from_millis(1100));
+                    }
+                    Ok(())
+                },
+                &|| {
+                    calls.set(calls.get() + 1);
+                    if !slow_before_submit && calls.get() == 5 {
+                        thread::sleep(Duration::from_millis(1100));
+                    }
+                    Ok(())
+                },
+                |_, _| Ok(fake),
+            )
+            .unwrap();
+            assert!(is_scoped_work_timeout(&frame));
+            let d = &frame["diagnosis"];
+            assert_eq!(d["beforeSubmitCalls"], u64::from(slow_before_submit));
+            if slow_before_submit {
+                assert!(d["beforeSubmitMaxMs"].as_u64().unwrap() >= 1000);
+                assert!(d["guardCheckMaxMs"].as_u64().unwrap() < 1000);
+            } else {
+                assert!(d["guardCheckMaxMs"].as_u64().unwrap() >= 1000);
+                assert_eq!(d["beforeSubmitMaxMs"], 0);
+            }
+            assert_eq!(frame["deliveryPhase"], "ATTENTION");
+            assert!(!store.submission_witness_present(&event.event_id).unwrap());
+        }
+    }
+
+    #[test]
+    fn scoped_review_rejects_replay_running_host_and_invalid_budget_before_adapter() {
+        let (store, event, _) = fixture("scoped-preflight");
+        for limit in [0, 181] {
+            let result = run_with_adapter::<FakeAdapter>(
+                &store,
+                &event.event_id,
+                limit,
+                &mut |_, _| unreachable!(),
+                &|| Ok(()),
+                |_, _| panic!("no adapter"),
+            );
+            assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_ARGUMENTS_INVALID");
+        }
+        let lease = store.host_lock().unwrap();
+        let delivery = store.claim(&event, &lease).unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        drop(lease);
+        let result = run_with_adapter::<FakeAdapter>(
+            &store,
+            &event.event_id,
+            180,
+            &mut |_, _| unreachable!(),
+            &|| Ok(()),
+            |_, _| panic!("no adapter"),
+        );
+        assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_REPLAY_REFUSED");
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().target,
+            delivery.target
+        );
+    }
+
+    #[test]
+    fn ordinary_attempt_refuses_scoped_event_before_adapter_request() {
+        let (store, event, target) = fixture("scoped-ordinary");
+        let lease = store.host_lock().unwrap();
+        let delivery = store.claim(&event, &lease).unwrap();
+        let mut fake = adapter(&event, &target);
+        let mut status = local_status(&delivery);
+        assert_eq!(
+            attempt_inner(&store, &lease, &mut fake, &delivery, &mut status, None).unwrap_err(),
+            "SCOPED_REVIEW_EXPLICIT_GUARD_REQUIRED"
+        );
+        assert_eq!(fake.ack_count.get(), 0);
+        assert_eq!(fake.frames.len(), 2);
+    }
+
+    #[test]
+    fn scoped_audit_reference_is_immutable_and_cannot_be_stripped_by_replay() {
+        let (store, event, target) = fixture("scoped-audit");
+        assert_eq!(
+            store
+                .produce_expected_with_audit(
+                    &event.event_id,
+                    "alpha",
+                    "source_review",
+                    &event.message,
+                    &target,
+                    &event.audit_references
+                )
+                .unwrap(),
+            event
+        );
+        assert!(
+            store
+                .produce_expected(
+                    &event.event_id,
+                    "alpha",
+                    "source_review",
+                    &event.message,
+                    &target
+                )
+                .is_err()
+        );
+        assert!(
+            store
+                .produce_expected_with_audit(
+                    &event.event_id,
+                    "alpha",
+                    "source_review",
+                    &event.message,
+                    &target,
+                    &["catdesk-review-v1:other".into()]
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn scoped_review_wire_is_rejected_by_the_literal_legacy_event_allowlist() {
+        let (_, event, _) = fixture("scoped-legacy-wire");
+        event.validate().unwrap();
+        let wire = serde_json::to_value(&event).unwrap();
+        // This is the exact accepted-purpose set from the predecessor Event
+        // reader. Audit references alone were ignored by that reader.
+        let legacy_accepts = matches!(
+            wire["eventType"].as_str(),
+            Some("review_ready" | "engineering_attention" | "test")
+        );
+        assert_eq!(wire["eventType"], "source_review");
+        assert!(
+            !legacy_accepts,
+            "an old host must not accept this queued review"
+        );
+    }
+
+    #[test]
+    fn scoped_review_type_without_audit_cannot_reach_either_sender() {
+        let (store, _, target) = fixture("scoped-missing-audit");
+        let event = store
+            .produce_expected(
+                "missing-review-audit",
+                "alpha",
+                "source_review",
+                "source review without authorization",
+                &target,
+            )
+            .unwrap();
+        let result = run_with_adapter::<FakeAdapter>(
+            &store,
+            &event.event_id,
+            180,
+            &mut |_, _| panic!("missing audit must not consume a grant"),
+            &|| Ok(()),
+            |_, _| panic!("missing audit must not open a browser"),
+        );
+        assert_eq!(result.unwrap_err(), "SCOPED_REVIEW_EVENT_INVALID");
+        let lease = store.host_lock().unwrap();
+        let delivery = store.claim(&event, &lease).unwrap();
+        let mut fake = adapter(&event, &target);
+        assert_eq!(
+            attempt_inner(
+                &store,
+                &lease,
+                &mut fake,
+                &delivery,
+                &mut local_status(&delivery),
+                None
+            )
+            .unwrap_err(),
+            "SCOPED_REVIEW_EXPLICIT_GUARD_REQUIRED"
+        );
+        assert_eq!(fake.ack_count.get(), 0);
+        assert_eq!(fake.frames.len(), 2);
+    }
+
+    #[test]
+    fn scoped_review_can_be_retired_without_granting_native_work_or_sending() {
+        let (store, event, target) = fixture("scoped-retirement");
+        store
+            .retire_stale_expected(
+                &event.event_id,
+                &event.project_id,
+                &target,
+                &crate::protocol::digest(&event.message),
+            )
+            .unwrap();
+        let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(delivery.phase, Phase::Stale);
+        assert_eq!(delivery.event.event_type, "source_review");
+        assert!(delivery.receipt.is_none());
+        assert!(store.timer(&event.event_id).unwrap().is_none());
+    }
+}

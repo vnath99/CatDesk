@@ -1,0 +1,77 @@
+{
+  "observedUtc": "2026-11-02T11:23:48.924376+00:00",
+  "classification": "TESTED_SOURCE",
+  "baseSourceCommit": "6d19cc3309899acc9e3b5f90471f484d2cc9db4e",
+  "sourceInputs": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "gitBlob": "7a82ab5493b41acb0fa9f7081c12b87c0d18d921",
+      "sha256": "4d2b9ab49f58726d40f0ba2545cd4e1af8e2be9d43aa5e86801421351dc61744"
+    },
+    {
+      "path": "wake/adapter.py",
+      "gitBlob": "1f21b029002db8a79e4e5c07be251db73bf2aae1",
+      "sha256": "a784256e1950742462ad74f58f7b1b4ff982f3df12e65469088020a85cf53e75"
+    },
+    {
+      "path": "wake/src/runtime_snapshot.rs",
+      "gitBlob": "0c15dd8d6489fa0a3e6aa8a722e6e8723bbecf80",
+      "sha256": "1052ac72c2353b0947f6cd697f4b5138da695141f945a04007d5706a2169c2f0"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "gitBlob": "90a5fad888e0cfbf39297c4500050b6254431e76",
+      "sha256": "8f3df1d69cf21dad92a69869dff7e51e5249f8d648efc298a2875f1e16adc34c"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "gitBlob": "5969d386182b791f849f10a3a09f072c3daf42d5",
+      "sha256": "2e4689efd24666e3d00610aa5972cfccd2fbd86297f25fa6044ad36aecfecf3d"
+    }
+  ],
+  "red": {
+    "domCasesPassed": 2,
+    "domCaseFailed": 1,
+    "adapterCaseFailed": 1,
+    "adapterFailingSubcases": 4,
+    "positiveRegressionBodiesUnchanged": true
+  },
+  "green": {
+    "dom": {
+      "passed": 68,
+      "seconds": 50.663
+    },
+    "adapter": {
+      "passed": 44,
+      "seconds": 12.879
+    },
+    "bridge": {
+      "passed": 126,
+      "seconds": 175.721
+    },
+    "nativeSnapshot": {
+      "passed": 11,
+      "seconds": 0.37
+    },
+    "distinctCases": 249,
+    "strictAllTargetClippy": "PASS",
+    "fmt": "PASS",
+    "diffCheck": "PASS"
+  },
+  "implementation": [
+    "Missing-assistant source reads consult the existing exact-event read-only observer before returning assistant-not-mounted.",
+    "A unique visible exact load-error card can be identified outside absent assistant-role nodes, only in the current paired exchange after every USER node and with no later turn.",
+    "USER, code, quotation, controls, semantic/tool units and tool-result content are excluded; two cards remain ambiguous.",
+    "Existing active-generation precedence and exact route/turn rechecks remain; no snapshot is emitted on failure.",
+    "Known observer failure codes share the existing closed native diagnostic sanitizer."
+  ],
+  "browserStarts": 0,
+  "messagesSent": 0,
+  "responseRecoveryClicks": 0,
+  "bindingChanges": 0,
+  "productionChanges": 0,
+  "liveAcceptance": "OPEN_MATCHED_PACKAGE_REQUIRED",
+  "independentSourceOrReleaseAuthority": false,
+  "pendingReviewB": "SENT_RESPONSE_UNVERIFIED_PRESERVED_NO_RESEND",
+  "nextTask": "Build and qualify an exact matching development package; run one bounded no-send diagnosis of the existing receipt. Do not claim that the offline error-card reproduction proves the live failure cause."
+}

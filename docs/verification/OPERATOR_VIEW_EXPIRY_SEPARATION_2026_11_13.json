@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-13T02:08:01.347763+00:00",
+  "sourceBaseCommit": "1d6b224e00a10198cdf016ac2182387f4052861c",
+  "qualification": "PRIVATE_OPERATOR_DIAGNOSTIC_SOURCE_TESTED_NOT_OPERATOR_LIVE_ACCEPTANCE",
+  "defect": "The previous read-only comparison rejected expired signing proposals before observing root identity, preventing the reconciliation required before fresh signing inputs.",
+  "correction": "Observe the exact retained root/account/three-file facts independently of expiry; classify an expired match separately and keep readyForPurposeSigning false. A successful comparison is never bootstrap authorization.",
+  "originalComparisonSha256": "d84985f80548f34464dfb91e5908154e2c46d5cb0b0c75251bf2106286c0ed00",
+  "successorComparisonSha256": "60a4e4b50fbeb1a603646bc0ddeb6de2e434f642147ebd1c40fe12aa28f6a7f5",
+  "originalComparisonPreserved": true,
+  "proposalBytesPreserved": true,
+  "proposalExpiresUtc": "2026-11-12T04:33:04Z",
+  "proposalStatus": "EXPIRED_DO_NOT_SIGN",
+  "tests": {
+    "observedUtc": "2026-11-13T02:05:22.4602819+00:00",
+    "executionExitCode": 0,
+    "casesPassed": 8,
+    "parserErrors": 0,
+    "evidenceOrigin": "Recorded local exec stdout, chunk fd37e3; no native reader invoked.",
+    "testScriptSha256": "ee1ed7b266068f68f41dd70d5eec8fce3cd9bc380054fe8fe72b1aa2f8293d3b",
+    "coverage": [
+      "fresh/expired matching and mismatching observations",
+      "unproven observation always refused",
+      "expired proposal never signable",
+      "expiry observed before native comparison without early expiry refusal"
+    ],
+    "operatorEnvironmentQualified": false
+  },
+  "retainedProtections": [
+    "elevated intended account",
+    "same-buffer input SHA verification",
+    "original root identity",
+    "all three original file observations",
+    "native revalidation",
+    "fixed pinned native helpers",
+    "bounded redacted output"
+  ],
+  "sourceBuildRequired": false,
+  "protectedInstallationActions": 0,
+  "browserStarts": 0,
+  "serviceStarts": 0,
+  "messagesSent": 0,
+  "nativeStateQueries": 0,
+  "keysReadOrGenerated": 0,
+  "signatureChecksChanged": false,
+  "policyEnrolled": false,
+  "freshProposalGenerated": false,
+  "installedAcceptance": false,
+  "nextAction": "Run the expiry-aware read-only comparison once in the intended elevated PowerShell 7 environment. On a match, revalidate state/artifacts and prepare fresh inputs. On refusal/mismatch preserve state and reconcile the exact result."
+}

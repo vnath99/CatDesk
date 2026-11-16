@@ -1,5 +1,251 @@
-param([switch]$BuildOnly, [switch]$RebuildGui)
+param(
+    [switch]$BuildOnly,
+    [switch]$RebuildGui,
+    [switch]$Bootstrap,
+    [switch]$Execute,
+    [string]$QualifiedHost,
+    [string]$ExpectedHostSha256,
+    [string]$ApprovalFile,
+    [string]$ExpectedApprovalSha256,
+    [string]$ExpectedPublicKeySha256
+)
 $ErrorActionPreference = 'Stop'
+
+# First enrollment remains an explicit operator operation. The frozen native
+# binary performs signature, elevated-owner, existing-state, create-only and
+# security checks. This wrapper neither creates trust nor edits protected data.
+# Without -Execute it invokes only the bounded, read-only native preflight.
+if ($Bootstrap) {
+    if ($BuildOnly -or $RebuildGui -or $PSVersionTable.PSVersion.Major -lt 7) {
+        throw 'WAKE_BOOTSTRAP_POWERSHELL_7_AND_EXCLUSIVE_MODE_REQUIRED'
+    }
+    foreach ($value in @($ExpectedHostSha256, $ExpectedApprovalSha256, $ExpectedPublicKeySha256)) {
+        if ($value -cnotmatch '^[a-f0-9]{64}$') { throw 'WAKE_BOOTSTRAP_FROZEN_IDENTITY_REQUIRED' }
+    }
+    foreach ($path in @($QualifiedHost, $ApprovalFile)) {
+        if (-not [IO.Path]::IsPathFullyQualified($path) -or
+            $path -cnotmatch '^[A-Za-z]:\\' -or
+            $path -match '[\x00-\x1f]') {
+            throw 'WAKE_BOOTSTRAP_FROZEN_FILE_REQUIRED'
+        }
+    }
+    if (-not ('CatDeskWakeBootstrapPathPinV1' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+public sealed class CatDeskWakeBootstrapPathPinV1 : IDisposable {
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Info {
+        public uint Attributes, CreationLow, CreationHigh, AccessLow, AccessHigh;
+        public uint WriteLow, WriteHigh, Volume, SizeHigh, SizeLow, Links, IndexHigh, IndexLow;
+    }
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true, ExactSpelling=true)]
+    private static extern SafeFileHandle CreateFileW(string path, uint access, uint share,
+        IntPtr security, uint disposition, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", SetLastError=true, ExactSpelling=true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandle(SafeFileHandle file, out Info info);
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true, ExactSpelling=true)]
+    private static extern uint GetFinalPathNameByHandleW(SafeFileHandle file, StringBuilder path, uint size, uint flags);
+    private readonly List<SafeFileHandle> parents = new List<SafeFileHandle>();
+    private readonly List<Info> parentInfo = new List<Info>();
+    private FileStream stream;
+    private Info leafInfo;
+    private bool disposed;
+    public string CanonicalFilePath { get; private set; }
+    public FileStream Stream { get { if (disposed) throw new ObjectDisposedException("PathPin"); return stream; } }
+    public long Length { get { return Stream.Length; } }
+    private CatDeskWakeBootstrapPathPinV1() { }
+    private static IOException Failure(string reason) { return new IOException("WAKE_BOOTSTRAP_FROZEN_"+reason); }
+    private static SafeFileHandle OpenHandle(string path, bool directory) {
+        // LIST_DIRECTORY makes directory sharing effective; attribute-only access is separate.
+        // A retained child also keeps the directory nonempty, which refuses mount-point replacement.
+        var handle = CreateFileW(path, directory ? 0x00120081u : 0x80000000u, 1,
+            IntPtr.Zero, 3, 0x00200000u | (directory ? 0x02000000u : 0u), IntPtr.Zero);
+        if (handle.IsInvalid) {
+            int code = Marshal.GetLastWin32Error(); handle.Dispose();
+            throw Failure(code == 32 || code == 33 ? "PATH_BUSY" : "PATH_UNAVAILABLE");
+        }
+        return handle;
+    }
+    private static Info Inspect(SafeFileHandle handle, bool directory) {
+        Info info;
+        if (!GetFileInformationByHandle(handle, out info)) throw Failure("PATH_UNAVAILABLE");
+        if ((info.Attributes & 0x400) != 0) throw Failure("REPARSE_POINT_REFUSED");
+        if (((info.Attributes & 0x10) != 0) != directory || info.Volume == 0 ||
+            (info.IndexHigh == 0 && info.IndexLow == 0) || (!directory && info.Links != 1))
+            throw Failure("FILE_REQUIRED");
+        return info;
+    }
+    private static bool Same(Info a, Info b, bool directory) {
+        return a.Volume == b.Volume && a.IndexHigh == b.IndexHigh && a.IndexLow == b.IndexLow &&
+            (directory || (a.Links == b.Links && a.SizeHigh == b.SizeHigh && a.SizeLow == b.SizeLow &&
+                          a.WriteLow == b.WriteLow && a.WriteHigh == b.WriteHigh));
+    }
+    private static string FinalPath(SafeFileHandle handle) {
+        var buffer = new StringBuilder(32768);
+        uint length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Capacity, 0);
+        if (length == 0 || length >= buffer.Capacity) throw Failure("PATH_UNAVAILABLE");
+        string value = buffer.ToString();
+        if (value.StartsWith(@"\\?\", StringComparison.Ordinal)) value = value.Substring(4);
+        if (value.Length < 3 || value[1] != ':' || value[2] != '\\') throw Failure("PATH_INVALID");
+        return Path.GetFullPath(value);
+    }
+    public static CatDeskWakeBootstrapPathPinV1 Open(string path) {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) throw Failure("PATH_PLATFORM_REQUIRED");
+        if (String.IsNullOrEmpty(path) || path.Length > 2048 || path.Length < 4 ||
+            !Char.IsLetter(path[0]) || path[1] != ':' || path[2] != '\\') throw Failure("PATH_INVALID");
+        foreach (char c in path) if (Char.IsControl(c)) throw Failure("PATH_INVALID");
+        string canonical;
+        try { canonical = Path.GetFullPath(path); } catch { throw Failure("PATH_INVALID"); }
+        if (!String.Equals(path, canonical, StringComparison.OrdinalIgnoreCase)) throw Failure("PATH_INVALID");
+        string root = Path.GetPathRoot(canonical);
+        string[] components = canonical.Substring(root.Length).Split('\\');
+        foreach (string part in components) if (part.Length == 0 || part == "." || part == ".." ||
+            part.EndsWith(".", StringComparison.Ordinal) || part.EndsWith(" ", StringComparison.Ordinal) ||
+            part.IndexOf(':') >= 0) throw Failure("PATH_INVALID");
+        var pin = new CatDeskWakeBootstrapPathPinV1();
+        SafeFileHandle leaf = null;
+        try {
+            string current = root;
+            var parent = OpenHandle(current, true); pin.parents.Add(parent); pin.parentInfo.Add(Inspect(parent, true));
+            for (int i=0; i<components.Length-1; i++) {
+                current = Path.Combine(current, components[i]);
+                parent = OpenHandle(current, true); pin.parents.Add(parent); pin.parentInfo.Add(Inspect(parent, true));
+            }
+            leaf = OpenHandle(canonical, false); pin.leafInfo = Inspect(leaf, false);
+            if (!String.Equals(FinalPath(leaf), canonical, StringComparison.OrdinalIgnoreCase)) throw Failure("PATH_CHANGED");
+            pin.CanonicalFilePath = canonical;
+            pin.stream = new FileStream(leaf, FileAccess.Read, 4096, false); leaf = null;
+            pin.Revalidate(); return pin;
+        } catch { if (leaf != null) leaf.Dispose(); pin.Dispose(); throw; }
+    }
+    public void Revalidate() {
+        if (disposed) throw new ObjectDisposedException("PathPin");
+        for (int i=0; i<parents.Count; i++) if (!Same(parentInfo[i], Inspect(parents[i], true), true)) throw Failure("PATH_CHANGED");
+        if (!Same(leafInfo, Inspect(stream.SafeFileHandle, false), false) ||
+            !String.Equals(FinalPath(stream.SafeFileHandle), CanonicalFilePath, StringComparison.OrdinalIgnoreCase))
+            throw Failure("PATH_CHANGED");
+    }
+    public void Dispose() {
+        if (disposed) return; disposed=true;
+        try { if (stream != null) stream.Dispose(); }
+        finally { for (int i=parents.Count-1; i>=0; i--) parents[i].Dispose(); }
+    }
+}
+'@
+    }
+    $imagePin = $null
+    $approvalPin = $null
+    $native = $null
+    try {
+        try {
+            $imagePin = [CatDeskWakeBootstrapPathPinV1]::Open($QualifiedHost)
+            $approvalPin = [CatDeskWakeBootstrapPathPinV1]::Open($ApprovalFile)
+        } catch {
+            $code = $_.Exception.GetBaseException().Message
+            if ($code -cmatch '^WAKE_BOOTSTRAP_FROZEN_[A-Z_]+$') { throw $code }
+            throw 'WAKE_BOOTSTRAP_FROZEN_PATH_UNAVAILABLE'
+        }
+        if ($imagePin.Length -le 0 -or $imagePin.Length -gt 80MB -or
+            $approvalPin.Length -le 0 -or $approvalPin.Length -gt 64KB) {
+            throw 'WAKE_BOOTSTRAP_FROZEN_FILE_SIZE_INVALID'
+        }
+        $imageHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($imagePin.Stream)).ToLowerInvariant()
+        $approvalHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($approvalPin.Stream)).ToLowerInvariant()
+        if ($imageHash -cne $ExpectedHostSha256 -or $approvalHash -cne $ExpectedApprovalSha256) {
+            throw 'WAKE_BOOTSTRAP_FROZEN_FILE_CHANGED'
+        }
+        if (-not ('CatDeskWakeBootstrapBoundedOutputV1' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
+public sealed class CatDeskWakeBootstrapOutputV1 {
+    public string Text;
+    public bool Overflow;
+}
+public static class CatDeskWakeBootstrapBoundedOutputV1 {
+    public static async Task<CatDeskWakeBootstrapOutputV1> Drain(StreamReader reader, int limit) {
+        var buffer = new char[1024];
+        var text = new StringBuilder();
+        bool overflow = false;
+        int count;
+        while ((count = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) != 0) {
+            int keep = System.Math.Min(count, limit - text.Length);
+            if (keep > 0) text.Append(buffer, 0, keep);
+            if (count > keep) overflow = true;
+        }
+        return new CatDeskWakeBootstrapOutputV1 { Text = text.ToString(), Overflow = overflow };
+    }
+}
+'@
+        }
+        $info = [Diagnostics.ProcessStartInfo]::new()
+        $info.FileName = $imagePin.CanonicalFilePath
+        $info.UseShellExecute = $false
+        $info.CreateNoWindow = $true
+        $info.RedirectStandardOutput = $true
+        $info.RedirectStandardError = $true
+        $action = if ($Execute) { 'bootstrap' } else { 'bootstrap-preflight' }
+        foreach ($argument in @('install-broker', $action, '--approval-file', $approvalPin.CanonicalFilePath,
+                '--expected-approval-sha256', $ExpectedApprovalSha256,
+                '--expected-public-key-sha256', $ExpectedPublicKeySha256)) {
+            $info.ArgumentList.Add($argument)
+        }
+        $imagePin.Revalidate()
+        $approvalPin.Revalidate()
+        $native = [Diagnostics.Process]::Start($info)
+        $stdout = [CatDeskWakeBootstrapBoundedOutputV1]::Drain($native.StandardOutput, 65536)
+        $stderr = [CatDeskWakeBootstrapBoundedOutputV1]::Drain($native.StandardError, 4096)
+        if (-not $native.WaitForExit(90000)) {
+            # No retry: SCM/file creation may already have happened. The native
+            # coordinator starts no service or descendant; partial state is
+            # retained for reviewed recovery instead of deletion or overwrite.
+            $native.Kill()
+            if (-not $native.WaitForExit(5000)) { throw 'WAKE_BOOTSTRAP_NATIVE_EXIT_UNPROVEN_NO_RETRY' }
+            throw 'WAKE_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RETRY'
+        }
+        if (-not $stdout.Wait(2000) -or -not $stderr.Wait(2000)) {
+            throw 'WAKE_BOOTSTRAP_READBACK_UNKNOWN_NO_RETRY'
+        }
+        $output = $stdout.Result.Text
+        $errorOutput = $stderr.Result.Text
+        if ($stdout.Result.Overflow -or $stderr.Result.Overflow) {
+            throw 'WAKE_BOOTSTRAP_READBACK_INVALID_NO_RETRY'
+        }
+        if ($native.ExitCode -ne 0) {
+            if ($errorOutput.Trim() -cmatch '^[A-Z][A-Z0-9_]{1,127}$') { throw $errorOutput.Trim() }
+            throw 'WAKE_BOOTSTRAP_NATIVE_REFUSED_NO_RETRY'
+        }
+        $result = $output | ConvertFrom-Json -ErrorAction Stop
+        if ($null -eq $result) { throw 'WAKE_BOOTSTRAP_READBACK_INVALID_NO_RETRY' }
+    } finally {
+        try {
+            if ($null -ne $native) {
+                try {
+                    if (-not $native.HasExited) {
+                        $native.Kill()
+                        if (-not $native.WaitForExit(5000)) { throw 'WAKE_BOOTSTRAP_NATIVE_EXIT_UNPROVEN_NO_RETRY' }
+                    }
+                } finally { $native.Dispose() }
+            }
+        } finally {
+            try { if ($null -ne $approvalPin) { $approvalPin.Dispose() } }
+            finally { if ($null -ne $imagePin) { $imagePin.Dispose() } }
+        }
+    }
+    $output.Trim()
+    return
+}
+if ($Execute -or $QualifiedHost -or $ExpectedHostSha256 -or $ApprovalFile -or
+    $ExpectedApprovalSha256 -or $ExpectedPublicKeySha256) {
+    throw 'WAKE_BOOTSTRAP_EXPLICIT_MODE_REQUIRED'
+}
 
 $wakeSource = $PSScriptRoot
 $repoSource = Split-Path -Parent $wakeSource

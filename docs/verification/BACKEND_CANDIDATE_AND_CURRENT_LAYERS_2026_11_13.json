@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-13T02:38:26.763403+00:00",
+  "sourceCommit": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+  "sourceTree": "b3cefeeb74dc0e8763b50adb5929d35cdb94857c",
+  "stage": "BUILT_UNSIGNED_REVIEW_INPUT_NOT_INSTALLED",
+  "sourceTestEvidence": "GIT_CLEANUP_ERROR_PRIORITY_2026_11_13.json",
+  "artifact": {
+    "name": "catdesk.exe",
+    "sha256": "625feffdd31dfaa33a22c15f91b4b5d1560074be71eedcc0586e771b79896ab1",
+    "byteLength": 39918592,
+    "peMachine": "AMD64"
+  },
+  "build": {
+    "startedUtc": "2026-11-13T02:25:21.9049125+00:00",
+    "finishedUtc": "2026-11-13T02:32:22.5504835+00:00",
+    "elapsedSeconds": 420.6468292,
+    "profile": "release",
+    "locked": true,
+    "offline": true,
+    "jobs": 1,
+    "ownerSha256": "2f4069f96af88367c7f6c29ef49ba386252fbf46aaf0657f9b26b90357b896b1",
+    "resultSha256": "36ed056a85282441e7cf90c426fdecd152a203857332d2bed5f68216d7495fa0",
+    "provenanceSha256": "1cd094695539787833f87dd19173b353c5f8e5bb1f3e2c9bf952ab17ba2abef2",
+    "sourceInputCount": 476,
+    "compilerSourceInputCount": 217,
+    "dependencyEvidenceSha256": "cbdf83b42c544f1c3cae416587074a6a02855f8d38894501b8bb6f5cc404ba50",
+    "allInputsRehashed": true,
+    "compilerProcessesRemaining": 0,
+    "ownedProcessesExited": true
+  },
+  "reviewStatus": {
+    "integratorInspectionCompleted": true,
+    "canonicalBackendIndependentFullSourceReview": false,
+    "producerAttested": false,
+    "promotionAuthorized": false
+  },
+  "currentInstalledDiagnosis": {
+    "operation": "catdesk.ps1 diagnose",
+    "startedUtc": "2026-11-13T02:33:42.7231967+00:00",
+    "finishedUtc": "2026-11-13T02:33:50.1587866+00:00",
+    "ownerSha256": "700e1ba78f374b131dc7fc5c058ac24542174827f994365ae94b77935ee7213e",
+    "logSha256": "83706361d9ebef8fca88c8e0ef6df14e7c2eaf3aca2cf600d8dfddbd0387bbf0",
+    "result": {
+      "command": "diagnose",
+      "state": "DEGRADED",
+      "primaryLayer": "LOCAL_DAEMON",
+      "nextAction": "RUN_RECOVER",
+      "layers": [
+        {
+          "layer": "LIFECYCLE_ENGINE",
+          "state": "READY",
+          "gate": "READY"
+        },
+        {
+          "layer": "CANONICAL_RELEASE",
+          "state": "READY",
+          "gate": "READY"
+        },
+        {
+          "layer": "RECOVERY_AUTHORITY",
+          "state": "NOT_REQUIRED",
+          "gate": "NOT_REQUIRED"
+        },
+        {
+          "layer": "LOCAL_MCP_CONFIG",
+          "state": "READY",
+          "gate": "READY"
+        },
+        {
+          "layer": "LOCAL_DAEMON",
+          "state": "FAILED",
+          "gate": "LOCAL_MCP_LISTENER_MISSING"
+        },
+        {
+          "layer": "LOCAL_MCP_PROTOCOL",
+          "state": "NOT_REQUIRED",
+          "gate": "UPSTREAM_FAILED"
+        },
+        {
+          "layer": "WAKE_RUNTIME",
+          "state": "READY",
+          "gate": "READY"
+        },
+        {
+          "layer": "OFFICIAL_RUNTIME",
+          "state": "FAILED",
+          "gate": "RUNTIME_STATUS_NOT_READY"
+        },
+        {
+          "layer": "CODEX_CLI",
+          "state": "READY",
+          "gate": "READY"
+        }
+      ]
+    }
+  },
+  "connector": {
+    "operation": "v5 catdesk_transport_status",
+    "attempts": 1,
+    "exactError": "McpServerError: MCP SSE probe returned 429 from openai.org",
+    "correlationIdReturned": false,
+    "localDaemonStateInferredFrom429": false
+  },
+  "protectedInstallationChanged": false,
+  "wakeArtifactsRebuilt": false,
+  "candidateExecuted": false,
+  "servicesStarted": 0,
+  "recoveryCommands": 0,
+  "browserStarts": 0,
+  "originalRequestsReplayed": false,
+  "installedAcceptance": false,
+  "remaining": [
+    "Independent canonical-backend/direct-task source review and existing producer/release authority for this candidate.",
+    "Qualified bounded startup/health/stop of the existing trusted installed backend; current canonical identity and ownership gates must pass.",
+    "Existing official-owner qualification before any bounded reconnect; no replacement tunnel or authentication change.",
+    "Operator-view reconciliation before fresh one-time Wake bootstrap/signing inputs and enrollment.",
+    "Installed unsigned-update/rollback qualification and actual Web edit/checkpoint/verification/self-Wake plus multi-project isolation."
+  ]
+}

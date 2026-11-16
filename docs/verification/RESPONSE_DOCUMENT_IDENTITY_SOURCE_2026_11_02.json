@@ -1,0 +1,59 @@
+{
+  "observedUtc": "2026-11-02T20:58:40.829995+00:00",
+  "classification": "TESTED_SOURCE_NOT_INSTALLED",
+  "baseSourceCommit": "3f870770daa687228182f4fed4461bc6a096188d",
+  "sourceInputs": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "gitBlob": "017782f744b1022218d104ece2efafffea1666f7",
+      "sha256": "2504ba90240e2c3cce19fafb1172d3aca183d7130c737dfadd8de2a3dbf91bd3"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "gitBlob": "50529282af7ad930d02cfb7e83254d7d74e87731",
+      "sha256": "69f86bd0b822cf101c3967c716ef31875ea4a74b32148211ef2f349b20dd2018"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "gitBlob": "9279c23dcc20982b36221ec43aa113474e04d5ec",
+      "sha256": "3357fbf094a693e1b268e27d96f6607fec34ce21a0fb35f285cf2d1296ad3850"
+    }
+  ],
+  "reproduction": {
+    "selectedCases": 8,
+    "passed": 5,
+    "failed": 2,
+    "errors": 1,
+    "originalThreeRegressionBodiesUnchanged": true
+  },
+  "verification": {
+    "currentDomPassed": 72,
+    "currentDomSeconds": 91.583,
+    "adapterPassed": 44,
+    "adapterSeconds": 13.815,
+    "distinctCases": 116,
+    "strictAllTargetClippy": "PASS",
+    "fmt": "PASS",
+    "diffCheck": "PASS"
+  },
+  "behavior": [
+    "Completion observation checks evaluated location.href rather than cached driver URL metadata.",
+    "Exact registered conversation rules remain authoritative; permitted canonical/project URL aliases retain existing behavior.",
+    "Document identity is rechecked after response reads and before translating response-probe failures.",
+    "Unreadable document identity fails closed with fixed diagnostic codes; no private browser exception text is returned."
+  ],
+  "browserStarts": 0,
+  "messagesSent": 0,
+  "responseRecoveryClicks": 0,
+  "projectBindingChanges": 0,
+  "productionChanges": 0,
+  "reviewOrReleaseAuthorityCreated": false,
+  "pendingReviewB": "SENT_BODY_VERIFIED_PARTIAL_COORDINATOR_OPEN_TIMER_INCOMPLETE_NO_RESEND",
+  "liveCauseEstablished": false,
+  "remainingAcceptance": [
+    "Qualify a matching immutable development package",
+    "One bounded no-send observation of the retained exact-event response",
+    "Genuine independent current-source review before protected release",
+    "Installed two independent ChatGPT Web coding callers and unattended recovery"
+  ]
+}

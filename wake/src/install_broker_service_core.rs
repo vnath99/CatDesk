@@ -106,8 +106,8 @@ pub fn inspect_one_connected_submission_read_only(
     // stage, independent fixed GitHub fetcher, or phase transaction here.
     Ok(signed_readback(
         &approval,
-        frame.operator_evidence().operator_sid_sha256(),
-        frame.operator_evidence().session_id(),
+        frame.operator_evidence()?.operator_sid_sha256(),
+        frame.operator_evidence()?.session_id(),
     ))
 }
 

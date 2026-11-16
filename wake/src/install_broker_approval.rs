@@ -8,6 +8,9 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+#[path = "install_broker_same_state_approval.rs"]
+pub mod same_state;
+
 const DOMAIN: &[u8] = b"CatDeskWakeInstallApprovalV1\0";
 const MAX_ENVELOPE_BYTES: usize = 16 * 1024;
 const MAX_APPROVAL_AGE_SECONDS: u64 = 7 * 24 * 60 * 60;

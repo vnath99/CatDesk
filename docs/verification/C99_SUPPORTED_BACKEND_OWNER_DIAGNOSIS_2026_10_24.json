@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C99_SUPPORTED_OWNER_AND_READ_ONLY_RECOVERY_DIAGNOSIS",
+  "observedUtc": "2026-10-24T12:55:12.7497853+00:00",
+  "recordedUtc": "2026-10-24T12:58:21.9283297+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "d9f739ff2bfd0b892fc2230b98007e95514bc4ae",
+  "branch": "codex/web-rollover-oct17",
+  "appSourceCommit": "925ee01029b41c87f22ddbdf02ef47090836b9f1",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "READ_ONLY_HOST_DIAGNOSIS_AND_SOURCE_TRACE_NOT_RECOVERY_ACCEPTANCE",
+  "owner": {
+    "publicEntryPoint": "canonical-workspace/catdesk.ps1",
+    "localLauncher": "scripts/start-catdesk-stack.ps1",
+    "localImage": "fingerprinted target/release/catdesk.exe --catdesk-daemon",
+    "optionalSupervisor": "scripts/catdesk-autostart-supervisor.ps1",
+    "supervisorScope": "PER_USER_EXACT_WORKSPACE_TASK_OR_RUN_ENTRY_SINGLETON",
+    "supervisorInvokes": "PUBLIC_STATUS_AND_GUARDED_RECOVER",
+    "externalOfficialRuntime": "SEPARATELY_OWNED_NOT_STARTED_BY_THIS_DIAGNOSIS",
+    "selectedDevelopmentImage": "NOT_CANONICAL_SERVING_AUTHORITY"
+  },
+  "currentDiagnosis": {
+    "state": "ACTION_REQUIRED",
+    "primaryLayer": "RECOVERY_AUTHORITY",
+    "nextAction": "OPERATOR_ATTENTION",
+    "layers": [
+      {
+        "layer": "LIFECYCLE_ENGINE",
+        "state": "READY",
+        "gate": "READY"
+      },
+      {
+        "layer": "CANONICAL_RELEASE",
+        "state": "FAILED",
+        "gate": "CANONICAL_IDENTITY_INTERNAL"
+      },
+      {
+        "layer": "RECOVERY_AUTHORITY",
+        "state": "FAILED",
+        "gate": "LKG_AUTHORITY_MISSING"
+      },
+      {
+        "layer": "CODEX_CLI",
+        "state": "READY",
+        "gate": "READY"
+      }
+    ],
+    "canonicalImageSha256": "9a8f4ebf6ea57cbb61efaa12e8afa54d18b8db7374b9884067325bc84565568c",
+    "sidecarExpectedSha256": "a264c8dc85fa55311e74114158f4f4cd598f6e9e9d0a6ca535e14d18aa649939",
+    "canonicalPairMatches": false,
+    "independentHashComparison": "MISMATCH",
+    "diagnosticGateCaveat": "PUBLIC_FACADE_REPORTED_CANONICAL_IDENTITY_INTERNAL_NOT_THE_MORE_SPECIFIC_HASH_MISMATCH_LABEL",
+    "autostartState": "AUTOSTART_ENABLED",
+    "existingSupervisorMutexObserved": false,
+    "supervisorProcessLiveness": "NOT_INDEPENDENTLY_INVENTORIED_IN_C99",
+    "codexPrerequisites": "PUBLIC_DIAGNOSIS_READY_NO_MODEL_TURN_OR_SESSION_HANDOFF"
+  },
+  "dependencyEvidence": {
+    "priorOfficialStatusUtc": "2026-10-24T10:15:51.3939547Z",
+    "priorOfficialRuntime": "STOPPED_PROCESS_FALSE_HEALTH_FALSE_READY_FALSE",
+    "priorLocalInventoryUtc": "2026-10-24T10:17:08Z",
+    "configuredLocalPort": 3200,
+    "priorListenerCount": 0,
+    "priorDaemonCount": 0,
+    "priorConnectorUtc": "2026-10-24T10:23:01Z",
+    "priorConnectorResult": "HTTP_429",
+    "newConnectorCalls": 0,
+    "causality": "STOPPED_LOCAL_AND_OFFICIAL_COMPONENTS_ARE_DISTINCT_FROM_THE_UNEXPLAINED_CONNECTOR_429",
+    "restorationGuarantees429Resolution": false
+  },
+  "boundedDiagnostics": {
+    "commands": [
+      {
+        "ownerExited": true,
+        "command": "diagnose",
+        "maximumSeconds": 20,
+        "action": null,
+        "exitCode": 0,
+        "timedOut": false
+      },
+      {
+        "ownerExited": true,
+        "command": "autostart",
+        "maximumSeconds": 20,
+        "action": "status",
+        "exitCode": 0,
+        "timedOut": false
+      }
+    ],
+    "outerMaximumSeconds": 60,
+    "outerExitCode": 0,
+    "outerTimedOut": false,
+    "outerTerminationFailed": false,
+    "naturalChildExits": true,
+    "firstSandboxAttempt": "FAILED_BEFORE_FACADE_CALLS_WRONG_SANDBOX_USER_PROFILE_TERMINAL",
+    "successfulRetry": "SAME_READ_ONLY_COMMANDS_ACTUAL_WINDOWS_ACCOUNT",
+    "sourceTestsRerun": 0,
+    "reason": "NO_PRODUCT_SOURCE_CHANGED"
+  },
+  "preservation": {
+    "realRecordsCompared": 306,
+    "realRecordsChanged": 0,
+    "canonicalAndConfigPinsCompared": 7,
+    "canonicalAndConfigPinsChanged": 0,
+    "bindingsAndHistoriesChanged": false,
+    "nativeSessionActions": 0,
+    "runtimeLifecycleActions": 0,
+    "browserWakeRecurringStarts": 0,
+    "messagesSent": 0,
+    "completedCanariesReplayed": 0,
+    "profilesOrAuthenticationChanged": false,
+    "replacementTunnelsCreated": 0,
+    "repositoryVisibilityChanged": false,
+    "repositoryVisibility": "PUBLIC_PREVIOUS_EXPLICIT_CATDESK_AUTHORIZATION"
+  },
+  "operator": {
+    "restorationDeferredUntil": "2026-10-27",
+    "timeZone": "America/New_York",
+    "automaticActionScheduled": false,
+    "readOnlyCommand": "./catdesk.ps1 diagnose",
+    "conditionalRecoveryCommand": "./catdesk.ps1 recover",
+    "currentRecoveryCommandEligible": false,
+    "prerequisites": [
+      "OWNER_REVIEWED_RELEASE_PAIR_OR_VALID_REVIEWED_LKG_RECOVERY_AUTHORITY",
+      "FRESH_CANONICAL_DIAGNOSIS",
+      "EXPLICIT_ALLOWED_STARTUP_SCOPE_INCLUDING_POSSIBLE_WAKE_AND_GUI",
+      "EXTERNAL_OFFICIAL_RUNTIME_OWNER_ACTION_IF_STILL_STOPPED"
+    ],
+    "doNot": [
+      "EDIT_FINGERPRINT_TO_MATCH_IMAGE",
+      "COPY_DEVELOPMENT_IMAGE_OVER_CANONICAL",
+      "ENABLE_AUTOSTART_OR_START_PROTECTED_SUPERVISOR",
+      "RUN_INTERNAL_BOOTSTRAP_AS_REPLACEMENT",
+      "ASSUME_RECOVER_FIXES_429"
+    ]
+  },
+  "acceptance": {
+    "actualParallelChatgptWebCodingBC": "OPEN_LIVE_DEPENDENCY",
+    "completedRolloverProof": "PRESERVED_NOT_REPLAYED",
+    "selectedDevelopment": "V76_STOPPED_UNCHANGED",
+    "protectedRuntime": "UNQUALIFIED",
+    "unattended": "NOT_ACTIVATED",
+    "exactRemoteCi": "UNVERIFIED_PRIOR_ZERO_RUNS_AND_CHECKS",
+    "fullMilestone": "OPEN"
+  },
+  "nextExecutableTask": "Owner review of canonical release authority on or after October 27; once the allowed serving path and connector are available, run the remaining bounded actual two-conversation scoped coding qualification. Continue only independently identified product gaps; no repeated unchanged dependency probes."
+}

@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "sources",
+  "offset": 16,
+  "entries": [
+    {
+      "path": "src/daemon_reload.rs",
+      "baseBlob": "778ac587052d4944d31fd42b643133df59efcf7a",
+      "targetBlob": "9bb9fd36a4ee8fa99dd5f38bb7ed79d3a57ced9d",
+      "patchSha256": "b5e627d8e70c3e402ab6601c53c5b65aa2aef0c53e220d6eca6206825c9eb3e0",
+      "startByte": 142576,
+      "endByte": 147634
+    },
+    {
+      "path": "src/delegated/autonomy_projects.rs",
+      "baseBlob": "dc52d9fd82990d9796985cd6cf5bf49ffb86a07a",
+      "targetBlob": "40fa6a8f4bf6b987c0ae25618c307752db813968",
+      "patchSha256": "5d78cc7975a8e2aa92c82f1bfb6a861b314e71a3ddc6f66fb53f11b572d98e87",
+      "startByte": 147634,
+      "endByte": 154762
+    },
+    {
+      "path": "src/delegated/autonomy_runtime.rs",
+      "baseBlob": "fe20b2153735e11723db6809653196c532f335e5",
+      "targetBlob": "62da648421f5ac77013609a0d07bfffa55a42e22",
+      "patchSha256": "fcca12118b9b3ad2dc57f4d031c26551eac00080f77aa81912142fc4222bdcf3",
+      "startByte": 154762,
+      "endByte": 166628
+    },
+    {
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "baseBlob": "b8cc78fbce037b08c0abf21e8e2eaa84e732788f",
+      "targetBlob": "f30ffebb20206435d1beba279f191394fb75a080",
+      "patchSha256": "c07ad8fa65bb4d87c0e17e803a4af24d3b44d9a6fbf6e9aa3d38337e0c2b2a33",
+      "startByte": 166628,
+      "endByte": 169031
+    },
+    {
+      "path": "src/delegated/codex_app_server.rs",
+      "baseBlob": "ec101f20098e88d100325b82f61965d9d8de51b2",
+      "targetBlob": "a22414e763e06bad49819dfc4c93827885298b2a",
+      "patchSha256": "b14132aa3aa5f9c11953b4deac5ff8efe042b9949905abd0d36921a99b32a426",
+      "startByte": 169031,
+      "endByte": 171583
+    },
+    {
+      "path": "src/main.rs",
+      "baseBlob": "78f4845e6618f1db4aadeb4b04e23ed1330cd27b",
+      "targetBlob": "cc5c5476b9c5be1cba0d0617356e911d71294dc9",
+      "patchSha256": "10c62a8081c93cd5b9277037c780826fdc654347d855f79ecbae3a28bc49fd45",
+      "startByte": 171583,
+      "endByte": 173517
+    },
+    {
+      "path": "src/mcp.rs",
+      "baseBlob": "379d812a3bc84e9a8b62382c02bb3ffcecaa9940",
+      "targetBlob": "495f67951806e23f86fc82a6fcb53d53f6c74f11",
+      "patchSha256": "5fd33006d4e8812094327e663dea4bb5ef302e509d1543c57ade423baba9e53d",
+      "startByte": 173517,
+      "endByte": 197751
+    },
+    {
+      "path": "src/operator_codex_cli.rs",
+      "baseBlob": "e315f6cc97e845f59ca8e85037cf734cd6352ed1",
+      "targetBlob": "e809e394918e9675ac21d4af0a5c348d9fd7e2f2",
+      "patchSha256": "2d7558dce36691048689cab4e5bdaf97084357432bb03a20e8644f84fe389e56",
+      "startByte": 197751,
+      "endByte": 198538
+    }
+  ]
+}

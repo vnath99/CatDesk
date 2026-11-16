@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T09:01:13.505370+00:00",
+  "classification": "ACTUAL_LOCAL_FOUR_REGISTERED_PROJECT_RECEIPT_ACCOUNTING_NOT_NEW_BROWSER_OR_WEB_CODING",
+  "sourceCommit": "60fcf0e0cbd34b5b1f369e94198640691b98c567",
+  "controllerSha256": "741dbb1f95255e6554b7990da831c74a704f59a78dc06da82d06daf2a3db25b9",
+  "controllerRole": "SEPARATE_MATCHED_DEBUG_CONTROLLER_NOT_PRODUCTION_OR_SELECTED_PACKAGE",
+  "maximumSeconds": 180,
+  "elapsedSeconds": 132.641,
+  "owner": {
+    "ExitCode": 0,
+    "TimedOut": false,
+    "TerminationFailed": false
+  },
+  "projects": [
+    {
+      "projectId": "bug-bounty",
+      "recordedReceipts": 2,
+      "alreadyKnownReceiptsBefore": 0,
+      "unconfirmedSkipped": 0,
+      "bodyUnavailableSkipped": 0,
+      "knownDeliveredUserMessages": 2,
+      "beforeObservedTokenProxy": 22059,
+      "afterObservedTokenProxy": 22390,
+      "originalEventsAndPolicyPreserved": true,
+      "idempotentLocalAccounting": true,
+      "providerMessages": 0
+    },
+    {
+      "projectId": "byovd",
+      "recordedReceipts": 5,
+      "alreadyKnownReceiptsBefore": 0,
+      "unconfirmedSkipped": 0,
+      "bodyUnavailableSkipped": 0,
+      "knownDeliveredUserMessages": 5,
+      "beforeObservedTokenProxy": 35356,
+      "afterObservedTokenProxy": 36327,
+      "originalEventsAndPolicyPreserved": true,
+      "idempotentLocalAccounting": true,
+      "providerMessages": 0
+    },
+    {
+      "projectId": "wake2",
+      "recordedReceipts": 9,
+      "alreadyKnownReceiptsBefore": 0,
+      "unconfirmedSkipped": 0,
+      "bodyUnavailableSkipped": 0,
+      "knownDeliveredUserMessages": 9,
+      "beforeObservedTokenProxy": 1530,
+      "afterObservedTokenProxy": 3561,
+      "originalEventsAndPolicyPreserved": true,
+      "idempotentLocalAccounting": true,
+      "providerMessages": 0
+    },
+    {
+      "projectId": "portfoliodesk",
+      "recordedReceipts": 3,
+      "alreadyKnownReceiptsBefore": 0,
+      "unconfirmedSkipped": 0,
+      "bodyUnavailableSkipped": 0,
+      "knownDeliveredUserMessages": 3,
+      "beforeObservedTokenProxy": 1556,
+      "afterObservedTokenProxy": 1572,
+      "originalEventsAndPolicyPreserved": true,
+      "idempotentLocalAccounting": true,
+      "providerMessages": 0
+    }
+  ],
+  "receiptsIndependentlyMatchedToOriginalSentTimestamps": 19,
+  "preservation": {
+    "criticalPinsChecked": 5107,
+    "unchangedCriticalPins": 5103,
+    "expectedContextLedgerChanges": 4,
+    "unexpectedCriticalChanges": 0,
+    "unexpectedContextChanges": 0,
+    "allPriorBaselinesRetained": true,
+    "forensicBaselineIsReleaseAuthority": false,
+    "registryWakeBindingsDeliveriesTimersQueuesHistoriesTaskJournalsAndNativeOwnershipUnchanged": true
+  },
+  "operations": {
+    "browserBackendWakeOfficialOrRecurringStarts": 0,
+    "providerMessages": 0,
+    "taskToolsExecuted": 0,
+    "bindingChanges": 0,
+    "protectedPromotion": false,
+    "hostStopped": true
+  },
+  "acceptance": {
+    "fourRealRegisteredProjectReceiptAccounting": "PASS",
+    "localReplayIdempotence": "PASS",
+    "automaticBackgroundOwner": "NOT_STARTED",
+    "actualSimultaneousBrowserWakeDelivery": "NOT_EXERCISED_THIS_LOCAL_ACCOUNTING_TEST",
+    "newBrowserRetry": "NOT_PERFORMED",
+    "fullNativeTwoWebCoding": "OPEN",
+    "newSourceProductionPromotion": "NOT_PERFORMED"
+  },
+  "sourceEvidence": "OBSERVER_RECEIPT_ACCOUNTING_SOURCE_2026_10_31.json",
+  "goal": "ACTIVE"
+}

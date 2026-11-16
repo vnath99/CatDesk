@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 32,
+  "entries": [
+    {
+      "file": "part-033.diff.txt",
+      "bytes": 8158,
+      "sha256": "d5940d2489e75e47ad939f020953fdc010c063e2b6661e36215dd3d0da55e2cb",
+      "startByte": 260861,
+      "endByte": 269019,
+      "paths": [
+        "src/operator_codex_cli/queue/native_continuation.rs"
+      ]
+    },
+    {
+      "file": "part-034.diff.txt",
+      "bytes": 8190,
+      "sha256": "306f7e1955b3362ac6f80dc9fc60cbbc93751d661687fc5f1651b26d4e8f126e",
+      "startByte": 269019,
+      "endByte": 277209,
+      "paths": [
+        "src/operator_codex_cli/queue/native_continuation.rs"
+      ]
+    },
+    {
+      "file": "part-035.diff.txt",
+      "bytes": 8176,
+      "sha256": "10f8b68a2dcfd9878482fba83d1e15b61fdf85a35659647489588a4ca2f87130",
+      "startByte": 277209,
+      "endByte": 285385,
+      "paths": [
+        "src/operator_codex_cli/queue/native_continuation.rs",
+        "src/operator_codex_cli/queue/native_dispatch.rs"
+      ]
+    },
+    {
+      "file": "part-036.diff.txt",
+      "bytes": 8168,
+      "sha256": "e6e8ac416a39e3e8dcae5e2a0e50d50426c948ee054b11a47e8e90c2d9cfd8e0",
+      "startByte": 285385,
+      "endByte": 293553,
+      "paths": [
+        "src/operator_codex_cli/queue/native_dispatch.rs",
+        "src/operator_codex_cli/queue/owned_native.rs"
+      ]
+    },
+    {
+      "file": "part-037.diff.txt",
+      "bytes": 8186,
+      "sha256": "bc2dc497be088e04bb198bdbcc2e028f899a3f02baa7da253b8d50aa44f42617",
+      "startByte": 293553,
+      "endByte": 301739,
+      "paths": [
+        "src/operator_codex_cli/queue/owned_native.rs"
+      ]
+    },
+    {
+      "file": "part-038.diff.txt",
+      "bytes": 8180,
+      "sha256": "11bff8d930f6b7f7010a6a55b3e8a9ae8cc95ea5ad59e75c285cda074b7b201a",
+      "startByte": 301739,
+      "endByte": 309919,
+      "paths": [
+        "src/operator_codex_cli/queue/owned_native.rs",
+        "src/operator_facade.rs"
+      ]
+    },
+    {
+      "file": "part-039.diff.txt",
+      "bytes": 8189,
+      "sha256": "3afea0278edd755e36d0d571805515e67c902bdcd7e5dca4db6bad612b8079c5",
+      "startByte": 309919,
+      "endByte": 318108,
+      "paths": [
+        "src/operator_facade.rs"
+      ]
+    },
+    {
+      "file": "part-040.diff.txt",
+      "bytes": 8170,
+      "sha256": "9e03efb3b668627cb2caf3820bae610309ed9a9401923dd278d5ced67ba2233b",
+      "startByte": 318108,
+      "endByte": 326278,
+      "paths": [
+        "src/operator_facade.rs",
+        "src/operator_installed_backend.rs"
+      ]
+    }
+  ]
+}

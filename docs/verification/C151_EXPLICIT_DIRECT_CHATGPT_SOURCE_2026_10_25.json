@@ -1,0 +1,418 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C151_EXPLICIT_DIRECT_CHATGPT_CONTRACT_SOURCE",
+  "recordedUtc": "2026-10-25T04:41:18.5413838+00:00",
+  "localDate": "2026-10-25_America_New_York",
+  "branch": "codex/web-rollover-oct17",
+  "sourceBaseCommit": "5e58fc0dd68fbe2193b40f471c0ca894c1edb235",
+  "sourceQualification": "SIX_MODIFIED_FILES_IDENTIFIED_BY_RAW_HASH_PINS",
+  "sourcePins": [
+    {
+      "path": "src/delegated/autonomous_contract.rs",
+      "sha256": "6f3948c4ed62581cb1e2234ac9992843fbce104196e5cb4804420263f5f6208f"
+    },
+    {
+      "path": "src/delegated/autonomous_controller.rs",
+      "sha256": "d821e3348d09deddcd54922f3ee6c680ad450002490ca69f2ebc702ea107c563"
+    },
+    {
+      "path": "src/delegated/autonomy_runtime.rs",
+      "sha256": "9cce84cdbc32e7886bb8e21846b9224c4de1f8bfa5244533e3c4df7c8c11c9cf"
+    },
+    {
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "sha256": "f4661055c5b6504378fd830909140c6f689781617cd5c347611466dd55878790"
+    },
+    {
+      "path": "src/delegated/autonomy_accounting.rs",
+      "sha256": "0ebf8d85e24dc9c4078bff0244c5acd43412e1b902ca5995e1b3316c876c5e03"
+    },
+    {
+      "path": "src/delegated/autonomy_state.rs",
+      "sha256": "06e638484460ea3e4f43dc705b1a28017ea1b119600cd324a93bcb820daf21d5"
+    }
+  ],
+  "implementation": {
+    "plannerGate": "EXISTING_PUBLIC_ESCALATION_AND_REPLY",
+    "primaryModel": "conversation-selected",
+    "routineModel": "none",
+    "baselineRecovery": "IMMUTABLE_BASELINE_REUSED_BEFORE_OWNERSHIP",
+    "approval": "EXACT_CONTRACT_HASH_AT_CLAIM_AND_COMPLETION",
+    "graph": "DEPENDENCY_READY_TASK_WITH_FRESH_BASELINE_AND_REMAINING_BUDGET",
+    "existingRegistryAndReviewProducerReused": true,
+    "lease": "FRESH_VERIFICATION_REQUIRES_VALID_LEASE_PASSED_CHECKPOINT_RECOVERY_RETAINED",
+    "routineProvider": "none",
+    "nonCatDeskSnapshots": "CHECKPOINT_OUTPUT_HASHES_WITHOUT_CATDESK_BUILD_INPUTS",
+    "primaryProvider": "chatgpt-web",
+    "nativeWriterAcquired": false,
+    "catDeskGraphSnapshot": "FINAL_COMPLETED_TASK_ONLY",
+    "mode": "chatgpt_web_direct_autonomous",
+    "paidOrCloudFallback": false,
+    "nativeSolGuardsChanged": false
+  },
+  "qualification": {
+    "sourceGateRecordSha256": "896eeca36ec499e945e3ae8302725b04f4f8b179de240ce97590e10b525834c9",
+    "focusedSteps": [
+      {
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "summaries": [],
+        "exitCode": 0,
+        "name": "format",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "seconds": 2.9286936
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "delegated::autonomous_controller::tests::",
+          "--",
+          "--nocapture"
+        ],
+        "summaries": [
+          "test result: ok. 78 passed; 0 failed; 0 ignored; 0 measured; 1650 filtered out; finished in 12.87s"
+        ],
+        "exitCode": 0,
+        "name": "direct-controller",
+        "logSha256": "dc09d93e7988560e76af8566c0a3ff593f90c31338f95d3d9d1b97a7d9a8d74d",
+        "seconds": 71.5387993
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "delegated::autonomous_contract::tests::"
+        ],
+        "summaries": [
+          "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 1717 filtered out; finished in 0.01s"
+        ],
+        "exitCode": 0,
+        "name": "contract-policy",
+        "logSha256": "4d670cf77864ce45b10a97bc2afa045c35fd8c90af5f45690ffb747e412863d4",
+        "seconds": 3.9293465
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "delegated::autonomy_supervisor::tests::"
+        ],
+        "summaries": [
+          "test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 1685 filtered out; finished in 0.64s"
+        ],
+        "exitCode": 0,
+        "name": "supervisor",
+        "logSha256": "13c950fc715eee2fdc5e4bc0520b4e1cfcceb076141c085986d752cf79b9bb58",
+        "seconds": 1.0700031
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "delegated::autonomy_runtime::tests::fresh_runtime_refuses_unproven_restart_and_keeps_writer_marker",
+          "--",
+          "--exact"
+        ],
+        "summaries": [
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1727 filtered out; finished in 0.06s"
+        ],
+        "exitCode": 0,
+        "name": "native-restart-ownership",
+        "logSha256": "ede9f3ee4b8dacdffff2c40111d58b2e2adc3dc3b7a5943993ed71aa0a73b4e5",
+        "seconds": 0.5440154
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "delegated::autonomy_state::tests::"
+        ],
+        "summaries": [
+          "test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 1696 filtered out; finished in 4.90s"
+        ],
+        "exitCode": 0,
+        "name": "state",
+        "logSha256": "ff89e0baade00ee082244b9af06913cde14542471825207817026944bd72dfe9",
+        "seconds": 5.3952437
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "delegated::autonomy_accounting::tests::"
+        ],
+        "summaries": [
+          "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 1710 filtered out; finished in 48.68s"
+        ],
+        "exitCode": 0,
+        "name": "accounting",
+        "logSha256": "0ae9987f6f58a9604124526fc5d7fc726cfed45456fd18d66d42961288013a2a",
+        "seconds": 49.1593203
+      },
+      {
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "summaries": [],
+        "exitCode": 0,
+        "name": "strict-clippy",
+        "logSha256": "e8089d0f6ccd886882441fabd855742747750d822e74077d9e7f47dda9ac2199",
+        "seconds": 18.5579217
+      }
+    ],
+    "reviewRecordSha256": "e81f64b3dad90249383cbfbbf911206a7adc772d85e7de244b32287980b7f0b9",
+    "reviewManifestSha256": "f4592ac9a640e64cd4760c7d4711090c5172acc0a0db8e7831e93010821195fc",
+    "independentReview": {
+      "sourceReviewVerdict": "PASS",
+      "sourceCommit": "5e58fc0dd68fbe2193b40f471c0ca894c1edb235",
+      "inspectedPaths": [
+        "src/delegated/autonomous_contract.rs",
+        "src/delegated/autonomous_controller.rs",
+        "src/delegated/autonomy_accounting.rs",
+        "src/delegated/autonomy_state.rs",
+        "src/delegated/autonomy_runtime.rs",
+        "src/delegated/autonomy_supervisor.rs",
+        "src/delegated/autonomy_verifier.rs"
+      ],
+      "limitations": [
+        "Tool-free static review of the supplied source; hashes and test results were not independently verified.",
+        "The base commit alone does not identify the modified source. This verdict applies to the supplied raw-hash-pinned contents.",
+        "Runtime and supervisor inspection is limited to the supplied excerpts; omitted implementations are outside this verdict.",
+        "C164 qualification is reported for the preceding freeze; C177 current focused gates remain pending.",
+        "This review supplies no genuine Web completion evidence, producer attestation, build admission, promotion authority or installed acceptance."
+      ],
+      "approvedForProtectedBuild": true,
+      "recommendation": "Approve the inspected correction as a source recommendation only. The locked admission check rejects accounting-only direct intent before controller task preparation, and the accounting writer independently prevents executor replacement. The regressions meaningfully cover refusal, preserved identity and one-turn recovery. No concrete remaining defect was identified in this scope; actual protected-build admission remains subject to the existing authority gates.",
+      "findings": []
+    },
+    "remoteCi": "UNVERIFIED_NO_NEW_REMOTE_READBACK_YET",
+    "syntheticFixture": "DIRECT_COMPLETION_ACK_SNAPSHOT_AND_REVIEWED_BUILD_PREPARE_ONLY",
+    "fullLocalSuite": {
+      "record": "C164",
+      "sourcePins": [
+        {
+          "path": "src/delegated/autonomous_contract.rs",
+          "sha256": "6f3948c4ed62581cb1e2234ac9992843fbce104196e5cb4804420263f5f6208f"
+        },
+        {
+          "path": "src/delegated/autonomous_controller.rs",
+          "sha256": "458269a040876b4a1e456507352b21c3cc11adb62ea170dd3e8f10325bf797c5"
+        },
+        {
+          "path": "src/delegated/autonomy_runtime.rs",
+          "sha256": "9cce84cdbc32e7886bb8e21846b9224c4de1f8bfa5244533e3c4df7c8c11c9cf"
+        },
+        {
+          "path": "src/delegated/autonomy_supervisor.rs",
+          "sha256": "f4661055c5b6504378fd830909140c6f689781617cd5c347611466dd55878790"
+        },
+        {
+          "path": "src/delegated/autonomy_accounting.rs",
+          "sha256": "7d23f8774616e8a56d85a4fa93a2281559b96fecad666d14b4039f5f77c96744"
+        },
+        {
+          "path": "src/delegated/autonomy_state.rs",
+          "sha256": "06e638484460ea3e4f43dc705b1a28017ea1b119600cd324a93bcb820daf21d5"
+        }
+      ],
+      "scope": "PRIOR_TO_FINAL_CONTROLLER_ACCOUNTING_PENDING_INTENT_GUARD_NOT_REMOTE_CI",
+      "steps": [
+        {
+          "seconds": 45.7321176,
+          "summaries": [
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1727 filtered out; finished in 0.31s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 57 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s"
+          ],
+          "logSha256": "58f7e4127051347e851cffab7c3d297b3673939868a7aa6d23da88dc0ec3b8ab",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "command::tests::run_command_uses_platform_shell_and_cwd",
+            "--",
+            "--exact"
+          ],
+          "exitCode": 0,
+          "name": "isolated-shell-cwd"
+        },
+        {
+          "seconds": 252.2880072,
+          "summaries": [
+            "failures:",
+            "failures:",
+            "    reviewed_build::tests::appcontainer_fixed_helper_writes_only_fixed_output_child",
+            "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1727 filtered out; finished in 0.00s",
+            "failures:",
+            "failures:",
+            "    reviewed_build::tests::appcontainer_fixed_helper_writes_only_fixed_output_child",
+            "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1727 filtered out; finished in 0.00s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1727 filtered out; finished in 0.00s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1727 filtered out; finished in 2.01s",
+            "test result: ok. 1695 passed; 0 failed; 32 ignored; 0 measured; 1 filtered out; finished in 143.53s",
+            "test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 48 filtered out; finished in 0.00s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 48 filtered out; finished in 0.07s",
+            "test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s",
+            "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+            "test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 56 filtered out; finished in 0.00s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 56 filtered out; finished in 0.07s",
+            "test result: ok. 57 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.04s",
+            "test result: ok. 64 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 48 filtered out; finished in 0.00s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 48 filtered out; finished in 0.07s",
+            "test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.91s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.38s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 45.16s",
+            "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s",
+            "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s",
+            "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s",
+            "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 52.07s"
+          ],
+          "logSha256": "12358677b821d1fb6e856412e38d024f42dd0e674eec4ce9a6d94c729a481fda",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "--",
+            "--skip",
+            "command::tests::run_command_uses_platform_shell_and_cwd"
+          ],
+          "exitCode": 0,
+          "name": "remaining-root-suite"
+        },
+        {
+          "seconds": 26.7927234,
+          "summaries": [],
+          "logSha256": "479e06c4fd5dde656f07eb657bc734ff14f58790da93c7b89b60b194de05e17e",
+          "arguments": [
+            "clippy",
+            "--locked",
+            "--offline",
+            "--all-targets",
+            "--all-features",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exitCode": 0,
+          "name": "strict-clippy"
+        },
+        {
+          "seconds": 3.585284,
+          "summaries": [],
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "arguments": [
+            "fmt",
+            "--all",
+            "--",
+            "--check"
+          ],
+          "exitCode": 0,
+          "name": "format"
+        }
+      ],
+      "recordSha256": "13c56fb8a90572bdd9728dd64bd7c3a7788857dae84cb64db69665746545f832"
+    },
+    "producerConfirmExecuted": false,
+    "reviewScope": "TOOL_FREE_NATIVE_STATIC_SOURCE_ONLY_NOT_CHATGPT_WEB_AUTHORITY"
+  },
+  "retainedFailures": {
+    "c147": "LATER_GATED_TASK_BASELINE_ERROR_AND_ESCALATION_INBOX_COUNT_ASSUMPTION_FIXED_INTERMEDIATE_SOURCE_DRIFT_RUN_NOT_COUNTED",
+    "c170": "NATIVE_LAUNCH_RACE_AND_BOUND_NATIVE_FRESH_CLAIM_FIXED",
+    "c140": "LEASE_APPROVAL_GRAPH_FINDINGS_FIXED",
+    "c153": "REPAIR_AND_INTERRUPTED_OWNERSHIP_FIXED_WITH_EXISTING_ACCOUNTING_QUEUE_IDEMPOTENCY",
+    "c148": "PER_TASK_LAUNCH_AND_BASELINE_INTERRUPTION_FINDINGS_FIXED",
+    "c169": "LEGACY_FIXTURE_DRAFT_STATE_CORRECTED_TO_APPROVED_QUEUED",
+    "c145": "DIRECT_PLANNER_GATE_FINDING_FIXED_SOURCE_FIELD_WRAPPER_MISMATCH_RETAINED",
+    "c168": "LEGACY_DIRECT_PENDING_CLAIM_RECOVERY_FIXED",
+    "c175": "ACCOUNTING_ONLY_DIRECT_INTENT_PRESERVED_AT_NATIVE_ADMISSION_AND_ACCOUNTING_WRITER",
+    "c165": "INTERRUPTED_PLANNER_SELECTION_AND_NOTIFICATION_RECOVERY_FIXED",
+    "c156": "SHARED_SESSION_LOCK_EXACT_ACCOUNTING_IDENTITY_AND_INTERRUPTED_VERIFIER_RECOVERY_FIXED",
+    "c141": "NATIVE_MISSING_CONTRACT_RESTART_REGRESSION_FIXED",
+    "c161": "CHECKPOINT_RETIREMENT_AND_SHARED_INBOX_RACE_FIXED",
+    "c138": "SCHEMA_RED_BEFORE_IMPLEMENTATION",
+    "c172": "SAME_NATIVE_LAUNCH_RACE_FIXED",
+    "c150": "UNCLAIMED_GATED_FINALIZATION_WITH_EMPTY_OUTPUTS_REFUSED_BY_EXACT_TASK_OWNERSHIP"
+  },
+  "preservation": {
+    "browserWakeStarts": 0,
+    "canonicalPromoted": false,
+    "developmentPrevious": "v76",
+    "existingStateFilesExact": 361,
+    "externalRuntimeActions": 0,
+    "completedCanariesReplayed": 0,
+    "recurringAutomationStarts": 0,
+    "projectBindingsChanged": 0,
+    "nativeSessionsResumed": 0,
+    "developmentCurrent": "v77"
+  },
+  "acceptance": {
+    "twoConversationWebCoding": "OPEN",
+    "operatorAction": "NONE_IDENTIFIED",
+    "normalControllerWithNewMode": "NOT_YET_BUILT",
+    "realWebReview": "PENDING_NO_NATIVE_REPORT_REATTRIBUTION",
+    "goal": "ACTIVE",
+    "connector": "LAST_OBSERVED_429_SEPARATE_DEPENDENCY",
+    "productionBackend": "STOPPED_UNPROMOTED",
+    "next": "Build and qualify this reviewed controller separately, perform genuine bounded direct Web review, then existing acknowledged snapshot/producer and release-pair gates.",
+    "installedRollback": "OPEN",
+    "producerAttestation": "PENDING_GENUINE_COMPLETED_WEB_WORK"
+  }
+}

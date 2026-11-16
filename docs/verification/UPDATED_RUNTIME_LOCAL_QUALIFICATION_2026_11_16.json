@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-16T18:53:55.761269+00:00",
+  "scope": "MATERIAL_DEVELOPMENT_CANDIDATE_LOCAL_QUALIFICATION_NOT_INSTALLED_WEB_ACCEPTANCE",
+  "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "sourceTree": "4a83da9f2daa22e1ecabcf000beb6899fc5e60d1",
+  "developmentIntegration": {
+    "pullRequest": 32,
+    "merged": true,
+    "reviewedHead": "f5cf99eff2aa94df80754d17dd36d548be02c322",
+    "mergeCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "mainChanged": false,
+    "hostedChecksClaimed": false
+  },
+  "build": {
+    "sourceInputsCompared": 262,
+    "actualCompilerOperandUnionCount": 221,
+    "sourceInputsBeforeAfterMatched": true,
+    "profile": "dev with sha2 opt-level 3",
+    "artifacts": [
+      {
+        "name": "CatDeskWakeHost.exe",
+        "byteLength": 5472768,
+        "sha256": "5dcbc92ce367771acaba0f550717c3778e96e6b663355a988b352479cfa10d78"
+      },
+      {
+        "name": "CatDeskBinagotchy.exe",
+        "byteLength": 77893120,
+        "sha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465"
+      },
+      {
+        "name": "adapter.py",
+        "byteLength": 75704,
+        "sha256": "d9e1e68a6e48ccb45d132e287d2f13cdbef9c75d252ad64123ef73eb5d0ee118"
+      },
+      {
+        "name": "wake_bridge.py",
+        "byteLength": 313218,
+        "sha256": "eea29aff3cb6518a2c03e97bbb361d3e52357b5e47a81ca63fdaaa69da890f5d"
+      }
+    ],
+    "developmentPackageId": "1.0.0-dev.85-136c27bb0c8ee63f46e832b73f21178fe8f0e43854c0f612ff79b3a005ebf2de",
+    "nativePackageId": "1.0.0-dev.85-5dcbc92ce367-eeacab849df8",
+    "canonicalNativeManifestSha256": "b0937273a9e2e706ca0c6a998a66c48fb254977e5dda137ef7b3ced3f6cfff61",
+    "retainedRawManifestSha256": "f0ca15cd617eb9726ab628fc0478aeb2647bfb4d415b5035cc26c325b96ea41a",
+    "manifestEncoding": "Canonical native typed JSON has no final LF; the distinct retained raw snapshot includes one. Neither original is rewritten.",
+    "provenance": "Actual retained depinfo operands matched before/after raw source hashes and committed source blobs; independently certified compiler-read bytes and reproducible rebuild are not claimed",
+    "brokerRebuilt": false,
+    "independentFullCandidateReview": false,
+    "protectedQualification": false
+  },
+  "developmentSelection": {
+    "status": "PACKAGE_UPDATED_STOPPED",
+    "protectedInstallationChanged": false,
+    "firstAttempt": "DEV_PACKAGE_INVENTORY_INVALID: input had a fifth manifest file; all selection pins unchanged",
+    "correction": "Existing four-file update path accepted the same four frozen artifact bytes from a separate exact inventory; no rebuild",
+    "currentHealthStatus": "NOT_RECORDED",
+    "previousVerifiedSource": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+    "previousImmutablePackageRetained": true
+  },
+  "pausedHost": {
+    "maximumSeconds": 10,
+    "outcome": "FOREGROUND_HOST_EXITED",
+    "ownedTreeExited": true,
+    "initialControl": "PAUSED",
+    "finalControl": "STOPPED",
+    "eventDispatched": false
+  },
+  "localMcp": {
+    "startedUtc": "2026-11-16T18:19:39.753066+00:00",
+    "finishedUtc": "2026-11-16T18:19:58.039335+00:00",
+    "maximumBackendSeconds": 15,
+    "unauthenticatedStatus": 401,
+    "wrongBearerStatus": 401,
+    "authenticatedInitializeStatus": 200,
+    "authenticatedCatalogStatus": 200,
+    "toolCount": 78,
+    "scopedWebDispatcherPublished": true,
+    "productionActivationPublished": false,
+    "productionListenerPresentBeforeDuringAfter": true,
+    "controllerExitCode": 0,
+    "streamsClosed": true,
+    "developmentListenerClosed": true,
+    "temporaryProcessOnlyBearer": true,
+    "externalConnectionOrTunnelChanged": false,
+    "canonicalWebAcceptance": false
+  },
+  "registeredBrowserObservation": {
+    "finalState": "EXACT_READY_IDLE",
+    "route": "EXACT",
+    "history": "PRESENT",
+    "editor": "READY",
+    "composer": "EMPTY",
+    "generation": "IDLE",
+    "assistant": "PRESENT",
+    "exchange": "UNATTRIBUTED",
+    "authenticationVerified": false,
+    "browserReadOnly": true,
+    "sendAttempted": false,
+    "ownedTreeExited": true
+  },
+  "originalD22": {
+    "nativePreconditionsRevalidated": true,
+    "readOnlyInspections": 1,
+    "exactOriginalApprovedTargetObserved": true,
+    "finalState": "EXACT_EDITOR_AMBIGUOUS",
+    "responseState": "EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN",
+    "boundedDomAbsenceDoesNotProveFailedSend": true,
+    "deliveryReceiptProven": false,
+    "resendAuthorized": false,
+    "sendAttempted": false,
+    "verdictOrProducerAuthorityCreated": false,
+    "ownedTreeExited": true,
+    "originalUnknownPreserved": true,
+    "failedPreparatoryInvocation": "Unsupported flag spelling refused at argument parsing; no browser or execution. Correct existing flags used for the single observation."
+  },
+  "remainingIndependentSourceReview": {
+    "marker": "PRIMITIVE_LITERAL_CLOSURE_56AA_NOV16",
+    "verdict": "BOUNDARY_PARTIAL",
+    "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "findings": [],
+    "neededReads": [
+      {
+        "path": "tests/test_wake_bridge.py",
+        "ranges": "54-100",
+        "reason": "Complete detailed review of the new malformed, duplicate, incomplete-history and failed-response assertions."
+      },
+      {
+        "path": "src/web_conversation_context.rs",
+        "ranges": "1476-1531",
+        "reason": "Complete the new legacy-replay and sibling-counter assertions, including persisted estimate equality."
+      },
+      {
+        "path": "tests/test_wake_readiness_probe.py",
+        "ranges": "Full 123-added-line baseline reconciliation",
+        "reason": "Relevant assertions were previously inspected, but the entire net test delta was not independently reconstructed."
+      },
+      {
+        "path": "wake/tests/test_adapter.py",
+        "ranges": "Remaining initialization and cooperative-bootstrap negative assertions",
+        "reason": "Finish detailed direct-caller regression review beyond the prior test inventory."
+      }
+    ],
+    "reportedAssistantSeconds": 209.4262981414795,
+    "requestedSeconds": 120,
+    "softLimitExceeded": true,
+    "threadStatus": "systemError",
+    "originalTurnCompleted": true,
+    "responseBodyRetained": true,
+    "additionalSendsStopped": true,
+    "fullCandidateReview": false,
+    "artifactProducerOrReleaseAuthority": false
+  },
+  "existingProductionOwner": {
+    "autostartStatus": "AUTOSTART_ENABLED",
+    "activeScope": "FULL_STACK",
+    "backendOnlyArgumentPresent": false,
+    "supervisorSourcePath": "scripts/catdesk-autostart-supervisor.ps1",
+    "supervisorSha256": "ec98614183ecd97d7ac51bec2de9b535f767c955d1623fe57eaa92e7fe7a5b4a",
+    "supervisorCreatedBeforeLocalTests": true,
+    "canonicalBackendAndPreexistingGuiReportSameParent": true,
+    "wakeOwnerAlsoPredatesLocalTests": true,
+    "wakeDirectLaunchCauseEstablished": false,
+    "sourceCanInvokeFullPublicRecovery": true,
+    "oldBootstrapDisposition": "HOLD_DO_NOT_SIGN_OR_APPLY: retained STOPPED snapshot is no longer current",
+    "supportedDisableCaveat": "Current operational facade removes owned persistence but does not terminate the live monitor. It is not proof of quiescence.",
+    "ownerPersistenceOrProtectedStateChanged": false
+  },
+  "preservation": {
+    "narrowPinsCompared": 863,
+    "changedPins": 2,
+    "expectedChangedLeaves": [
+      "development authority.json",
+      "development current.json"
+    ],
+    "allOtherNarrowPinsMatched": true,
+    "originalF7ClaimAndProjectRegistryUnchanged": true,
+    "broadMcpSnapshotPinsCompared": 1733,
+    "broadImmediateMismatchCount": 1,
+    "broadPreservationPassed": false,
+    "laterChangedLeaves": "Production Wake status and six operational auto-status files observed changing while pre-existing production owners were active; causal attribution not proven",
+    "noBlanketAllRuntimeBytesUnchangedClaim": true,
+    "developmentProfileQuiescent": true,
+    "loginMarkerAbsent": true,
+    "knownOwnedTestPidsAbsent": true,
+    "existingProductionBackendTunnelWakeGuiAndSupervisorPreserved": true,
+    "canonicalExecutableSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901"
+  },
+  "nextGates": {
+    "wake": "Reconcile supported existing full-stack supervisor quiescence and coherent current STOPPED state before any fresh purpose signing input. Then genuine offline signature, elevated native preflight and separate qualified selection; do not use the stale packet.",
+    "review": "Resume only the distinct pending independent coverage after the existing reviewer client is usable; retain original f7 PARTIAL and exact candidate identities. No duplicate contract or fabricated PASS.",
+    "backend": "Resolve original d22 delivery/response attribution or an explicitly reviewed applicable recovery transition without replay, then genuine report/acknowledgment/snapshot/producer chain.",
+    "directWeb": "Installed scoped Git checkpoint and Wake delivery/reader capabilities still require their genuine release gates. Actual edit, independent verify, Git checkpoint, self-Wake and second-project continuation remain OPEN."
+  },
+  "privateKeyReads": 0,
+  "signaturesCreated": 0,
+  "protectedInstalls": 0,
+  "newTunnelPluginProfileOrNativeTask": 0,
+  "unknownOperationReplays": 0
+}

@@ -1,0 +1,169 @@
++                RuntimeError::Provider("Codex initialization acknowledgment failed".into())
++            })?;
+         self.initialized = true;
+         Ok(response)
+     }
+@@ -1168,6 +1193,7 @@ pub fn parse_resumed_thread_metadata(value: &Value) -> Result<CodexThreadMetadat
+         .get("canAcceptDirectInput")
+         .and_then(Value::as_bool)
+         != Some(true)
++        || metadata.concurrently_owned
+     {
+         return Err(RuntimeError::Validation(
+             "Codex resumed thread is not idle/direct-input eligible".into(),
+diff --git a/src/main.rs b/src/main.rs
+index 78f4845e6618f1db4aadeb4b04e23ed1330cd27b..cc5c5476b9c5be1cba0d0617356e911d71294dc9 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -2760,6 +2760,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+         && args.get(1).is_some_and(|arg| arg == "web-dev-runtime");
+     let operator_web = args.first().is_some_and(|arg| arg == "operator")
+         && args.get(1).is_some_and(|arg| arg == "web");
++    let operator_project = args.first().is_some_and(|arg| arg == "operator")
++        && args.get(1).is_some_and(|arg| arg == "project");
+     match operator_facade::parse_operator_action(args.clone()) {
+         Ok(Some(action)) => {
+             let workspace = std::env::current_dir()?;
+@@ -2774,6 +2776,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+                             "{}",
+                             serde_json::json!({"status":"attention","error":error})
+                         );
++                    } else if operator_project {
++                        println!(
++                            "{}",
++                            serde_json::json!({"status":"attention","errorCode":delegated::codex_app_server::registration_error_code(&error)})
++                        );
+                     } else if operator_web {
+                         println!(
+                             "{}",
+@@ -2793,6 +2800,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+                     "{}",
+                     serde_json::json!({"status":"attention","error":error})
+                 );
++            } else if operator_project {
++                println!(
++                    "{}",
++                    serde_json::json!({"status":"attention","errorCode":delegated::codex_app_server::registration_error_code(&error)})
++                );
+             } else if operator_web {
+                 println!(
+                     "{}",
+diff --git a/src/mcp.rs b/src/mcp.rs
+index 379d812a3bc84e9a8b62382c02bb3ffcecaa9940..495f67951806e23f86fc82a6fcb53d53f6c74f11 100644
+--- a/src/mcp.rs
++++ b/src/mcp.rs
+@@ -4073,6 +4073,22 @@ pub(crate) fn operator_read_project_web_target_diagnosed(
+     paired_project_target_readback_with_config_diagnosed(&control_workspace, project_id, &config)
+ }
+ 
++/// Login-only recovery already pins and validates its development authority,
++/// while ordinary root selection must remain fenced by the interrupted marker.
++/// Reuse the normal registry/history pairing checks against that exact store.
++pub(crate) fn operator_read_login_recovery_target(
++    control_workspace: &Path,
++    project_id: &str,
++    selected_store: &catdesk_wake::store::Store,
++) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
++    let lock = wake_target_lock_at_root(selected_store.root())
++        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
++    let _guard = lock
++        .lock()
++        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
++    paired_project_target_readback_locked(control_workspace, selected_store, project_id)
++}
++
+ pub(crate) fn operator_read_project_web_target_status(
+     control_workspace: &Path,
+     project_id: &str,
+@@ -6380,13 +6396,14 @@ fn web_project_registry_status_with(
+                 .get("chatgptTargetHistory")
+                 .cloned()
+                 .unwrap_or_else(|| json!([]));
+-            let paired = operator_read_project_web_target_status(workspace, project_id);
++            let paired = registry_wake_target_snapshot(workspace, project_id);
+             let wake = match &paired {
+                 Ok(Some(target))
+                     if registered_url == Some(target.url.as_str())
+                         && registered_digest == Some(target.sha256.as_str()) =>
+                 {
+-                    json!({"status":"PAIRED","target":target,"deliveryProved":false})
++                    json!({"status":"PAIRED","target":target,"deliveryProved":false,
++                        "workspaceIdentityVerified":false,"executionAuthorized":false})
+                 }
+                 Ok(None) if registered_url.is_none() && registered_digest.is_none() => {
+                     json!({"status":"UNBOUND","deliveryProved":false})
+@@ -6408,13 +6425,21 @@ fn web_project_registry_status_with(
+             };
+             let mut rollover = rollover_status(workspace, project_id);
+             annotate_rollover_current_target(&mut rollover, paired_target);
++            let mut work = crate::web_work_state::WorkLedger::status(workspace, project_id);
++            work["delivery"] = match &wake_progress {
++                Ok((events, deliveries)) => {
++                    web_work_delivery_progress(project_id, &work, paired_target, events, deliveries)
++                }
++                Err(reason) => json!({"status":"UNAVAILABLE","reason":reason,
++                    "requestReplayAllowed":false,"executionAuthorized":false}),
++            };
+             Some(json!({
+                 "projectId":project_id,
+                 "registeredConversationUrl":registered_url,
+                 "conversationHistory":history,
+                 "wake":wake,
+                 "queue":queue,
+-                "workIntent":crate::web_work_state::WorkLedger::status(workspace, project_id),
++                "workIntent":work,
+                 "context":web_project_context_status(workspace, project_id, paired_target),
+                 "rollover":rollover,
+             }))
+@@ -6428,10 +6453,35 @@ fn web_project_registry_status_with(
+         "readOnly":true,
+         "deliveryProved":false,
+         "installedAcceptance":"UNVERIFIED",
++        "workspaceIdentityVerified":false,
++        "executionAuthorized":false,
+         "projects":statuses,
+     })
+ }
+ 
++/// Status needs exact persisted registry/Wake agreement, not execution
++/// admission. Reuse the same target/history validator without spawning Git
++/// for every row. All execution and target mutation entry points retain their
++/// separate current-workspace/Git checks.
++fn registry_wake_target_snapshot(
++    workspace: &Path,
++    project: &str,
++) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
++    if !crate::wake_protocol_client::selected(workspace) {
++        return Err(DesignatedChatTargetErrorV1::Unavailable);
++    }
++    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)
++        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
++    let wake = catdesk_wake::store::Store::open_read_only(&root)
++        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
++    wake.with_config_read_only(|config| {
++        Ok(paired_project_target_readback_with_config(
++            workspace, project, config,
++        ))
++    })
++    .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?
++}
++
+ fn annotate_rollover_current_target(
+     rollover: &mut Value,
+     paired_target: Option<&ProjectWebTargetV1>,
+@@ -6619,6 +6669,102 @@ fn load_wake_progress_snapshot(
+     Ok((events, deliveries))
+ }
+ 
++/// Correlate the active ownership record with its own durable transport record.
++/// This joins existing read-only snapshots; it never admits work or retries.
++fn web_work_delivery_progress(
++    project: &str,
++    work: &Value,
++    paired: Option<&ProjectWebTargetV1>,
++    events: &[catdesk_wake::protocol::Event],
++    deliveries: &[catdesk_wake::store::Delivery],
++) -> Value {
++    use catdesk_wake::{protocol::digest, store::Phase};
++    let unavailable = |reason| {
++        json!({"status":"ATTENTION","reason":reason,

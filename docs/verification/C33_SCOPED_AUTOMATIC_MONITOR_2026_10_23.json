@@ -1,0 +1,97 @@
+{
+  "recordedUtc": "2026-10-23T13:52:57.1805835Z",
+  "localDate": "2026-10-23",
+  "task": "C33-SCOPED-AUTOMATIC-MONITOR",
+  "classification": "SELECTED_BOUNDED_SCOPED_AUTOMATIC_MULTI_PROJECT_CONTEXT_MONITOR",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "5973f1437953ed57a591bc70927631e96c5f6016",
+  "selectedApplicationSha256": "3cf82b4a8f0c577f68f833f1cd4ebaa96ccbcc618410f33174b1d938a44ab67c",
+  "sourceTests": {
+    "currentDistinctTests": 84,
+    "rerun": false,
+    "basis": "Exact tested source bytes unchanged"
+  },
+  "startedUtc": "2026-10-23T13:42:06.0270064Z",
+  "finishedUtc": "2026-10-23T13:46:04.2233253Z",
+  "elapsedSeconds": 238.1956602,
+  "bounds": {
+    "intervalSeconds": 120,
+    "foregroundHostSeconds": 245,
+    "outerJobSeconds": 270,
+    "listenerSeconds": 235
+  },
+  "projects": [
+    {
+      "role": "quarantined-alpha",
+      "observedEstimateTokens": 2812,
+      "freshBrowserObservation": false,
+      "generation": 2,
+      "stage": "QUARANTINED",
+      "eventsAfter": 7,
+      "eventsBefore": 7
+    },
+    {
+      "role": "controlled-beta",
+      "observedEstimateTokens": 1741,
+      "freshBrowserObservation": true,
+      "generation": 3,
+      "stage": "OBSERVED",
+      "eventsAfter": 4,
+      "eventsBefore": 4
+    },
+    {
+      "role": "controlled-fast",
+      "observedEstimateTokens": 1657,
+      "freshBrowserObservation": true,
+      "generation": 2,
+      "stage": "OBSERVED",
+      "eventsAfter": 5,
+      "eventsBefore": 5
+    }
+  ],
+  "coverage": "UNKNOWN_OR_INCOMPLETE",
+  "eventDeduplication": "PASS_NO_DUPLICATE_EVENTS_ON_REREAD",
+  "browserAdmission": "Existing shared-browser lock/retry; two project captures complete within one bounded tick",
+  "preservation": {
+    "priorC29Cause": "UNPROVEN_NOT_REPRODUCED",
+    "oldRolloverJournalsExact": true,
+    "expectedMonitorUpdates": 6,
+    "originalFiveBindingsAndHistoriesPreserved": true,
+    "unexpectedChanges": 0,
+    "temporaryBetaPolicyRestored": true,
+    "bindingsChanged": 0,
+    "priorAlphaAutoStatusArchivedByteExact": true,
+    "newRecords": 0,
+    "protectedRecordsExact": 193,
+    "recordsChecked": 199,
+    "exactPairedReadbacks": 9
+  },
+  "cleanup": {
+    "listenerNaturalExit": true,
+    "ownedHostTreeExit": true,
+    "recurringAutomationActivated": false,
+    "ownedProcesses": 0,
+    "productionControl": "STOPPED",
+    "developmentControl": "STOPPED"
+  },
+  "actions": {
+    "nativeSessionActions": 0,
+    "automaticRolloverEnabled": false,
+    "connectorCalls": 0,
+    "newMessages": 0,
+    "productionChanged": false,
+    "rolloversAdvanced": 0,
+    "completedCanaryReplayed": false
+  },
+  "acceptance": {
+    "protectedInstalledProduction": "NOT_ACCEPTED",
+    "milestone": "PARTIAL",
+    "automaticMonitoringThroughRollover": "OPEN",
+    "actualConcurrentWebMcpCoding": "OPEN_CONNECTOR_DEPENDENCY",
+    "ci": "UNVERIFIED",
+    "unattended": "NOT_ACTIVATED",
+    "selectedAutomaticMultiProjectMonitor": "PASS_BOUNDED_DEVELOPMENT"
+  },
+  "nextExecutableTask": "Review a controlled project root and task ownership for a fresh automatic monitoring-to-handoff-to-rollover qualification. Preserve prior completed and ambiguous operations.",
+  "operatorAction": "NONE_FOR_INDEPENDENTLY_ELIGIBLE_WORK"
+}

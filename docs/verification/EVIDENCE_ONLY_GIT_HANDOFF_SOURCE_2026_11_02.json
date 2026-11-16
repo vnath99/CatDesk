@@ -1,0 +1,56 @@
+{
+  "observedUtc": "2026-11-02T07:53:27.573060+00:00",
+  "classification": "TESTED_SOURCE_NOT_LIVE_RECOVERY_OR_RELEASE_AUTHORITY",
+  "sourceBaseCommit": "a2941fe829e00c37ee9712afd0fa054763881e77",
+  "changedSource": "src/operator_web_rollover.rs",
+  "sourceFileSha256": "e5236c8e31185da621d5ff127513a9c2e9ac0e5212fe8ad3cf2864923eb081af",
+  "realFailure": {
+    "completedSourceTurnVerified": true,
+    "collectionRefusal": "WEB_HANDOFF_GIT_STATE_INVALID",
+    "sourceBodyUtf8Bytes": 3297,
+    "sourceBodySha256": "5863469ea7db7774fd263612b5871db1b475171783908d0f6ad5cd996ff29006",
+    "basis": "SOURCE_REPORTED",
+    "nativeBranchHeadAndWorktreeAllNull": true,
+    "sourceEvidenceEntries": 3,
+    "nativeGitAttested": false,
+    "replacementCreated": false,
+    "bindingChanged": false,
+    "originalSourceBodyAndFailurePreserved": true,
+    "temporaryPolicyRestored": true
+  },
+  "implementation": {
+    "evidenceOnlySourceReportedGitAccepted": true,
+    "nativeFieldsStayUnknown": true,
+    "sourceEvidencePreserved": true,
+    "originalSnapshotBytesUnchanged": true,
+    "requiresSourceEvidenceForSourceReported": true,
+    "unknownBasisCannotClaimFields": true,
+    "malformedKnownCommitsStillRejected": true,
+    "taskOwnershipReceiptRevisionAndAppFencesUnchanged": true,
+    "newMessageProtocolOrRecoveryRegistry": false,
+    "sourceReportingIsNotNativeAuthority": true
+  },
+  "verification": {
+    "redFocusedCasesFailedAsExpected": 3,
+    "greenFocusedCasesPassed": 3,
+    "handoffRegressionCasesPassedIncludingTheThreeFocusedCases": 20,
+    "strictAllTargetClippyPassed": true,
+    "formatAndDiffChecksPassed": true,
+    "commands": [
+      "cargo test --locked --offline --bin catdesk handoff_context_evidence_only -- --test-threads=1",
+      "cargo test --locked --offline --bin catdesk operator_facade::web::rollover::tests::handoff_ -- --test-threads=2",
+      "cargo clippy --locked --offline --all-targets -- -D warnings",
+      "cargo fmt --all -- --check",
+      "git diff --check"
+    ],
+    "priorExpandedParallelFailureErased": false,
+    "ownedTestProcessesExitedWithoutTimeout": true
+  },
+  "sourceAuthority": {
+    "existingC52ManagedClaimTargetUnchanged": true,
+    "laterSourceAcceptanceNotInherited": true,
+    "producerOrProtectedPromotionAuthorityCreated": false
+  },
+  "nextTask": "Build/qualify a matching development controller, then read-only collection of the exact original completed handoff under its original intent. Do not resend the original request or fabricate native Git fields. Re-enable only the existing bounded policy when ready; preserve the original refusal and manifest.",
+  "operatorActionRequired": false
+}

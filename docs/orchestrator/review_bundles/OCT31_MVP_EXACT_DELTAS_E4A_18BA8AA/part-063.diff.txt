@@ -1,0 +1,181 @@
++                        else { "Native queue dispatch recorded; task verification remains separate." };
++                    JsonRpcResponse::success(response_id,
++                    json!({"content":[{"type":"text","text":text}],
++                        "structuredContent":result,"isError":failed,
++                        "_meta":{"catdeskTaskLifecycle":{"nativeSessionAction":"EXACT_NATIVE_QUEUE_DISPATCH_REQUEST",
++                            "executionAuthority":"LOCAL_EXACT_ASSIGNMENT_KEY_AND_FROZEN_NATIVE_TASK",
++                            "taskCompletionVerified":false,"conversationOriginAuthenticated":false,
++                            "retryWithNewCallIdAllowed":false,"browserStarted":false,"wakeHostStarted":false}}})) },
++                Err(reason) => JsonRpcResponse::error(response_id, -32002, reason),
++            };
++            traffic.finish(&mut response).await;
++            response
++        }).await {
++            Ok(response) => response,
++            Err(_) => JsonRpcResponse::error(id, -32002, "WEB_TASK_OUTCOME_UNKNOWN_NO_REPLAY".into()),
++        };
++    }
++    if call.tool == "wake.manual_end_turn" {
++        // Dropping the HTTP awaiter cannot cancel this bounded metadata turn;
++        // the existing journal remains the no-replay authority on a lost reply.
++        let response_id = id.clone();
++        return match tokio::spawn(async move {
++        let selection = call.selection();
++        // Omit executionKey and the authentication envelope from observation.
++        let observed_params = json!({"name":TOOL,"arguments":call.task_args()});
++        let call = std::sync::Arc::new(call);
++        let owned = call.clone();let root = control.clone();
++        let admitted = tokio::task::spawn_blocking(move || authorize(&root, &owned)).await;
++        match admitted {
++            Ok(Ok(_)) => {},
++            Ok(Err(reason)) => return JsonRpcResponse::error(response_id, -32002, reason),
++            Err(_) => return JsonRpcResponse::error(response_id, -32002, "WEB_TASK_AUTHORIZATION_UNAVAILABLE".into()),
++        }
++        let traffic = crate::project_mcp::TrafficObservation::start_scoped(control.clone(), &selection, observed_params).await;
++        let result = tokio::task::spawn_blocking(move || {
++            crate::web_work::manual_wake(
++                &control,
++                call.pins(),
++                &call.execution_key,
++                &call.task_id,
++                &call.call_id,
++                call.arguments.clone(),
++            )
++        })
++        .await;
++        let mut response = match result {
++            Ok(Ok(result)) => JsonRpcResponse::success(
++                response_id,
++                json!({"content":[{"type":"text","text":"Manual continuation intent recorded; delivery unverified."}],
++                    "structuredContent":result,"isError":false,
++                    "_meta":{"catdeskTaskLifecycle":{"status":"QUEUED_ONLY","nativeSessionAction":"NONE",
++                        "isolatedWorktreeWriterClaimed":false,"browserStarted":false,"wakeHostStarted":false,
++                        "executionAuthority":"LOCAL_EXACT_ASSIGNMENT_KEY_AND_MANUAL_WAKE_CAPABILITY",
++                        "conversationOriginAuthenticated":false,"retryWithNewCallIdAllowed":false}}}),
++            ),
++            Ok(Err(reason)) => JsonRpcResponse::error(response_id, -32002, reason),
++            Err(_) => {
++                JsonRpcResponse::error(response_id, -32002, "WEB_TASK_OUTCOME_UNKNOWN_NO_REPLAY".into())
++            }
++        };
++        traffic.finish(&mut response).await;
++        response
++        }).await {
++            Ok(response) => response,
++            Err(_) => JsonRpcResponse::error(id, -32002, "WEB_TASK_OUTCOME_UNKNOWN_NO_REPLAY".into()),
++        };
++    }
++
+     let response_id = id.clone();
+     // Detach only this existing bounded turn if its HTTP awaiter disappears.
+     // The owned future still drains the task and releases its exact lease.
+@@ -286,192 +423,1803 @@ mod tests {
+         .unwrap();
+     }
+ 
+-    struct Fixture {
+-        control: PathBuf,
+-        pins: Value,
+-        key: String,
+-        task: PathBuf,
+-        native: PathBuf,
+-    }
+-    fn fixture(id: &str) -> Fixture {
+-        let (control, assignment, wake, pins, event) =
+-            crate::web_work::tests::assignment_fixture_for(id);
+-        wake.publish(&event).unwrap();
+-        crate::web_work::associate(&control, pins.clone(), &assignment).unwrap();
+-        let task_data: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+-        let task = PathBuf::from(task_data["contract"]["workspace"].as_str().unwrap());
+-        let native = resolve_registered_project_from_control_root(&control, id)
+-            .unwrap()
+-            .project
+-            .workspace;
+-        // A prepared association itself does not authorize central execution.
++    struct Fixture {
++        control: PathBuf,
++        pins: Value,
++        key: String,
++        task: PathBuf,
++        native: PathBuf,
++        keys: Vec<OwnedFixtureKey>,
++        _native_queue: Option<crate::operator_codex_cli::NativeQueueFixture>,
++    }
++
++    struct OwnedFixtureKey {
++        path: PathBuf,
++        bytes: Vec<u8>,
++    }
++
++    impl OwnedFixtureKey {
++        fn retain(expected: PathBuf, granted: &Value) -> Self {
++            assert_eq!(granted["executionKeyFile"].as_str(), expected.to_str());
++            let bytes = fs::read(&expected).unwrap();
++            let key: String = serde_json::from_slice(&bytes).unwrap();
++            assert_eq!(key.len(), 64);
++            assert!(
++                key.bytes()
++                    .all(|value| value.is_ascii_hexdigit() && !value.is_ascii_uppercase())
++            );
++            Self {
++                path: expected,
++                bytes,
++            }
++        }
++    }
++
++    impl Drop for OwnedFixtureKey {
++        fn drop(&mut self) {
++            // Only this exact path, proved absent before its fixture grant,
++            // may be removed. Never sweep the shared user key directory.
++            let metadata = fs::symlink_metadata(&self.path).unwrap();
++            use std::os::windows::fs::MetadataExt;
++            assert!(
++                metadata.is_file()
++                    && !metadata.file_type().is_symlink()
++                    && metadata.file_attributes() & 0x400 == 0
++            );
++            let parent = fs::symlink_metadata(self.path.parent().unwrap()).unwrap();
++            assert!(
++                parent.is_dir()
++                    && !parent.file_type().is_symlink()
++                    && parent.file_attributes() & 0x400 == 0
++            );
++            assert_eq!(fs::read(&self.path).unwrap(), self.bytes);
++            fs::remove_file(&self.path).unwrap();
++        }
++    }
++
++    fn fresh_fixture_key_path(control: &Path, project: &str) -> PathBuf {
++        let record = crate::web_work_state::WorkLedger::open(control, project)
++            .unwrap()
++            .record("request-a")
++            .unwrap()
++            .unwrap();
++        let identity = protocol::digest(
++            &serde_json::to_string(&(control, project, record.task_assignment.as_ref().unwrap()))
++                .unwrap(),
++        );
++        let path = crate::delegated::autonomy_runtime::fixed_current_user_catdesk_state_root()
++            .unwrap()
++            .join("WebTaskKeys")
++            .join(format!("{identity}.json"));
++        assert!(
++            !path.try_exists().unwrap(),
++            "fixture cannot take ownership of an existing key"
++        );
++        path
++    }
++    fn fixture(id: &str) -> Fixture {
++        fixture_with_manual_wake(id, false)
++    }
++    fn fixture_with_manual_wake(id: &str, allow_manual_wake: bool) -> Fixture {
++        fixture_capabilities(id, allow_manual_wake, false)
++    }
++    fn native_fixture(id: &str) -> Fixture {
++        fixture_capabilities(id, false, true)
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn native_dispatch_slow_inspection_releases_shared_locks_and_peer_can_patch() {
++        let (alpha, beta) = paired_fixtures(true);

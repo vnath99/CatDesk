@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "fullDeclaredCodePaths": 84,
+  "reason": "Complete the exact receipt/collector/prepare surroundings requested in the independently read size-correction checkpoint.",
+  "reads": [
+    {
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 2371,2411 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_web_rollover.rs",
+      "bytes": 2219,
+      "sha256": "6976d54715abe2b9270b25643d5d3f08c20ab7a1cd5a2d6fad00f56a1c1ea6d5",
+      "firstLine": 2371,
+      "lastLine": 2411
+    },
+    {
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 2480,2577 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_web_rollover.rs",
+      "bytes": 5176,
+      "sha256": "d77f3b511252490bda62f79d6df47476661581f49c8c6824cabce711b11933db",
+      "firstLine": 2480,
+      "lastLine": 2577
+    },
+    {
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 2660,2740 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_web_rollover.rs",
+      "bytes": 4718,
+      "sha256": "1be2f597c79056d4077b986786c49f96fdfa2de525c9390b4fe1a0f33c7ba199",
+      "firstLine": 2660,
+      "lastLine": 2740
+    },
+    {
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 2741,2792 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_web_rollover.rs",
+      "bytes": 2704,
+      "sha256": "4dda93d12d0bcd7cd14bae5db2bc42591d57c84762c3eb15c5f5eb43d22912f1",
+      "firstLine": 2741,
+      "lastLine": 2792
+    }
+  ],
+  "totalCodeBytes": 14817,
+  "additionalEvidence": [
+    "docs/verification/SOURCE_HANDOFF_SIZE_RECOVERY_2026_11_01.json",
+    "docs/verification/HANDOFF_SIZE_TEST_EXECUTION_2026_11_01.json",
+    "docs/verification/SOURCE_HANDOFF_SIZE_LIVE_RECOVERY_2026_11_01.json"
+  ],
+  "questions": [
+    "Assess receipt and timer identity, selected project route/native ownership, cancellation and source-progress rechecks before preparation.",
+    "Assess reported test evidence with its coordinator-execution limitation and genuine development recovery; do not infer protected or installed acceptance.",
+    "Report concrete defects or exact needed reads; retain all prior partial-review scope and limits."
+  ],
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-01T01:59:16.246027+00:00",
+  "observedClientTime": "2026-10-31T21:59:16.246027-04:00",
+  "sourceBaseCommit": "e79f1a8f3fdb3a00b1b448a42b3266bf1cb72a4e",
+  "classification": "ACTUAL_SUPPORTED_SERVING_RESTORED_CONNECTOR_FAILED_BEFORE_TOOL_RESPONSE_NO_HTTP_STATUS",
+  "release": {
+    "installedSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+    "installedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+    "canonicalSourceIntegration": "4bec4d596f996089fdebb6f6cb1b846c6e23382b",
+    "executableFingerprintAndReleaseAuthorityChanged": false,
+    "newPromotionPerformed": false
+  },
+  "restoration": {
+    "startedUtc": "2026-10-31T22:58:35.635496+00:00",
+    "finishedUtc": "2026-10-31T22:58:57.409342+00:00",
+    "publicCommand": "catdesk.ps1 start -BackendOnly",
+    "publicState": "LOCAL_BACKEND_READY",
+    "officialCommand": "tunnel-client runtimes connect WITH_EXISTING_ALIAS_PROFILE_TUNNEL_AND_KEY_REFERENCE",
+    "nativeManagedRuntimeUsed": true,
+    "newTunnelOrProfileCreated": false,
+    "persistentAuthenticationChanged": false,
+    "publicDiagnoseAfter": "HEALTHY",
+    "servingOwnersIntentionallyRetained": true,
+    "wakeGuiAndRecurringStarts": 0
+  },
+  "authentication": {
+    "localMode": "EXISTING_OPAQUE_ROUTE_CAPABILITY_NO_BEARER_CONFIGURED",
+    "opaqueRouteInitializeStatus": 200,
+    "opaqueRouteCatalogStatus": 200,
+    "wrongRouteStatus": 404,
+    "wrongBearerAtCorrectOpaqueRouteStatus": 200,
+    "bearerAuthenticationQualified": false,
+    "centralTaskGuard": "WEB_TASK_CENTRAL_AUTH_REQUIRED",
+    "guardCheckProvidedProjectTaskRequestKeyOrCallIdentity": false,
+    "guardCheckExecutedTask": false,
+    "existingControlPlaneKeyReferenceAcceptedByManagedRuntime": true,
+    "chatgptClientEndToEndAuthorizationEstablished": false,
+    "credentialsAndProfilesChanged": false
+  },
+  "catalog": {
+    "localCount": 101,
+    "clientCount": 90,
+    "localOnly": [
+      "autonomy_project_thread_rotation_confirm",
+      "autonomy_project_thread_rotation_preflight",
+      "catdesk_codex_goal_resume",
+      "catdesk_github_publication",
+      "catdesk_wake_delivery_status",
+      "catdesk_web_context_capture",
+      "catdesk_web_context_configure",
+      "catdesk_web_context_observe",
+      "catdesk_web_review_read",
+      "catdesk_web_work_request",
+      "catdesk_web_work_resolve"
+    ],
+    "clientOnly": [],
+    "centralNamedToolListedLocally": false,
+    "affectedC49CatalogEstablished": false,
+    "connectionRefreshed": false
+  },
+  "connector": {
+    "atUtc": "2026-10-31T22:59:59.725Z",
+    "attempts": 1,
+    "elapsedMilliseconds": 19235,
+    "result": "REQUEST_SEND_FAILED_BEFORE_CATDESK_TOOL_RESULT",
+    "failingDestination": "https://chatgpt.com/backend-api/ps/mcp",
+    "httpStatusExposed": false,
+    "current429Observed": false,
+    "toolResponseReceived": false,
+    "underlyingMessage": "error sending request for url (https://chatgpt.com/backend-api/ps/mcp)",
+    "retries": 0,
+    "earlierSetup424Nested429CorrelationPreservedSeparately": true
+  },
+  "persistentRecovery": {
+    "installedPublicStatusBefore": "AUTOSTART_ENABLED",
+    "readOnlyObservedUtc": "2026-10-31T23:02:09.0975404+00:00",
+    "legacyRunKeyPresent": true,
+    "legacyMonitorMutexPresent": false,
+    "legacyScheduledTaskPresent": false,
+    "stableFrontDoorTaskPresent": false,
+    "registrationStatusAloneProvesLiveMonitor": false,
+    "runKeyTrigger": "USER_LOGON_NOT_CONTINUOUS_MONITOR_RESTART",
+    "activeLegacyMonitorCanRecoverCanonicalBackendThroughPublicFacade": true,
+    "legacyMonitorOwnsOrReconnectsExternalTunnel": false,
+    "fullLegacyRecoveryMayStartWake": true,
+    "stable3201FrontDoorStartsBackendOrTunnel": false,
+    "automaticRecoveryAfterRebootQualified": false,
+    "monitorEnabledOrReconfiguredThisTurn": false,
+    "sourceCorrection": "AUTOSTART_REGISTERED_MONITOR_STOPPED_FOR_OWNED_REGISTRATION_WITHOUT_LIVE_SINGLETON",
+    "installedCorrection": false
+  },
+  "stopHistory": {
+    "retainedSuccessfulBoundedWindowExplicitStopUtc": "2026-10-31T07:39:41.2420793+00:00",
+    "receiptReportsStopped": true,
+    "explicitCleanupIsCrashEvidence": false,
+    "originalOctober24ShutdownCauseEstablished": false,
+    "currentMonitorAbsenceExplainsNoSameSessionAutostartRecovery": true
+  },
+  "finalQualification": {
+    "observedUtc": "2026-11-01T01:55:49.588847+00:00",
+    "publicDiagnosis": "HEALTHY",
+    "officialHealthHttp": {
+      "healthz": 200,
+      "readyz": 200
+    },
+    "officialRuntime": {
+      "process_running": true,
+      "ready": true,
+      "healthy": true,
+      "runtime_state": "ready"
+    },
+    "finalProcessInventoryUtc": "2026-11-01T01:56:24.952864+00:00",
+    "intendedBackendOwners": 1,
+    "intendedOfficialClientOwners": 1,
+    "wakeHostOwners": 0,
+    "sameServingProcessIdentitiesAndCreationTimesAsRestoration": true,
+    "continuousHealthAcrossIntervalClaimed": false,
+    "temporaryQualificationHelpersExited": true,
+    "preservationPinsChecked": 5121,
+    "preservationPinChanges": 0,
+    "firstExtraHealthProbe": "HARNESS_USED_HEALTH_ENDPOINT_AS_BASE_AND_APPENDED_DUPLICATE_PATH_404",
+    "failedProbeRetained": true,
+    "correctedHealthProbe": "USES_AUTHORITY_NORMALIZATION_FROM_EXISTING_LIFECYCLE_HELPER"
+  },
+  "sourceTests": {
+    "expectedRedFailedAtNewStoppedMonitorAssertion": true,
+    "suites": [
+      {
+        "name": "test-catdesk-lifecycle.ps1",
+        "exitCode": 0,
+        "elapsedSeconds": 3.7839035,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "name": "test-catdesk-autostart-supervisor.ps1",
+        "exitCode": 0,
+        "elapsedSeconds": 1.5307318,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      {
+        "name": "test-catdesk-production-acceptance.ps1",
+        "exitCode": 0,
+        "elapsedSeconds": 2.24386,
+        "timedOut": false,
+        "terminationFailed": false
+      }
+    ],
+    "newCases": 4,
+    "scope": "SOURCE_FIXTURES_NOT_INSTALLED_MONITOR_OR_REBOOT_ACCEPTANCE",
+    "logs": {
+      "oct31-serving-monitor-red.private.log": "a136694be28007e3f47c02cfc4761fae206df2e2bdb506dc6b510e910ca27bdf",
+      "oct31-serving-monitor-green.private.log": "d5d6857d6b5f5d06cca2af9f0aa8995b1afb75a6141c5cc37cf99f15e3ddc5ef"
+    }
+  },
+  "preserved": {
+    "allProjectBindingsAndNativeSessions": true,
+    "browserProfilesAndDrafts": true,
+    "heldOrCompletedWebRequests": true,
+    "c49Retries": 0,
+    "pluginCreationOrConnectionRefresh": 0,
+    "releaseOrRecoveryAuthorityChanges": 0
+  },
+  "nextTasks": [
+    "Resolve ChatGPT connector request-send failure on materially changed evidence; no unchanged retries",
+    "Qualify an existing-owner serving-only automatic recovery path, preserving external tunnel ownership and Wake independence",
+    "Establish approved central MCP bearer scope separately from current opaque-route serving; do not weaken dispatcher guard",
+    "Obtain genuine current-source independent review/producer authority before protected installation updates",
+    "Then qualify genuine two-project ChatGPT Web execution without replaying completed or unknown work"
+  ],
+  "fullMilestoneComplete": false
+}

@@ -1,0 +1,1662 @@
+# CatDesk exact public-source review input. No approval or execution authority.
+# Base e4a99a8b6913c3db689a216f4ae4e0a7f6fff612
+# Target b25119e8c47cfe261aae06b461c3697e3841cdb6
+
+diff --git a/scripts/wake_readiness_visual_probe.py b/scripts/wake_readiness_visual_probe.py
+index 5e3d2ba5abb58b9e20a1ae89a027981f323f8585..60ad352fe972bd64f9c5a28ddfbe719d2e84dd72 100644
+--- a/scripts/wake_readiness_visual_probe.py
++++ b/scripts/wake_readiness_visual_probe.py
+@@ -1,6 +1,10 @@
+ from __future__ import annotations
+ import argparse
++import hashlib
++import importlib.util
++import json
+ import os
++import re
+ import sys
+ import time
+ from pathlib import Path
+@@ -11,56 +15,358 @@ EDITOR = "#prompt-textarea"
+ STOP = ("button[data-testid='stop-button']", "button[aria-label*='stop' i]")
+ LOGIN = ("a[href*='/auth/login']", "button[data-testid*='login' i]")
+ CAPTCHA = ("iframe[title*='captcha' i]", "[data-testid*='captcha' i]", "iframe[title*='security' i]", "[data-testid*='security' i]")
++NETWORK_ERRORS = frozenset({
++    "ERR_NETWORK_CHANGED", "ERR_INTERNET_DISCONNECTED", "ERR_NAME_NOT_RESOLVED",
++    "ERR_CONNECTION_CLOSED", "ERR_CONNECTION_RESET", "ERR_CONNECTION_ABORTED",
++    "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_TIMED_OUT", "ERR_TIMED_OUT",
++    "ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED",
++    "ERR_CERT_DATE_INVALID", "ERR_CERT_AUTHORITY_INVALID", "ERR_CERT_COMMON_NAME_INVALID",
++    "ERR_BLOCKED_BY_CLIENT", "ERR_BLOCKED_BY_ADMINISTRATOR", "ERR_BLOCKED_BY_RESPONSE",
++    "ERR_HTTP_RESPONSE_CODE_FAILURE", "ERR_TOO_MANY_RETRIES", "ERR_EMPTY_RESPONSE",
++    "ERR_FAILED", "ERR_HTTP2_PROTOCOL_ERROR", "ERR_SSL_PROTOCOL_ERROR", "ERR_QUIC_PROTOCOL_ERROR",
++})
++HOME_CHECKS = frozenset({
++    "EMPTY", "NOT_HOME", "BUSY", "DOCUMENT_LOADING", "EDITOR_MISSING",
++    "EDITOR_AMBIGUOUS", "EDITOR_UNSUPPORTED", "DRAFT_PRESENT", "EDITOR_MEDIA_PRESENT",
++    "ATTACHMENT_INDICATOR", "EVALUATION_UNKNOWN", "EVALUATION_FAILED",
++})
++
++def load_observation_sink(path, expected_sha256, profile, url):
++    """Execute only exact owner-verified primitive bytes, not an import search."""
++    if (path.name != "wake_bridge.py" or not path.is_file() or path.is_symlink()
++            or getattr(path, "is_junction", lambda: False)()
++            or path.parent.is_symlink() or getattr(path.parent, "is_junction", lambda: False)()):
++        raise ValueError("primitives unavailable")
++    with path.open("rb") as stream:
++        content = stream.read(4 * 1024 * 1024 + 1)
++    if len(content) > 4 * 1024 * 1024 or hashlib.sha256(content).hexdigest() != expected_sha256:
++        raise ValueError("primitives identity mismatch")
++    spec = importlib.util.spec_from_file_location("catdesk_readiness_primitives", path)
++    module = importlib.util.module_from_spec(spec)
++    sys.modules[spec.name] = module
++    exec(compile(content, str(path), "exec"), module.__dict__)
++    sink = module.CdpSink(url, profile, 30, 20)
++    if not callable(getattr(sink, "browser_surface_observation", None)):
++        raise ValueError("observation primitives unsupported")
++    return sink
++
++
++def surface_state(value):
++    route = value["route"]
++    if route != "EXACT":
++        return {"HOME": "HOME", "AUTH_REQUIRED": "LOGIN_VISIBLE", "SECURITY_CHECK": "CAPTCHA_VISIBLE",
++                "NETWORK_ERROR": "CHROME_ERROR", "TARGET_DRIFT": "TARGET_DRIFT"}.get(route, "OBSERVATION_UNAVAILABLE")
++    if value["document"] == "LOADING":
++        return "EXACT_DOCUMENT_LOADING"
++    if value["document"] != "COMPLETE":
++        return "OBSERVATION_UNAVAILABLE"
++    if value["editor"] != "READY":
++        return "EXACT_EDITOR_AMBIGUOUS" if value["editor"] == "AMBIGUOUS" else "EXACT_NO_EDITOR"
++    if value["generation"] == "ACTIVE":
++        return "EXACT_READY_BUSY"
++    if value["generation"] != "IDLE":
++        return "OBSERVATION_UNAVAILABLE"
++    if value.get("composer") == "DRAFT_PRESENT":
++        return "EXACT_DRAFT_PRESENT"
++    if value.get("composer") != "EMPTY" or value["assistant"] == "UNKNOWN":
++        return "OBSERVATION_UNAVAILABLE"
++    if value["assistant"] == "DELIVERY_TIMEOUT":
++        return "EXACT_READY_RESPONSE_TIMEOUT"
++    return "EXACT_READY_RESPONSE_LOAD_ERROR" if value["assistant"] == "LOAD_ERROR" else "EXACT_READY_IDLE"
+ 
+ def visible(cdp, selector):
+     try: return bool(cdp.is_element_visible(selector))
+     except Exception: return False
+ 
++def conversation_id(value):
++    """Same strict route contract as the owner-verified bridge primitives."""
++    if (not isinstance(value, str) or not value or len(value) > 512 or not value.isascii()
++            or any(char.isspace() or ord(char) < 32 for char in value)):
++        return None
++    try:
++        actual = urlparse(value)
++        if (actual.scheme != "https" or actual.hostname not in {"chatgpt.com", "chat.openai.com"}
++                or actual.username or actual.password or actual.port is not None or actual.query or actual.fragment):
++            return None
++        if not re.fullmatch(r"/(?:c/[A-Za-z0-9_-]{1,200}|g/[A-Za-z0-9_-]{1,200}/c/[A-Za-z0-9_-]{1,200})", actual.path):
++            return None
++        return actual.path.split("/")[-1]
++    except Exception:
++        return None
++
++
++def exact_url(current, expected):
++    identity = conversation_id(current)
++    return identity is not None and identity == conversation_id(expected)
++
++
++def value_shape(value):
++    return "STRING" if isinstance(value, str) else ("WRAPPED" if isinstance(value, (dict, tuple, list)) else "OTHER")
++
++
++def route_class(value, expected):
++    if not isinstance(value, str):
++        return "UNKNOWN"
++    if value.startswith("chrome-error://"):
++        return "NETWORK"
++    if exact_url(value, expected):
++        return "EXACT"
++    try:
++        parsed = urlparse(value)
++        if (parsed.scheme != "https" or parsed.hostname not in {"chatgpt.com", "chat.openai.com"}
++                or parsed.username or parsed.password or parsed.port is not None):
++            return "OTHER"
++        if parsed.path.startswith('/auth/'):
++            return "AUTH"
++        if parsed.path in {"", "/"} and not parsed.query and not parsed.fragment:
++            return "HOME"
++    except Exception:
++        return "INVALID"
++    return "OTHER"
++
++
++def select_registered_target_tab(cdp, url, report=None):
++    """CDP's controlled tab may differ from the human-visible tab after login.
++
++    Select only a unique returned tab whose target metadata AND document URL
++    match the registered destination. Do not navigate, close tabs, read draft
++    contents, or export any other tab's URL. Uncertainty never permits selection.
++    """
++    facts = dict(schemaVersion=1, tabCount=-1, metadataMatches=0, unreadableMetadata=0,
++                 candidateShape="UNOBSERVED", candidateRoute="UNKNOWN", candidateFrame="UNKNOWN",
++                 controlledShape="UNOBSERVED", controlledRoute="UNKNOWN", alternateRoute=False,
++                 stage="ENUMERATION", state="TARGET_TAB_UNAVAILABLE")
++    def finish(state):
++        facts["state"] = state
++        if report is not None:
++            report(dict(facts))
++        return state
++    def controlled():
++        value = cdp.get_current_url()
++        facts["controlledShape"] = value_shape(value)
++        facts["controlledRoute"] = route_class(value, url)
++        return value
++    try:
++        try:
++            controlled()
++        except Exception:
++            facts["controlledShape"] = "OTHER"
++        tabs = cdp.get_tabs()
++        if not isinstance(tabs, (list, tuple)) or len(tabs) > 32:
++            return finish("TARGET_TAB_UNAVAILABLE")
++        facts["tabCount"] = len(tabs)
++        facts["stage"] = "METADATA"
++        matches = []
++        for tab in tabs:
++            try:
++                metadata = tab.target.url
++                if not isinstance(metadata, str):
++                    facts["unreadableMetadata"] += 1
++                elif exact_url(metadata, url):
++                    matches.append(tab)
++            except Exception:
++                facts["unreadableMetadata"] += 1
++        facts["metadataMatches"] = len(matches)
++        if facts["unreadableMetadata"]:
++            return finish("TARGET_TAB_UNAVAILABLE")
++        if not matches:
++            return finish("TARGET_TAB_MISSING")
++        if len(matches) != 1:
++            return finish("TARGET_TAB_AMBIGUOUS")
++        tab = matches[0]
++        facts["stage"] = "DOCUMENT"
++        document = cdp.loop.run_until_complete(tab.get_current_url())
++        facts["candidateShape"] = value_shape(document)
++        facts["candidateRoute"] = route_class(document, url)
++        try:
++            frame = cdp.loop.run_until_complete(tab.evaluate("window === window.top"))
++            facts["candidateFrame"] = "TOP" if frame is True else ("SUBFRAME" if frame is False else "UNKNOWN")
++        except Exception:
++            pass
++        if not exact_url(document, url):
++            return finish("TARGET_TAB_DRIFT")
++        facts["alternateRoute"] = document != url
++        facts["stage"] = "SWITCH"
++        cdp.switch_to_tab(tab)
++        if not exact_url(controlled(), url):
++            return finish("TARGET_TAB_DRIFT")
++        facts["stage"] = "VERIFIED"
++        return finish("TARGET_TAB_EXACT")
++    except Exception:
++        return finish("TARGET_TAB_UNAVAILABLE")
++
+ def classify(cdp, url):
+     try: current = str(cdp.get_current_url())
+     except Exception: return "URL_UNAVAILABLE"
+     try:
+         p = urlparse(current)
+-        expected = urlparse(url)
+     except Exception:
+         return "URL_INVALID"
+     if current.startswith("chrome-error://"): return "CHROME_ERROR"
+     if p.path.startswith("/auth/") or any(visible(cdp, s) for s in LOGIN): return "LOGIN_VISIBLE"
+     if any(visible(cdp, s) for s in CAPTCHA): return "CAPTCHA_VISIBLE"
+-    exact = p.scheme == "https" and p.hostname == expected.hostname and p.path.rstrip("/") == expected.path.rstrip("/") and not p.query and not p.fragment
++    exact = exact_url(current, url)
+     if exact and visible(cdp, EDITOR):
+         return "EXACT_READY_BUSY" if any(visible(cdp, s) for s in STOP) else "EXACT_READY_IDLE"
+     if exact: return "EXACT_NO_EDITOR"
+     if p.hostname in {"chatgpt.com","chat.openai.com"} and p.path in {"","/"}: return "HOME"
+     return "TARGET_DRIFT"
+ 
++def chrome_error_detail(cdp):
++    """Export only a fixed browser error label, never page text or a target URL.
++
++    Ordinary ChatGPT documents, including unknown drafts, are not inspected.
++    The browser's internal error document must still be selected at evaluation.
++    """
++    try:
++        if not str(cdp.get_current_url()).startswith("chrome-error://"):
++            return "UNKNOWN"
++        code = cdp.evaluate("""(() => {
++            if (location.protocol !== 'chrome-error:') return null;
++            const nodes = document.querySelectorAll('#error-code, .error-code');
++            if (nodes.length !== 1) return null;
++            return nodes[0].textContent;
++        })()""")
++        if isinstance(code, str) and code.strip() in NETWORK_ERRORS:
++            return code.strip()
++    except Exception:
++        pass
++    return "UNKNOWN"
++
++def home_recovery_check(cdp, url):
++    """Explain the existing emptiness guard using fixed metadata, never text.
++
++    The reason is not authentication or task authority. The document must still
++    be HTTPS ChatGPT Home inside the evaluation before inspecting its composer.
++    """
++    if classify(cdp, url) != "HOME":
++        return "NOT_HOME"
++    if any(visible(cdp, s) for s in STOP):
++        return "BUSY"
++    try:
++        reason = cdp.evaluate("""(() => {
++            if (location.protocol !== 'https:' ||
++                !['chatgpt.com', 'chat.openai.com'].includes(location.hostname) ||
++                !['', '/'].includes(location.pathname) || location.port ||
++                location.username || location.password || location.search || location.hash) return 'NOT_HOME';
++            if (document.readyState !== 'complete') return 'DOCUMENT_LOADING';
++            const editors = document.querySelectorAll('#prompt-textarea');
++            if (editors.length === 0) return 'EDITOR_MISSING';
++            if (editors.length !== 1) return 'EDITOR_AMBIGUOUS';
++            const e = editors[0];
++            if (!(e instanceof HTMLTextAreaElement) && !e.isContentEditable) return 'EDITOR_UNSUPPORTED';
++            const text = e instanceof HTMLTextAreaElement ? e.value : e.textContent;
++            if (text !== '') return 'DRAFT_PRESENT';
++            if (e.querySelector('img, video, audio, input, [data-file-id]')) return 'EDITOR_MEDIA_PRESENT';
++            if (document.querySelector('[data-testid*="attachment" i], [data-testid*="file-thumbnail" i]')) return 'ATTACHMENT_INDICATOR';
++            return 'EMPTY';
++        })()""")
++        if isinstance(reason, str) and reason in HOME_CHECKS:
++            return reason
++    except Exception:
++        return "EVALUATION_FAILED"
++    return "EVALUATION_UNKNOWN"
++
++def recover_empty_home(cdp, url):
++    """One same-tab navigation after the same strict idle/empty checks.
++
++    The caller consumes its sole attempt regardless of the fixed outcome. No
++    unknown draft, attachment, wrapped value or evaluation failure permits it.
++    """
++    reason = home_recovery_check(cdp, url)
++    if reason != "EMPTY":
++        return reason
++    if classify(cdp, url) != "HOME":
++        return "NOT_HOME"
++    if any(visible(cdp, s) for s in STOP):
++        return "BUSY"
++    try:
++        # Existing bridge recovery also uses get(): open() can switch tabs.
++        cdp.get(url)
++        return "NAVIGATION_ATTEMPTED"
++    except Exception:
++        return "NAVIGATION_FAILED"
++
+ def main():
+     parser = argparse.ArgumentParser(description="Read-only CatDesk Wake profile readiness probe")
+     parser.add_argument("--conversation-url", required=True)
+     parser.add_argument("--seconds", type=float, default=45.0)
+     parser.add_argument("--await-start", action="store_true")
++    # Internal development owner supplies only its independently validated
++    # selected profile. The legacy production probe retains its fixed default.
++    parser.add_argument("--profile", type=Path)
++    parser.add_argument("--primitives", type=Path)
++    parser.add_argument("--primitives-sha256")
++    parser.add_argument("--read-only", action="store_true")
+     args = parser.parse_args()
+     if args.await_start and sys.stdin.readline() != "START\n":
+         return 2
+     url = args.conversation_url
+-    parsed = urlparse(url)
+-    if parsed.scheme != "https" or parsed.hostname not in {"chatgpt.com", "chat.openai.com"} or not parsed.path.startswith("/c/") or parsed.query or parsed.fragment:
++    if conversation_id(url) is None:
+         print("PROBE:BAD_URL", flush=True); return 2
+     if not 5 <= args.seconds <= 120:
+         print("PROBE:BAD_DURATION", flush=True); return 2
+-    if not PROFILE.is_dir():
++    profile = args.profile if args.profile is not None else PROFILE
++    if not profile.is_dir():
+         print("PROBE:PROFILE_NOT_FOUND", flush=True); return 2
++    sink = None
++    if args.primitives is not None or args.primitives_sha256 is not None:
++        try:
++            sink = load_observation_sink(args.primitives, args.primitives_sha256, profile, url)
++        except Exception:
++            print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
++            return 0
++    def observation(cdp):
++        if sink is None:
++            return classify(cdp, url), None
++        try:
++            value = sink.browser_surface_observation(cdp)
++            return surface_state(value), value
++        except Exception:
++            return "OBSERVATION_UNAVAILABLE", None
+     from seleniumbase import SB
+-    with SB(uc=True, user_data_dir=str(PROFILE)) as sb:
++    def report_tab(facts):
++        print("PROBE:TAB:" + json.dumps(facts, separators=(",", ":"), sort_keys=True), flush=True)
++    with SB(uc=True, user_data_dir=str(profile)) as sb:
+         sb.activate_cdp_mode(url)
+         cdp = sb.cdp
++        if args.profile is not None:
++            print("PROBE:" + select_registered_target_tab(cdp, url, report_tab), flush=True)
+         last = None
++        last_surface = None
+         deadline = time.monotonic() + args.seconds
++        recover_after = time.monotonic() + min(5.0, args.seconds / 2)
++        recovery_attempted = False
++        # A returned tab can still be loading when the initial independent
++        # document check runs. Reinspect existing tabs within the same budget;
++        # select only the same unique, independently exact registered target.
++        selection_attempts = 1
++        select_after = recover_after
+         while time.monotonic() < deadline:
+-            state = classify(cdp, url)
++            state, surface = observation(cdp)
++            if (args.profile is not None and state in {"HOME", "TARGET_DRIFT"}
++                    and selection_attempts < 4 and time.monotonic() >= select_after):
++                selection_attempts += 1
++                selected = select_registered_target_tab(cdp, url, report_tab)
++                print("PROBE:" + selected, flush=True)
++                state, surface = observation(cdp)
++                select_after = time.monotonic() + 5.0
+             if state != last:
+                 print("PROBE:" + state, flush=True); last = state
++                if state == "CHROME_ERROR":
++                    print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
++            if surface is not None and surface != last_surface:
++                print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
++                last_surface = surface
++            if not args.read_only and args.profile is not None and state == "HOME" and not recovery_attempted and time.monotonic() >= recover_after:
++                recovery_attempted = True
++                print("PROBE:HOME_CHECK:" + recover_empty_home(cdp, url), flush=True)
+             time.sleep(1)
+-        print("PROBE:FINAL:" + classify(cdp, url), flush=True)
++        final, surface = observation(cdp)
++        if surface is not None:
++            print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
++        if final == "CHROME_ERROR" and last != final:
++            print("PROBE:NETWORK:" + chrome_error_detail(cdp), flush=True)
++        print("PROBE:FINAL:" + final, flush=True)
+     return 0
+ if __name__ == "__main__": raise SystemExit(main())
+
+diff --git a/src/daemon_reload.rs b/src/daemon_reload.rs
+index 778ac587052d4944d31fd42b643133df59efcf7a..9bb9fd36a4ee8fa99dd5f38bb7ed79d3a57ced9d 100644
+--- a/src/daemon_reload.rs
++++ b/src/daemon_reload.rs
+@@ -26,6 +26,12 @@ use crate::reviewed_source_snapshot::{
+     ReviewedSourceSnapshotExpectedV1, validate_committed_snapshot,
+ };
+ 
++#[path = "promotion_retirement.rs"]
++#[cfg(windows)]
++pub(crate) mod retirement;
++#[path = "promotion_source_bridge.rs"]
++#[cfg(windows)]
++pub(crate) mod source_bridge;
+ #[path = "release_pair_stopped.rs"]
+ pub(crate) mod stopped;
+ 
+@@ -437,6 +443,10 @@ pub fn prepare_reviewed_promotion_with_profile(
+     local_backend_only: bool,
+ ) -> Result<ReviewedPromotionPreflightV1, String> {
+     let workspace = canonical_directory(workspace, "reviewed promotion workspace")?;
++    #[cfg(windows)]
++    let _promotion_lease = retirement::mutation_lease(&workspace)?;
++    #[cfg(windows)]
++    retirement::ensure_ready(&workspace)?;
+     let candidate =
+         canonical_workspace_file(&workspace, candidate, "reviewed promotion candidate")?;
+     let candidate_sha256 = sha256_file(&candidate)?;
+@@ -539,12 +549,33 @@ pub fn prepare_reviewed_promotion_with_profile(
+             && existing.expires_at_unix >= now_unix()
+             && same_reviewed_promotion_evidence(&existing.authorization, &preflight.authorization)
+         {
++            if reviewed_promotion_claim_path(&workspace).exists() {
++                let claim: ReviewedPromotionClaimV1 = read_bounded_json(
++                    &reviewed_promotion_claim_path(&workspace),
++                    "reviewed promotion claim",
++                )?;
++                if claim.authorization_id != existing.authorization.authorization_id
++                    || claim.transaction_id != existing.authorization.transaction_id
++                    || claim.claim_id != existing.authorization.claim_id
++                    || claim.state != "CLAIMED_PENDING"
++                {
++                    return Err(
++                        "reviewed promotion claim differs; explicit recovery is required".into(),
++                    );
++                }
++            }
+             return Ok(existing);
+         }
+         if existing.authorization.review_record_id == preflight.authorization.review_record_id {
+             return Err("reviewed promotion binding is already immutable".into());
+         }
+     }
++    if reviewed_promotion_claim_path(&workspace).exists() {
++        return Err(
++            "reviewed promotion is claimed; inspect RESULT and use explicit stopped retirement"
++                .into(),
++        );
++    }
+     atomic_json_write(&reviewed_promotion_preflight_path(&workspace), &preflight)?;
+     Ok(preflight)
+ }
+@@ -556,6 +587,10 @@ pub fn confirm_reviewed_promotion(
+     confirmation_token: &str,
+ ) -> Result<ReviewedPromotionConfirmationOutcomeV1, String> {
+     let workspace = canonical_directory(workspace, "reviewed promotion workspace")?;
++    #[cfg(windows)]
++    let _promotion_lease = retirement::mutation_lease(&workspace)?;
++    #[cfg(windows)]
++    retirement::ensure_ready(&workspace)?;
+     let preflight: ReviewedPromotionPreflightV1 = read_bounded_json(
+         &reviewed_promotion_preflight_path(&workspace),
+         "reviewed promotion preflight",
+@@ -774,7 +809,35 @@ pub fn run_reviewed_promotion_worker(args: ReviewedPromotionWorkerArgsV1) -> Res
+             &authorization.transaction_id,
+         )?
+     };
+-    let result = crate::operator_facade::run_fixed_powershell_invocation_blocking(invocation)?;
++    // A previously qualified stopped release can supply the old listener using
++    // its existing bounded headless mode. The normal handoff/promotion remains
++    // the sole writer of the canonical pair and release authority.
++    #[cfg(windows)]
++    let mut source_bridge = match source_bridge::start_if_required(&workspace, &authorization) {
++        Ok(bridge) => bridge,
++        Err(error) => {
++            // No promotion helper ran. Preserve a terminal ambiguous result;
++            // never replay a consumed claim or assert cleanup from this label.
++            atomic_json_write(
++                &reviewed_promotion_result_path(&workspace),
++                &ReviewedPromotionResultV1 {
++                    schema_version: 1,
++                    state: "PROMOTION_FAILED_OR_AMBIGUOUS".into(),
++                    authorization_generation: authorization.generation,
++                    candidate_sha256: authorization.candidate_sha256,
++                    transaction_id: authorization.transaction_id,
++                    serving_state: None,
++                },
++            )?;
++            return Err(error);
++        }
++    };
++    let result = crate::operator_facade::run_fixed_powershell_invocation_blocking(invocation);
++    #[cfg(windows)]
++    if let Some(bridge) = source_bridge.as_mut() {
++        bridge.stop()?;
++    }
++    let result = result?;
+     let state = if result.success
+         && result.stderr.trim().is_empty()
+         && result.stdout.len() <= 4096
+
+diff --git a/src/delegated/autonomy_projects.rs b/src/delegated/autonomy_projects.rs
+index dc52d9fd82990d9796985cd6cf5bf49ffb86a07a..40fa6a8f4bf6b987c0ae25618c307752db813968 100644
+--- a/src/delegated/autonomy_projects.rs
++++ b/src/delegated/autonomy_projects.rs
+@@ -269,64 +269,115 @@ pub fn resolve_registered_project_from_control_root(
+     control_workspace: &Path,
+     project_id: &str,
+ ) -> Result<ResolvedProjectScopeV1, RuntimeError> {
+-    valid_slug(project_id, "project id")?;
+-    let control_workspace = control_workspace
+-        .canonicalize()
+-        .map_err(|_| RuntimeError::Validation("CatDesk control workspace is unavailable".into()))?;
+-    let store = AutonomousProjectRegistryStoreV1::open_read_only(
+-        control_workspace.join(".catdesk").join("projects"),
+-    )?;
+-    let registry = store.load_registry()?;
+-    let controller = registry
+-        .projects
+-        .iter()
+-        .find(|project| project.project_id == CATDESK_PROJECT_ID_V1)
+-        .ok_or_else(|| {
+-            RuntimeError::Validation("CatDesk control project is not registered".into())
++    PreparedProjectScopeV1::resolve(control_workspace, project_id).map(|prepared| prepared.scope)
++}
++
++/// Git probes happen before shared admission. Recheck these exact two records
++/// under the existing registration lock before using the prepared scope.
++pub(crate) struct PreparedProjectScopeV1 {
++    scope: ResolvedProjectScopeV1,
++    controller: AutonomousProjectV1,
++}
++
++impl PreparedProjectScopeV1 {
++    pub(crate) fn resolve(
++        control_workspace: &Path,
++        project_id: &str,
++    ) -> Result<Self, RuntimeError> {
++        valid_slug(project_id, "project id")?;
++        let control_workspace = control_workspace.canonicalize().map_err(|_| {
++            RuntimeError::Validation("CatDesk control workspace is unavailable".into())
+         })?;
+-    if controller.workspace != control_workspace {
+-        return Err(RuntimeError::Validation(
+-            "CatDesk control registry is bound to a different workspace".into(),
+-        ));
++        let store = AutonomousProjectRegistryStoreV1::open_read_only(
++            control_workspace.join(".catdesk").join("projects"),
++        )?;
++        let registry = store.load_registry()?;
++        let controller = registry
++            .projects
++            .iter()
++            .find(|project| project.project_id == CATDESK_PROJECT_ID_V1)
++            .cloned()
++            .ok_or_else(|| {
++                RuntimeError::Validation("CatDesk control project is not registered".into())
++            })?;
++        if controller.workspace != control_workspace {
++            return Err(RuntimeError::Validation(
++                "CatDesk control registry is bound to a different workspace".into(),
++            ));
++        }
++        let control_path = controller.workspace.to_str().ok_or_else(|| {
++            RuntimeError::Validation("CatDesk control workspace is not UTF-8".into())
++        })?;
++        let observed_control = super::autonomy_supervisor::verified_external_git_workspace(
++            control_path,
++            &controller.git_identity,
++        )
++        .map_err(|_| {
++            RuntimeError::Validation("CatDesk control Git identity is unavailable".into())
++        })?;
++        if observed_control != control_workspace {
++            return Err(RuntimeError::Validation(
++                "CatDesk control workspace identity drifted".into(),
++            ));
++        }
++        let project = registry
++            .projects
++            .into_iter()
++            .find(|project| project.project_id == project_id)
++            .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
++        let registered_path = project.workspace.to_str().ok_or_else(|| {
++            RuntimeError::Validation("registered project workspace is not UTF-8".into())
++        })?;
++        let observed_workspace = super::autonomy_supervisor::verified_external_git_workspace(
++            registered_path,
++            &project.git_identity,
++        )
++        .map_err(|_| {
++            RuntimeError::Validation("registered project Git identity is unavailable".into())
++        })?;
++        if observed_workspace != project.workspace {
++            return Err(RuntimeError::Validation(
++                "registered project workspace identity drifted".into(),
++            ));
++        }
++        Ok(Self {
++            scope: ResolvedProjectScopeV1 {
++                control_workspace,
++                project,
++            },
++            controller,
++        })
+     }
+-    let control_path = controller
+-        .workspace
+-        .to_str()
+-        .ok_or_else(|| RuntimeError::Validation("CatDesk control workspace is not UTF-8".into()))?;
+-    let observed_control = super::autonomy_supervisor::verified_external_git_workspace(
+-        control_path,
+-        &controller.git_identity,
+-    )
+-    .map_err(|_| RuntimeError::Validation("CatDesk control Git identity is unavailable".into()))?;
+-    if observed_control != control_workspace {
+-        return Err(RuntimeError::Validation(
+-            "CatDesk control workspace identity drifted".into(),
+-        ));
++
++    pub(crate) fn scope(&self) -> &ResolvedProjectScopeV1 {
++        &self.scope
+     }
+-    let project = registry
+-        .projects
+-        .into_iter()
+-        .find(|project| project.project_id == project_id)
+-        .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
+-    let registered_path = project.workspace.to_str().ok_or_else(|| {
+-        RuntimeError::Validation("registered project workspace is not UTF-8".into())
+-    })?;
+-    let observed_workspace = super::autonomy_supervisor::verified_external_git_workspace(
+-        registered_path,
+-        &project.git_identity,
+-    )
+-    .map_err(|_| {
+-        RuntimeError::Validation("registered project Git identity is unavailable".into())
+-    })?;
+-    if observed_workspace != project.workspace {
+-        return Err(RuntimeError::Validation(
+-            "registered project workspace identity drifted".into(),
+-        ));
++
++    pub(crate) fn controller(&self) -> &AutonomousProjectV1 {
++        &self.controller
++    }
++
++    /// Metadata only. The caller retains the existing registration lock.
++    pub(crate) fn revalidate_registration(&self) -> Result<(), RuntimeError> {
++        let registry = AutonomousProjectRegistryStoreV1::open_read_only(
++            self.scope.control_workspace.join(".catdesk/projects"),
++        )?
++        .load_registry()?;
++        if !registry
++            .projects
++            .iter()
++            .any(|current| current == &self.controller)
++            || !registry
++                .projects
++                .iter()
++                .any(|current| current == &self.scope.project)
++        {
++            return Err(RuntimeError::Validation(
++                "prepared project registration changed".into(),
++            ));
++        }
++        Ok(())
+     }
+-    Ok(ResolvedProjectScopeV1 {
+-        control_workspace,
+-        project,
+-    })
+ }
+ 
+ impl AutonomousProjectRegistryStoreV1 {
+
+diff --git a/src/delegated/autonomy_runtime.rs b/src/delegated/autonomy_runtime.rs
+index fe20b2153735e11723db6809653196c532f335e5..62da648421f5ac77013609a0d07bfffa55a42e22 100644
+--- a/src/delegated/autonomy_runtime.rs
++++ b/src/delegated/autonomy_runtime.rs
+@@ -1152,12 +1152,12 @@ pub fn host_prepare_codex_app_server_thread(
+     Ok(bound_thread)
+ }
+ 
+-/// Host-only observation/bootstrap for a never-registered external project.
++/// Host-only observation for a never-registered external project.
+ /// The caller supplies no thread, prompt, executable, or authentication data.
+ /// An exact-CWD app-server-visible Terra/High idle thread is preferred first.
+-/// Zero candidates alone permits the fixed read-only bootstrap; ambiguity,
+-/// ownership, or metadata mismatch fails closed rather than creating a
+-/// parallel hidden thread.
++/// A missing persisted thread returns a native initialization prerequisite.
++/// This observer never creates threads or submits turns; ambiguity, ownership
++/// and metadata mismatch fail closed.
+ pub fn host_observe_registration_thread(
+     workspace: &Path,
+     git_identity: &str,
+@@ -1177,53 +1177,58 @@ pub fn host_observe_registration_thread_for_model(
+     observed_at_unix: u64,
+     expected_model: &str,
+ ) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
+-    let effort = super::codex_model_policy::required_effort(expected_model).ok_or_else(|| {
+-        RuntimeError::Validation("registration has no supported exact model profile".into())
+-    })?;
+-    let workspace = workspace.canonicalize().map_err(|_| {
+-        RuntimeError::Validation("registration workspace canonicalization failed".into())
+-    })?;
+-    let mut transport = host_app_server_launch_config(&workspace)?.spawn_stdio_transport()?;
+-    transport.initialize()?;
+-    let cwd = workspace.to_string_lossy().into_owned();
+-    let candidates = CodexAppServerReadClientV1::discover_registration_threads_for_model(
++    if super::codex_model_policy::required_effort(expected_model).is_none() {
++        return Err(RuntimeError::Validation(
++            "CODEX_REGISTRATION_PROFILE".into(),
++        ));
++    }
++    let workspace = workspace
++        .canonicalize()
++        .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_WORKSPACE".into()))?;
++    let mut transport = host_app_server_launch_config(&workspace)
++        .and_then(|config| config.spawn_stdio_transport())
++        .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_TRANSPORT".into()))?;
++    transport
++        .initialize()
++        .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_INITIALIZE".into()))?;
++    observe_registration_thread(
+         &mut transport,
+-        &cwd,
++        &workspace,
++        git_identity,
+         observed_at_unix,
+         expected_model,
+-    )?;
++    )
++}
++
++fn observe_registration_thread<T: CodexAppServerTransportV1>(
++    transport: &mut T,
++    workspace: &Path,
++    git_identity: &str,
++    observed_at_unix: u64,
++    expected_model: &str,
++) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
++    if super::codex_model_policy::required_effort(expected_model).is_none() {
++        return Err(RuntimeError::Validation(
++            "CODEX_REGISTRATION_PROFILE".into(),
++        ));
++    }
++    let candidates = CodexAppServerReadClientV1::discover_registration_threads_for_model(
++        transport,
++        &workspace.to_string_lossy(),
++        observed_at_unix,
++        expected_model,
++    )
++    .map_err(|_| RuntimeError::Validation("CODEX_REGISTRATION_DISCOVERY".into()))?;
+     let preparation = match candidates.as_slice() {
+-        [preparation] => preparation.clone(),
++        [preparation] => preparation,
+         [] => {
+-            let response = transport.request(
+-                "thread/start",
+-                serde_json::json!({
+-                    "cwd": cwd,
+-                    "model": expected_model,
+-                    "effort": effort,
+-                    "approvalPolicy": "never",
+-                    "sandboxPolicy": {"type":"readOnly", "networkAccess":false},
+-                    "input": [{"type":"text", "text":"CatDesk registration bootstrap. Do not modify files, run commands, use tools, or access the network. Reply only that this exact workspace thread is available."}]
+-                }),
+-            )?;
+-            let metadata = super::codex_app_server::parse_thread_metadata(&response)?;
+-            if PathBuf::from(&metadata.cwd).canonicalize().ok().as_deref() != Some(&workspace) {
+-                return Err(RuntimeError::Validation(
+-                    "registration bootstrap returned a different workspace".into(),
+-                ));
+-            }
+-            CodexAppServerReadClientV1::prepare_mutating_thread_for_model(
+-                &mut transport,
+-                &cwd,
+-                None,
+-                Some(&metadata.thread_id),
+-                observed_at_unix,
+-                expected_model,
+-            )?
++            return Err(RuntimeError::Validation(
++                "CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED".into(),
++            ));
+         }
+         _ => {
+             return Err(RuntimeError::Validation(
+-                "registration has multiple app-server-visible existing threads".into(),
++                "CODEX_REGISTRATION_AMBIGUOUS".into(),
+             ));
+         }
+     };
+@@ -1231,18 +1236,26 @@ pub fn host_observe_registration_thread_for_model(
+         .canonicalize()
+         .ok()
+         .as_deref()
+-        != Some(&workspace)
++        != Some(workspace)
+     {
+         return Err(RuntimeError::Validation(
+-            "registration thread cwd drifted".into(),
++            "CODEX_REGISTRATION_WORKSPACE".into(),
+         ));
+     }
+     Ok(ProjectRegistrationEvidenceV1 {
+-        workspace,
++        workspace: workspace.to_path_buf(),
+         git_identity: git_identity.into(),
+-        codex_thread_id: preparation.thread.thread_id,
+-        selected_model: preparation.thread.selected_model.unwrap_or_default(),
+-        reasoning_effort: preparation.thread.reasoning_effort.unwrap_or_default(),
++        codex_thread_id: preparation.thread.thread_id.clone(),
++        selected_model: preparation
++            .thread
++            .selected_model
++            .clone()
++            .unwrap_or_default(),
++        reasoning_effort: preparation
++            .thread
++            .reasoning_effort
++            .clone()
++            .unwrap_or_default(),
+     })
+ }
+ 
+@@ -4665,6 +4678,122 @@ mod tests {
+         replies: VecDeque<Value>,
+         methods: Vec<String>,
+     }
++
++    #[test]
++    fn registration_missing_persisted_thread_requests_native_initialization_without_creating_anything()
++     {
++        let root =
++            std::env::temp_dir().join(format!("catdesk-registration-missing-{}", Uuid::new_v4()));
++        fs::create_dir_all(&root).unwrap();
++        let workspace = root.canonicalize().unwrap();
++        let mut transport = FakeTransport {
++            replies: VecDeque::from([json!({"data":[]}), json!({"data":[]})]),
++            methods: Vec::new(),
++        };
++        let error = observe_registration_thread(
++            &mut transport,
++            &workspace,
++            "fixture-git",
++            10,
++            SOL_MEDIUM_MODEL,
++        )
++        .unwrap_err();
++        assert!(
++            matches!(error,RuntimeError::Validation(code) if code=="CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED")
++        );
++        assert_eq!(transport.methods, ["thread/list", "thread/list"]);
++        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
++        remove_writer_fixture(root);
++    }
++
++    #[test]
++    fn registration_reuses_persisted_native_thread_and_refuses_conflicting_writer_evidence() {
++        let root =
++            std::env::temp_dir().join(format!("catdesk-registration-existing-{}", Uuid::new_v4()));
++        fs::create_dir_all(&root).unwrap();
++        let workspace = root.canonicalize().unwrap();
++        let cwd = workspace.to_string_lossy();
++        for active_writer in [false, true] {
++            let thread = json!({"id":"existing-thread","cwd":cwd});
++            let mut resumed = json!({"thread":{"id":"existing-thread","cwd":cwd,"canAcceptDirectInput":true},"cwd":cwd,"model":"gpt-6.1-sol","reasoningEffort":"medium"});
++            resumed["thread"]["activeWriter"] = json!(active_writer);
++            let mut transport = FakeTransport {
++                replies: VecDeque::from([
++                    json!({"data":[thread.clone()]}),
++                    json!({"data":[]}),
++                    json!({"thread":thread}),
++                    json!({"rateLimits":[]}),
++                    resumed,
++                ]),
++                methods: Vec::new(),
++            };
++            let result = observe_registration_thread(
++                &mut transport,
++                &workspace,
++                "fixture-git",
++                10,
++                SOL_MEDIUM_MODEL,
++            );
++            assert_eq!(result.is_ok(), !active_writer);
++            if let Ok(evidence) = result {
++                assert_eq!(evidence.codex_thread_id, "existing-thread");
++                assert_eq!(evidence.selected_model, SOL_MEDIUM_MODEL);
++                assert_eq!(evidence.reasoning_effort, "medium");
++            }
++            assert_eq!(
++                transport.methods,
++                [
++                    "thread/list",
++                    "thread/list",
++                    "thread/read",
++                    "account/rateLimits/read",
++                    "thread/resume"
++                ]
++            );
++        }
++        for raw in [
++            "CODEX_REGISTRATION_DISCOVERY: private data",
++            "C:/private/runtime",
++            "CODEX_REGISTRATION_UNTRUSTED",
++        ] {
++            assert_eq!(
++                super::super::codex_app_server::registration_error_code(raw),
++                "CODEX_PROJECT_OPERATION_REFUSED"
++            );
++        }
++        remove_writer_fixture(root);
++    }
++
++    #[test]
++    #[ignore = "explicit bounded operator-local persisted native registration acceptance"]
++    fn live_operator_existing_registration_probe() {
++        let path = PathBuf::from(
++            std::env::var_os("CATDESK_REGISTRATION_LIVE_FIXTURE").expect("explicit test manifest"),
++        );
++        let manifest: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
++        assert_eq!(manifest["existingNativeThreadOnly"], true);
++        let control = PathBuf::from(manifest["controlWorkspace"].as_str().unwrap())
++            .canonicalize()
++            .unwrap();
++        let native = PathBuf::from(manifest["nativeWorkspace"].as_str().unwrap())
++            .canonicalize()
++            .unwrap();
++        assert_ne!(control, native);
++        let result=super::super::autonomy_supervisor::handle_tool("autonomy_project_registry_preflight",json!({
++            "projectId":"native-beta","workspace":native,"gitIdentity":"https://example.test/native-beta-fixture.git",
++            "verificationProfile":"rust_full","modelId":SOL_MEDIUM_MODEL
++        }),&control).expect("supported existing-thread preflight");
++        let confirmed = super::super::autonomy_supervisor::handle_tool(
++            "autonomy_project_registry_confirm",
++            json!({
++                "confirmationToken":result["confirmationToken"]
++            }),
++            &control,
++        )
++        .expect("existing-thread confirmation");
++        assert_eq!(confirmed["projectId"], "native-beta");
++        println!("LIVE_REGISTRATION_EXISTING_NATIVE_THREAD_CONFIRMED=true");
++    }
+     impl CodexAppServerTransportV1 for FakeTransport {
+         fn request(&mut self, method: &str, _params: Value) -> Result<Value, RuntimeError> {
+             self.methods.push(method.into());
+
+diff --git a/src/delegated/autonomy_supervisor.rs b/src/delegated/autonomy_supervisor.rs
+index b8cc78fbce037b08c0abf21e8e2eaa84e732788f..f30ffebb20206435d1beba279f191394fb75a080 100644
+--- a/src/delegated/autonomy_supervisor.rs
++++ b/src/delegated/autonomy_supervisor.rs
+@@ -391,6 +391,14 @@ pub fn tool_schemas() -> Vec<Value> {
+         .collect()
+ }
+ 
++fn registration_runtime_error(error: super::runtime::RuntimeError) -> String {
++    let code = match &error {
++        super::runtime::RuntimeError::Validation(code) => code.as_str(),
++        _ => "",
++    };
++    super::codex_app_server::registration_error_code(code).into()
++}
++
+ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, String> {
+     let workspace = workspace
+         .canonicalize()
+@@ -1100,17 +1108,17 @@ impl AutonomousSupervisorV1 {
+         model_id: Option<&str>,
+     ) -> Result<Value, String> {
+         let workspace = verified_external_git_workspace(workspace, git_identity)?;
++        let store = self.project_registry()?;
++        let _writer = super::autonomy_runtime::acquire_project_writer_lock(&workspace)
++            .map_err(|_| "CODEX_REGISTRATION_WRITER_BUSY".to_string())?;
+         let evidence = super::autonomy_runtime::host_observe_registration_thread_for_model(
+             &workspace,
+             git_identity,
+             supervisor_now_unix(),
+             model_id.unwrap_or(super::codex_model_policy::LEGACY_TERRA_MODEL),
+         )
+-        .map_err(|_| {
+-            "authoritative exact-CWD Codex registration evidence is unavailable".to_string()
+-        })?;
+-        let preflight = self
+-            .project_registry()?
++        .map_err(registration_runtime_error)?;
++        let preflight = store
+             .preflight_project_registration(
+                 project_id,
+                 verification_profile,
+@@ -1159,9 +1167,7 @@ impl AutonomousSupervisorV1 {
+             supervisor_now_unix(),
+             &preflight.evidence.selected_model,
+         )
+-        .map_err(|_| {
+-            "authoritative exact-CWD Codex confirmation evidence is unavailable".to_string()
+-        })?;
++        .map_err(registration_runtime_error)?;
+         let project = store
+             .confirm_project_registration(confirmation_token, &evidence, supervisor_now_unix())
+             .map_err(|_| "project registration confirmation was rejected".to_string())?;
+
+diff --git a/src/delegated/codex_app_server.rs b/src/delegated/codex_app_server.rs
+index ec101f20098e88d100325b82f61965d9d8de51b2..a22414e763e06bad49819dfc4c93827885298b2a 100644
+--- a/src/delegated/codex_app_server.rs
++++ b/src/delegated/codex_app_server.rs
+@@ -27,6 +27,24 @@ const MAX_APP_SERVER_SKIPPED_NOTIFICATIONS: usize = 32;
+ const THREAD_LIST_PAGE_LIMIT: u64 = 5;
+ const THREAD_LIST_MAX_PAGES: usize = 8;
+ 
++/// Only these fixed stage codes can cross the operator boundary. Provider
++/// messages, paths, thread IDs, prompts and authentication data stay private.
++pub(crate) fn registration_error_code(error: &str) -> &'static str {
++    match error {
++        "CODEX_REGISTRATION_WORKSPACE" => "CODEX_REGISTRATION_WORKSPACE",
++        "CODEX_REGISTRATION_PROFILE" => "CODEX_REGISTRATION_PROFILE",
++        "CODEX_REGISTRATION_TRANSPORT" => "CODEX_REGISTRATION_TRANSPORT",
++        "CODEX_REGISTRATION_INITIALIZE" => "CODEX_REGISTRATION_INITIALIZE",
++        "CODEX_REGISTRATION_DISCOVERY" => "CODEX_REGISTRATION_DISCOVERY",
++        "CODEX_REGISTRATION_AMBIGUOUS" => "CODEX_REGISTRATION_AMBIGUOUS",
++        "CODEX_REGISTRATION_WRITER_BUSY" => "CODEX_REGISTRATION_WRITER_BUSY",
++        "CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED" => {
++            "CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED"
++        }
++        _ => "CODEX_PROJECT_OPERATION_REFUSED",
++    }
++}
++
+ /// Launch settings for a CatDesk-owned supported `codex app-server --stdio`
+ /// process.  The only authentication-related setting is an opaque,
+ /// operator-selected config-root path.  CatDesk never reads it, and it is
+@@ -160,6 +178,13 @@ impl CodexAppServerStdioTransportV1 {
+                 "capabilities": {"experimentalApi": true}
+             }),
+         )?;
++        // Complete the documented handshake before any workspace request.
++        self.stdin
++            .write_all(b"{\"method\":\"initialized\",\"params\":{}}\n")
++            .and_then(|()| self.stdin.flush())
++            .map_err(|_| {
++                RuntimeError::Provider("Codex initialization acknowledgment failed".into())
++            })?;
+         self.initialized = true;
+         Ok(response)
+     }
+@@ -1168,6 +1193,7 @@ pub fn parse_resumed_thread_metadata(value: &Value) -> Result<CodexThreadMetadat
+         .get("canAcceptDirectInput")
+         .and_then(Value::as_bool)
+         != Some(true)
++        || metadata.concurrently_owned
+     {
+         return Err(RuntimeError::Validation(
+             "Codex resumed thread is not idle/direct-input eligible".into(),
+
+diff --git a/src/main.rs b/src/main.rs
+index 78f4845e6618f1db4aadeb4b04e23ed1330cd27b..cc5c5476b9c5be1cba0d0617356e911d71294dc9 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -2760,6 +2760,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+         && args.get(1).is_some_and(|arg| arg == "web-dev-runtime");
+     let operator_web = args.first().is_some_and(|arg| arg == "operator")
+         && args.get(1).is_some_and(|arg| arg == "web");
++    let operator_project = args.first().is_some_and(|arg| arg == "operator")
++        && args.get(1).is_some_and(|arg| arg == "project");
+     match operator_facade::parse_operator_action(args.clone()) {
+         Ok(Some(action)) => {
+             let workspace = std::env::current_dir()?;
+@@ -2774,6 +2776,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+                             "{}",
+                             serde_json::json!({"status":"attention","error":error})
+                         );
++                    } else if operator_project {
++                        println!(
++                            "{}",
++                            serde_json::json!({"status":"attention","errorCode":delegated::codex_app_server::registration_error_code(&error)})
++                        );
+                     } else if operator_web {
+                         println!(
+                             "{}",
+@@ -2793,6 +2800,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
+                     "{}",
+                     serde_json::json!({"status":"attention","error":error})
+                 );
++            } else if operator_project {
++                println!(
++                    "{}",
++                    serde_json::json!({"status":"attention","errorCode":delegated::codex_app_server::registration_error_code(&error)})
++                );
+             } else if operator_web {
+                 println!(
+                     "{}",
+
+diff --git a/src/mcp.rs b/src/mcp.rs
+index 379d812a3bc84e9a8b62382c02bb3ffcecaa9940..495f67951806e23f86fc82a6fcb53d53f6c74f11 100644
+--- a/src/mcp.rs
++++ b/src/mcp.rs
+@@ -4073,6 +4073,22 @@ pub(crate) fn operator_read_project_web_target_diagnosed(
+     paired_project_target_readback_with_config_diagnosed(&control_workspace, project_id, &config)
+ }
+ 
++/// Login-only recovery already pins and validates its development authority,
++/// while ordinary root selection must remain fenced by the interrupted marker.
++/// Reuse the normal registry/history pairing checks against that exact store.
++pub(crate) fn operator_read_login_recovery_target(
++    control_workspace: &Path,
++    project_id: &str,
++    selected_store: &catdesk_wake::store::Store,
++) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
++    let lock = wake_target_lock_at_root(selected_store.root())
++        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
++    let _guard = lock
++        .lock()
++        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
++    paired_project_target_readback_locked(control_workspace, selected_store, project_id)
++}
++
+ pub(crate) fn operator_read_project_web_target_status(
+     control_workspace: &Path,
+     project_id: &str,
+@@ -6380,13 +6396,14 @@ fn web_project_registry_status_with(
+                 .get("chatgptTargetHistory")
+                 .cloned()
+                 .unwrap_or_else(|| json!([]));
+-            let paired = operator_read_project_web_target_status(workspace, project_id);
++            let paired = registry_wake_target_snapshot(workspace, project_id);
+             let wake = match &paired {
+                 Ok(Some(target))
+                     if registered_url == Some(target.url.as_str())
+                         && registered_digest == Some(target.sha256.as_str()) =>
+                 {
+-                    json!({"status":"PAIRED","target":target,"deliveryProved":false})
++                    json!({"status":"PAIRED","target":target,"deliveryProved":false,
++                        "workspaceIdentityVerified":false,"executionAuthorized":false})
+                 }
+                 Ok(None) if registered_url.is_none() && registered_digest.is_none() => {
+                     json!({"status":"UNBOUND","deliveryProved":false})
+@@ -6408,13 +6425,21 @@ fn web_project_registry_status_with(
+             };
+             let mut rollover = rollover_status(workspace, project_id);
+             annotate_rollover_current_target(&mut rollover, paired_target);
++            let mut work = crate::web_work_state::WorkLedger::status(workspace, project_id);
++            work["delivery"] = match &wake_progress {
++                Ok((events, deliveries)) => {
++                    web_work_delivery_progress(project_id, &work, paired_target, events, deliveries)
++                }
++                Err(reason) => json!({"status":"UNAVAILABLE","reason":reason,
++                    "requestReplayAllowed":false,"executionAuthorized":false}),
++            };
+             Some(json!({
+                 "projectId":project_id,
+                 "registeredConversationUrl":registered_url,
+                 "conversationHistory":history,
+                 "wake":wake,
+                 "queue":queue,
+-                "workIntent":crate::web_work_state::WorkLedger::status(workspace, project_id),
++                "workIntent":work,
+                 "context":web_project_context_status(workspace, project_id, paired_target),
+                 "rollover":rollover,
+             }))
+@@ -6428,10 +6453,35 @@ fn web_project_registry_status_with(
+         "readOnly":true,
+         "deliveryProved":false,
+         "installedAcceptance":"UNVERIFIED",
++        "workspaceIdentityVerified":false,
++        "executionAuthorized":false,
+         "projects":statuses,
+     })
+ }
+ 
++/// Status needs exact persisted registry/Wake agreement, not execution
++/// admission. Reuse the same target/history validator without spawning Git
++/// for every row. All execution and target mutation entry points retain their
++/// separate current-workspace/Git checks.
++fn registry_wake_target_snapshot(
++    workspace: &Path,
++    project: &str,
++) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
++    if !crate::wake_protocol_client::selected(workspace) {
++        return Err(DesignatedChatTargetErrorV1::Unavailable);
++    }
++    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)
++        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
++    let wake = catdesk_wake::store::Store::open_read_only(&root)
++        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
++    wake.with_config_read_only(|config| {
++        Ok(paired_project_target_readback_with_config(
++            workspace, project, config,
++        ))
++    })
++    .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?
++}
++
+ fn annotate_rollover_current_target(
+     rollover: &mut Value,
+     paired_target: Option<&ProjectWebTargetV1>,
+@@ -6619,6 +6669,102 @@ fn load_wake_progress_snapshot(
+     Ok((events, deliveries))
+ }
+ 
++/// Correlate the active ownership record with its own durable transport record.
++/// This joins existing read-only snapshots; it never admits work or retries.
++fn web_work_delivery_progress(
++    project: &str,
++    work: &Value,
++    paired: Option<&ProjectWebTargetV1>,
++    events: &[catdesk_wake::protocol::Event],
++    deliveries: &[catdesk_wake::store::Delivery],
++) -> Value {
++    use catdesk_wake::{protocol::digest, store::Phase};
++    let unavailable = |reason| {
++        json!({"status":"ATTENTION","reason":reason,
++        "requestReplayAllowed":false,"executionAuthorized":false,"taskCompletionVerified":false})
++    };
++    if !matches!(
++        work["status"].as_str(),
++        Some("UNOBSERVED" | "DURABLE_SNAPSHOT")
++    ) {
++        return unavailable("WORK_INTENT_UNAVAILABLE");
++    }
++    let Some(active) = work.get("active").filter(|value| !value.is_null()) else {
++        return json!({"status":"NO_ACTIVE_REQUEST","requestReplayAllowed":false,
++            "executionAuthorized":false,"taskCompletionVerified":false});
++    };
++    let (Some(id), Some(request), Some(generation), Some(target_digest), Some(message_digest)) = (
++        active["eventId"].as_str(),
++        active["requestId"].as_str(),
++        active["targetGeneration"].as_u64(),
++        active["targetSha256"].as_str(),
++        active["messageSha256"].as_str(),
++    ) else {
++        return unavailable("WORK_INTENT_IDENTITY_INVALID");
++    };
++    if active["phase"] != "OPEN"
++        || id != format!("web-work-{}", digest(&format!("{project}\0{request}")))
++    {
++        return unavailable("WORK_INTENT_IDENTITY_INVALID");
++    }
++    let queued: Vec<_> = events.iter().filter(|event| event.event_id == id).collect();
++    let recorded: Vec<_> = deliveries
++        .iter()
++        .filter(|delivery| delivery.event.event_id == id)
++        .collect();
++    if queued.len() > 1 || recorded.len() > 1 {
++        return unavailable("WORK_DELIVERY_IDENTITY_CONFLICT");
++    }
++    let event_matches = |event: &catdesk_wake::protocol::Event| {
++        event.project_id == project
++            && event.target_generation == generation
++            && matches!(
++                event.event_type.as_str(),
++                "engineering_attention" | "source_review"
++            )
++            && digest(&event.message) == message_digest
++    };
++    if queued.iter().any(|event| !event_matches(event)) {
++        return unavailable("WORK_DELIVERY_IDENTITY_CONFLICT");
++    }
++    let matches_paired = paired.map(|target| {
++        target.project_id == project
++            && target.generation == generation
++            && target.sha256 == target_digest
++    });
++    let mut result = json!({"status":"DURABLE_SNAPSHOT","eventId":id,
++        "matchesPairedTarget":matches_paired,"snapshotAtomic":false,
++        "requestReplayAllowed":false,"executionAuthorized":false,"taskCompletionVerified":false,
++        "receiptObserved":false,"requiresReconciliation":false});
++    if let Some(delivery) = recorded.first() {
++        if !event_matches(&delivery.event)
++            || delivery.target.generation != generation
++            || delivery.target.digest != target_digest
++            || delivery.message_digest != message_digest
++            || queued
++                .first()
++                .is_some_and(|event| **event != delivery.event)
++        {
++            return unavailable("WORK_DELIVERY_IDENTITY_CONFLICT");
++        }
++        result["phase"] = json!(delivery.phase);
++        result["lastActivityUtc"] = json!(delivery.updated_utc);
++        result["receiptObserved"] =
++            json!(delivery.phase == Phase::Sent && delivery.receipt.is_some());
++        result["requiresReconciliation"] = json!(matches!(
++            delivery.phase,
++            Phase::Submitting | Phase::Attention
++        ));
++    } else if let Some(event) = queued.first() {
++        result["phase"] = json!("QUEUED");
++        result["lastActivityUtc"] = json!(event.created_utc);
++    } else {
++        result["status"] = json!("UNOBSERVED");
++        result["phase"] = json!("NO_DURABLE_DELIVERY_OBSERVED");
++    }
++    result
++}
++
+ fn wake_project_progress(
+     project_id: &str,
+     events: &[catdesk_wake::protocol::Event],
+@@ -6676,7 +6822,10 @@ fn wake_project_progress(
+             event["eventId"]
+                 .as_str()
+                 .is_some_and(|id| id.starts_with("web-work-"))
+-                && event["eventType"] == "engineering_attention"
++                && matches!(
++                    event["eventType"].as_str(),
++                    Some("engineering_attention" | "source_review")
++                )
+         })
+         .count();
+     let work_requests = recent
+@@ -6685,7 +6834,10 @@ fn wake_project_progress(
+             event["eventId"]
+                 .as_str()
+                 .is_some_and(|id| id.starts_with("web-work-"))
+-                && event["eventType"] == "engineering_attention"
++                && matches!(
++                    event["eventType"].as_str(),
++                    Some("engineering_attention" | "source_review")
++                )
+         })
+         .take(8)
+         .map(|(_, event)| {
+@@ -10761,6 +10913,234 @@ mod tests {
+     use std::ffi::OsString;
+     use uuid::Uuid;
+ 
++    fn active_delivery_fixture(
++        project: &str,
++    ) -> (Value, ProjectWebTargetV1, catdesk_wake::store::Delivery) {
++        use catdesk_wake::{
++            protocol::{Event, Target, digest},
++            store::{Delivery, Phase},
++        };
++        let target = Target::new(3, format!("https://chatgpt.com/c/{project}-fixture")).unwrap();
++        let event = Event {
++            schema_version: catdesk_wake::PROTOCOL_VERSION,
++            event_id: format!("web-work-{}", digest(&format!("{project}\0request"))),
++            project_id: project.into(),
++            event_type: "source_review".into(),
++            created_utc: 10,
++            message: format!("private {project} source review"),
++            target_generation: 3,
++            audit_references: vec![],
++        };
++        let work = json!({"status":"DURABLE_SNAPSHOT","active":{"requestId":"request",
++            "eventId":event.event_id,"phase":"OPEN","targetGeneration":3,
++            "targetSha256":target.digest,"messageSha256":digest(&event.message)}});
++        let paired = ProjectWebTargetV1 {
++            project_id: project.into(),
++            url: target.url.clone(),
++            sha256: target.digest.clone(),
++            generation: 3,
++            historical_urls: vec![],
++        };
++        let delivery = Delivery {
++            schema_version: catdesk_wake::PROTOCOL_VERSION,
++            message_digest: digest(&event.message),
++            event,
++            target,
++            phase: Phase::Submitting,
++            owner: "fixture-owner".into(),
++            updated_utc: 12,
++            receipt: None,
++            reason: None,
++        };
++        (work, paired, delivery)
++    }
++
++    #[test]
++    fn active_web_work_progress_distinguishes_unknown_without_blocking_siblings() {
++        let (alpha_work, alpha_target, alpha) = active_delivery_fixture("alpha");
++        let (beta_work, beta_target, mut beta) = active_delivery_fixture("beta");
++        beta.phase = catdesk_wake::store::Phase::Claimed;
++        let events = vec![alpha.event.clone(), beta.event.clone()];
++        let deliveries = vec![alpha.clone(), beta.clone()];
++        let a = web_work_delivery_progress(
++            "alpha",
++            &alpha_work,
++            Some(&alpha_target),
++            &events,
++            &deliveries,
++        );
++        let b = web_work_delivery_progress(
++            "beta",
++            &beta_work,
++            Some(&beta_target),
++            &events,
++            &deliveries,
++        );
++        assert_eq!(a["phase"], "SUBMITTING");
++        assert_eq!(a["requiresReconciliation"], true);
++        assert_eq!(b["phase"], "CLAIMED");
++        assert_eq!(b["requiresReconciliation"], false);
++        for status in [&a, &b] {
++            assert_eq!(status["matchesPairedTarget"], true);
++            assert_eq!(status["requestReplayAllowed"], false);
++            assert_eq!(status["executionAuthorized"], false);
++            assert_eq!(status["taskCompletionVerified"], false);
++            assert_eq!(status["snapshotAtomic"], false);
++            assert!(!status.to_string().contains("private"));
++            assert!(!status.to_string().contains("https://"));
++        }
++        assert_eq!(a["eventId"], alpha.event.event_id);
++        assert!(!a.to_string().contains(&beta.event.event_id));
++        assert_eq!(
++            wake_project_progress("alpha", &events, &deliveries)["workRequests"]["recordCount"],
++            1
++        );
++    }
++
++    #[test]
++    fn active_web_work_progress_refuses_identity_conflicts() {
++        let (work, target, original) = active_delivery_fixture("alpha");
++        for change in 0..7 {
++            let mut delivery = original.clone();
++            match change {
++                0 => delivery.event.project_id = "beta".into(),
++                1 => delivery.event.target_generation += 1,
++                2 => delivery.event.event_type = "unrelated".into(),
++                3 => delivery.message_digest = "a".repeat(64),
++                4 => delivery.target.digest = "b".repeat(64),
++                5 => delivery.event.message.push_str(" changed"),
++                _ => delivery.target.generation += 1,
++            }
++            let status =
++                web_work_delivery_progress("alpha", &work, Some(&target), &[], &[delivery]);
++            assert_eq!(status["reason"], "WORK_DELIVERY_IDENTITY_CONFLICT");
++            assert_eq!(status["requestReplayAllowed"], false);
++        }
++        let duplicate = web_work_delivery_progress(
++            "alpha",
++            &work,
++            Some(&target),
++            &[],
++            &[original.clone(), original.clone()],
++        );
++        assert_eq!(duplicate["status"], "ATTENTION");
++        let mut queued = original.event.clone();
++        queued.audit_references.push("different-snapshot".into());
++        assert_eq!(
++            web_work_delivery_progress("alpha", &work, Some(&target), &[queued], &[original])["status"],
++            "ATTENTION"
++        );
++    }
++
++    #[test]
++    fn active_web_work_progress_keeps_missing_and_historical_state_unproved() {
++        let (work, mut target, delivery) = active_delivery_fixture("alpha");
++        target.generation += 1;
++        let queued = web_work_delivery_progress(
++            "alpha",
++            &work,
++            Some(&target),
++            std::slice::from_ref(&delivery.event),
++            &[],
++        );
++        assert_eq!(queued["phase"], "QUEUED");
++        assert_eq!(queued["matchesPairedTarget"], false);
++        assert_eq!(queued["executionAuthorized"], false);
++        let absent = web_work_delivery_progress("alpha", &work, None, &[], &[]);
++        assert_eq!(absent["status"], "UNOBSERVED");
++        assert_eq!(absent["requestReplayAllowed"], false);
++        assert!(absent["matchesPairedTarget"].is_null());
++        let empty = web_work_delivery_progress(
++            "alpha",
++            &json!({"status":"UNOBSERVED","active":null}),
++            None,
++            &[],
++            &[delivery],
++        );
++        assert_eq!(empty["status"], "NO_ACTIVE_REQUEST");
++        assert_eq!(
++            web_work_delivery_progress("alpha", &json!({"status":"ATTENTION"}), None, &[], &[])["status"],
++            "ATTENTION"
++        );
++    }
++
++    #[test]
++    fn active_web_work_progress_receipt_does_not_claim_task_completion() {
++        use catdesk_wake::store::{Phase, Receipt};
++        let (work, target, mut delivery) = active_delivery_fixture("alpha");
++        delivery.phase = Phase::Sent;
++        delivery.receipt = Some(Receipt {
++            schema_version: catdesk_wake::PROTOCOL_VERSION,
++            event_id: delivery.event.event_id.clone(),
++            target_generation: 3,
++            target_digest: delivery.target.digest.clone(),
++            message_digest: delivery.message_digest.clone(),
++            sent_utc: 11,
++            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
++        });
++        let status = web_work_delivery_progress("alpha", &work, Some(&target), &[], &[delivery]);
++        assert_eq!(status["receiptObserved"], true);
++        assert_eq!(status["phase"], "SENT");
++        assert_eq!(status["taskCompletionVerified"], false);
++        assert_eq!(status["requestReplayAllowed"], false);
++    }
++
++    #[test]
++    #[ignore = "read-only qualification against the operator's existing five-project control metadata"]
++    fn registry_status_current_control_metadata_read_only() {
++        eprintln!("READONLY_STATUS_PHASE=REGISTRY_START");
++        let root = PathBuf::from(
++            std::env::var_os("CATDESK_READONLY_STATUS_CONTROL")
++                .expect("explicit existing control root"),
++        );
++        let registry =
++            crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1::open_read_only(
++                root.join(".catdesk/projects"),
++            )
++            .unwrap()
++            .load_registry()
++            .unwrap();
++        eprintln!("READONLY_STATUS_PHASE=REGISTRY_READ");
++        let report = web_project_registry_status_with(
++            &root,
++            &json!({"projects":registry.projects}),
++            |control, project| {
++                eprintln!("READONLY_STATUS_PHASE=ROLLOVER_ENTER");
++                let value = crate::operator_facade::registry_rollover_status(control, project);
++                eprintln!("READONLY_STATUS_PHASE=ROLLOVER_RETURN");
++                value
++            },
++        );
++        eprintln!("READONLY_STATUS_PHASE=STATUS_READ");
++        assert_eq!(report["readOnly"], true);
++        assert_eq!(report["installedAcceptance"], "UNVERIFIED");
++        let mut facts = Vec::new();
++        for id in ["catdesk", "wake2", "byovd", "bug-bounty", "portfoliodesk"] {
++            let project = report["projects"]
++                .as_array()
++                .unwrap()
++                .iter()
++                .find(|project| project["projectId"] == id)
++                .expect("registered project");
++            let delivery = &project["workIntent"]["delivery"];
++            if matches!(id, "catdesk" | "wake2") {
++                assert_eq!(delivery["phase"], "SUBMITTING");
++                assert_eq!(delivery["requiresReconciliation"], true);
++                assert_eq!(delivery["matchesPairedTarget"], true);
++            } else {
++                assert_eq!(delivery["status"], "NO_ACTIVE_REQUEST");
++            }
++            assert_eq!(delivery["executionAuthorized"], false);
++            assert_eq!(delivery["requestReplayAllowed"], false);
++            assert_eq!(delivery["taskCompletionVerified"], false);
++            facts.push(json!({"projectId":id,"activeDeliveryStatus":delivery["status"],
++                "activeDeliveryPhase":delivery["phase"],"requiresReconciliation":delivery["requiresReconciliation"],
++                "workRequestCount":project["queue"]["workRequests"]["recordCount"],
++                "originalDispositionComplete":project["rollover"]["operatorDisposition"]["complete"]}));
++        }
++        println!("READONLY_CURRENT_PROJECT_FACTS={}", json!(facts));
++    }
++
+     #[test]
+     fn web_project_status_keeps_queue_progress_and_messages_project_scoped() {
+         use catdesk_wake::protocol::{Event, digest};
+@@ -10832,18 +11212,21 @@ mod tests {
+             target_generation: 1,
+             audit_references: vec![],
+         };
++        let mut review = event("alpha", "web-work-alpha-review", "private review", 13);
++        review.event_type = "source_review".into();
+         let events = [
+             event("alpha", "web-work-alpha", "private alpha request", 10),
+             event("alpha", "ordinary-alpha", "private ordinary event", 11),
+             event("beta", "web-work-beta", "private beta request", 12),
++            review,
+         ];
+         let status = wake_project_progress("alpha", &events, &[]);
+-        assert_eq!(status["queuedCount"], 2);
+-        assert_eq!(status["workRequests"]["recordCount"], 1);
++        assert_eq!(status["queuedCount"], 3);
++        assert_eq!(status["workRequests"]["recordCount"], 2);
+         assert_eq!(status["workRequests"]["status"], "TRANSPORT_ONLY");
+         assert_eq!(
+             status["workRequests"]["recent"][0]["eventId"],
+-            "web-work-alpha"
++            "web-work-alpha-review"
+         );
+         assert_eq!(status["workRequests"]["recent"][0]["phase"], "QUEUED");
+         assert_eq!(
+@@ -12102,6 +12485,57 @@ mod tests {
+         (root, wake)
+     }
+ 
++    #[test]
++    fn login_recovery_target_uses_validated_store_while_normal_selection_stays_fenced() {
++        let (root, wake) = project_web_target_fixture("login-recovery-selected-lock");
++        let target = bind_project_web_target_locked(
++            &root,
++            &wake,
++            "alpha",
++            "https://chatgpt.com/c/recovery-alpha",
++            None,
++            0,
++        )
++        .unwrap();
++        let dev = root.join(".catdesk/web-development");
++        fs::create_dir(&dev).unwrap();
++        let marker = dev.join("login-active.json");
++        fs::write(&marker, b"preserved interrupted login").unwrap();
++        let selector = root.join(".catdesk/wake-bridge");
++        fs::create_dir(&selector).unwrap();
++        fs::write(
++            selector.join("owner.json"),
++            br#"{"schemaVersion":1,"owner":"independent_v1"}"#,
++        )
++        .unwrap();
++        let registry_path = root.join(".catdesk/projects/projects.json");
++        let config_path = wake.root().join("config.json");
++        let registry = fs::read(&registry_path).unwrap();
++        let config = fs::read(&config_path).unwrap();
++        assert_eq!(
++            crate::wake_protocol_client::wake_root_for_workspace(&root).unwrap_err(),
++            "DEV_LOGIN_CLEANUP_UNVERIFIED"
++        );
++        assert_eq!(
++            operator_read_login_recovery_target(&root, "alpha", &wake).unwrap(),
++            Some(target)
++        );
++        assert_eq!(fs::read(&registry_path).unwrap(), registry);
++        assert_eq!(fs::read(&config_path).unwrap(), config);
++        assert_eq!(fs::read(&marker).unwrap(), b"preserved interrupted login");
++        assert_eq!(
++            crate::wake_protocol_client::wake_root_for_workspace(&root).unwrap_err(),
++            "DEV_LOGIN_CLEANUP_UNVERIFIED"
++        );
++        wake.set_target("alpha", 1, "https://chatgpt.com/c/changed-recovery-alpha")
++            .unwrap();
++        assert_eq!(
++            operator_read_login_recovery_target(&root, "alpha", &wake),
++            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
++        );
++        fs::remove_dir_all(root).unwrap();
++    }
++
+     #[test]
+     fn project_web_target_diagnostics_distinguish_unavailable_and_mismatched_authority() {
+         let (root, wake) = project_web_target_fixture("read-diagnostics");
+
+diff --git a/src/operator_codex_cli.rs b/src/operator_codex_cli.rs
+index e315f6cc97e845f59ca8e85037cf734cd6352ed1..e809e394918e9675ac21d4af0a5c348d9fd7e2f2 100644
+--- a/src/operator_codex_cli.rs
++++ b/src/operator_codex_cli.rs
+@@ -7,8 +7,15 @@
+ mod queue;
+ mod recovery;
+ 
++pub(crate) use queue::continue_native_queue_selection_prepared;
+ pub(crate) use queue::publish_review_invitation_for_mcp;
+ pub(crate) use queue::read_review_package_for_mcp;
++#[cfg(all(test, windows))]
++pub(crate) use queue::{NativeQueueFixture, native_queue_fixture};
++pub(crate) use queue::{
++    NativeQueueSelection, check_native_queue_selection_prepared, dispatch_native_queue_selection,
++    freeze_native_queue_selection, native_queue_selection_status,
++};
+ 
+ use std::fs;
+ use std::path::{Path, PathBuf};

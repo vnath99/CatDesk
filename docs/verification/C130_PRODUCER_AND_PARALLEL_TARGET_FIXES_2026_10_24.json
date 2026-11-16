@@ -1,0 +1,228 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C130_PRODUCER_REVIEW_FIXES_AND_INDEPENDENT_TARGET_READBACK",
+  "recordedUtc": "2026-10-25T02:34:57.2794433+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "sourceBaseCommit": "5fb15295588aafd85fe05ad3d976ceba1a14c149",
+  "sourceQualification": "MODIFIED_WORKTREE_RAW_HASH_PINS",
+  "sourcePins": [
+    {
+      "sha256": "4794c6af581c3163c8498bcff3a98d97aa317de251b6100c6d57b6fb06546bad",
+      "path": "src/reviewed_build.rs"
+    },
+    {
+      "sha256": "c8b87aae4bc9d2df5ec46b9fcb711b0dfe56ff23e06a4fdd8773dad8bf9c5713",
+      "path": "src/reviewed_source_snapshot.rs"
+    },
+    {
+      "sha256": "37f1080375a679b7c572274d9f2e1d6bb916e865f01451d4abef8a0db34b3725",
+      "path": "src/project_mcp.rs"
+    },
+    {
+      "sha256": "5c045d396329a5148b37b3cf5bafad755badfc7c70c30debfe5d7546216a9790",
+      "path": "src/mcp.rs"
+    }
+  ],
+  "branch": "codex/web-rollover-oct17",
+  "review": {
+    "productionAuthorityGranted": false,
+    "reportSha256": "21f01dad8a9a722ab077016af84eea170ce447074c0c927851ed98185e6aedb8",
+    "limitations": [
+      "WORKTREE_HASH_PINS identify the supplied uncommitted file versions, not a modified commit: src/reviewed_build.rs=4794c6af581c3163c8498bcff3a98d97aa317de251b6100c6d57b6fb06546bad; src/reviewed_source_snapshot.rs=c8b87aae4bc9d2df5ec46b9fcb711b0dfe56ff23e06a4fdd8773dad8bf9c5713; src/mcp.rs=5c045d396329a5148b37b3cf5bafad755badfc7c70c30debfe5d7546216a9790; src/project_mcp.rs=37f1080375a679b7c572274d9f2e1d6bb916e865f01451d4abef8a0db34b3725. sourceCommit names only the stated base. Checksums were supplied, not independently computed.",
+      "Review used only the supplied source and complete four-file diff. No tools, filesystem, network, shell, agents, compilation or tests were used. Omitted unchanged code and the reported Stage 1 result were not independently re-reviewed.",
+      "The existing delete-on-close lock implementation and Wake Store/root-selection implementations were not supplied. Their underlying exclusion, lifetime and storage guarantees remain dependency assumptions requiring established source review before protected-build approval.",
+      "Snapshot enforcement intentionally covers overlapping declared outputs and captured inputs. It does not establish that every declared output belongs to the build input set. Previously accepted inconsistent snapshots now fail validation; no automatic migration is provided.",
+      "The admission test establishes exclusion during the selected supersession gap and resolution of the fresh generation afterward. It does not exercise every public PREPARE/CONFIRM interleaving or crash boundary.",
+      "The descendant test exercises successful root exit followed by timeout and cleanup, with and without inherited stderr. It does not establish normal successful descendant completion, termination/query failure handling, or the PROCESS_QUIESCENCE_UNPROVEN branch. Timeout permits up to five additional seconds for cleanup; unresolved cleanup fails closed without joining the reader.",
+      "The delayed-preparation test establishes status-reader independence while one preparation is paused. It does not guarantee freedom from all shared-lock contention: operator_read_project_web_target_diagnosed still holds the same Wake-target lock across project preparation, and status retains its 250ms acquisition limit.",
+      "Fresh normal build/qualification, genuine acknowledged review/snapshot/producer authority, installed acceptance and exact remote CI remain pending. The held c1ee5d81... controller predates these fixes and supplies no producer admission evidence."
+    ],
+    "followup": "C129_FOUR_FILE_FIX_SCOPE_PASS",
+    "requestedEffort": "medium",
+    "toolsUsedByReviewer": 0,
+    "stage2": "C123_THREE_CONCRETE_PRODUCER_FINDINGS",
+    "effectiveNativeProfile": "NOT_EXPOSED_BY_EPHEMERAL_CLI_OUTPUT_NOT_CLAIMED",
+    "requestedModel": "gpt-6.1-sol",
+    "stage1": "C119_AND_C121_RELEASE_RECONCILIATION_SCOPE_PASS",
+    "sourceQualification": "MODIFIED_WORKTREE_HASH_PINS_NOT_YET_COMMITTED_AT_REVIEW",
+    "manifestSha256": "1621bafaad694e59b75096af159964b4bbdfaab8201dafa247ef2b02fbd9753a"
+  },
+  "implementation": {
+    "parallelTargetRead": "GIT_PREFLIGHT_OUTSIDE_SHARED_WAKE_PAIR_LOCK_EXACT_PREPARED_ROOT_LOCK_AND_SELECTION_RECHECK_PAIRED_READBACK_UNCHANGED",
+    "snapshot": "CROSS_CHECK_OVERLAPPING_DECLARED_OUTPUT_HASHES_AT_CREATION_AND_REPLAY",
+    "timeout": "900_SECOND_BUILD_BOUND_PLUS_AT_MOST_FIVE_SECOND_CLEANUP_NO_ATTESTATION_IF_UNPROVEN",
+    "buildCompletion": "ROOT_EXIT_AND_ZERO_JOB_PROCESSES_AND_FINISHED_STDERR_READER_BEFORE_JOIN_OR_OUTPUT_ADMISSION",
+    "admission": "EXISTING_DELETE_ON_CLOSE_LOCK_PER_WORKSPACE_PREPARE_CONFIRM_ONLY_RERESOLVE_ACTIVE_POINTER_AFTER_ACQUISITION",
+    "diagnosticTargetRead": "EXISTING_DIAGNOSED_READER_STILL_USES_ITS_ORIGINAL_LOCK_ORDER_NOT_ALL_CONTENTION_ELIMINATED"
+  },
+  "verification": {
+    "snapshotRed": "TWO_TESTS_REPRODUCED_CAPTURE_AND_REPLAY_HASH_GAP",
+    "sourceTestsAreInstalledAcceptance": false,
+    "snapshotFocused": "28_PASS",
+    "routingRed": "C122_AND_C126_FULL_RUN_TARGET_UNAVAILABLE_C127_DETERMINISTIC_SIBLING_FAILURE",
+    "rootSummary": [
+      "test result: ok. 1674 passed; 0 failed; 32 ignored; 0 measured; 1 filtered out; finished in 145.49s"
+    ],
+    "sourceFrozen": true,
+    "steps": [
+      {
+        "logSha256": "10b29a6b445b90bf975fc893ee7c0623b9f14c211d8443b9821354e1da766930",
+        "name": "isolated-shell-cwd",
+        "exitCode": 0,
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "command::tests::run_command_uses_platform_shell_and_cwd",
+          "--",
+          "--exact"
+        ],
+        "summaries": [
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1706 filtered out; finished in 0.31s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 57 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s"
+        ],
+        "seconds": 42.2878523
+      },
+      {
+        "logSha256": "e39b510919688ed095f865df132070667a62eff855872678e0dbb6fecf32a087",
+        "name": "remaining-root-suite",
+        "exitCode": 0,
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--",
+          "--skip",
+          "command::tests::run_command_uses_platform_shell_and_cwd"
+        ],
+        "summaries": [
+          "failures:",
+          "failures:",
+          "    reviewed_build::tests::appcontainer_fixed_helper_writes_only_fixed_output_child",
+          "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1706 filtered out; finished in 0.00s",
+          "failures:",
+          "failures:",
+          "    reviewed_build::tests::appcontainer_fixed_helper_writes_only_fixed_output_child",
+          "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1706 filtered out; finished in 0.00s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1706 filtered out; finished in 0.01s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1706 filtered out; finished in 2.05s",
+          "test result: ok. 1674 passed; 0 failed; 32 ignored; 0 measured; 1 filtered out; finished in 145.49s",
+          "test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 48 filtered out; finished in 0.00s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 48 filtered out; finished in 0.07s",
+          "test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.09s",
+          "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+          "test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 56 filtered out; finished in 0.00s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 56 filtered out; finished in 0.08s",
+          "test result: ok. 57 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.17s",
+          "test result: ok. 64 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 48 filtered out; finished in 0.00s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 48 filtered out; finished in 0.06s",
+          "test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.06s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.43s",
+          "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 49.39s",
+          "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.88s",
+          "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s",
+          "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s",
+          "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 71.64s"
+        ],
+        "seconds": 281.8915103
+      },
+      {
+        "logSha256": "1eaa48a63f849e7e81838c665a6ac8389771e8c737a2f5a2e8fce066e4679e41",
+        "name": "strict-clippy",
+        "exitCode": 0,
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "summaries": [],
+        "seconds": 34.9793427
+      },
+      {
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "name": "format",
+        "exitCode": 0,
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "summaries": [],
+        "seconds": 3.211647
+      }
+    ],
+    "fullLocalRustCommands": "PASS_CI_EQUIVALENT_ROOT_COMMANDS_NOT_REMOTE_CI",
+    "producerFocused": "103_PASS_8_IGNORED_INCLUDING_REAL_DESCENDANT_PIPE_AND_EOF_CASES",
+    "initialSourceGate": "C125_FOCUSED_TESTS_PASS_LINT_FOUND_INTENTIONAL_DESCENDANT_FIXTURE_EXCEPTION_DOCUMENTED_BEFORE_FINAL_GATE",
+    "failedEvidencePreserved": true
+  },
+  "separateController": {
+    "bytes": 35156480,
+    "sourceCommit": "5fb15295588aafd85fe05ad3d976ceba1a14c149",
+    "currentDevelopmentSelectionChanged": false,
+    "productionPromoted": false,
+    "status": "HELD_PREDATES_CURRENT_FIXES_REBUILD_REQUIRED",
+    "authAndRestartQualification": "TWO_TWELVE_SECOND_READ_ONLY_LOOPBACK_RUNS_401_MISSING_401_WRONG_200_VALID_TEN_TOOLS_NATURAL_EXIT_AND_LISTENER_GONE",
+    "sha256": "c1ee5d81e763d2d9d2d20dfa14d4fe23588a75fc52f9d1936b69b6083b680ca7",
+    "producerAttested": false
+  },
+  "preservation": {
+    "canonicalRecordedFingerprint": "a264c8dc85fa55311e74114158f4f4cd598f6e9e9d0a6ca535e14d18aa649939",
+    "completedCanariesReplayed": 0,
+    "browserWakeRecurringStarts": 0,
+    "externalRuntimeActions": 0,
+    "canonicalPairChanged": false,
+    "developmentFilesExact": 306,
+    "existingNativeSessionsResumed": 0,
+    "previousDevelopmentVersion": "v76",
+    "canonicalBinarySha256": "9a8f4ebf6ea57cbb61efaa12e8afa54d18b8db7374b9884067325bc84565568c",
+    "historicalFilesExact": 55,
+    "currentDevelopmentVersion": "v77"
+  },
+  "acceptance": {
+    "remoteCi": "UNVERIFIED_PENDING_NEW_COMMIT_READBACK",
+    "installedRollback": "OPEN",
+    "productionBackend": "NOT_RESTORED",
+    "operatorDateDeferral": "SUPERSEDED_NO_DATE_HOLD",
+    "fullOctoberMilestone": "OPEN",
+    "actualTwoConversationWebCoding": "OPEN",
+    "officialRuntime": "SEPARATE_OWNER_UNCHANGED",
+    "connector": "LAST_OBSERVED_HTTP_429_NOT_RETRIED_UNCHANGED_DEPENDENCY"
+  },
+  "nextTask": "Publish the reviewed source pins and verified remote SHA. Build the corrected normal controller separately. Establish a genuine current completed review, committed source snapshot and producer attestation through supported admission; do not relabel this external review JSON or the held normal controller as production authority. Resolve any concrete admission integration gap without switching models to evade the Sol guard. Then use release-pair prepare/confirm/result and qualify actual installed startup/auth/rollback before real two-conversation Web coding. No new operator action has been identified."
+}

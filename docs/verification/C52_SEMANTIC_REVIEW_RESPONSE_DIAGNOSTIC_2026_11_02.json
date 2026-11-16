@@ -1,0 +1,68 @@
+{
+  "observedUtc": "2026-11-02T10:35:42.444058+00:00",
+  "classification": "CONTROLLED_LIVE_PARTIAL_REVIEW_AND_UNVERIFIED_ASSISTANT_RESPONSE",
+  "sourceCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "runtimeSourceCommit": "9039ee9d89cbcf457160ac7e76fdfcd00fdb159e",
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "checkpointA": {
+    "verdict": "REVIEWED_PARTIAL",
+    "responseSha256": "beb1ef5835914c78cbe94582a72c1112b09d14739a482f0466ad15df27e0ebc7",
+    "coordinatorClosed": true,
+    "uniqueCommandResultPairs": 12,
+    "matchingExecutionWitnesses": 16,
+    "identicalRepeatedResultsCountedOnce": true,
+    "additionalModelVisibleTraffic": "UNKNOWN",
+    "observedTokenProxy": 23363,
+    "originAuthenticated": false,
+    "coverageKnown": false,
+    "providerContextExact": false,
+    "repeatImportChangedLedger": false
+  },
+  "checkpointB": {
+    "userDelivery": "EXACT_USER_MESSAGE_APPENDED",
+    "responseVerified": false,
+    "reason": "SOURCE_REVIEW_ASSISTANT_NOT_MOUNTED",
+    "observationState": "PENDING",
+    "diagnosisRefusal": "SCOPED_RECONCILE_DELIVERY_INVALID",
+    "resolveApiCalls": 0,
+    "sourceCommandsWithMatchedLogs": 2,
+    "declaredCommands": 15,
+    "retryOrResendAuthorizedByTheseResults": false
+  },
+  "checkpointC": {
+    "submitted": false
+  },
+  "privateEvidenceHarness": {
+    "originalReadExitZeroIsNotVerifiedResponse": true,
+    "originalReadResultAndFailedResolvePreserved": true,
+    "futureReadsRequireVerifiedNonemptyBody": true,
+    "originalHelperSha256": "da68c19cadeaac8f063f105f1b083132e138b925b3cd93c6855cb1b3bac74545",
+    "correctedHelperSha256": "db607cf28afef1b1336105ad0128ed7c369b7cdfc54c9b30b28a1c61dfec3ed0",
+    "actualVerifiedAndUnverifiedResultsClassifiedCorrectly": true
+  },
+  "sourceRegression": {
+    "command": "cargo test --locked --offline --bin catdesk operator_facade::web::tests::diagnosed_review_read_preserves_sent_evidence_and_never_promotes_timeout_text -- --test-threads=1",
+    "passed": 1,
+    "failed": 0,
+    "testSeconds": 4.73,
+    "earlierWrongFilterSelectedZeroTests": true,
+    "zeroTestAttemptCountsAsAcceptance": false,
+    "scope": "TESTED_SOURCE_NOT_INSTALLED_OR_WEB_RESPONSE_ACCEPTANCE"
+  },
+  "cleanup": {
+    "testOwnedProcesses": 0,
+    "recurringWakeHost": "STOPPED",
+    "trustedServingOwnerRetained": true,
+    "soleExpectedBackendListener": true,
+    "processActions": 0
+  },
+  "productionChanges": 0,
+  "bindingChanges": 0,
+  "nativeTaskStarts": 0,
+  "newProfilesOrTunnels": 0,
+  "operatorActionRequired": false,
+  "fullContextMeterAcceptance": "OPEN",
+  "providerClientExpansion": "MANDATORY_LATER_CD_P7",
+  "nextTask": "Preserve the delivered request while determining the supported sent-event response-recovery path; do not resend B or submit C behind its unresolved work. Continue independently eligible canonical/control and reviewed Wake-publication implementation. Genuine cumulative source acceptance and two-project Web/native editing remain open."
+}

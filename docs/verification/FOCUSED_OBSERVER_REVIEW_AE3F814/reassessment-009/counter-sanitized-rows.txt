@@ -1,0 +1,150 @@
+fn sanitized_rows(text: &str) -> Vec<String> {
+    text.lines()
+        .filter(|line| {
+            let Some(state) = line.strip_prefix("PROBE:") else {
+                return false;
+            };
+            if state.starts_with("SURFACE:") {
+                return surface_observation(line).is_some();
+            }
+            if state.starts_with("TAB:") {
+                return tab_observation(line).is_some();
+            }
+            if state.starts_with("RESPONSE:") {
+                return sent_response_observation(line).is_some();
+            }
+            if state.starts_with("HISTORY_RESPONSE:") {
+                return historical_response_observation(line).is_some();
+            }
+            if state.starts_with("TASK:") {
+                return task_response_diagnostics(line).is_some();
+            }
+            if let Some(reason) = state.strip_prefix("RESPONSE_STATE:") {
+                return matches!(
+                    reason,
+                    "UNPROVEN"
+                        | "UNSTABLE"
+                        | "RESPONSE_LOAD_ERROR"
+                        | "RESPONSE_NETWORK_ERROR"
+                        | "LOGIN_OR_PROFILE_REQUIRED"
+                        | "RESPONSE_EXPECTED_USER_DUPLICATED"
+                        | "RESPONSE_EXPECTED_USER_NOT_FOUND"
+                        | "RESPONSE_USER_REPRESENTATION_MISMATCH"
+                        | "RESPONSE_SEQUENCE_QUERY_FAILED"
+                        | "RESPONSE_SEQUENCE_DRIFT"
+                        | "RESPONSE_STATE_UNPROVEN"
+                        | "RESPONSE_TIMEOUT_RETRY_REQUIRED"
+                        | "RESPONSE_TARGET_DRIFT"
+                        | "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
+                );
+            }
+            if let Some(phase) = state.strip_prefix("PHASE:") {
+                return matches!(
+                    phase,
+                    "IMPORT_BROWSER"
+                        | "BROWSER_START"
+                        | "CDP_NAVIGATION"
+                        | "OBSERVING"
+                        | "BROWSER_CLOSED"
+                );
+            }
+            if let Some(reason) = state.strip_prefix("HOME_CHECK:") {
+                return matches!(
+                    reason,
+                    "EMPTY"
+                        | "NOT_HOME"
+                        | "BUSY"
+                        | "DOCUMENT_LOADING"
+                        | "EDITOR_MISSING"
+                        | "EDITOR_AMBIGUOUS"
+                        | "EDITOR_UNSUPPORTED"
+                        | "DRAFT_PRESENT"
+                        | "EDITOR_MEDIA_PRESENT"
+                        | "ATTACHMENT_INDICATOR"
+                        | "EVALUATION_UNKNOWN"
+                        | "EVALUATION_FAILED"
+                        | "NAVIGATION_ATTEMPTED"
+                        | "NAVIGATION_FAILED"
+                );
+            }
+            if let Some(code) = state.strip_prefix("NETWORK:") {
+                return matches!(
+                    code,
+                    "UNKNOWN"
+                        | "ERR_NETWORK_CHANGED"
+                        | "ERR_INTERNET_DISCONNECTED"
+                        | "ERR_NAME_NOT_RESOLVED"
+                        | "ERR_CONNECTION_CLOSED"
+                        | "ERR_CONNECTION_RESET"
+                        | "ERR_CONNECTION_ABORTED"
+                        | "ERR_CONNECTION_REFUSED"
+                        | "ERR_CONNECTION_TIMED_OUT"
+                        | "ERR_TIMED_OUT"
+                        | "ERR_PROXY_CONNECTION_FAILED"
+                        | "ERR_TUNNEL_CONNECTION_FAILED"
+                        | "ERR_CERT_DATE_INVALID"
+                        | "ERR_CERT_AUTHORITY_INVALID"
+                        | "ERR_CERT_COMMON_NAME_INVALID"
+                        | "ERR_BLOCKED_BY_CLIENT"
+                        | "ERR_BLOCKED_BY_ADMINISTRATOR"
+                        | "ERR_BLOCKED_BY_RESPONSE"
+                        | "ERR_HTTP_RESPONSE_CODE_FAILURE"
+                        | "ERR_TOO_MANY_RETRIES"
+                        | "ERR_EMPTY_RESPONSE"
+                        | "ERR_FAILED"
+                        | "ERR_HTTP2_PROTOCOL_ERROR"
+                        | "ERR_SSL_PROTOCOL_ERROR"
+                        | "ERR_QUIC_PROTOCOL_ERROR"
+                );
+            }
+            let state = state.strip_prefix("FINAL:").unwrap_or(state);
+            matches!(
+                state,
+                "EXACT_READY_IDLE"
+                    | "PROFILE_QUIESCENT"
+                    | "PROFILE_HELPER_ACTIVE"
+                    | "PROFILE_BROWSER_ACTIVE"
+                    | "PROFILE_OWNER_UNATTRIBUTED"
+                    | "PROFILE_INVENTORY_UNVERIFIED"
+                    | "EXACT_READY_RESPONSE_LOAD_ERROR"
+                    | "EXACT_READY_RESPONSE_TIMEOUT"
+                    | "EXACT_DRAFT_PRESENT"
+                    | "EXACT_DOCUMENT_LOADING"
+                    | "EXACT_EDITOR_AMBIGUOUS"
+                    | "OBSERVATION_UNAVAILABLE"
+                    | "TARGET_TAB_EXACT"
+                    | "TARGET_TAB_MISSING"
+                    | "TARGET_TAB_AMBIGUOUS"
+                    | "TARGET_TAB_DRIFT"
+                    | "TARGET_TAB_UNAVAILABLE"
+                    | "EXACT_READY_BUSY"
+                    | "EXACT_NO_EDITOR"
+                    | "LOGIN_VISIBLE"
+                    | "CAPTCHA_VISIBLE"
+                    | "HOME"
+                    | "TARGET_DRIFT"
+                    | "CHROME_ERROR"
+                    | "URL_UNAVAILABLE"
+                    | "URL_INVALID"
+            )
+        })
+        .take(64)
+        .map(|line| {
+            // Return canonical whitelisted values, never raw JSON containing
+            // duplicate-key values or formatting from an untrusted helper.
+            if let Some(value) = surface_observation(line) {
+                format!("PROBE:SURFACE:{value}")
+            } else if let Some(value) = tab_observation(line) {
+                format!("PROBE:TAB:{value}")
+            } else if let Some(value) = sent_response_observation(line) {
+                format!("PROBE:RESPONSE:{value}")
+            } else if let Some(value) = historical_response_observation(line) {
+                format!("PROBE:HISTORY_RESPONSE:{value}")
+            } else if let Some(value) = task_response_diagnostics(line) {
+                format!("PROBE:TASK:{value}")
+            } else {
+                line.to_owned()
+            }
+        })
+        .collect()
+}

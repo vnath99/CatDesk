@@ -1,0 +1,158 @@
+             Ok(redacted_project_control_result(operation, result))
+         }
+     }
+@@ -1763,6 +1967,42 @@ pub(crate) fn valid_repair_result(result: &CommandResult) -> bool {
+ 
+ #[cfg(test)]
+ mod tests {
++    #[test]
++    fn failed_promotion_operator_commands_require_exact_identity_and_digest() {
++        let id = "a".repeat(32);
++        let hash = "b".repeat(64);
++        let inspect = vec![
++            "operator".into(),
++            "release-pair".into(),
++            "inspect-failed-promotion".into(),
++            "--transaction-id".into(),
++            id.clone(),
++        ];
++        assert!(super::parse_operator_action(inspect.clone()).is_ok());
++        let retire = vec![
++            "operator".into(),
++            "release-pair".into(),
++            "retire-failed-promotion".into(),
++            "--transaction-id".into(),
++            id,
++            "--expected-evidence-sha256".into(),
++            hash,
++        ];
++        assert!(super::parse_operator_action(retire.clone()).is_ok());
++        let mut qualify = retire.clone();
++        qualify[2] = "qualify-promotion-source".into();
++        assert!(super::parse_operator_action(qualify.clone()).is_ok());
++        qualify.push("--force".into());
++        assert!(super::parse_operator_action(qualify).is_err());
++        for index in [3, 4, 5, 6] {
++            let mut changed = retire.clone();
++            changed[index] = "../unscoped".into();
++            assert!(super::parse_operator_action(changed).is_err());
++        }
++        let mut extra = inspect;
++        extra.push("--force".into());
++        assert!(super::parse_operator_action(extra).is_err());
++    }
+     use super::*;
+     use serde_json::Value;
+     use sha2::Digest;
+@@ -2314,6 +2554,61 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn web_development_inspect_readiness_requires_only_registered_project() {
++        let valid = [
++            "operator",
++            "web-dev-runtime",
++            "inspect-readiness",
++            "--project-id",
++            "alpha",
++        ];
++        assert!(parse_operator_action(valid.into_iter().map(str::to_string)).is_ok());
++        for flag in ["--profile", "--url", "--message", "--seconds", "--send"] {
++            let mut args = valid.into_iter().map(str::to_string).collect::<Vec<_>>();
++            args.extend([flag.into(), "override".into()]);
++            assert!(parse_operator_action(args).is_err());
++        }
++    }
++
++    #[test]
++    fn web_development_login_reconciliation_requires_project_hash_and_explicit_commit() {
++        let mut args = [
++            "operator",
++            "web-dev-runtime",
++            "reconcile-login",
++            "--project-id",
++            "alpha",
++            "--expected-marker-sha256",
++        ]
++        .map(str::to_owned)
++        .to_vec();
++        args.push("a".repeat(64));
++        assert!(matches!(
++            parse_operator_action(args.clone()),
++            Ok(Some(OperatorAction::WebDevelopment(
++                WebDevelopmentAction::ReconcileLogin { execute: false, .. }
++            )))
++        ));
++        args.push("--execute".into());
++        assert!(matches!(
++            parse_operator_action(args.clone()),
++            Ok(Some(OperatorAction::WebDevelopment(
++                WebDevelopmentAction::ReconcileLogin { execute: true, .. }
++            )))
++        ));
++        for flag in ["--force", "--url", "--profile", "--send"] {
++            let mut invalid = args[..7].to_vec();
++            invalid.push(flag.into());
++            assert!(parse_operator_action(invalid).is_err());
++        }
++        for hash in ["a".repeat(63), "A".repeat(64), "z".repeat(64)] {
++            let mut invalid = args[..7].to_vec();
++            invalid[6] = hash;
++            assert!(parse_operator_action(invalid).is_err());
++        }
++    }
++
+     #[test]
+     fn web_development_login_requires_prepared_root_before_any_browser_action() {
+         let workspace =
+@@ -2323,6 +2618,10 @@ mod tests {
+             login_web_development(&workspace, "alpha").unwrap_err(),
+             "DEV_RUNTIME_NOT_PREPARED"
+         );
++        assert_eq!(
++            inspect_web_development_readiness(&workspace, "alpha").unwrap_err(),
++            "DEV_RUNTIME_NOT_PREPARED"
++        );
+         fs::remove_dir(workspace).unwrap();
+     }
+ 
+diff --git a/src/operator_installed_backend.rs b/src/operator_installed_backend.rs
+index 85f370814c9d8f5fc67b72dc768eec1120868ad7..fdf79b80cc4a1bc70361b48bd1fc9dc9fc077dc1 100644
+--- a/src/operator_installed_backend.rs
++++ b/src/operator_installed_backend.rs
+@@ -344,18 +344,38 @@ fn prefix(root: &Path, helper: &Path) -> String {
+ }
+ fn trust_command(root: &Path, helper: &Path) -> String {
+     format!(
+-        "{} $lease=Enter-CatDeskStoppedLifecycleLease $root;try {{ if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $lease)){{throw 'startup authority'}};$p=Read-CatDeskLkgPointer $root;$s=Read-CatDeskLkgSlot $root $p.Slot;$c=Get-CatDeskCanonicalPairEvidence $root;if($p.Hash -cne $s.Hash -or $p.Generation -ne $s.Generation -or $p.Slot -cne $s.Slot -or $c.Hash -cne $s.Hash){{throw 'selected release'}};$r=Get-CatDeskQualifiedStoppedAuthority $root $s.Hash;[pscustomobject]@{{schemaVersion=1;state='TRUSTED_INSTALLED';sha256=$s.Hash;slot=$s.Slot;generation=$s.Generation;receiptTransaction=$r.transactionId}}|ConvertTo-Json -Compress;[Console]::Out.Flush();if([Console]::In.ReadLine() -cne 'STOP'){{throw 'lease channel closed'}} }}finally{{$lease.Dispose()}}",
+-        prefix(root, helper)
++        "{} $lease=Enter-CatDeskStoppedLifecycleLease $root;try {{ if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $lease)){{throw 'startup authority'}};{};[Console]::Out.Flush();if([Console]::In.ReadLine() -cne 'STOP'){{throw 'lease channel closed'}} }}finally{{$lease.Dispose()}}",
++        prefix(root, helper),
++        selected_release_proof_script()
+     )
+ }
++
++/// Reuse the selected slot's existing authority rather than requiring every
++/// future release to have the initial stopped migration's hash/generation.
++/// This fragment only reads; it cannot repair, promote or mint authority.
++fn selected_release_proof_script() -> &'static str {
++    "if(Test-Path -LiteralPath (Join-Path $root '.catdesk/promotion-recovery/promotion-transaction.json')){throw 'pending promotion'};$p=Read-CatDeskLkgPointer $root;if($null -eq $p){throw 'selected pointer missing'};$s=Read-CatDeskLkgSlot $root $p.Slot;$c=Get-CatDeskCanonicalPairEvidence $root;if($null -eq $s -or $p.Hash -cne $s.Hash -or $p.Generation -ne $s.Generation -or $p.Slot -cne $s.Slot -or $c.Hash -cne $s.Hash){throw 'selected release'};$m=ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($s.Metadata));switch -CaseSensitive ($m.source){'reviewed_promotion'{$r=Get-CatDeskReviewedPromotionAuthority -Root $root -Canonical $c};'reviewed_qualified_stopped'{$r=Get-CatDeskQualifiedStoppedAuthority -Root $root -ExpectedHash $s.Hash};'reviewed_reconciliation'{$r=Get-CatDeskReviewedReconciliationAuthority -Root $root -ExpectedHash $s.Hash};default{throw 'selected authority unsupported'}};[pscustomobject]@{schemaVersion=2;state='TRUSTED_INSTALLED';sha256=$s.Hash;slot=$s.Slot;generation=$s.Generation;authorityKind=$m.source;receiptTransaction=$r.transactionId}|ConvertTo-Json -Compress"
++}
++
+ fn validate_trust(proof: &Value, expected: &str) -> Result<(), String> {
++    let selected_version = matches!(proof["slot"].as_str(), Some("slot-a" | "slot-b"))
++        && proof["generation"]
++            .as_u64()
++            .is_some_and(|generation| (1..=i32::MAX as u64).contains(&generation));
++    let authority = match proof["authorityKind"].as_str() {
++        Some("reviewed_promotion") => selected_version,
++        Some("reviewed_qualified_stopped" | "reviewed_reconciliation") => {
++            proof["slot"] == "slot-b" && proof["generation"] == 2
++        }
++        _ => false,
++    };
+     if expected.len() != 64
+         || !expected.bytes().all(|b| b.is_ascii_hexdigit())
+-        || proof["schemaVersion"] != 1
++        || proof.as_object().is_none_or(|object| object.len() != 7)

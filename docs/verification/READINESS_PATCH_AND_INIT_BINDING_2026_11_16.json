@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-16T17:51:25.232517+00:00",
+  "scope": "INDEPENDENT_DEVELOPMENT_PATCH_AND_EXACT_INIT_BINDING_SOURCE_BOUNDARY_ONLY",
+  "sourceCommit": "ba2db7aba0780daa0a52961c673aae710c107f08",
+  "publicationParent": "5561b379f1c3e1e3bd99a414a37feba3b5bdc284",
+  "pullRequest": 32,
+  "readinessCorrection": {
+    "marker": "READINESS_EXIT_PATCH_BA2_NOV16",
+    "scope": "DEVELOPMENT_SOURCE_PATCH_ONLY",
+    "verdict": "PASS",
+    "inspectedPathsAndRanges": [
+      {
+        "path": "wake/src/readiness_probe.rs",
+        "blob": "c8a9d751e3df078e3a8abdc2012c2fa6ff37ecec",
+        "ranges": "541-660, 1170-1291",
+        "coverage": "Complete changed implementation, both exceptional pipe branches, common Job cleanup and new Windows descendant tests."
+      },
+      {
+        "path": "wake/src/runtime_readiness.rs",
+        "blob": "88c1ee0e4514210d039e54d66efd245c0501b018",
+        "ranges": "18-29, 558-566, 689-714, 910-967",
+        "coverage": "Complete changed ownership wrapper, registered readiness caller, error handling and lock-contention regression."
+      },
+      {
+        "path": "wake/src/process_job.rs",
+        "blob": "7c61314a62d34d5ec922a495a72280afc16e73eb",
+        "ranges": "1-130",
+        "coverage": "Existing Windows Job assignment, zero-active accounting, bounded termination and Drop."
+      },
+      {
+        "path": "wake/src/runtime.rs",
+        "blob": "a07e144e8f773d84473dc2b84f6e385271312da1",
+        "ranges": "1706-1810",
+        "coverage": "Existing shared browser lock and fail-stop retained-handle helper."
+      },
+      {
+        "path": "wake/src/development_runtime.rs",
+        "blob": "cb988e00247d3a91cfc4d7ad9dcbd01c53e856b3",
+        "ranges": "2420-2465",
+        "coverage": "Unchanged development observation and sticky cleanup marker."
+      }
+    ],
+    "findings": [],
+    "neededReads": [],
+    "responseSha256": "0dd5e9a0bbfe705e7f29b49f1e9dd276d71bfa7f743208c826f1792073bbd2ee",
+    "publicSourceReads": 8,
+    "testsIndependentlyExecuted": false,
+    "reportedAssistantSeconds": 69.88117098808289,
+    "requestedSeconds": 180,
+    "requestedTimeLimitExceeded": false,
+    "reportedDurationIsHardTimeoutProof": false,
+    "noResend": true,
+    "bodyCompleteJson": true,
+    "originalResponseAttributable": true,
+    "fullCandidateReview": false,
+    "artifactProducerOrReleaseAuthority": false
+  },
+  "initializationBoundary": {
+    "marker": "INIT_RECEIPT_BINDING_BA2_NOV16",
+    "scope": "INIT_RECEIPT_TO_PAIRED_BINDING_ONLY",
+    "verdict": "BOUNDARY_COMPLETE_NO_FINDINGS",
+    "inspectedPathsAndRanges": [
+      {
+        "path": "src/operator_web_onboarding.rs",
+        "blob": "c8150893dc3297256f06b59d4fd9ce53fc35e0db",
+        "ranges": "79-125,125-309,309-530,531-782,850-1242"
+      },
+      {
+        "path": "src/operator_web_rollover.rs",
+        "blob": "9476d8ee97d2f59adaf3f0178f4471d1c13aa58d",
+        "ranges": "189-220,760-818,1478-1518,3052-3133,3797-3887,3945-4010,4100-4155,4180-4295,8035-8137",
+        "netDelta": "All 35 added lines independently identified against the exact base; no deletions."
+      },
+      {
+        "path": "src/web_rollover_admission.rs",
+        "blob": "a13d23d8530274c0f4ebd86fbb2754100b316e8c",
+        "ranges": "1-460,460-690"
+      },
+      {
+        "path": "wake/src/runtime_bootstrap_observation.rs",
+        "blob": "d60a2e620e4ea390d9bf71692d5d23f02b91522a",
+        "ranges": "173-383,384-600,602-727"
+      },
+      {
+        "path": "src/mcp.rs",
+        "blob": "2c649759f84c0a9168343e18d064ee2dfef9da93",
+        "ranges": "3972-4055,4230-4578"
+      },
+      {
+        "path": "src/delegated/autonomy_projects.rs",
+        "blob": "65775cedd410d0b1e1e89ad0f8fa3f01407638a0",
+        "ranges": "1302-1388,2023-2034"
+      },
+      {
+        "path": "wake/adapter.py",
+        "blob": "889c6db99ca39e89a51f712d111054c14eecae4d",
+        "ranges": "720-840"
+      }
+    ],
+    "findings": [],
+    "neededReads": [],
+    "responseSha256": "0d4f1b1aeab43a6288fb2cde9ac6b103188dc6a7e723b9a1cc8fa9502d9595f1",
+    "publicSourceReads": 11,
+    "testsIndependentlyExecuted": false,
+    "reportedAssistantSeconds": 198.443843126297,
+    "requestedSeconds": 180,
+    "requestedTimeLimitExceeded": true,
+    "reportedDurationIsHardTimeoutProof": false,
+    "noResend": true,
+    "bodyCompleteJson": true,
+    "originalResponseAttributable": true,
+    "fullCandidateReview": false,
+    "artifactProducerOrReleaseAuthority": false
+  },
+  "initializationAssessment": {
+    "identity": "PASS: Recovery checks project, intent, registration digest, frozen USER message digest, original journal SHA256, candidate URL and recorded native-turn timestamp.",
+    "unknownFence": "PASS: SEND_ATTEMPTED remains unreplayable. Recovery observes the original exchange without another USER Send.",
+    "freshReadback": "PASS: The browser adapter requires the exact original USER, completed response, fresh-document persistence and exact initialization acknowledgment before emitting a completed receipt.",
+    "hints": "PASS: Unverified destination hints and diagnostic observations cannot replace a completed bootstrap receipt.",
+    "retainedEvidence": "PASS: The initial journal preserves original identity and recovery provenance. Diagnostic observations are stored separately without changing the frozen journal.",
+    "sharedBrowser": "PASS within the inspected boundary: Native readback uses existing host ownership and Adapter browser-session locking. No additional browser submission authority is created.",
+    "admission": "PASS: Shared New Chat admission remains separately owned. Recovery records only the original initialization entry after validating its completed receipt.",
+    "pairedCommit": "PASS: The registry callback holds its registration lock across the Wake target CAS and registry commit. The paired readback requires matching URL, digest, generation and Wake history.",
+    "interruptionRecovery": "PASS: Wake-first interruption is explicitly recoverable for an initially unbound project when the exact generation-one successor is retained. A saved completed receipt is reused without reobserving or resending.",
+    "atomicity": "The registry and Wake files are not one atomic cross-system write. Safety relies on ordered commits, exact CAS, refusal of inconsistent pairs and idempotent recovery. No blind rollback or resend was identified.",
+    "projectIsolation": "Relevant source tests preserve unrelated project bindings, native ownership and historical state.",
+    "regressionEvidence": "Inspected assertions covering changed identity, incomplete receipts, original UNKNOWN, interrupted Wake-first commits, repeated recovery, diagnostic isolation and independent projects. Tests were not executed."
+  },
+  "sourceComparison": {
+    "inputCount": 262,
+    "changedFromRetainedBase": 42,
+    "original261IndexPreserved": true,
+    "new262IndexIsSourceOnly": true,
+    "newCandidateOrBinaryBuilt": false,
+    "ordinaryAuthPatchSourceUnchangedFromItsGenuineScopedReview": true,
+    "authPatchReviewedAt": "e2d28eb5de852afe83574cd2ce39c297951139c9",
+    "authPaths": [
+      "src/ngrok.rs",
+      "src/openai_tunnel.rs",
+      "src/openai_tunnel_runtime_auth_tests.rs"
+    ],
+    "baseFourRoleReviewNotAutomaticallyInherited": true,
+    "originalCompilerReadBytesCertified": false
+  },
+  "installedCapabilityEvidence": {
+    "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "basis": "READ_ONLY_EXACT_RETAINED_INSTALLED_SOURCE_NOT_NEW_LIVE_ACCEPTANCE",
+    "projectTaskTools": [
+      "read",
+      "search",
+      "patch.preview",
+      "patch.apply",
+      "patch.compare",
+      "diff.actual",
+      "verify.command"
+    ],
+    "scopedGitCheckpointToolAbsent": true,
+    "verificationSandboxKeepsGitMetadataReadOnly": true,
+    "evidencePaths": [
+      "src/project_mcp_task.rs",
+      "src/project_task_command.rs"
+    ],
+    "releaseDependencyIsGenuine": true,
+    "alternateCommandRouteOrNewGrantAttempted": false
+  },
+  "qualification": {
+    "newSourceChanges": 0,
+    "newTestsOrBuilds": 0,
+    "newNativeContract": false,
+    "originalF7PartialAndClaimPreserved": true,
+    "originalD22UnknownAndNoReplayPreserved": true,
+    "productionLifecycleOrBindingActions": 0,
+    "operatorSigningInputsNotRefrozen": true,
+    "noPrivateKeyReads": true,
+    "readinessPatchPassIsNotFullRuntimeApproval": true,
+    "initializationCommitUsesOrderedRecoverableCASNotCrossSystemAtomicity": true
+  },
+  "remainingSourceCoverage": [
+    "Finish only the distinct Python-reader/regression assertion and native diagnostic-consumer gaps left by the retained partial assessments, considering explicit unchanged-base provenance",
+    "Development-only flags/root/login and fixed CLI caller/exclusion assessment",
+    "Remaining reachable changed four-role source and context-literal/replay assertions",
+    "Independent exact updated-candidate artifact/build provenance and permitted working-previous qualification; no relabeling unchanged 06d artifacts"
+  ],
+  "releaseGates": {
+    "wakeBootstrap": "Existing exact operator-purpose signature and supported native preflight; not changed by these source reviews",
+    "backend": "Original d22 attribution/outcome and genuine producer authority remain separate; never resend UNKNOWN",
+    "liveMvp": "Installed scoped delivery/Git capability plus actual authorized Web edit/checkpoint/self-Wake and second-project independence remain OPEN"
+  },
+  "softLimitEvidence": "Initialization reviewer reported 198.444 seconds against 180 requested. No supported hard cancellation tool was available. The same original turn became idle and its complete body was retained; no resend or local browser/Wake owner existed."
+}

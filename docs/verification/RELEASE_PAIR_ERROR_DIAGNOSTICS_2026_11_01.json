@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-01T22:35:05.568960+00:00",
+  "evidenceBaseCommit": "63fdbac4380b65ae1598b6675498410c5c5e2f8a",
+  "branch": "codex/web-rollover-oct17",
+  "sourceChange": {
+    "status": "TESTED_SOURCE_AND_CONTROLLED_READONLY_WINDOWS_NOT_INSTALLED",
+    "path": "src/main.rs",
+    "workingFileSha256": "9e059d67a551cd6656df73e20e891160ec3599e48844f05c6a8f12cac52326c8",
+    "trigger": "The new completed-promotion inspector returned only status=attention; main discarded its failure layer.",
+    "result": "Release-pair execution and parsing failures now expose closed errorCode values. Raw helper/process/authority/credential/path details remain redacted. Exit status remains2.",
+    "fullDeclaredScopeRetained": 84,
+    "unchangedBlobsAgainstAccepted9ea9e7b": 81,
+    "changedBlobs": [
+      {
+        "path": "src/main.rs",
+        "previousAcceptedBlob": "634e0c07881903d3bf5a7b8366300340a34f84a8",
+        "currentBlob": "f14ea385b10daf0f2eeea8809cf75920af1cdb24"
+      },
+      {
+        "path": "src/operator_facade.rs",
+        "previousAcceptedBlob": "205add5ae4742bc6e68da0e0138d402a8f98666b",
+        "currentBlob": "cfc9bc7706b3174c496e58cc1972397943a203e2"
+      },
+      {
+        "path": "src/promotion_retirement.rs",
+        "previousAcceptedBlob": "8d3825761dc1f283ede4664ab77f6404c05f67fe",
+        "currentBlob": "ae9efd7cb5a548f85ea20ede1f5c18557dca3b27"
+      }
+    ]
+  },
+  "localChecks": {
+    "diagnosticPrivacyCases": [
+      "tests::release_pair_attention_distinguishes_layers_without_exporting_error_details"
+    ],
+    "existingWebPrivacyCases": [
+      "tests::operator_web_attention_exposes_only_bounded_stable_codes"
+    ],
+    "strictAllTargetClippy": true,
+    "format": true,
+    "diffCheck": true,
+    "debugControllerBuild": true,
+    "controllerSha256": "896e2c285692c9fca5e3b87e7e064620512b507ba85e41b9e0c3a9794a69bf31",
+    "protectedCandidateOrInstallation": false
+  },
+  "actualWindowsReadonly": {
+    "code": "PROMOTION_RETIREMENT_OWNER_OR_TRUST_UNPROVEN",
+    "exitCode": 2,
+    "boundedSeconds": 90,
+    "elapsedSeconds": 7.938,
+    "preservationPins": 4719,
+    "preservationMismatches": 0,
+    "lockReleased": true,
+    "retireCalls": 0,
+    "promotionCalls": 0,
+    "scope": "Diagnostic projection and fail-closed refusal while the intended backend remains serving.",
+    "limitation": "This combined owner-or-trust code does not prove owner presence is the sole cause, stopped eligibility, actual retirement, promotion or installed recovery."
+  },
+  "reviewProgress": {
+    "reviewedSource": "57ab32f8cd7440e3de9fbd7e29da873f7b22ae09",
+    "completedDistinctWebReviews": 1,
+    "verdict": "REVIEWED_PARTIAL",
+    "responseSha256": "c3e40874b6f634cd909436001d5b1c6198f0f70d8bb06a83e3b5a13538d7b631",
+    "taskCorrelatedSourceCommands": 5,
+    "matchingCommandCounts": [
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "currentSourceCumulativeAccepted": false,
+    "obsoleteAdministrativeClaim": "CANCELLED_INACTIVE_VERSION5",
+    "oldNativeFilesPreservedExceptOwnedStateAndAppendedEvent": true,
+    "priorEventPrefixPreserved": true,
+    "accountingUnchanged": true,
+    "unusedSecondFrozenMessageRevoked": true,
+    "completedReviewPreserved": true,
+    "reportAbsent": true,
+    "noNewReplacementClaimYet": true
+  },
+  "context": {
+    "generation": 5,
+    "observedProxy": 71327,
+    "configuredLocalBudget": 96000,
+    "localTrigger": 72000,
+    "coverage": "UNKNOWN_OR_INCOMPLETE",
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "boundedReviewerReportedVisibleToolImportIdempotent": true,
+    "earlierElevenCallResultVisibilityRemainsUnknown": true,
+    "rolloverRequestRefused": "WEB_ROLLOVER_NOT_DUE_OR_DISABLED",
+    "reason": "The one uncertainty-only rollover allowance was already used; observed pressure had not reached the unchanged trigger.",
+    "failedRequestMessagesSent": 0,
+    "policyRestored": true,
+    "replacementConversationCreated": false,
+    "completedRolloverReplayed": false
+  },
+  "cleanup": {
+    "testOwnedRemaining": 0,
+    "intendedServingOwnersPreserved": true,
+    "sharedWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "firstTransientMatchingPowerShellIdentityGoneBeforeFreshZeroInventory": true,
+    "processKillActions": 0
+  },
+  "retainedCandidate": {
+    "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "genuineAttestationPreserved": true,
+    "installed": false,
+    "currentMigrationControllerSourceApproval": false
+  },
+  "productionReleaseOrLifecycleActions": 0,
+  "newNativeProjectTurns": 0,
+  "goalPaused": false,
+  "operatorActionRequiredNow": false,
+  "next": "Freeze updated three-file source scope, obtain genuine bounded independent review within context headroom, then qualify the current controller and existing guarded release procedure.",
+  "coreTwoWebCodingAcceptance": "OPEN",
+  "mvpComplete": false
+}

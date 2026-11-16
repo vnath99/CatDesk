@@ -8,7 +8,7 @@
 
 use crate::{
     Result,
-    install_broker_approval::{VerifiedApprovalV1, validate_manifest},
+    install_broker_approval::{PackageManifestV1, VerifiedApprovalV1, validate_manifest},
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -31,10 +31,17 @@ const ARTIFACT_NAMES: [&str; 4] = [
     "wake_bridge.py",
 ];
 const MANIFEST_NAME: &str = "manifest.json";
+#[path = "install_broker_source_runtime.rs"]
+mod runtime_v3;
+pub(crate) use runtime_v3::{
+    RuntimePackagePinsV3, RuntimePackagePublicationV3, RuntimePackageStageV3, RuntimeSourceRoleV3,
+};
 const MAX_MANIFEST_BYTES: usize = 4096;
 const MAX_DIRECTORY_ENTRIES: usize = 16;
 const FILE_OPEN: u32 = 1;
+const FILE_CREATE: u32 = 2;
 const FILE_READ_DATA: u32 = 1;
+const FILE_WRITE_DATA: u32 = 2;
 const FILE_READ_ATTRIBUTES: u32 = 0x80;
 const SYNCHRONIZE: u32 = 0x0010_0000;
 const FILE_SHARE_READ: u32 = 1;
@@ -191,13 +198,17 @@ fn size(info: &FileInfo) -> u64 {
 }
 
 fn open_path_directory(path: &OsStr) -> Result<OwnedHandle> {
+    open_path_directory_with_sharing(path, FILE_SHARE_READ | FILE_SHARE_WRITE)
+}
+
+fn open_path_directory_with_sharing(path: &OsStr, sharing: u32) -> Result<OwnedHandle> {
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
     let wide: Vec<u16> = path.encode_wide().chain(std::iter::once(0)).collect();
     let raw = unsafe {
         CreateFileW(
             wide.as_ptr(),
             FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            sharing,
             ptr::null_mut(),
             3,
             FILE_FLAG_BACKUP_SEMANTICS | FILE_OPEN_REPARSE_POINT,
@@ -213,6 +224,38 @@ fn open_path_directory(path: &OsStr) -> Result<OwnedHandle> {
 }
 
 fn open_relative(parent: &OwnedHandle, name: &str, directory: bool) -> Result<OwnedHandle> {
+    open_relative_object(
+        parent,
+        name,
+        directory,
+        false,
+        if directory {
+            FILE_SHARE_READ | FILE_SHARE_WRITE
+        } else {
+            FILE_SHARE_READ
+        },
+    )
+}
+
+fn open_relative_object(
+    parent: &OwnedHandle,
+    name: &str,
+    directory: bool,
+    create: bool,
+    sharing: u32,
+) -> Result<OwnedHandle> {
+    open_relative_object_secured(parent, name, directory, create, sharing, None, false)
+}
+
+fn open_relative_object_secured(
+    parent: &OwnedHandle,
+    name: &str,
+    directory: bool,
+    create: bool,
+    sharing: u32,
+    descriptor: Option<&crate::install_broker_stage_writer::LocalDescriptor>,
+    read_security: bool,
+) -> Result<OwnedHandle> {
     if !valid_component(name) {
         return Err("WAKE_BROKER_SOURCE_COMPONENT_INVALID".into());
     }
@@ -229,7 +272,7 @@ fn open_relative(parent: &OwnedHandle, name: &str, directory: bool) -> Result<Ow
         root_directory: parent.as_raw_handle(),
         object_name: &mut object_name,
         attributes: 0x40, // OBJ_CASE_INSENSITIVE; directory readback checks exact case.
-        security_descriptor: ptr::null_mut(),
+        security_descriptor: descriptor.map_or(ptr::null_mut(), |value| value.as_raw()),
         security_quality_of_service: ptr::null_mut(),
     };
     let mut iosb = IoStatusBlock {
@@ -240,17 +283,21 @@ fn open_relative(parent: &OwnedHandle, name: &str, directory: bool) -> Result<Ow
     let result = unsafe {
         NtCreateFile(
             &mut raw,
-            FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+            FILE_READ_DATA
+                | FILE_READ_ATTRIBUTES
+                | SYNCHRONIZE
+                | if read_security { 0x0002_0000 } else { 0 }
+                | if create && !directory {
+                    FILE_WRITE_DATA
+                } else {
+                    0
+                },
             &mut attributes,
             &mut iosb,
             ptr::null_mut(),
             0,
-            if directory {
-                FILE_SHARE_READ | FILE_SHARE_WRITE
-            } else {
-                FILE_SHARE_READ
-            },
-            FILE_OPEN,
+            sharing,
+            if create { FILE_CREATE } else { FILE_OPEN },
             FILE_SYNCHRONOUS_IO_NONALERT
                 | FILE_OPEN_REPARSE_POINT
                 | if directory {
@@ -270,7 +317,7 @@ fn open_relative(parent: &OwnedHandle, name: &str, directory: bool) -> Result<Ow
     Ok(handle)
 }
 
-fn fresh_directory(directory: &OwnedHandle) -> Result<OwnedHandle> {
+fn fresh_directory(directory: &OwnedHandle, sharing: u32) -> Result<OwnedHandle> {
     let mut empty = UnicodeString {
         length: 0,
         maximum_length: 0,
@@ -297,7 +344,7 @@ fn fresh_directory(directory: &OwnedHandle) -> Result<OwnedHandle> {
             &mut iosb,
             ptr::null_mut(),
             0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            sharing,
             FILE_OPEN,
             FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
             ptr::null_mut(),
@@ -318,7 +365,21 @@ fn fresh_directory(directory: &OwnedHandle) -> Result<OwnedHandle> {
 }
 
 fn inventory(directory: &OwnedHandle, filter: Option<&str>, expected: &[&str]) -> Result<()> {
-    let fresh = fresh_directory(directory)?;
+    inventory_with_sharing(
+        directory,
+        filter,
+        expected,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+    )
+}
+
+fn inventory_with_sharing(
+    directory: &OwnedHandle,
+    filter: Option<&str>,
+    expected: &[&str],
+    sharing: u32,
+) -> Result<()> {
+    let fresh = fresh_directory(directory, sharing)?;
     let expected: BTreeSet<String> = expected.iter().map(|name| (*name).to_string()).collect();
     let mut seen = BTreeSet::new();
     let mut pattern = filter.map(|name| name.encode_utf16().collect::<Vec<_>>());
@@ -452,7 +513,8 @@ fn hash_artifact(file: &mut File, expected_length: u64, expected_sha256: &str) -
 /// with the already verified detached approval. This type cannot install.
 pub(crate) struct PinnedCandidateSourceV1 {
     ancestors: Vec<OwnedHandle>,
-    chain: Vec<&'static str>,
+    chain: Vec<String>,
+    exclusive_parent: bool,
     directory_info: Vec<FileInfo>,
     manifest: File,
     manifest_info: FileInfo,
@@ -478,11 +540,24 @@ impl PinnedCandidateSourceV1 {
     /// Rehash the same pinned bytes and compare every fixed-name reopen before
     /// a protected stage records provenance. A source change only refuses use.
     pub(crate) fn revalidate(&mut self, approval: &VerifiedApprovalV1) -> Result<()> {
-        validate_manifest(&approval.payload().manifest)?;
-        let canonical = serde_json::to_vec(&approval.payload().manifest)
-            .map_err(|_| "WAKE_BROKER_SOURCE_MANIFEST_INVALID")?;
+        self.revalidate_manifest(
+            &approval.payload().manifest,
+            &approval.payload().manifest_sha256,
+        )
+    }
+
+    /// Manifest-layout byte checks shared with V2. This does not turn an
+    /// unsigned manifest or these read pins into installation authority.
+    pub(crate) fn revalidate_manifest(
+        &mut self,
+        manifest: &PackageManifestV1,
+        manifest_sha256: &str,
+    ) -> Result<()> {
+        validate_manifest(manifest)?;
+        let canonical =
+            serde_json::to_vec(manifest).map_err(|_| "WAKE_BROKER_SOURCE_MANIFEST_INVALID")?;
         if canonical.len() > MAX_MANIFEST_BYTES
-            || format!("{:x}", Sha256::digest(&canonical)) != approval.payload().manifest_sha256
+            || format!("{:x}", Sha256::digest(&canonical)) != manifest_sha256
             || self.manifest_bytes != canonical
         {
             return Err("WAKE_BROKER_SOURCE_MANIFEST_MISMATCH".into());
@@ -497,11 +572,11 @@ impl PinnedCandidateSourceV1 {
             if index > 0 {
                 inventory(
                     &self.ancestors[index - 1],
-                    Some(self.chain[index - 1]),
-                    &[self.chain[index - 1]],
+                    Some(&self.chain[index - 1]),
+                    &[&self.chain[index - 1]],
                 )?;
                 let reopened =
-                    open_relative(&self.ancestors[index - 1], self.chain[index - 1], true)?;
+                    open_relative(&self.ancestors[index - 1], &self.chain[index - 1], true)?;
                 if !same_object(&now, &info(reopened.as_raw_handle(), true)?) {
                     return Err("WAKE_BROKER_SOURCE_OBJECT_CHANGED".into());
                 }
@@ -509,7 +584,19 @@ impl PinnedCandidateSourceV1 {
         }
         let submission = &self.ancestors[self.ancestors.len() - 2];
         let candidate = &self.ancestors[self.ancestors.len() - 1];
-        inventory(submission, None, &["candidate"])?;
+        let package_name = self
+            .chain
+            .last()
+            .ok_or("WAKE_BROKER_SOURCE_COMPONENT_INVALID")?;
+        inventory(
+            submission,
+            if self.exclusive_parent {
+                None
+            } else {
+                Some(package_name)
+            },
+            &[package_name],
+        )?;
         inventory(
             candidate,
             None,
@@ -521,8 +608,8 @@ impl PinnedCandidateSourceV1 {
                 ARTIFACT_NAMES[3],
             ],
         )?;
-        let (manifest, now_manifest) = read_manifest(&mut self.manifest)?;
-        if manifest != canonical || !stable(&self.manifest_info, &now_manifest) {
+        let (manifest_bytes, now_manifest) = read_manifest(&mut self.manifest)?;
+        if manifest_bytes != canonical || !stable(&self.manifest_info, &now_manifest) {
             return Err("WAKE_BROKER_SOURCE_MANIFEST_MISMATCH".into());
         }
         let reopened = open_relative(candidate, MANIFEST_NAME, false)?;
@@ -530,7 +617,7 @@ impl PinnedCandidateSourceV1 {
             return Err("WAKE_BROKER_SOURCE_OBJECT_CHANGED".into());
         }
         for (index, name) in ARTIFACT_NAMES.iter().enumerate() {
-            let expected = &approval.payload().manifest.artifacts[index];
+            let expected = &manifest.artifacts[index];
             let now = hash_artifact(
                 &mut self.artifacts[index],
                 expected.byte_length,
@@ -557,6 +644,17 @@ impl PinnedCandidateSourceV1 {
         )?;
         Ok(())
     }
+
+    /// Retained objects only, in fixed manifest-layout order. The caller must
+    /// keep this value alive and separately check protected-stage security.
+    pub(crate) fn package_pins(&self) -> (&OwnedHandle, &OwnedHandle, &File, &[File; 4]) {
+        (
+            &self.ancestors[self.ancestors.len() - 2],
+            &self.ancestors[self.ancestors.len() - 1],
+            &self.manifest,
+            &self.artifacts,
+        )
+    }
 }
 
 fn open_candidate_in(
@@ -564,10 +662,37 @@ fn open_candidate_in(
     chain: &[&'static str],
     approval: &VerifiedApprovalV1,
 ) -> Result<PinnedCandidateSourceV1> {
+    open_candidate_manifest_in(
+        root,
+        chain,
+        &approval.payload().manifest,
+        &approval.payload().manifest_sha256,
+    )
+}
+
+fn open_candidate_manifest_in(
+    root: OwnedHandle,
+    chain: &[&'static str],
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+) -> Result<PinnedCandidateSourceV1> {
     if chain.len() < 2 || chain.last() != Some(&"candidate") {
         return Err("WAKE_BROKER_SOURCE_COMPONENT_INVALID".into());
     }
-    validate_manifest(&approval.payload().manifest)?;
+    open_manifest_package_in(root, chain, manifest, manifest_sha256, true)
+}
+
+fn open_manifest_package_in(
+    root: OwnedHandle,
+    chain: &[&str],
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+    exclusive_parent: bool,
+) -> Result<PinnedCandidateSourceV1> {
+    if chain.len() < 2 || chain.iter().any(|name| !valid_component(name)) {
+        return Err("WAKE_BROKER_SOURCE_COMPONENT_INVALID".into());
+    }
+    validate_manifest(manifest)?;
     let mut ancestors = vec![root];
     let mut directory_info = vec![info(ancestors[0].as_raw_handle(), true)?];
     for component in chain {
@@ -583,7 +708,16 @@ fn open_candidate_in(
     }
     let submission = &ancestors[ancestors.len() - 2];
     let candidate = &ancestors[ancestors.len() - 1];
-    inventory(submission, None, &["candidate"])?;
+    let package_name = chain.last().ok_or("WAKE_BROKER_SOURCE_COMPONENT_INVALID")?;
+    inventory(
+        submission,
+        if exclusive_parent {
+            None
+        } else {
+            Some(package_name)
+        },
+        &[*package_name],
+    )?;
     inventory(
         candidate,
         None,
@@ -595,7 +729,7 @@ fn open_candidate_in(
             ARTIFACT_NAMES[3],
         ],
     )?;
-    let manifest = File::from(open_relative(candidate, MANIFEST_NAME, false)?);
+    let manifest_file = File::from(open_relative(candidate, MANIFEST_NAME, false)?);
     let mut artifact_vec = Vec::with_capacity(4);
     for name in ARTIFACT_NAMES {
         artifact_vec.push(File::from(open_relative(candidate, name, false)?));
@@ -605,9 +739,10 @@ fn open_candidate_in(
         .map_err(|_| "WAKE_BROKER_SOURCE_INVENTORY_MISMATCH")?;
     let mut source = PinnedCandidateSourceV1 {
         ancestors,
-        chain: chain.to_vec(),
+        chain: chain.iter().map(|name| (*name).to_owned()).collect(),
+        exclusive_parent,
         directory_info,
-        manifest,
+        manifest: manifest_file,
         manifest_info: FileInfo::default(),
         manifest_bytes: Vec::new(),
         artifacts,
@@ -617,14 +752,14 @@ fn open_candidate_in(
     source.manifest_info = manifest_info;
     source.manifest_bytes = bytes;
     for index in 0..4 {
-        let signed = &approval.payload().manifest.artifacts[index];
+        let signed = &manifest.artifacts[index];
         source.artifact_info[index] = hash_artifact(
             &mut source.artifacts[index],
             signed.byte_length,
             &signed.sha256,
         )?;
     }
-    source.revalidate(approval)?;
+    source.revalidate_manifest(manifest, manifest_sha256)?;
     Ok(source)
 }
 
@@ -633,6 +768,67 @@ pub(crate) fn open_fixed_candidate_source(
 ) -> Result<PinnedCandidateSourceV1> {
     let volume = open_path_directory(OsStr::new(r"C:\"))?;
     open_candidate_in(volume, &SOURCE_CHAIN, approval)
+}
+
+/// Same fixed, untrusted source; V2 supplies only its already checked manifest
+/// layout. There is no caller-selected path and no owner-field conversion.
+pub(crate) fn pin_fixed_candidate_manifest(
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+) -> Result<PinnedCandidateSourceV1> {
+    let volume = open_path_directory(OsStr::new(r"C:\"))?;
+    open_candidate_manifest_in(volume, &SOURCE_CHAIN, manifest, manifest_sha256)
+}
+
+pub(crate) fn pin_staged_candidate_manifest(
+    root: &OwnedHandle,
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+) -> Result<PinnedCandidateSourceV1> {
+    let retained = root
+        .try_clone()
+        .map_err(|_| "WAKE_BROKER_SOURCE_OBJECT_UNAVAILABLE")?;
+    open_candidate_manifest_in(
+        retained,
+        &["staging", "candidate"],
+        manifest,
+        manifest_sha256,
+    )
+}
+
+/// Read pins for the exact signed package name under the fixed packages role.
+/// This only validates bytes; the V2 publication receipt separately checks
+/// protected ACLs, full identities, location and durable transaction history.
+pub(crate) fn pin_published_candidate_manifest(
+    root: &OwnedHandle,
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+) -> Result<PinnedCandidateSourceV1> {
+    let retained = root
+        .try_clone()
+        .map_err(|_| "WAKE_BROKER_SOURCE_OBJECT_UNAVAILABLE")?;
+    open_manifest_package_in(
+        retained,
+        &["packages", &manifest.package_id],
+        manifest,
+        manifest_sha256,
+        false,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn pin_fixture_candidate_manifest(
+    root: &std::path::Path,
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+) -> Result<PinnedCandidateSourceV1> {
+    let volume = open_path_directory(root.as_os_str())?;
+    open_candidate_manifest_in(
+        volume,
+        &["WakeSubmissionV1", "candidate"],
+        manifest,
+        manifest_sha256,
+    )
 }
 
 #[cfg(test)]

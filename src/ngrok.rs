@@ -192,7 +192,7 @@ async fn configure_official_runtime_mode(
     state: SharedState,
     client_path: PathBuf,
 ) -> Result<(), String> {
-    let (alias, profile, auto_connect, auto_recover, local_mcp_url) = {
+    let (alias, profile, auto_connect, auto_recover, local_mcp_url, mcp_auth_token) = {
         let app = state.lock().await;
         (
             app.openai_tunnel_config.runtime_alias.clone(),
@@ -205,6 +205,7 @@ async fn configure_official_runtime_mode(
                 app.port,
                 app.mcp_path()
             ),
+            app.mcp_auth_token.clone(),
         )
     };
     let trusted_client_identity = trusted_tunnel_client_executable_fingerprint(&client_path)
@@ -236,7 +237,7 @@ async fn configure_official_runtime_mode(
         Ok(status) if status.process_running => {
             let local_mcp_ready = crate::tunnel::run_mcp_endpoint_self_check(
                 &local_mcp_url,
-                None,
+                mcp_auth_token.as_deref(),
                 crate::tunnel::MCP_SELF_CHECK_TIMEOUT,
                 false,
             )
@@ -288,9 +289,15 @@ async fn configure_official_runtime_mode(
             drop(app);
             if reconnect_now {
                 if let Ok(tunnel_id) = std::env::var("CATDESK_OPENAI_TUNNEL_ID") {
-                    if connect_official_runtime(&client_path, &alias, &tunnel_id, &local_mcp_url)
-                        .await
-                        .is_err()
+                    if connect_official_runtime(
+                        &client_path,
+                        &alias,
+                        &tunnel_id,
+                        &local_mcp_url,
+                        mcp_auth_token.as_deref(),
+                    )
+                    .await
+                    .is_err()
                     {
                         let mut app = state.lock().await;
                         app.transport_health.health = TransportHealth::Degraded;
@@ -325,7 +332,7 @@ async fn configure_official_runtime_mode(
             } else {
                 let local_mcp_ready = crate::tunnel::run_mcp_endpoint_self_check(
                     &local_mcp_url,
-                    None,
+                    mcp_auth_token.as_deref(),
                     crate::tunnel::MCP_SELF_CHECK_TIMEOUT,
                     false,
                 )
@@ -373,9 +380,15 @@ async fn configure_official_runtime_mode(
                     );
                     app.transport_health.health = TransportHealth::Connecting;
                 }
-                connect_official_runtime(&client_path, &alias, &tunnel_id, &local_mcp_url)
-                    .await
-                    .map_err(|error| error.to_string())?;
+                connect_official_runtime(
+                    &client_path,
+                    &alias,
+                    &tunnel_id,
+                    &local_mcp_url,
+                    mcp_auth_token.as_deref(),
+                )
+                .await
+                .map_err(|error| error.to_string())?;
             }
         }
     }
@@ -432,7 +445,7 @@ async fn start_openai_runtime_monitor_if_needed(
             let runtime = official_runtime_status(&client_path, &alias)
                 .await
                 .unwrap_or_else(|error| OfficialRuntimeStatus::stopped(&alias, error.to_string()));
-            let (local_endpoint, health_base_url, auto_recover) = {
+            let (local_endpoint, health_base_url, auto_recover, mcp_auth_token) = {
                 let app = monitor_state.lock().await;
                 (
                     format!(
@@ -443,11 +456,12 @@ async fn start_openai_runtime_monitor_if_needed(
                     ),
                     runtime.health_base_url.clone(),
                     app.openai_tunnel_config.auto_recover,
+                    app.mcp_auth_token.clone(),
                 )
             };
             let local_mcp_ready = crate::tunnel::run_mcp_endpoint_self_check(
                 &local_endpoint,
-                None,
+                mcp_auth_token.as_deref(),
                 crate::tunnel::MCP_SELF_CHECK_TIMEOUT,
                 false,
             )
@@ -549,6 +563,7 @@ async fn start_openai_runtime_monitor_if_needed(
                                 &alias,
                                 &tunnel_id,
                                 &local_endpoint,
+                                mcp_auth_token.as_deref(),
                             )
                             .await;
                         }
@@ -684,7 +699,13 @@ async fn configure_external_tunnel(state: SharedState) -> Result<(), String> {
         format!("MCP Server URL: {}", redact_full_mcp_url(&public_mcp_url)),
     );
     app.log("INFO", format!("Connection fingerprint: {fingerprint}"));
-    app.log("WARN", public_no_auth_warning().into());
+    if !app
+        .mcp_auth_token
+        .as_deref()
+        .is_some_and(crate::server::valid_mcp_auth_token)
+    {
+        app.log("WARN", public_no_auth_warning().into());
+    }
     app.persist_state_with_log();
     Ok(())
 }
@@ -759,6 +780,44 @@ pub async fn start(state: SharedState) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn native_mcp_auth_external_warning_matches_listener_configuration() {
+        for token in [
+            None,
+            Some("native-warning-fixture-token-000000".to_string()),
+        ] {
+            let root =
+                std::env::temp_dir().join(format!("native-auth-warning-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).unwrap();
+            let mut app = crate::state::AppState::new_for_test(
+                3217,
+                root.to_string_lossy().into(),
+                root.join("config.toml"),
+            )
+            .unwrap();
+            app.mcp_auth_token = token.clone();
+            app.tunnel_config.public_base_url = Some("https://example.test".into());
+            let state = std::sync::Arc::new(tokio::sync::Mutex::new(app));
+            configure_external_tunnel(state.clone()).await.unwrap();
+            let app = state.lock().await;
+            assert_eq!(
+                app.logs
+                    .iter()
+                    .any(|entry| entry.message == public_no_auth_warning()),
+                token.is_none()
+            );
+            if let Some(token) = token {
+                assert!(
+                    !std::fs::read_to_string(root.join("config.toml"))
+                        .unwrap()
+                        .contains(&token)
+                );
+            }
+            drop(app);
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
 
     fn monitor_config() -> RuntimeMonitorConfig {
         RuntimeMonitorConfig {

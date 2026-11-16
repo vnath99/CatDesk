@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "preparedUtc": "2026-11-01T18:09:40.844997+00:00",
+  "classification": "IMMUTABLE_PUBLIC_SOURCE_REVIEW_INPUTS_NOT_COMPLETED_INSPECTION_OR_RELEASE_AUTHORITY",
+  "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "fullDeclaredCodePaths": 84,
+  "scopeReduced": false,
+  "group": "BACKEND_PRODUCTION_B",
+  "reads": [
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 721,
+      "lastLine": 840,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 721,840 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 5973,
+      "sha256": "161f3ac3167e522735cc0132ece45ec13ec0386f6b0475be0282a881bebbcf02"
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 841,
+      "lastLine": 960,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 841,960 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 5494,
+      "sha256": "371e9c2dc30a5a9a5673562019e9194854bb0a38dd1a65dca29cd3fad79bcf94"
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 961,
+      "lastLine": 1080,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 961,1080 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 6899,
+      "sha256": "cef4981779d0d9de4415155b7744ceba75c1d9372f68fe461730c40b1503cb0c"
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 1081,
+      "lastLine": 1200,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1081,1200 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 6924,
+      "sha256": "2903316ae1c409a9e9f0121cb9a1040d5b2fab3c5f5dc770b2d4579b021f941b"
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 1201,
+      "lastLine": 1231,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1201,1231 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 1812,
+      "sha256": "265421e1d7d19fc88d710aec595daec9137b97a6120aa6231d09762663735785"
+    }
+  ],
+  "totalCodeOutputBytes": 27102,
+  "maximumCodeReadBytes": 7800,
+  "protocol": {
+    "tools": "v5 run_command timeout10000/include_full_output=true; execute code commands sequentially",
+    "review": "Assess source suitability; retain earlier partial evidence and remaining scope; report truncation, confirmed defects and concrete neededReads",
+    "response": "JSON at most4000 UTF-8 bytes so the existing durable source-handoff reader can retain the task",
+    "safeguards": "No native execution, writes, authentication, bindings, production operations, C49 or uncertain-message replay"
+  },
+  "coverageLimits": "Complete current backend production is split contiguously across A/B. Other groups show changed test lines and their prior replaced/deleted ranges. Earlier partial references remain limited; no full-file acceptance or test execution is inferred.",
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

@@ -25,6 +25,7 @@ SEND_SELECTORS = (
     "button[aria-label='Send prompt']",
     "button[aria-label='Send message']",
     "button#composer-submit-button",
+    "button[type='submit'][aria-label='Send']",
 )
 STOP_SELECTORS = (
     "button[data-testid='stop-button']",

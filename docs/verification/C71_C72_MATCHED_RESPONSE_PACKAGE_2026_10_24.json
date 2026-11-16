@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C71_C72_MATCHED_RESPONSE_RECOVERY_PACKAGE",
+  "observedUtc": "2026-10-24T05:49:19.6140786+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "sourceCommit": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+  "sourceTree": "4e305552a1ac0283458c230587a42b19aef51296",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "NORMAL_RELEASE_BUILDS_AND_SELECTED_STOPPED_DEVELOPMENT_COMPONENT_NOT_PROTECTED_INSTALLATION",
+  "guardRefusal": {
+    "code": "DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH",
+    "changedRecords": 0,
+    "oldPackageFilesIndependentlyExact": true,
+    "rejectedInputsNotRetried": true,
+    "guardPreserved": true
+  },
+  "appBuild": {
+    "exitCode": 0,
+    "imageSha256": "4bf469b1c1e86f4aa939df0f8d279ce3562a48fe73487a88b3af3e8a542b4ee0",
+    "imageBytes": 34875904,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "sourceCommit": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+    "maximumSeconds": 600,
+    "elapsedSeconds": 411.0810519
+  },
+  "hostBuild": {
+    "imageSha256": "bd8ef10570d79e5e4090b210a005ba8f4e0616a1a437309f5bfc847d4e4ea2cd",
+    "imageBytes": 2083328,
+    "elapsedSeconds": 34.4226072,
+    "maximumSeconds": 300,
+    "ownerEofProbeOnly": true,
+    "status": "PASS",
+    "focusedRuntimeTestsPassed": 12,
+    "profile": "NORMAL_HOST_RELEASE_NO_TEST_SUPPORT",
+    "sourceCommit": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+    "foregroundGate": {
+      "schemaVersion": 1,
+      "classification": "NORMAL_RELEASE_FOREGROUND_GATE_PROBE",
+      "imageSha256": "bd8ef10570d79e5e4090b210a005ba8f4e0616a1a437309f5bfc847d4e4ea2cd",
+      "markerPresent": true,
+      "ownerEofRefused": true,
+      "exitCode": 1,
+      "runtimeStateCreated": false,
+      "ownedProcessExited": true,
+      "deliveryProved": false
+    }
+  },
+  "selected": {
+    "browserProfileAction": "NONE",
+    "wakeHostStarted": false,
+    "appSourceCommit": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+    "coldSelectedBridgeRegressions": true,
+    "selectedPackage": "1.0.0-dev.85-53205c45b5e939db37b678324c9c2c1adb1eb06850893b694f9018285ec4ca49",
+    "stateRecordsChecked": 282,
+    "selectedViewPassed": true,
+    "failure": null,
+    "elapsedSeconds": 7.0706023,
+    "protectedInstalledAcceptance": false,
+    "unexpectedChanges": 0,
+    "bridgeSourceCommit": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+    "sourceCommit": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+    "browserStarted": false,
+    "nativeSessionsChanged": false,
+    "messagesSent": 0,
+    "previousPackage": "1.0.0-dev.85-771a222cc620cbed9171324efddbac80cce79dcf84509e4dd500f901f53bf6ed",
+    "previousPackagePreserved": true,
+    "newStateRecords": 0,
+    "exactPairedReads": 9,
+    "unchangedProtectedRecords": 280,
+    "classification": "SELECTED_STOPPED_DEVELOPMENT_MATCHED_RELEASE_UPDATE",
+    "productionModified": false,
+    "scopedProcessCount": 0,
+    "atUtc": "2026-10-24T05:47:59.8072052Z",
+    "recurringStarted": false,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "allowedPackagePointerChanges": 2
+  },
+  "packageFiles": [
+    {
+      "name": "adapter.py",
+      "sha256": "0686ae77d3f4ed7ff6fc1dcfcffe07c212f8e4aea515ed069c73e11993782b97",
+      "bytes": 51207
+    },
+    {
+      "name": "CatDeskBinagotchy.exe",
+      "sha256": "4bf469b1c1e86f4aa939df0f8d279ce3562a48fe73487a88b3af3e8a542b4ee0",
+      "bytes": 34875904
+    },
+    {
+      "name": "CatDeskWakeHost.exe",
+      "sha256": "bd8ef10570d79e5e4090b210a005ba8f4e0616a1a437309f5bfc847d4e4ea2cd",
+      "bytes": 2083328
+    },
+    {
+      "name": "wake_bridge.py",
+      "sha256": "0f162cd0a49f5166a95a88aba3be08afe04c3ec2010ce51a66504d44d3c77bdb",
+      "bytes": 180478
+    }
+  ],
+  "selectedBridgeRegressions": {
+    "tests": 4,
+    "readFailureBudget": 3,
+    "browserActions": 0,
+    "pass": true
+  },
+  "outerContainment": {
+    "maximumSeconds": 180,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "preservation": {
+    "previousPackagePreserved": true,
+    "retiredProjects": 1,
+    "otherRecordsExact": 280,
+    "nativeActions": 0,
+    "runtimeRecordsChecked": 282,
+    "productionChanged": false,
+    "changedRuntimeRecords": 2,
+    "scopedOwners": 0,
+    "activeProjects": 9,
+    "bindingsUnchanged": true,
+    "permittedChanges": "PACKAGE_AUTHORITY_AND_CURRENT_POINTER_ONLY",
+    "messagesSent": 0
+  },
+  "acceptance": {
+    "fullOctoberMilestone": "OPEN",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "sourcePython": "C70_PASS_225_TESTS_187_SUBTESTS_NOT_REPEATED",
+    "selectedDevelopment": "PASS_MATCHED_NORMAL_BINARIES_AND_COLD_COMPONENT",
+    "remoteCi": "UNVERIFIED_NO_EXACT_SUCCESSFUL_RUN",
+    "actualWebToolExecutionBC": "OPEN_CONNECTOR_HTTP429_AND_SCOPED_TOOL_CATALOG",
+    "fullRuntimeRestart": "OPEN",
+    "candidateBrowserRead": "C70_PASS_REAL_READ_WITH_CONTROLLED_TRANSIENT_FAULT_NOT_REPLAYED",
+    "unattended": "NOT_ACTIVATED",
+    "ownedProcessInterruption": "NOT_RUN_C69_SOURCE_ALREADY_VERIFIED_NOT_YET_REGISTERED"
+  },
+  "nextTask": "Register the already verified C69 controlled source through supported paired binding using a separate current plan. Preserve seed and failed journal, perform no resend, then prepare the bounded owned-process interruption test. Connector-specific Web B/C remains separate."
+}

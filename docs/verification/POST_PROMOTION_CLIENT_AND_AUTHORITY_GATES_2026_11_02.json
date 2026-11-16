@@ -1,0 +1,134 @@
+{
+  "observedUtc": "2026-11-02T03:16:59.236461+00:00",
+  "promotionEvidenceCommit": "38568e211482cd969996139cbdcdaef65124c359",
+  "passiveInstalledDoctor": {
+    "readOnly": true,
+    "networkRequests": 0,
+    "runtimeStarts": 0,
+    "repairs": 0,
+    "layers": [
+      {
+        "layer": "PROCESS_OWNER",
+        "status": "UNVERIFIED",
+        "code": "OWNER_NOT_QUALIFIED"
+      },
+      {
+        "layer": "RELEASE_PAIR",
+        "status": "PASS",
+        "code": "RELEASE_PAIR_VERIFIED"
+      },
+      {
+        "layer": "RECOVERY_AUTHORITY",
+        "status": "PASS",
+        "code": "RECOVERY_AUTHORITY_AVAILABLE"
+      },
+      {
+        "layer": "LOCAL_CONFIG",
+        "status": "PASS",
+        "code": "LOCAL_CONFIG_READABLE"
+      },
+      {
+        "layer": "LOCAL_DAEMON",
+        "status": "PASS",
+        "code": "CANONICAL_LISTENER_PRESENT"
+      },
+      {
+        "layer": "LOCAL_HEALTH",
+        "status": "NOT_RUN",
+        "code": "LOCAL_HEALTH_NOT_PROBED"
+      },
+      {
+        "layer": "LOCAL_MCP",
+        "status": "NOT_RUN",
+        "code": "LOCAL_MCP_NOT_PROBED"
+      },
+      {
+        "layer": "MCP_AUTH_CONFIGURATION",
+        "status": "UNVERIFIED",
+        "code": "MCP_BEARER_USER_PRESENT_PROCESS_UNSET"
+      },
+      {
+        "layer": "PERSISTENT_SUPERVISOR",
+        "status": "FAIL",
+        "code": "SUPERVISOR_REGISTERED_MONITOR_STOPPED"
+      },
+      {
+        "layer": "OFFICIAL_RUNTIME",
+        "status": "UNVERIFIED",
+        "code": "RUNTIME_OWNER_UNVERIFIED"
+      },
+      {
+        "layer": "UPSTREAM_CONTROL_PLANE",
+        "status": "NOT_RUN",
+        "code": "UPSTREAM_NOT_PROBED"
+      },
+      {
+        "layer": "CONNECTOR",
+        "status": "NOT_RUN",
+        "code": "CONNECTOR_NOT_PROBED"
+      },
+      {
+        "layer": "BROWSER",
+        "status": "NOT_RUN",
+        "code": "BROWSER_NOT_INSPECTED"
+      },
+      {
+        "layer": "PROJECT_REGISTRY",
+        "status": "FAIL",
+        "code": "PROJECT_WAKE_TARGET_MISMATCH"
+      },
+      {
+        "layer": "WAKE_QUEUE",
+        "status": "UNVERIFIED",
+        "code": "WAKE_UNKNOWN_OUTCOME"
+      },
+      {
+        "layer": "CODEX_CLI",
+        "status": "UNVERIFIED",
+        "code": "CODEX_PRESENT_AUTH_UNVERIFIED"
+      },
+      {
+        "layer": "NATIVE_SESSION",
+        "status": "NOT_RUN",
+        "code": "WORKER_OWNER_NOT_PROBED"
+      },
+      {
+        "layer": "LOCAL_PROVIDER",
+        "status": "UNVERIFIED",
+        "code": "LOCAL_PROVIDER_NOT_PROBED"
+      },
+      {
+        "layer": "OBSERVATIONS",
+        "status": "NOT_RUN",
+        "code": "OBSERVATIONS_NOT_SUPPLIED"
+      }
+    ]
+  },
+  "interpretation": [
+    "Passive NOT_RUN/UNVERIFIED layers are not contradictory to separately attributable authenticated live checks.",
+    "The current registered persistent monitor is stopped; a serving backend and controlled restart do not establish unattended recovery.",
+    "Project/Wake pairing and held unknown Wake outcomes remain real independent gates."
+  ],
+  "registryScopeComparison": {
+    "twoOriginalProjectWorkspacesMatchAcrossRegistries": true,
+    "nativeThreadBindingsDiffer": true,
+    "conversationDigestsDiffer": true,
+    "duplicateWorkspaceRegistrationProhibitedByExistingSource": true,
+    "aliasesNotAdded": true,
+    "originalBindingsNotChanged": true
+  },
+  "clientMetadata": {
+    "installedServerPublishesCentralDispatcherAndNativeOperations": true,
+    "thisChatsLoadedClientCatalogOmitsCentralDispatcher": true,
+    "connectionTypeNotIndependentlyVerified": true,
+    "officialRefreshDocumentation": "https://developers.openai.com/plugins/deploy/connect-chatgpt",
+    "customMcpProcedure": "Open existing plugin connection, Refresh, verify changed catalog, test in new conversation.",
+    "publishedPluginProcedure": "Use existing continuous review/publication; do not assume custom MCP refresh applies.",
+    "replacementPluginCreated": false,
+    "connectionSettingsChanged": false,
+    "operatorRequestedToVerifyExistingDetails": true,
+    "pluginManagementFailure": "TRANSPORT_SEND_FAILURE_NO_HTTP_STATUS_NO_RETRY"
+  },
+  "nextIndependentTask": "PREPARE_ISOLATED_CANONICAL_ACCEPTANCE_SCOPE_AND_SUPPORTED_TASK_AUTHORITY_WITHOUT_DUPLICATE_WORKSPACE_REGISTRATION",
+  "goal": "ACTIVE"
+}

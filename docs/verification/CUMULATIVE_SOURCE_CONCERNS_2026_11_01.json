@@ -1,0 +1,179 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T11:50:24.696736+00:00",
+  "classification": "SOURCE_CONCERN_INVESTIGATION_AND_WINDOWS_REGRESSIONS_NOT_INDEPENDENT_CUMULATIVE_ACCEPTANCE",
+  "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+  "reviewBase": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "fullDeclaredCodePathCount": 84,
+  "genuineWebAssessment": {
+    "verdict": "INCONCLUSIVE",
+    "sourceAccepted": false,
+    "responseSha256": "114e7dc48bd2e56f40b4776a7b2bbcdc46b16bb1f4fbfe21408b3181aba889d4",
+    "taskCorrelatedSourceReads": 9,
+    "allSourceLogsMatchedPinnedInputsWithExistingPrivacyRedaction": true,
+    "deliveryClosedOnlyAsCompletedAssessment": true,
+    "nativeManagedReviewStillPending": true
+  },
+  "investigation": [
+    {
+      "concern": "Initialization may admit concurrent Web work before commit",
+      "result": "EXISTING_SHARED_PROJECT_OS_LOCK_IDENTIFIED",
+      "reason": "Initialization opens and retains ProjectStore before sampling work. WorkLease retains the same ProjectStore OS file lock across central request, resolution and native admission. The registration and Wake locks are nested inside that project lock; the pre-lock race alleged by the selected range did not establish a defect.",
+      "implementationChanged": false
+    },
+    {
+      "concern": "Interrupted continuation after child activation may conflict with dormant reconstruction",
+      "result": "EXISTING_PARENT_LINK_RECOVERY_AND_TEST_IDENTIFIED",
+      "reason": "follow traverses the durable parent link first. check_link compares immutable request identity and origin while permitting the stored activated bit. An activated linked leaf does not reenter dormant creation. The existing regression injects interruption at all three durable checkpoints, resumes twice, and proves exactly two jobs with original execution profile and workspace.",
+      "implementationChanged": false
+    },
+    {
+      "concern": "Interrupted native finalization may permit duplicate execution",
+      "result": "EXISTING_DURABLE_CALL_AND_EXACT_QUEUE_CLAIM_FENCES_IDENTIFIED",
+      "reason": "The admission retains its project lease through finish. Stable grant selection and call identity are checked before migration; REQUESTED, POLICY_ALLOWED and EXECUTING are recorded before dispatch. Any recorded same call is refused; a different call is refused while a prior effect remains unresolved. Queue selection claims only READY jobs under its queue lock before launch. Existing ambiguous-native regression refuses both identities while an independent project finishes.",
+      "implementationChanged": false
+    }
+  ],
+  "pinnedSourceReadsForIndependentFollowup": [
+    {
+      "purpose": "initialization-lock-acquisition",
+      "path": "src/operator_web_initialization.rs",
+      "firstLine": 130,
+      "lastLine": 146,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 130,146 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/operator_web_initialization.rs",
+      "outputBytes": 890,
+      "outputSha256": "37b427073a2b9c55b75d81cff608ef081106bf0d29f0ca832ce54252fdaeabd8"
+    },
+    {
+      "purpose": "shared-project-lease",
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 385,
+      "lastLine": 402,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 385,402 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/operator_web_rollover.rs",
+      "outputBytes": 892,
+      "outputSha256": "0b4f0fb3bb45b752713c397ecd2295bfacfa9b09e76b7d58502e1d10c4ece78f"
+    },
+    {
+      "purpose": "project-lock-owner",
+      "path": "src/operator_web_rollover.rs",
+      "firstLine": 705,
+      "lastLine": 754,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 705,754 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/operator_web_rollover.rs",
+      "outputBytes": 2361,
+      "outputSha256": "159a0f75a1f4dc7567b379f5abe87c9f94e851db1a8c6e2a6a10347cafcc4621"
+    },
+    {
+      "purpose": "native-admission-lock-lifetime",
+      "path": "src/web_work.rs",
+      "firstLine": 187,
+      "lastLine": 263,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 187,263 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/web_work.rs",
+      "outputBytes": 3625,
+      "outputSha256": "e18767c4023aef4572cda9e30aad8b80efd732102ac132b26ba847c67ea94d2b"
+    },
+    {
+      "purpose": "continuation-link-recovery",
+      "path": "src/operator_codex_cli/queue/native_continuation.rs",
+      "firstLine": 151,
+      "lastLine": 206,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 151,206 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/operator_codex_cli/queue/native_continuation.rs",
+      "outputBytes": 2798,
+      "outputSha256": "1f6f107a807e866f02012e3d338738d7d65f21513995bd07f419fe5cb2461754"
+    },
+    {
+      "purpose": "continuation-commit-order",
+      "path": "src/operator_codex_cli/queue/native_continuation.rs",
+      "firstLine": 299,
+      "lastLine": 390,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 299,390 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/operator_codex_cli/queue/native_continuation.rs",
+      "outputBytes": 5427,
+      "outputSha256": "e381e9c061857df67e5aac1d5a3e6049292560dbdb7005db96b8fa89d9c6d6f7"
+    },
+    {
+      "purpose": "continuation-interruption-regression",
+      "path": "src/operator_codex_cli/queue/native_continuation.rs",
+      "firstLine": 472,
+      "lastLine": 527,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 472,527 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/operator_codex_cli/queue/native_continuation.rs",
+      "outputBytes": 3171,
+      "outputSha256": "5574fc03ae09be7f96924469234a05b375021e8b3893af31588b02c1061bd03c"
+    },
+    {
+      "purpose": "journal-replay-fence",
+      "path": "src/project_mcp_task.rs",
+      "firstLine": 866,
+      "lastLine": 962,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 866,962 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/project_mcp_task.rs",
+      "outputBytes": 4866,
+      "outputSha256": "3dcdc9c46253102650444a16461b3dc97c185f43bf7244c05283e8c56b5e4c25"
+    },
+    {
+      "purpose": "native-journal-commit-and-finalization",
+      "path": "src/project_mcp_task.rs",
+      "firstLine": 1093,
+      "lastLine": 1189,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1093,1189 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/project_mcp_task.rs",
+      "outputBytes": 5286,
+      "outputSha256": "85473b0ea942d5ab050a7da5e106a3c53742c421f02271d90a53453f11f7096d"
+    },
+    {
+      "purpose": "native-exclusive-claim",
+      "path": "src/operator_codex_cli/queue.rs",
+      "firstLine": 3546,
+      "lastLine": 3671,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 3546,3671 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/operator_codex_cli/queue.rs",
+      "outputBytes": 7153,
+      "outputSha256": "86de888f0d62879b5c7b00799156ed2b3aca6f9c592906d28dd29ebbb3126fe2"
+    },
+    {
+      "purpose": "unknown-native-peer-isolation-regression",
+      "path": "src/web_task_dispatch.rs",
+      "firstLine": 2049,
+      "lastLine": 2084,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 2049,2084 2876ea3e2b4a094307b06ff35801ee4dce2606bf -- src/web_task_dispatch.rs",
+      "outputBytes": 1989,
+      "outputSha256": "087b9aee12221f8b79277159a65ad2c8c892eeec2907f581e7947616fe2d7820"
+    }
+  ],
+  "targetedWindowsRegression": {
+    "passedCases": 11,
+    "elapsedSeconds": 122.312,
+    "cases": [
+      "operator_facade::web::rollover::tests::fresh_initialization_admits_only_new_work_and_preserves_old_owners_and_journals",
+      "operator_facade::web::tests::fresh_initialization_command_requires_explicit_identity_and_has_no_force_or_payload",
+      "operator_facade::web::rollover::tests::fresh_initialization_refuses_pending_response_unknown_work_and_changed_scope",
+      "operator_codex_cli::queue::native_continuation::tests::native_continuation_missing_committed_child_never_recreates_it",
+      "operator_codex_cli::queue::native_continuation::tests::native_continuation_follows_multiple_rollovers_and_dormant_interruption",
+      "operator_codex_cli::queue::native_continuation::tests::native_continuation_preserves_proved_no_child_receipt_and_rejects_active_claim",
+      "operator_codex_cli::queue::native_continuation::tests::native_continuation_recovers_each_metadata_boundary_once",
+      "operator_codex_cli::queue::native_continuation::tests::native_continuation_refuses_changed_native_scope_and_corrupt_dormant_child",
+      "operator_codex_cli::queue::native_continuation::tests::native_continuation_requires_durable_proof_and_exact_source_scope",
+      "operator_codex_cli::queue::native_continuation::tests::native_continuation_terminal_and_operator_paused_jobs_remain_unchanged",
+      "operator_facade::web::rollover::tests::web_work_handoff_rechecks_active_event_under_project_lock"
+    ],
+    "logsSha256": [
+      "61e01138a3b8955b5a33bf0b71f79b2d132f44c11d3ae9a25152c10148bc5181",
+      "1f708fcb36f07b1d3934df94a02f69cca79983dfdca27ead466c016f030fd6f0",
+      "e05550558a3029082f021c631bf57df118bd081f3c7ffe82d7c4a19175192b19"
+    ],
+    "ownedProcessExitVerified": true,
+    "browserStarts": 0,
+    "nativeModelTurns": 0
+  },
+  "earlierNativeDispatcherQualification": {
+    "distinctPassedCases": 27,
+    "boundedRuns": 2,
+    "oneRunInitiallyTimedOutWithoutFailedAssertion": true,
+    "remainingCasesSubsequentlyPassedWithoutRepeatingPassedCases": true
+  },
+  "acceptance": {
+    "independentReassessmentRequired": true,
+    "cumulativeSourceAccepted": false,
+    "acknowledged": false,
+    "producerAuthority": false,
+    "protectedPromotionPerformed": false,
+    "installedTwoWebNativeEditsVerified": false,
+    "supervisorRestartAcceptanceVerified": false
+  },
+  "nextExecutableTask": "Obtain focused independent reassessment using these exact omitted lock, journal and checkpoint ranges; retain the full 84-path cumulative scope and all unresolved coverage limitations."
+}

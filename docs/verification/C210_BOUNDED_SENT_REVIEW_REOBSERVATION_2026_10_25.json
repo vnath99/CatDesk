@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C210_BOUNDED_SENT_REVIEW_REOBSERVATION",
+  "recordedUtc": "2026-10-25T17:34:52.1440438+00:00",
+  "source": {
+    "parentCommit": "a8912fa68c4b74832619c735b6bcba274e125ecc",
+    "files": [
+      {
+        "sha256": "e30adf7dd00534dc30bd1ea08310c8beda8012e2a438094e5b377da7d81f49da",
+        "path": "src/operator_web_cli.rs"
+      },
+      {
+        "sha256": "e7ff41de20dc57106eb4d74852789167151898d9ce64eb30df6d9c16830b0749",
+        "path": "src/operator_web_review.rs"
+      },
+      {
+        "sha256": "612359d3a339e2f19040eb88beaf91faf2273857e382b7a533c18030249d563b",
+        "path": "wake/src/runtime.rs"
+      },
+      {
+        "sha256": "17c611189a34202b5300df628a37a3e2da40002f8bc7c268282042615dcc9b74",
+        "path": "wake/src/runtime_response.rs"
+      },
+      {
+        "sha256": "f7bef1bb7916f139cee933f1d5970a1b78d508bb1f5c4e2becd355c5f6b2afc2",
+        "path": "wake/src/runtime_reobserve.rs"
+      },
+      {
+        "sha256": "facb8f9263c0971d707ec8efc4513e287955c04508122b3159a903d5aedef749",
+        "path": "wake/src/store.rs"
+      },
+      {
+        "sha256": "e5bcaf369b33c5dc01ca6e831b4c28749fbc75808f24ec254ee9f9ba47dd0ea9",
+        "path": "wake/src/store_reobserve.rs"
+      }
+    ],
+    "branch": "codex/web-rollover-oct17"
+  },
+  "command": "operator web review reobserve --project-id <id> --event-id <existing-sent-event>",
+  "behavior": {
+    "freshFiveFieldObserverWitnessRequired": true,
+    "browserRunsOutsideRegistryLock": true,
+    "completedTimer": "IDEMPOTENT_NO_BROWSER",
+    "commitLockOrder": "REGISTRY_THEN_WAKE",
+    "requiresCurrentPairedTargetAndExactSentReceipt": true,
+    "maximumSeconds": 90,
+    "requiresOriginalDeliveryTimerCas": true,
+    "automatic90MinuteBudget": "UNCHANGED",
+    "priorTimerAndOutcomeLogs": "IMMUTABLE_CREATE_NEW",
+    "requiresStoppedHost": true,
+    "senderPath": false,
+    "workResolved": false,
+    "arbitraryUrlOrMessageOverrides": false
+  },
+  "sourceQualification": {
+    "wakeStrictClippy": "PASS",
+    "maximumSeconds": 600,
+    "focusedPassed": 10,
+    "strictClippy": "PASS",
+    "state": "PASS",
+    "terminationFailed": false,
+    "resultSha256": "34fc223de2ad2826dd019d0731367726fc993620a5d80d6b7a84f2513e39e0ef",
+    "operatorPassed": 20,
+    "independentReview": "PASS",
+    "rootStrictClippy": "PASS",
+    "wakePassed": 408,
+    "wakeIgnored": 1,
+    "operatorResultSha256": "1a2cf7f1a03c832af5249c68bc65e44e19e00033807e4eea14fa5737f8326ccf",
+    "timedOut": false,
+    "zeroMatchInitialFilter": "NOT_ACCEPTED_CORRECTED_OPERATOR_MODULE_PASSED",
+    "uniqueTestsPassed": 428,
+    "focusedIncludedInWake": true,
+    "containmentSha256": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "operatorContainmentSha256": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "failedFixtureAndSandboxRuns": "PRESERVED"
+  },
+  "preservation": {
+    "candidateUnchanged": true,
+    "authorityFilesExact": 5,
+    "existingStateFilesExact": 461,
+    "bindingMutations": 0,
+    "sourceTestScope": "DISPOSABLE_FIXTURES_ONLY",
+    "browserWakeStarts": 0
+  },
+  "liveQualification": {
+    "plannedOuterLimitSeconds": 180,
+    "sourceImplementationIsNotLiveAcceptance": true,
+    "oldAutomaticBudget": "EXPIRED",
+    "state": "PENDING",
+    "originalFailureCause": "UNKNOWN",
+    "currentPythonSourceChangesInstalled": false,
+    "storedPriorBodyDoesNotReplaceFreshWitness": true,
+    "selectedObserver": "EXISTING_V77_PACKAGE_UNCHANGED"
+  },
+  "acceptance": {
+    "actualTwoConversationWebCoding": "OPEN",
+    "goal": "ACTIVE",
+    "newSourceGenuineWebReleaseReview": "REQUIRED",
+    "newDeliveryOrCanaryReplay": false,
+    "productionPromoted": false
+  }
+}

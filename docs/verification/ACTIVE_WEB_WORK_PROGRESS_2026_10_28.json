@@ -1,0 +1,141 @@
+{
+  "branch": "codex/web-rollover-oct17",
+  "ci": "UNVERIFIED_ZERO_EXACT_COMMIT_RUNS",
+  "connector": "NOT_REPROBED_UNCHANGED_LAST_HTTP_429",
+  "tests": {
+    "finalWebCompositionAndGateTests": 11,
+    "actualCurrentMetadataTests": 1,
+    "logDigests": [
+      {
+        "sha256": "3732feea68b17f252730dc25ec2bc5dcf7db0d4442989abbbc556e8278cba577",
+        "test": "active-work-progress-focused-tests-v2"
+      },
+      {
+        "sha256": "4edbcc763d226d88d60ec3eb52c4007d0732e7a1cc1251a7d13e11465e11a08d",
+        "test": "active-work-status-composition-tests"
+      },
+      {
+        "sha256": "e161abeadf2321b4ccf4e9954c3146e90d000cda97048b694f74b87188f63082",
+        "test": "active-work-target-guard-regression"
+      },
+      {
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "test": "active-work-progress-format-final"
+      },
+      {
+        "sha256": "4f7de3c799adea3faa375a6c3df6750f0fc716a20bca81c81ad02eb8f90043c7",
+        "test": "active-work-progress-clippy-final"
+      }
+    ],
+    "focusedActiveDeliveryTests": 4,
+    "format": "PASS",
+    "targetIdentityGuardTests": 1,
+    "strictAllTargetClippy": "PASS"
+  },
+  "installedState": {
+    "wakeStarts": 0,
+    "fingerprintMatches": true,
+    "bindingChanges": 0,
+    "recurringAutomationStarts": 0,
+    "browserStarts": 0,
+    "remainingTestOwners": 0,
+    "nativeProjectTaskActions": 0,
+    "imageChanged": false,
+    "newStatusImplementationInstalled": false,
+    "newReleaseCandidates": 0,
+    "executableSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf"
+  },
+  "changes": [
+    "Include source_review in transport work-request counts",
+    "Attribute active request delivery by project/event/generation/target digest/message digest",
+    "Expose reconciliation-required phases without granting replay or execution",
+    "Use existing registry/Wake target/history validator for advisory status without repeating workspace Git admission"
+  ],
+  "schemaVersion": 1,
+  "unattendedServingAcceptance": "OPEN",
+  "evidenceType": "TESTED_SOURCE_AND_READ_ONLY_CURRENT_DURABLE_METADATA_NOT_INSTALLED_WEB_EXECUTION",
+  "observedUtc": "2026-10-29T00:00:09.5756780+00:00",
+  "realTwoConversationWebCodingAcceptance": "OPEN",
+  "historicalRecovery": {
+    "deliverySha256": "07b3e2817a8d4c6f13fb6bb9c82e9d36392d25d81857f90186272ee026918869",
+    "newMessages": 0,
+    "subsequentCatdeskDeliveryAfterDisposition": true,
+    "originalAttemptReplayAllowed": false,
+    "taskCompletionVerified": false,
+    "subsequentAssistantTurnComplete": true,
+    "originalProviderOutcome": "UNKNOWN",
+    "timerSha256": "34bd5d715e12a769099d9a44b826d6ecd3549cd587acb48ee6b2863dfe25d843",
+    "originalDispositionComplete": true
+  },
+  "localDate": "2026-10-28",
+  "sourceFile": "src/mcp.rs",
+  "remoteSourceShaVerified": true,
+  "currentMetadata": {
+    "resultSha256": "1af152091abc8b931d5c25c8bc30ef453285faa4aef66498f9601a43a2e28a78",
+    "priorBoundedDiagnostics": {
+      "limitSecondsEach": 45,
+      "timeouts": 2,
+      "finding": "Repeated per-project Git identity probes made the advisory report exceed its budget",
+      "metadataChanges": 0
+    },
+    "protectedFiles": 369,
+    "testLimitSeconds": 45,
+    "projects": [
+      {
+        "activeDeliveryPhase": "SUBMITTING",
+        "activeDeliveryStatus": "DURABLE_SNAPSHOT",
+        "originalDispositionComplete": true,
+        "projectId": "catdesk",
+        "requiresReconciliation": true,
+        "workRequestCount": 2
+      },
+      {
+        "activeDeliveryPhase": "SUBMITTING",
+        "activeDeliveryStatus": "DURABLE_SNAPSHOT",
+        "originalDispositionComplete": null,
+        "projectId": "wake2",
+        "requiresReconciliation": true,
+        "workRequestCount": 7
+      },
+      {
+        "activeDeliveryPhase": null,
+        "activeDeliveryStatus": "NO_ACTIVE_REQUEST",
+        "originalDispositionComplete": null,
+        "projectId": "byovd",
+        "requiresReconciliation": null,
+        "workRequestCount": 4
+      },
+      {
+        "activeDeliveryPhase": null,
+        "activeDeliveryStatus": "NO_ACTIVE_REQUEST",
+        "originalDispositionComplete": null,
+        "projectId": "bug-bounty",
+        "requiresReconciliation": null,
+        "workRequestCount": 2
+      },
+      {
+        "activeDeliveryPhase": null,
+        "activeDeliveryStatus": "NO_ACTIVE_REQUEST",
+        "originalDispositionComplete": null,
+        "projectId": "portfoliodesk",
+        "requiresReconciliation": null,
+        "workRequestCount": 1
+      }
+    ],
+    "commandSha256": "9fb6b503cd03bef886bed2ef8abe0a883cabf91e2bd067c7da5e27f4344f760c",
+    "outerLimitSeconds": 60,
+    "changedFiles": 0,
+    "testSeconds": 29.95
+  },
+  "advisorySemantics": {
+    "taskCompletionVerified": false,
+    "executionAuthorized": false,
+    "requestReplayAllowed": false,
+    "executionAndBindingGatesUnchanged": true,
+    "snapshotAtomic": false,
+    "workspaceIdentityVerified": false
+  },
+  "sourceFileSha256": "78089f4bc24d400f13fd60af393b4a5f15fa11d38d1f28428d1c9be12cfddee0",
+  "goal": "ACTIVE",
+  "sourceCommit": "b8b42754ae59fc972e148e71a80a70d70b03b072"
+}

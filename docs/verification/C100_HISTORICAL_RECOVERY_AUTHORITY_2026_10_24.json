@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C100_HISTORICAL_RECOVERY_AUTHORITY_AND_OCT27_PLAN",
+  "observedUtc": "2026-10-24T13:39:28.0467123+00:00",
+  "recordedUtc": "2026-10-24T13:45:03.8453932+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "eedf2d29f4e30bf4d70c66f2d40ef1aa287caa28",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "READ_ONLY_HISTORICAL_HOST_EVIDENCE_NOT_RECOVERY_ACCEPTANCE",
+  "plan": "docs/orchestrator/OCT27_EXISTING_RECOVERY_AUTHORITY_PLAN.md",
+  "mismatch": {
+    "currentCanonicalSha256": "9a8f4ebf6ea57cbb61efaa12e8afa54d18b8db7374b9884067325bc84565568c",
+    "currentSidecarValue": "a264c8dc85fa55311e74114158f4f4cd598f6e9e9d0a6ca535e14d18aa649939",
+    "ordinaryReleaseBuildUtc": "2026-10-07T00:47:41.8500384Z",
+    "nextExactHashReadbackUtc": "2026-10-07T00:48:19.7696403Z",
+    "recordedBytes": 26838016,
+    "handoffUtc": "2026-10-07T00:55:18.0000000+00:00",
+    "handoffState": "REPLACEMENT_READY_PENDING_TRANSPORT_RECONNECT",
+    "handoffPort": 3200,
+    "nearbyGitHead": "530fd67df8d60979802a06f5a8e3d52492d77057",
+    "nearbyHeadProvesCleanBuild": false,
+    "logSha256": {
+      "ordinaryReleaseBuild": "7f0d2240b95b9e9156d407c0b3d616aed83fe16a8ad9f60cef6945642930299c",
+      "nearbyGitHead": "4a450b6e4901585c3bd3b5b97071629e3d4ea3b03ae161bd2ba0a703ebce849f",
+      "exactHashReadback": "b24763cefbfcfdd0a7b4b65078977bda79655bb062e6dea46eb92f23e03db52f"
+    },
+    "causeSupported": "ORDINARY_CANONICAL_RELEASE_BUILD_EXACT_HASH_READBACK_AND_NATIVE_RELOAD_WHILE_OLDER_SIDECAR_REMAINS",
+    "tamperingEstablished": false,
+    "independentReviewOrPromotionProvedByReload": false,
+    "publicRequestArchive": "docs/orchestrator/review_bundles/T-0465_R0_LEGACY_DAEMON_RELOAD_APPROVAL_ARCHIVE.json"
+  },
+  "history": [
+    {
+      "source": "docs/orchestrator/review_bundles/T-0154_CANONICAL_RELEASE_RECOVERY_SELF_HEALING_REVIEW_BUNDLE.md",
+      "finding": "EARLIER_A264_BINARY_532E_SIDECAR_INCIDENT_EXISTING_TRUSTED_PAIR_RECOVERY",
+      "period": "2026-08-18"
+    },
+    {
+      "source": "docs/orchestrator/review_bundles/T-0159_T0154_R3_REVIEWED_LKG_AUTHORITY_BINDING_REVIEW_BUNDLE.md",
+      "finding": "RELOAD_HEALTH_AND_REVIEW_DOCUMENTS_DO_NOT_MINT_LKG",
+      "period": "T0159"
+    },
+    {
+      "source": "AUTHORITATIVE_ESCROW_MANIFEST_READ_ONLY",
+      "finding": "A264_GENERATION1_OPERATIONAL_VERIFIED_SLOT_NOT_CURRENT_ROLLBACK_AUTHORITY",
+      "period": "2026-09-07"
+    },
+    {
+      "source": "docs/orchestrator/review_bundles/T-0322_RUNTIME_RELEASE_PARITY_CODEX_WORK_REVIEW_BUNDLE.md",
+      "finding": "OPERATIONAL_HEALTH_CANNOT_CREATE_OR_ADVANCE_LKG_LEGACY_READER_REJECTS_SOURCE",
+      "period": "2026-09-07_AND_LATER_READER_CORRECTION"
+    },
+    {
+      "source": "docs/orchestrator/review_bundles/T-0395_BOOTSTRAP_SNAPSHOT_PRODUCER_RECONCILIATION.md",
+      "finding": "DIFFERENT_BINARY_A264_SIDECAR_MISMATCH_ALREADY_EXISTS_TEMPORARY_BOOTSTRAP_NOT_PROMOTION",
+      "period": "2026-09-21"
+    },
+    {
+      "source": "SELECTED_DURABLE_COMMAND_LOGS_AND_RESTART_HANDOFF",
+      "finding": "KNOWN_9A8_BUILD_HASH_AND_RELOAD_SEQUENCE",
+      "period": "2026-10-07_UTC"
+    },
+    {
+      "source": "docs/orchestrator/review_bundles/T-0483_R6_WAKE_ROOT_OBJECT_PROVENANCE.md",
+      "finding": "DAEMON_RECORDED_PRESENT_WITH_WAKE_CHILD",
+      "period": "2026-10-14"
+    },
+    {
+      "source": "docs/OCTOBER_2026_MVP_ACCEPTANCE.md_INSTALLED_FACADE_AND_SUPERVISOR_AUDIT",
+      "finding": "LATER_NO_DAEMON_OR_LISTENER_SHUTDOWN_CAUSE_NOT_RECORDED",
+      "period": "2026-10-15"
+    },
+    {
+      "source": "docs/acceptance/canonical_reconciliation_tests_20261018.json",
+      "finding": "EXISTING_RELEASE_PAIR_PROCEDURE_SOURCE_AND_FIXTURE_QUALIFIED_NOT_INSTALLED",
+      "period": "2026-10-18"
+    },
+    {
+      "source": "PRIOR_FIXED_SIGNED_IMAGE_READBACK",
+      "finding": "SEPARATE_INSTALLED_EPOCH1_VERIFIED_PENDING_EPOCH2_NOT_CANONICAL_PROMOTION_OR_LKG",
+      "period": "2026-10-23"
+    }
+  ],
+  "authorityInventory": {
+    "generationResults": 40,
+    "olderResults": 1,
+    "failedOrAmbiguous": 41,
+    "buildAttestedResults": 0,
+    "attestationFilesAtInspectedLocations": 0,
+    "slotAHash": "a264c8dc85fa55311e74114158f4f4cd598f6e9e9d0a6ca535e14d18aa649939",
+    "slotASource": "operational_verified",
+    "slotAGeneration": 1,
+    "slotACapturedUtc": "2026-09-07T01:38:28.7290022Z",
+    "slotBExists": false,
+    "promotionControlExists": false,
+    "promotionRecoveryExists": false,
+    "releasePairControlExists": false,
+    "currentUsableReviewedRollbackChain": "NOT_FOUND_AT_INSPECTED_AUTHORITATIVE_LOCATIONS",
+    "historicalReviewNarrativePreserved": true,
+    "externalArchivesExhaustivelySearched": false,
+    "legacyRelabeled": false
+  },
+  "shutdown": {
+    "cause": "UNKNOWN",
+    "localStopRecordFiles": 0,
+    "nativeReloadReceiptIsNotExitEvidence": true,
+    "hashDivergenceExplainsRecoveryRefusalNotLaterShutdown": true,
+    "wakeBrowserCleanupCausationProved": false,
+    "windowsEventLogInvestigationPerformed": false
+  },
+  "separateSignedImage": {
+    "lastReadbackUtc": "2026-10-23T02:46:55.8981683Z",
+    "state": "SIGNATURE_AND_INSTALLED_PAYLOAD_VERIFIED",
+    "bootstrapEpoch": 1,
+    "installedRotationEpoch": 0,
+    "pendingRotationEpoch": 2,
+    "reverifiedThisTurn": false,
+    "canonicalRollbackAuthorityInferred": false,
+    "rotationOrSignerAction": 0
+  },
+  "operatorPlan": {
+    "deferStartupUntil": "2026-10-27",
+    "scheduledAutomatically": false,
+    "existingProceduresOnly": true,
+    "readOnlyPublicCommand": ".\\catdesk.ps1 diagnose",
+    "heldPublicRecoveryCommand": ".\\catdesk.ps1 recover",
+    "fallbackExistingProcedure": "operator release-pair prepare/confirm/result",
+    "candidateAuthorityCurrentlyAvailable": false,
+    "missingInputs": [
+      "ACKNOWLEDGED_SOURCE_BOUND_INDEPENDENT_REVIEW",
+      "VALID_BUILD_ATTESTED_PRODUCER_CANDIDATE_OR_ELIGIBLE_EXISTING_LKG",
+      "EXACT_ALLOWED_CONTROLLER_TRANSACTION_AND_STARTUP_SCOPE"
+    ],
+    "newMechanismDesigned": false,
+    "blindFailedBuildRetries": 0,
+    "postChecks": [
+      "CANONICAL_SIDECAR_AND_APPROVED_CANDIDATE_FULL_HASH_EQUAL",
+      "ELIGIBLE_LKG_AND_COMPLETE_NATIVE_OWNER_HANDOFF_RECORDS",
+      "EXACT_LOCAL3200_OWNER_AND_LOCAL_MCP_PROTOCOL",
+      "ACTUAL_SERVING_STORE_AND_SCOPED_TASK_CATALOG",
+      "ALL_ORIGINAL_BINDINGS_HISTORY_PENDING_JOURNALS_AND_NATIVE_OWNERS_PRESERVED",
+      "INDEPENDENT_OFFICIAL_STATUS_AND_ONE_BACKED_OFF_CONNECTOR_READ",
+      "ACTUAL_TWO_CONVERSATION_WEB_BC_CODING_BEFORE_MORE_SYNTHETIC_DEMOS",
+      "BOUNDED_TEST_OWNER_CLEANUP_WITHOUT_STOPPING_OFFICIAL_OWNER"
+    ]
+  },
+  "preservation": {
+    "realRecordsChecked": 306,
+    "realRecordsChanged": 0,
+    "historicalFilesChecked": 55,
+    "historicalFilesChanged": 0,
+    "runtimeLifecycleActions": 0,
+    "connectorCalls": 0,
+    "browserWakeRecurringStarts": 0,
+    "nativeActions": 0,
+    "signedArtifactsModified": false,
+    "bindingsModified": false,
+    "completedCanariesReplayed": 0,
+    "sourceChanged": false,
+    "sourceTestsRerun": 0,
+    "verification": "PRIVATE_CAUSAL_ASSERTIONS_AND_PER_FILE_HASH_READBACK_PUBLIC_JSON_AND_DIFF_REVIEW",
+    "remoteCi": "UNVERIFIED_NO_CURRENT_PRODUCT_SOURCE_CHANGE",
+    "fullMilestone": "OPEN"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "sources",
+  "offset": 24,
+  "entries": [
+    {
+      "path": "src/operator_codex_cli/queue.rs",
+      "baseBlob": "f3efed106db371e6752b18416858d72aafb0e077",
+      "targetBlob": "e17c6af767f85f11598997d8797d33c7b9790744",
+      "patchSha256": "5178d790b3ec5ad15dab880413a6ca34975ba0012ac1c603042ac41120134f4a",
+      "startByte": 198538,
+      "endByte": 246746
+    },
+    {
+      "path": "src/operator_codex_cli/queue/native_continuation.rs",
+      "baseBlob": null,
+      "targetBlob": "b68ec8cedec1959401b575db98323f377aa5c834",
+      "patchSha256": "457e3fa23889b0ff44cabf62dbc24a3f5f274632c83a6cda6616ec689c201d87",
+      "startByte": 246746,
+      "endByte": 278832
+    },
+    {
+      "path": "src/operator_codex_cli/queue/native_dispatch.rs",
+      "baseBlob": null,
+      "targetBlob": "53fd80cd92e7b8a3f617c05bf113017c7034005b",
+      "patchSha256": "c2b51b80bd908c749ba17dd580e1e9e0717d054ca941e9c16562d41a8d338229",
+      "startByte": 278832,
+      "endByte": 289662
+    },
+    {
+      "path": "src/operator_codex_cli/queue/owned_native.rs",
+      "baseBlob": null,
+      "targetBlob": "0847dbcd36c48d057ad0f163c05cee8ff66452d4",
+      "patchSha256": "b1262129bd9799da4ebfc6e40cab3772b416bd4396b756a6850b7258dc60e1db",
+      "startByte": 289662,
+      "endByte": 306378
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "baseBlob": "c8208844068cf9d85708b9ef095f19d1d7024794",
+      "targetBlob": "851af13dd2ddf3fab501b826e4a6df9e99199b7d",
+      "patchSha256": "661a06b149c60ff5917c0d1e0ac5efb447230e869820bdc89d9b0e94c61f9632",
+      "startByte": 306378,
+      "endByte": 322435
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "baseBlob": "85f370814c9d8f5fc67b72dc768eec1120868ad7",
+      "targetBlob": "fdf79b80cc4a1bc70361b48bd1fc9dc9fc077dc1",
+      "patchSha256": "4004cf943655cfea04dada63090ce334ab0c3ea85995ff14a68bfd703f56af1d",
+      "startByte": 322435,
+      "endByte": 335628
+    },
+    {
+      "path": "src/operator_installed_project.rs",
+      "baseBlob": "7117362eba1b66f1d62b626462fb44834407a9af",
+      "targetBlob": "32354772b7615e4356ab3f68fd51afe234e6e99b",
+      "patchSha256": "e4685b19f0549b5f83052ac59d19c8d4d068fe262282d3d53d257533e9e55461",
+      "startByte": 335628,
+      "endByte": 339295
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "baseBlob": "5e745b1b58358769fc7107d068811428103c0a0e",
+      "targetBlob": "b8fa5ce02bd6a7dd98e1ac311221ea52f7a4aef7",
+      "patchSha256": "df3154988094dbb8ccb2dd05d072922ee7586e6a0be69a0bf62651250a0faa22",
+      "startByte": 339295,
+      "endByte": 353604
+    }
+  ]
+}

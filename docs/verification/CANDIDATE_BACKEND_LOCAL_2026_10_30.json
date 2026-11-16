@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T10:25:47.722359+00:00",
+  "classification": "ACTUAL_CANDIDATE_DISPOSABLE_SELECTED_DEVELOPMENT_BACKEND_LOOPBACK_ONLY",
+  "branch": "codex/web-rollover-oct17",
+  "buildSourceCommit": "3d1726ffbd1789259ac5298acf23fba417ee399d",
+  "implementationCommit": "f9679fab27dc265cb1b48601fa0fbeaae9a206fb",
+  "artifactSha256": "58b9e1615b9416459e9079f2ea2eb4c496be324758b34ecdbe25fbb0eb2300d3",
+  "buildEvidence": "docs/verification/DEVELOPMENT_NATIVE_CANDIDATE_BUILD_2026_10_29.json",
+  "lifecycle": {
+    "prepareCommand": "operator web-dev-runtime prepare --package <candidate-package> --python-runtime <existing-qualified-runtime>",
+    "backendCommand": "operator web-dev-runtime run-backend --max-runtime-seconds 45",
+    "scope": "Fresh disposable control workspace using the retained normal optimized executable and verified existing Wake/Python components",
+    "setupElapsedSeconds": 92.203,
+    "backendElapsedSeconds": 46.468,
+    "outerOwnerMaximumSeconds": 180,
+    "recurringAutomationEnabled": false
+  },
+  "results": {
+    "readyAndExactExecutableVerified": true,
+    "workspaceIdentityVerified": true,
+    "unauthorizedHttpStatus": 401,
+    "authenticatedInitializeHttpStatus": 200,
+    "authenticatedCatalogHttpStatus": 200,
+    "toolCount": 79,
+    "nativeDispatchAndStatusAdvertised": true,
+    "rawShellOrWriteAdvertised": false,
+    "exactSyntheticPairedProjectTargetsRead": 2,
+    "ungrantedTaskRefused": true,
+    "naturalOwnerExitCode": 0,
+    "outputReadersClosed": true,
+    "ownedTreeExitProved": true,
+    "endpointClosed": true,
+    "testOwnedProcessMatchesAtFinalCleanup": 0,
+    "cleanupObservedUtc": "2026-10-30T10:39:21.8908719Z",
+    "realCriticalStatePinsUnchanged": 12
+  },
+  "retainedEarlierFailures": [
+    "Harness initially selected a nonexistent Python subdirectory; preflight failed before CatDesk commands or process startup.",
+    "Corrected initial setup exceeded its 35-second local preparation deadline while copying the existing Python runtime. The incomplete disposable root was preserved, without authority/current pointer, registration, backend start or provider call. A separate fresh root completed supported preparation with a sufficient bounded deadline."
+  ],
+  "preservation": {
+    "existingSelectedDevelopmentPackageChanged": false,
+    "protectedProductionChanged": false,
+    "realProjectBindingsChanged": false,
+    "existingNativeSessionsResumed": 0,
+    "browserWakeTunnelOrRecurringStarts": 0,
+    "realModelCalls": 0,
+    "actualChatGPTWebCalls": 0
+  },
+  "notEstablished": [
+    "Real native provider execution through MCP",
+    "Actual ChatGPT Web caller or two-conversation coding acceptance",
+    "Installed production acceptance of this candidate",
+    "Protected promotion authority for this candidate",
+    "Normal unattended operation",
+    "Hosted exact-source CI"
+  ],
+  "nextAction": "Qualify one normal native provider turn through the existing exact-project MCP grant in a fresh test-owned native workspace. Preserve existing sessions. Connector429 and existing-profile inspection remain separate unchanged Web gates."
+}

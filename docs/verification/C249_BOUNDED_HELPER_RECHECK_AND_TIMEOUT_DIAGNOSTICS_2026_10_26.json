@@ -1,0 +1,83 @@
+{
+  "checkpoint": "C249",
+  "date": "2026-10-26",
+  "classification": "SOURCE_QUALIFIED_NOT_GENUINELY_REVIEWED_PRODUCED_OR_INSTALLED",
+  "sourceParent": "98248023c8cd359476e5943d991c960354c5e168",
+  "branch": "codex/web-rollover-oct17",
+  "sourceParentRemoteShaVerified": true,
+  "sourceWorkingPins": [
+    {
+      "path": "src/reviewed_build.rs",
+      "sha256": "dc75a4a38fd432e544359a95689ce618257aef41bbcf7771693d0868a167df5a"
+    }
+  ],
+  "problem": "After one helper-membership check was refused while an unknown child remained, a later natural exit of that child never allowed the remaining exact pinned helper to be reconsidered.",
+  "regression": {
+    "unknownFixtureChildExitedNaturally": true,
+    "onlyExactKnownHelperSelectivelyStopped": true,
+    "fixtureBudgetSeconds": 4,
+    "dedicatedRegressionOverlapsFullSuite": true,
+    "red": {
+      "failurePreserved": true,
+      "productionCodeChanged": false,
+      "outerTimedOut": false,
+      "actualTestExitCode": 101,
+      "fixtureOutcome": "REVIEWED_BUILD_TIMEOUT"
+    },
+    "usesActualWindowsJobProcesses": true,
+    "green": {
+      "failed": 0,
+      "fixtureCleanupVerified": true,
+      "passed": 1,
+      "actualTestExitCode": 0,
+      "outerTimedOut": false
+    }
+  },
+  "sourceChange": {
+    "existingTimeoutErrorCode": "REVIEWED_BUILD_TIMEOUT",
+    "diagnosticCaptureRequiresConfirmedCleanupAndEof": true,
+    "eachCheckRevalidatesCompleteMembershipAndPinnedImage": true,
+    "rawStderrOrPrivatePathsPublished": false,
+    "unknownMembersNeverSelectivelyStopped": true,
+    "timeoutPhases": [
+      "ROOT_RUNNING",
+      "DESCENDANTS_ACTIVE",
+      "STDERR_EOF_PENDING"
+    ],
+    "existingDeadlineUnchanged": true,
+    "timeoutDiagnosticUsesExistingFailureRecord": true,
+    "successStillRequiresRootExitEmptyJobAndStderrEof": true,
+    "newAuthorityJournal": false,
+    "originalC247TimeoutReclassified": false,
+    "minimumHelperRecheckIntervalMilliseconds": 250
+  },
+  "finalQualification": {
+    "terminationFailed": false,
+    "ownerExitCode": 0,
+    "containmentSha256": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "allCommandExitCodes": 0,
+    "protectedFilesystemPassed": 14,
+    "reviewedBuildIgnoredManual": 8,
+    "protectedFilesystemFailed": 0,
+    "timedOut": false,
+    "reviewedBuildFailed": 0,
+    "formatting": "PASS",
+    "resultSha256": "8a421c462e5abc8651b9560324603a13fea20920aa4f5d2ed5e7aa1da1bcd734",
+    "reviewedBuildPassed": 130,
+    "strictClippy": "PASS"
+  },
+  "original900SecondTimeoutCause": "UNPROVEN",
+  "liveNativeBuildResolutionClaimed": false,
+  "newSourceGenuineReview": "PENDING",
+  "qualifiedControllerContainingFix": "PENDING",
+  "freshNativeProducer": "PENDING",
+  "candidate": "NONE",
+  "productionPromotion": false,
+  "installedC208": "UNCHANGED",
+  "exactSourceCi": "UNVERIFIED",
+  "connector": "LAST_HTTP_429_SEPARATE_DEPENDENCY",
+  "differentVersionRollback": "OPEN",
+  "twoIndependentChatgptWebCodingConversations": "OPEN",
+  "recurringAutomationStarted": false,
+  "milestoneComplete": false
+}

@@ -1,0 +1,203 @@
++                    &event.event_id,
++                    lease.owner(),
++                    Phase::Submitting,
++                    None,
++                    None
++                )
++                .unwrap_err(),
++            "QUEUE_EVENT_EXPIRED"
++        );
++        assert_eq!(store.delivery(&event.event_id).unwrap(), Some(claimed));
++        assert_eq!(
++            fs::read(store.delivery_path(&event.event_id)).unwrap(),
++            before
++        );
++        assert!(!store.submission_start_path(&event.event_id).exists());
++        assert!(!store.archive_path(&event.event_id).exists());
++        drop(lease);
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn wake_metadata_expired_unknown_submission_remains_unreplayable_and_reconcilable() {
++        let (base, store, target) = fixture();
++        let event = expired_event(&target);
++        store.publish(&event).unwrap();
++        let lease = store.host_lock().unwrap();
++        let mut historical = store.claim(&event, &lease).unwrap();
++        // Fixture represents a submission committed before its TTL elapsed.
++        // No clock mutation, browser action, or production state is involved.
++        historical.phase = Phase::Submitting;
++        historical.updated_utc = event.created_utc + 1;
++        historical.validate().unwrap();
++        atomic(&store.delivery_path(&event.event_id), &historical).unwrap();
++        assert_eq!(
++            store.claim(&event, &lease).unwrap_err(),
++            "SUBMISSION_RECONCILIATION_REQUIRED"
++        );
++        assert_eq!(
++            store.retry_pre_submit(&event.event_id).unwrap_err(),
++            "SUBMISSION_RETRY_REFUSED"
++        );
++        assert_eq!(store.delivery(&event.event_id).unwrap(), Some(historical));
++        let receipt = Receipt {
++            schema_version: PROTOCOL_VERSION,
++            event_id: event.event_id.clone(),
++            target_generation: target.generation,
++            target_digest: target.digest,
++            message_digest: digest(&event.message),
++            sent_utc: event.created_utc + 2,
++            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
++        };
++        let reconciled = store
++            .reconcile_submitting_sent(&event.event_id, receipt.clone())
++            .unwrap();
++        assert_eq!(reconciled.phase, Phase::Sent);
++        assert_eq!(reconciled.receipt, Some(receipt));
++        assert_eq!(reconciled.event, event);
++        assert!(store.archive_path(&event.event_id).exists());
++        drop(lease);
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    fn intent() -> WakeIntent<'static> {
++        WakeIntent {
++            purpose: WakePurpose::ManualEndTurn,
++            source_event_id: "source-alpha-1",
++            source_turn_id: "turn-alpha-1",
++            priority: 10,
++            ttl_seconds: 300,
++        }
++    }
++
++    #[test]
++    fn semantic_wake_freezes_received_time_and_expiry_across_cold_retries() {
++        let (base, store, target) = fixture();
++        let before = now();
++        let first = store
++            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++            .unwrap();
++        assert!((before..=now()).contains(&first.created_utc));
++        assert_eq!(
++            first.wake_metadata().unwrap().unwrap().expires_utc,
++            first.created_utc + intent().ttl_seconds
++        );
++        // A previously received intent is fixture data, not a changed clock.
++        // Its age exposes any accidental regeneration of creation/expiry.
++        let historical_created_utc = first.created_utc - 120;
++        let historical = Event {
++            created_utc: historical_created_utc,
++            audit_references: Vec::new(),
++            ..first
++        }
++        .with_wake_metadata(intent().metadata(historical_created_utc).unwrap())
++        .unwrap();
++        atomic(&store.event_path(&historical.event_id), &historical).unwrap();
++        let saved = fs::read(store.event_path(&historical.event_id)).unwrap();
++        let reopened =
++            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
++        let replay = reopened
++            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++            .unwrap();
++        assert_eq!(replay, historical);
++        assert_eq!(fs::read(store.event_path(&replay.event_id)).unwrap(), saved);
++        assert_eq!(reopened.events().unwrap(), [historical]);
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn semantic_wake_material_changes_conflict_but_distinct_source_identity_is_admitted() {
++        let (base, store, target) = fixture();
++        let original = store
++            .produce_expected_wake("alpha", "Continue alpha", &target, intent())
++            .unwrap();
++        assert_eq!(
++            original.event_id,
++            "wake-intent-b128942a8ffb67ccf1e9583f55a01b58c0f681f5c06ec3d22246e9ebfea943ad"
++        );
++        let saved = fs::read(store.event_path(&original.event_id)).unwrap();
++        for changed in [
++            WakeIntent {
++                priority: 11,
++                ..intent()
++            },
++            WakeIntent {
++                ttl_seconds: 301,
++                ..intent()
++            },
++        ] {
++            assert_eq!(
++                store
++                    .produce_expected_wake("alpha", "Continue alpha", &target, changed)
++                    .unwrap_err(),
++                "QUEUE_EVENT_ID_CONFLICT"
++            );
++        }
++        assert_eq!(
++            store
++                .produce_expected_wake("alpha", "Different task", &target, intent())
++                .unwrap_err(),
++            "QUEUE_EVENT_ID_CONFLICT"
++        );
++        assert_eq!(
++            fs::read(store.event_path(&original.event_id)).unwrap(),
++            saved
++        );
++        let mut identities = BTreeSet::from([original.event_id]);
++        for distinct in [
++            WakeIntent {
++                source_turn_id: "turn-alpha-2",
++                ..intent()
++            },
++            WakeIntent {
++                source_event_id: "source-alpha-2",
++                ..intent()
++            },
++            WakeIntent {
++                purpose: WakePurpose::NewTask,
++                ..intent()
++            },
++        ] {
++            let event = store
++                .produce_expected_wake("alpha", "Continue alpha", &target, distinct)
++                .unwrap();
++            assert!(identities.insert(event.event_id));
++        }
++        assert_eq!(store.events().unwrap().len(), 4);
++        fs::remove_dir_all(base).unwrap();
++    }
++
++    #[test]
++    fn semantic_wake_unknown_expired_submission_is_not_recreated_or_refreshed_after_restart() {
++        let (base, store, target) = fixture();
++        let intent = WakeIntent {
++            ttl_seconds: 60,
++            ..intent()
++        };
++        let created_utc = now() - 120;
++        let event = Event {
++            schema_version: PROTOCOL_VERSION,
++            event_id: intent.event_id("alpha").unwrap(),
++            project_id: "alpha".into(),
++            event_type: "engineering_attention".into(),
++            created_utc,
++            message: "Continue alpha".into(),
++            target_generation: target.generation,
++            audit_references: Vec::new(),
++        }
++        .with_wake_metadata(intent.metadata(created_utc).unwrap())
++        .unwrap();
++        store.publish(&event).unwrap();
++        let lease = store.host_lock().unwrap();
++        let mut historical = store.claim(&event, &lease).unwrap();
++        historical.phase = Phase::Submitting;
++        historical.updated_utc = created_utc + 1;
++        historical.validate().unwrap();
++        atomic(&store.delivery_path(&event.event_id), &historical).unwrap();
++        let saved_delivery = fs::read(store.delivery_path(&event.event_id)).unwrap();
++        let saved_queue = fs::read(store.event_path(&event.event_id)).unwrap();
++        drop(lease);
++        let reopened =
++            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
++        assert_eq!(
++            reopened

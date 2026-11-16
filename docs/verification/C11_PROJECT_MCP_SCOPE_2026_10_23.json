@@ -1,0 +1,224 @@
+{
+  "recordedUtc": "2026-10-23T04:45:42.2425983Z",
+  "localDate": "2026-10-23",
+  "task": "C11-IMMUTABLE-PROJECT-MCP-CONNECTION",
+  "classification": "SOURCE_TESTED_LOCAL_HTTP_FIXTURES",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "1c62422bbfb9c26f6a5eb3a049dae7d384653b15",
+  "sourceFiles": [
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "6de3658d1e6458b6c2e67828d1512b0bda50ff1c32b941c1d1f025b29167da7c"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "3851990965cdeb51554b22c8580e6e73769403dee5a98cbacaaa7e3e0a0130f1"
+    },
+    {
+      "path": "src/server.rs",
+      "sha256": "6f0db145920c668c7eb11e14b37e26ebb426c0ab8e0ee36e6ca302fb8bec7cec"
+    }
+  ],
+  "implementation": {
+    "registry": "EXISTING_GIT_IDENTITY_RESOLVER",
+    "authentication": "EXISTING_REQUIRED_BEARER_AUTH",
+    "projectAndWorkspace": "FIXED_BY_LOCAL_OPERATOR_BEFORE_LISTENING",
+    "globalWorkspaceMutation": false,
+    "perCallWitness": [
+      "projectId",
+      "expectedTargetGeneration",
+      "expectedTargetSha256"
+    ],
+    "scopeVerified": "BEFORE_CALL_AND_BEFORE_CONTENT_DISCLOSURE",
+    "pairedTargetRefresh": "CURRENT_GENERATION_ACCEPTED_AFTER_GUARDED_BIND_WITHOUT_ENDPOINT_RESTART",
+    "staleWitness": "REFUSED",
+    "cachedCatalog": "FIXED_PROJECT_ID_DYNAMIC_PAIRED_GENERATION_DIGEST",
+    "workspaceOrGitIdentityDrift": "REFUSE_OWN_CONNECTION",
+    "nativeWriterClaimed": false,
+    "access": "READ_ONLY_FIRST_STAGE",
+    "writesAndCommands": "DENIED_PENDING_OWNERSHIP_BACKEND",
+    "newRegistryOrTokenStore": false,
+    "browserAndUiMutationRoutes": "NOT_MOUNTED",
+    "headless": "EXISTING_LIFECYCLE_LOOPBACK_READ_ONLY_NO_WEB_AUTO_MAX180S",
+    "conversationOriginAuthenticated": false
+  },
+  "tests": {
+    "distinctTestsPassed": 20,
+    "testExecutionsPassed": 21,
+    "projectScopeHttpAndCli": 3,
+    "headlessLifecycle": 16,
+    "readOnlyTools": 2,
+    "scopeCliTestIncludedInHeadless": true,
+    "checks": [
+      {
+        "label": "project-mcp-http-and-cli",
+        "startedUtc": "2026-10-23T04:39:28.4120694Z",
+        "finishedUtc": "2026-10-23T04:40:35.4315069Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "project_mcp",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "82d68e8e2650de974779cc63d3af4725e2da593b829738cb1c99a0aaf57f4967"
+      },
+      {
+        "label": "existing-headless-lifecycle",
+        "startedUtc": "2026-10-23T04:40:35.4699124Z",
+        "finishedUtc": "2026-10-23T04:40:39.4018787Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "headless_",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "c560240f72e7cd6fc1237f5b5f04db967d3639e2e61d84f6ba063e736c7b7c47"
+      },
+      {
+        "label": "existing-read-only-tools",
+        "startedUtc": "2026-10-23T04:40:39.4121426Z",
+        "finishedUtc": "2026-10-23T04:40:40.4002328Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "read_only_tools",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "04d3a7f386a5ae84ca95c81323e9fa1e3d10312d417acd134a0556b09a5bb61e"
+      },
+      {
+        "label": "strict-root-clippy",
+        "startedUtc": "2026-10-23T04:40:40.4103496Z",
+        "finishedUtc": "2026-10-23T04:41:05.6968811Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "aa445d772c16efa23be38b17e61ef42f0ff8622309038a400088235a0ee11843"
+      },
+      {
+        "label": "root-format",
+        "startedUtc": "2026-10-23T04:41:05.7060764Z",
+        "finishedUtc": "2026-10-23T04:41:08.4279951Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "strictClippy": "PASS_ALL_TARGETS_ALL_FEATURES",
+    "format": "PASS",
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "boundSeconds": 600,
+    "realLoopbackSockets": true,
+    "twoProjectParallelReads": "PASS",
+    "wrongBearerAndProjectWitness": "REFUSED",
+    "siblingPathAndCallerWorkspaceOverride": "REFUSED_OR_IGNORED_WITH_OWN_ROOT_PRESERVED",
+    "writeAndCommand": "DENIED",
+    "guardedFixtureRollover": "FRESH_WITNESS_ACCEPTED_OLD_REFUSED_NO_RESTART",
+    "independentWriterProgress": "SIMULATED_LOCAL_FILE_EDIT_READ_BY_SIBLING",
+    "registryWorkspaceDrift": "AFFECTED_CONNECTION_REFUSED_SIBLING_PROGRESS",
+    "socketOwners": "BOTH_JOINED_BEFORE_ASSERTIONS",
+    "actualChatGptWebCalls": false,
+    "actualBrowserRollover": false
+  },
+  "external": {
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "nativeChatsChanged": false,
+    "productionBindingsChanged": false,
+    "selectedPackageChanged": false,
+    "recurringStarted": false,
+    "protectedProductionChanged": false,
+    "connectorCalled": false,
+    "completedCanaryReplayed": false
+  },
+  "acceptance": {
+    "source": "PASS_READ_ONLY_CONNECTION_STAGE",
+    "normalExecutable": "PASS_NORMAL_DEBUG_NO_DEV_DEPENDENCIES",
+    "normalTwoProcessHttp": "PASS_DISPOSABLE_REGISTERED_ROOTS_NO_ACTUAL_WEB_CALLS",
+    "actualWebB": "OPEN",
+    "ownershipBackedMutationAndExecution": "REQUIRED_NOT_IMPLEMENTED",
+    "selectedPackage": "C8_V49_UNCHANGED",
+    "liveGHI": "OPEN",
+    "connector": "LAST_DIRECT_PROBE_HTTP429_NO_REPEAT",
+    "protectedProduction": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullMilestone": "PARTIAL"
+  },
+  "nextTask": "Wire ownership-backed mutation/delegation through the same immutable context, preserving native owners. Qualify selected runtime and actual Web B independently, plus live G/H/I. No replay of completed canaries.",
+  "normalBuild": {
+    "finishedUtc": "2026-10-23T04:51:20.1227592Z",
+    "sourceCommit": "74b2966a254e93cd9d384fadcf86a196500e7151",
+    "imageSha256": "5f9444bfac6ebcf0bc9ab899cec86fd191b1a5de7b9c7e934027a51689fe997b",
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 240
+  },
+  "normalTwoProcess": {
+    "startedUtc": "2026-10-23T04:53:03.3284045Z",
+    "finishedUtc": "2026-10-23T04:53:42.5215214Z",
+    "classification": "NORMAL_LOCAL_MCP_DISPOSABLE_REGISTERED_PROJECTS",
+    "checks": [
+      "two-normal-process-parallel-own-root-reads",
+      "wrong-bearer-401",
+      "wrong-project-witness-refused",
+      "sibling-path-write-and-command-refused",
+      "simulated-independent-writer-progress",
+      "both-listeners-natural-deadline-exit-zero"
+    ],
+    "maximumSeconds": 180,
+    "listenerMaximumSeconds": 35,
+    "naturalExitCodes": [
+      0,
+      0
+    ],
+    "outerJobExitCode": 0,
+    "outerJobTimedOut": false,
+    "outerJobTerminationFailed": false,
+    "ownedProcesses": 0,
+    "protectedRecords": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "actualWebCalls": false
+  },
+  "publication": {
+    "sourceHead": "74b2966a254e93cd9d384fadcf86a196500e7151",
+    "remoteSha": "74b2966a254e93cd9d384fadcf86a196500e7151",
+    "atUtc": "2026-10-23T04:47:40.7312176Z",
+    "branch": "codex/web-rollover-oct17",
+    "ci": "UNVERIFIED",
+    "workflowRuns": 0,
+    "checkRuns": 0
+  }
+}

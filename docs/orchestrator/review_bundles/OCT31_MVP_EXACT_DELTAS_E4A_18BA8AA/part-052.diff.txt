@@ -1,0 +1,199 @@
++
++fn summary(value: &Journal) -> serde_json::Value {
++    serde_json::json!({"state":value.phase,"transactionId":value.plan.transaction_id,"evidenceSha256":value.evidence_sha256,
++        "candidateSha256":value.plan.candidate_sha256,"priorCanonicalSha256":value.plan.prior_sha256,
++        "historicalReceiptIncluded":value.plan.historical_handoff_sha256.is_some(),"productionBinaryChanged":false,"sourceAuthorityCreated":false})
++}
++
++#[cfg(windows)]
++fn archive_locked(
++    parent: &Guard,
++    value: &mut Journal,
++    mut checkpoint: impl FnMut(&str) -> Result<(), String>,
++) -> Result<(), String> {
++    if value.phase == "PREPARED" {
++        let name = archive_name(&value.plan.transaction_id)?;
++        match (
++            optional_child(parent, "promotion-control")?,
++            optional_child(parent, &name)?,
++        ) {
++            (Some(current), None) => {
++                if record_hashes(&current)? != value.plan.records {
++                    return Err(format!("{LABEL} source records changed"));
++                }
++                let mut current = current.reopen_direct_child_for_delete(LABEL)?;
++                current.rename_direct_child_within_parent(parent, &name, LABEL)?;
++            }
++            (None, Some(old)) if record_hashes(&old)? == value.plan.records => {}
++            _ => return Err(format!("{LABEL} archive location ambiguous")),
++        }
++        checkpoint("PROMOTION_RENAMED")?;
++        value.phase = "PROMOTION_ARCHIVED".into();
++        update_journal(parent, value)?;
++    }
++    if value.phase == "PROMOTION_ARCHIVED" {
++        if let Some(expected) = &value.plan.historical_handoff_sha256 {
++            let handoffs = child(parent, "restart-handoff")?;
++            let name = format!("retired-{expected}.json");
++            match (
++                read_optional_relative_regular(&handoffs, "latest.json", 4096, LABEL)?,
++                read_optional_relative_regular(&handoffs, &name, 4096, LABEL)?,
++            ) {
++                (Some(raw), None) if digest(&raw) == *expected => {
++                    rename_exact_regular_child(&handoffs, "latest.json", &name, &raw, LABEL)?
++                }
++                (None, Some(raw)) if digest(&raw) == *expected => {}
++                _ => return Err(format!("{LABEL} handoff archive differs")),
++            }
++        }
++        checkpoint("HANDOFF_RENAMED")?;
++        verify_archive(parent, value)?;
++        value.phase = "COMPLETED".into();
++        update_journal(parent, value)?;
++    }
++    verify_archive(parent, value)
++}
++
++#[cfg(windows)]
++pub(crate) fn retire(
++    workspace: &Path,
++    transaction: &str,
++    expected: &str,
++) -> Result<serde_json::Value, String> {
++    if !valid_digest(expected) {
++        return Err(format!("{LABEL} evidence digest invalid"));
++    }
++    let parent = metadata(workspace)?;
++    let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
++    let previous = journal(&parent)?;
++    if let Some(value) = &previous {
++        if value.phase == "COMPLETED" && value.plan.transaction_id == transaction {
++            if value.evidence_sha256 != expected {
++                return Err(format!("{LABEL} evidence differs"));
++            }
++            verify_archive(&parent, value)?;
++            return Ok(summary(value));
++        }
++    }
++    if previous
++        .as_ref()
++        .is_some_and(|v| v.phase != "COMPLETED" && v.plan.transaction_id != transaction)
++    {
++        return Err(format!("{LABEL} another recovery is pending"));
++    }
++    // Reuse the public lifecycle's existing exclusive stopped-owner lease.
++    use std::os::windows::fs::OpenOptionsExt;
++    let lifecycle = child(&parent, "release-pair-control")?;
++    let _lease = OpenOptions::new()
++        .read(true)
++        .write(true)
++        .share_mode(0)
++        .open(lifecycle.path().join("stopped-owner.lock"))
++        .map_err(|_| format!("{LABEL} public lifecycle owner is active"))?;
++    let plan = inspect_locked(workspace, &parent, transaction, previous.as_ref())?;
++    let evidence = digest(&bytes(&plan)?);
++    if evidence != expected {
++        return Err(format!("{LABEL} material evidence changed"));
++    }
++    // Retain the actual trusted disk pair through every metadata transition.
++    // These handles forbid writes/deletes and never replace executable bytes.
++    let mut release = Guard::acquire(workspace, LABEL)?;
++    release.descend_existing("target", LABEL)?;
++    release.descend_existing("release", LABEL)?;
++    let _canonical = crate::windows_protected_fs::retain_reviewed_regular_artifact(
++        &release,
++        "catdesk.exe",
++        &plan.prior_sha256,
++        128 * 1024 * 1024,
++        LABEL,
++    )?;
++    let fingerprint = read_relative_regular(&release, "catdesk.exe.sha256", 128, LABEL)?;
++    if std::str::from_utf8(&fingerprint)
++        .map_err(|_| "retirement fingerprint invalid")?
++        .trim()
++        .to_ascii_lowercase()
++        != plan.prior_sha256
++    {
++        return Err(format!("{LABEL} canonical fingerprint changed"));
++    }
++    let _fingerprint = crate::windows_protected_fs::retain_reviewed_regular_artifact(
++        &release,
++        "catdesk.exe.sha256",
++        &digest(&fingerprint),
++        128,
++        LABEL,
++    )?;
++    if let Some(old) = &previous {
++        if old.phase == "COMPLETED" {
++            verify_archive(&parent, old)?;
++            // Previous completion remains durable before replacing the current journal.
++            let name = format!(
++                "promotion-retirement-receipt-{}.json",
++                old.plan.transaction_id
++            );
++            let encoded = bytes(old)?;
++            match read_optional_relative_regular(&parent, &name, 65536, LABEL)? {
++                Some(saved) if saved == encoded => {}
++                None => write_new_regular_in(&parent, &name, &encoded, LABEL)?,
++                _ => return Err(format!("{LABEL} previous completion differs")),
++            }
++        }
++    }
++    let mut value = previous
++        .filter(|v| v.plan.transaction_id == transaction)
++        .unwrap_or(Journal {
++            schema_version: 1,
++            phase: "PREPARED".into(),
++            evidence_sha256: evidence,
++            plan,
++        });
++    update_journal(&parent, &value)?;
++    archive_locked(&parent, &mut value, |_| Ok(()))?;
++    Ok(summary(&value))
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::reviewed_candidate_owner::OwnedCandidateChild;
++    use std::sync::mpsc;
++
++    fn cleanup_fixture(root: PathBuf) {
++        let resolved = root.canonicalize().unwrap();
++        let temp = std::env::temp_dir().canonicalize().unwrap();
++        assert_eq!(resolved.parent(), Some(temp.as_path()));
++        assert!(
++            resolved
++                .file_name()
++                .unwrap()
++                .to_string_lossy()
++                .starts_with("CatDesk-Retirement-Fixture-")
++        );
++        fs::remove_dir_all(resolved).unwrap();
++    }
++
++    fn terminal_fixture() -> (
++        ReviewedPromotionAuthorizationV1,
++        ReviewedPromotionPreflightV1,
++        ReviewedPromotionClaimV1,
++        ReviewedPromotionResultV1,
++    ) {
++        let auth = ReviewedPromotionAuthorizationV1 {
++            schema_version: 1,
++            generation: 1,
++            authorization_id: "a".repeat(32),
++            expires_at_unix: 1,
++            candidate_relative_path: "candidate/catdesk.exe".into(),
++            candidate_sha256: "b".repeat(64),
++            prior_canonical_sha256: "c".repeat(64),
++            promotion_script_sha256: "d".repeat(64),
++            trusted_powershell_path: "fixture-interpreter".into(),
++            trusted_powershell_sha256: "e".repeat(64),
++            review_session_id: "fixture-review".into(),
++            review_record_id: "fixture-record".into(),
++            review_record_sha256: "f".repeat(64),
++            transaction_id: "1".repeat(32),
++            claim_id: "2".repeat(32),
++            build_attestation_sha256: "3".repeat(64),
++            build_attempt_id: "4".repeat(32),
++            snapshot_id: "fixture-snapshot".into(),

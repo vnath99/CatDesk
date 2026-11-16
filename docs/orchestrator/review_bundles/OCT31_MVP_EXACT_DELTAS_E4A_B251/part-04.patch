@@ -1,0 +1,1844 @@
+# CatDesk exact public-source review input. No approval or execution authority.
+# Base e4a99a8b6913c3db689a216f4ae4e0a7f6fff612
+# Target b25119e8c47cfe261aae06b461c3697e3841cdb6
+
+diff --git a/src/operator_facade.rs b/src/operator_facade.rs
+index c8208844068cf9d85708b9ef095f19d1d7024794..851af13dd2ddf3fab501b826e4a6df9e99199b7d 100644
+--- a/src/operator_facade.rs
++++ b/src/operator_facade.rs
+@@ -22,7 +22,14 @@ mod development_backend;
+ #[path = "operator_installed_backend.rs"]
+ mod installed_backend;
+ 
++#[cfg(windows)]
++pub(crate) use installed_backend::{
++    backend_command as promotion_source_command, verify_mcp_at as verify_promotion_source_mcp,
++};
++
+ pub(crate) use web::WebWorkLease;
++#[cfg(all(test, windows))]
++pub(crate) use web::native_continuation_fixture;
+ 
+ #[cfg(test)]
+ pub(crate) fn read_web_status(workspace: &Path) -> Result<serde_json::Value, String> {
+@@ -159,6 +166,14 @@ pub(crate) enum WebDevelopmentAction {
+     Login {
+         project_id: String,
+     },
++    InspectReadiness {
++        project_id: String,
++    },
++    ReconcileLogin {
++        project_id: String,
++        marker_sha256: String,
++        execute: bool,
++    },
+     Status,
+     Start,
+     Stop,
+@@ -203,6 +218,17 @@ pub(crate) enum ReleasePairOperatorAction {
+         transaction_id: String,
+     },
+     ResultStopped,
++    InspectFailedPromotion {
++        transaction_id: String,
++    },
++    RetireFailedPromotion {
++        transaction_id: String,
++        evidence_sha256: String,
++    },
++    QualifyPromotionSource {
++        transaction_id: String,
++        evidence_sha256: String,
++    },
+     Result,
+ }
+ 
+@@ -272,6 +298,16 @@ pub(crate) fn parse_operator_action(
+ 
+ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction, String> {
+     match args.get(2).map(String::as_str) {
++        Some("reconcile-login") if matches!(args.len(), 7 | 8)
++            && args[3] == "--project-id" && args[5] == "--expected-marker-sha256"
++            && catdesk_wake::protocol::valid_id(&args[4])
++            && args[6].len() == 64
++            && args[6].bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
++            && (args.len() == 7 || args[7] == "--execute") => Ok(WebDevelopmentAction::ReconcileLogin {
++                project_id: args[4].clone(), marker_sha256: args[6].clone(), execute: args.len() == 8,
++            }),
++        Some("inspect-readiness") if args.len()==5 && args[3]=="--project-id"
++            && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::InspectReadiness {project_id:args[4].clone()}),
+         Some("login") if args.len() == 5
+             && args[3] == "--project-id"
+             && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::Login {
+@@ -355,6 +391,72 @@ fn login_web_development(workspace: &Path, project_id: &str) -> Result<serde_jso
+     catdesk_wake::development_runtime::login(&workspace, &target.url)
+ }
+ 
++fn inspect_web_development_readiness(
++    workspace: &Path,
++    project_id: &str,
++) -> Result<serde_json::Value, String> {
++    let workspace = workspace
++        .canonicalize()
++        .map_err(|_| "DEV_WORKSPACE_UNAVAILABLE")?;
++    let root = catdesk_wake::development_runtime::root_for_workspace(&workspace)?
++        .ok_or("DEV_RUNTIME_NOT_PREPARED")?;
++    let lease = acquire_web_work_lease(&workspace, project_id)?;
++    let target = mcp::operator_read_project_web_target(&workspace, project_id)
++        .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
++        .ok_or("DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?;
++    let expected = catdesk_wake::protocol::Target::new(target.generation, target.url.clone())?;
++    if expected.digest != target.sha256 {
++        return Err("DEV_READINESS_TARGET_CHANGED".into());
++    }
++    lease.check_target(&expected)?;
++    catdesk_wake::development_runtime::validate_selected_target_isolation(
++        &workspace,
++        &root,
++        &target.url,
++    )?;
++    let mut result = catdesk_wake::development_runtime::inspect_readiness(&workspace, &target.url)?;
++    lease.check_target(&expected)?;
++    let after = mcp::operator_read_project_web_target(&workspace, project_id)
++        .map_err(|_| "DEV_READINESS_TARGET_CHANGED")?
++        .ok_or("DEV_READINESS_TARGET_CHANGED")?;
++    if after.generation != target.generation
++        || after.url != target.url
++        || after.sha256 != target.sha256
++    {
++        return Err("DEV_READINESS_TARGET_CHANGED".into());
++    }
++    result["projectId"] = json!(project_id);
++    result["targetGeneration"] = json!(target.generation);
++    result["targetDigest"] = json!(target.sha256);
++    Ok(result)
++}
++
++fn reconcile_web_development_login(
++    workspace: &Path,
++    project: &str,
++    marker_sha256: &str,
++    execute: bool,
++) -> Result<serde_json::Value, String> {
++    let mut result = catdesk_wake::development_runtime::reconcile_login(
++        workspace,
++        marker_sha256,
++        execute,
++        |store| {
++            let target = mcp::operator_read_login_recovery_target(workspace, project, store)
++                .map_err(|error| match error {
++                    mcp::DesignatedChatTargetErrorV1::ProtectedStateMismatch => {
++                        "DEV_LOGIN_RECOVERY_TARGET_PAIR_MISMATCH"
++                    }
++                    _ => "DEV_LOGIN_RECOVERY_TARGET_UNAVAILABLE",
++                })?
++                .ok_or("DEV_LOGIN_RECOVERY_PROJECT_TARGET_REQUIRED")?;
++            catdesk_wake::protocol::Target::new(target.generation, target.url)
++        },
++    )?;
++    result["projectId"] = json!(project);
++    Ok(result)
++}
++
+ /// Explicit controlled work for live development tests. It uses the same
+ /// paired target and durable queue as normal delivery, but never manufactures
+ /// a natural review record or a delivery receipt.
+@@ -579,6 +681,43 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>,
+             }
+         }
+         Some("result-stopped") if args.len() == 3 => ReleasePairOperatorAction::ResultStopped,
++        Some("inspect-failed-promotion")
++            if args.len() == 5
++                && args[3] == "--transaction-id"
++                && args[4].len() == 32
++                && args[4]
++                    .bytes()
++                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
++        {
++            ReleasePairOperatorAction::InspectFailedPromotion {
++                transaction_id: args[4].clone(),
++            }
++        }
++        Some(command @ ("retire-failed-promotion" | "qualify-promotion-source"))
++            if args.len() == 7
++                && args[3] == "--transaction-id"
++                && args[5] == "--expected-evidence-sha256"
++                && args[4].len() == 32
++                && args[4]
++                    .bytes()
++                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
++                && args[6].len() == 64
++                && args[6]
++                    .bytes()
++                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
++        {
++            if command == "qualify-promotion-source" {
++                ReleasePairOperatorAction::QualifyPromotionSource {
++                    transaction_id: args[4].clone(),
++                    evidence_sha256: args[6].clone(),
++                }
++            } else {
++                ReleasePairOperatorAction::RetireFailedPromotion {
++                    transaction_id: args[4].clone(),
++                    evidence_sha256: args[6].clone(),
++                }
++            }
++        }
+         _ => return Err("operator release-pair accepts only fixed actions".into()),
+     };
+     Ok(Some(OperatorAction::ReleasePair(action)))
+@@ -861,6 +1000,16 @@ pub(crate) async fn execute_operator_action(
+                 WebDevelopmentAction::Login { project_id } => {
+                     login_web_development(workspace, &project_id)
+                 }
++                WebDevelopmentAction::InspectReadiness { project_id } => {
++                    inspect_web_development_readiness(workspace, &project_id)
++                }
++                WebDevelopmentAction::ReconcileLogin {
++                    project_id,
++                    marker_sha256,
++                    execute,
++                } => {
++                    reconcile_web_development_login(workspace, &project_id, &marker_sha256, execute)
++                }
+                 WebDevelopmentAction::Status => development_runtime::status(workspace),
+                 WebDevelopmentAction::Start => development_runtime::start(workspace),
+                 WebDevelopmentAction::Stop => development_runtime::stop(workspace),
+@@ -1077,6 +1226,59 @@ pub(crate) async fn execute_operator_action(
+                         json!({"action":"release_pair_rollback_stopped","result":result,"tunnelAction":"none"}),
+                     )
+                 }
++                ReleasePairOperatorAction::InspectFailedPromotion { transaction_id } => {
++                    #[cfg(windows)]
++                    return tokio::task::spawn_blocking(move || {
++                        crate::daemon_reload::retirement::inspect(&workspace, &transaction_id)
++                    })
++                    .await
++                    .map_err(|_| "promotion retirement inspection failed")?;
++                    #[cfg(not(windows))]
++                    {
++                        let _ = transaction_id;
++                        Err("promotion retirement requires Windows".into())
++                    }
++                }
++                ReleasePairOperatorAction::RetireFailedPromotion {
++                    transaction_id,
++                    evidence_sha256,
++                } => {
++                    #[cfg(windows)]
++                    return tokio::task::spawn_blocking(move || {
++                        crate::daemon_reload::retirement::retire(
++                            &workspace,
++                            &transaction_id,
++                            &evidence_sha256,
++                        )
++                    })
++                    .await
++                    .map_err(|_| "promotion retirement requires recovery")?;
++                    #[cfg(not(windows))]
++                    {
++                        let _ = (transaction_id, evidence_sha256);
++                        Err("promotion retirement requires Windows".into())
++                    }
++                }
++                ReleasePairOperatorAction::QualifyPromotionSource {
++                    transaction_id,
++                    evidence_sha256,
++                } => {
++                    #[cfg(windows)]
++                    return tokio::task::spawn_blocking(move || {
++                        crate::daemon_reload::retirement::qualify_stopped_source(
++                            &workspace,
++                            &transaction_id,
++                            &evidence_sha256,
++                        )
++                    })
++                    .await
++                    .map_err(|_| "promotion source qualification failed")?;
++                    #[cfg(not(windows))]
++                    {
++                        let _ = (transaction_id, evidence_sha256);
++                        Err("promotion source qualification requires Windows".into())
++                    }
++                }
+             }
+         }
+         OperatorAction::RepairWakeBridgeEnvironment => {
+@@ -1103,7 +1305,9 @@ pub(crate) async fn execute_operator_action(
+             let result = crate::delegated::autonomy_supervisor::handle_tool(
+                 operation, arguments, &workspace,
+             )
+-            .map_err(|_| "reviewed project operation requires operator attention".to_string())?;
++            .map_err(|error| {
++                crate::delegated::codex_app_server::registration_error_code(&error).to_string()
++            })?;
+             Ok(redacted_project_control_result(operation, result))
+         }
+     }
+@@ -1763,6 +1967,42 @@ pub(crate) fn valid_repair_result(result: &CommandResult) -> bool {
+ 
+ #[cfg(test)]
+ mod tests {
++    #[test]
++    fn failed_promotion_operator_commands_require_exact_identity_and_digest() {
++        let id = "a".repeat(32);
++        let hash = "b".repeat(64);
++        let inspect = vec![
++            "operator".into(),
++            "release-pair".into(),
++            "inspect-failed-promotion".into(),
++            "--transaction-id".into(),
++            id.clone(),
++        ];
++        assert!(super::parse_operator_action(inspect.clone()).is_ok());
++        let retire = vec![
++            "operator".into(),
++            "release-pair".into(),
++            "retire-failed-promotion".into(),
++            "--transaction-id".into(),
++            id,
++            "--expected-evidence-sha256".into(),
++            hash,
++        ];
++        assert!(super::parse_operator_action(retire.clone()).is_ok());
++        let mut qualify = retire.clone();
++        qualify[2] = "qualify-promotion-source".into();
++        assert!(super::parse_operator_action(qualify.clone()).is_ok());
++        qualify.push("--force".into());
++        assert!(super::parse_operator_action(qualify).is_err());
++        for index in [3, 4, 5, 6] {
++            let mut changed = retire.clone();
++            changed[index] = "../unscoped".into();
++            assert!(super::parse_operator_action(changed).is_err());
++        }
++        let mut extra = inspect;
++        extra.push("--force".into());
++        assert!(super::parse_operator_action(extra).is_err());
++    }
+     use super::*;
+     use serde_json::Value;
+     use sha2::Digest;
+@@ -2314,6 +2554,61 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn web_development_inspect_readiness_requires_only_registered_project() {
++        let valid = [
++            "operator",
++            "web-dev-runtime",
++            "inspect-readiness",
++            "--project-id",
++            "alpha",
++        ];
++        assert!(parse_operator_action(valid.into_iter().map(str::to_string)).is_ok());
++        for flag in ["--profile", "--url", "--message", "--seconds", "--send"] {
++            let mut args = valid.into_iter().map(str::to_string).collect::<Vec<_>>();
++            args.extend([flag.into(), "override".into()]);
++            assert!(parse_operator_action(args).is_err());
++        }
++    }
++
++    #[test]
++    fn web_development_login_reconciliation_requires_project_hash_and_explicit_commit() {
++        let mut args = [
++            "operator",
++            "web-dev-runtime",
++            "reconcile-login",
++            "--project-id",
++            "alpha",
++            "--expected-marker-sha256",
++        ]
++        .map(str::to_owned)
++        .to_vec();
++        args.push("a".repeat(64));
++        assert!(matches!(
++            parse_operator_action(args.clone()),
++            Ok(Some(OperatorAction::WebDevelopment(
++                WebDevelopmentAction::ReconcileLogin { execute: false, .. }
++            )))
++        ));
++        args.push("--execute".into());
++        assert!(matches!(
++            parse_operator_action(args.clone()),
++            Ok(Some(OperatorAction::WebDevelopment(
++                WebDevelopmentAction::ReconcileLogin { execute: true, .. }
++            )))
++        ));
++        for flag in ["--force", "--url", "--profile", "--send"] {
++            let mut invalid = args[..7].to_vec();
++            invalid.push(flag.into());
++            assert!(parse_operator_action(invalid).is_err());
++        }
++        for hash in ["a".repeat(63), "A".repeat(64), "z".repeat(64)] {
++            let mut invalid = args[..7].to_vec();
++            invalid[6] = hash;
++            assert!(parse_operator_action(invalid).is_err());
++        }
++    }
++
+     #[test]
+     fn web_development_login_requires_prepared_root_before_any_browser_action() {
+         let workspace =
+@@ -2323,6 +2618,10 @@ mod tests {
+             login_web_development(&workspace, "alpha").unwrap_err(),
+             "DEV_RUNTIME_NOT_PREPARED"
+         );
++        assert_eq!(
++            inspect_web_development_readiness(&workspace, "alpha").unwrap_err(),
++            "DEV_RUNTIME_NOT_PREPARED"
++        );
+         fs::remove_dir(workspace).unwrap();
+     }
+ 
+
+diff --git a/src/operator_installed_backend.rs b/src/operator_installed_backend.rs
+index 85f370814c9d8f5fc67b72dc768eec1120868ad7..fdf79b80cc4a1bc70361b48bd1fc9dc9fc077dc1 100644
+--- a/src/operator_installed_backend.rs
++++ b/src/operator_installed_backend.rs
+@@ -344,18 +344,38 @@ fn prefix(root: &Path, helper: &Path) -> String {
+ }
+ fn trust_command(root: &Path, helper: &Path) -> String {
+     format!(
+-        "{} $lease=Enter-CatDeskStoppedLifecycleLease $root;try {{ if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $lease)){{throw 'startup authority'}};$p=Read-CatDeskLkgPointer $root;$s=Read-CatDeskLkgSlot $root $p.Slot;$c=Get-CatDeskCanonicalPairEvidence $root;if($p.Hash -cne $s.Hash -or $p.Generation -ne $s.Generation -or $p.Slot -cne $s.Slot -or $c.Hash -cne $s.Hash){{throw 'selected release'}};$r=Get-CatDeskQualifiedStoppedAuthority $root $s.Hash;[pscustomobject]@{{schemaVersion=1;state='TRUSTED_INSTALLED';sha256=$s.Hash;slot=$s.Slot;generation=$s.Generation;receiptTransaction=$r.transactionId}}|ConvertTo-Json -Compress;[Console]::Out.Flush();if([Console]::In.ReadLine() -cne 'STOP'){{throw 'lease channel closed'}} }}finally{{$lease.Dispose()}}",
+-        prefix(root, helper)
++        "{} $lease=Enter-CatDeskStoppedLifecycleLease $root;try {{ if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $lease)){{throw 'startup authority'}};{};[Console]::Out.Flush();if([Console]::In.ReadLine() -cne 'STOP'){{throw 'lease channel closed'}} }}finally{{$lease.Dispose()}}",
++        prefix(root, helper),
++        selected_release_proof_script()
+     )
+ }
++
++/// Reuse the selected slot's existing authority rather than requiring every
++/// future release to have the initial stopped migration's hash/generation.
++/// This fragment only reads; it cannot repair, promote or mint authority.
++fn selected_release_proof_script() -> &'static str {
++    "if(Test-Path -LiteralPath (Join-Path $root '.catdesk/promotion-recovery/promotion-transaction.json')){throw 'pending promotion'};$p=Read-CatDeskLkgPointer $root;if($null -eq $p){throw 'selected pointer missing'};$s=Read-CatDeskLkgSlot $root $p.Slot;$c=Get-CatDeskCanonicalPairEvidence $root;if($null -eq $s -or $p.Hash -cne $s.Hash -or $p.Generation -ne $s.Generation -or $p.Slot -cne $s.Slot -or $c.Hash -cne $s.Hash){throw 'selected release'};$m=ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($s.Metadata));switch -CaseSensitive ($m.source){'reviewed_promotion'{$r=Get-CatDeskReviewedPromotionAuthority -Root $root -Canonical $c};'reviewed_qualified_stopped'{$r=Get-CatDeskQualifiedStoppedAuthority -Root $root -ExpectedHash $s.Hash};'reviewed_reconciliation'{$r=Get-CatDeskReviewedReconciliationAuthority -Root $root -ExpectedHash $s.Hash};default{throw 'selected authority unsupported'}};[pscustomobject]@{schemaVersion=2;state='TRUSTED_INSTALLED';sha256=$s.Hash;slot=$s.Slot;generation=$s.Generation;authorityKind=$m.source;receiptTransaction=$r.transactionId}|ConvertTo-Json -Compress"
++}
++
+ fn validate_trust(proof: &Value, expected: &str) -> Result<(), String> {
++    let selected_version = matches!(proof["slot"].as_str(), Some("slot-a" | "slot-b"))
++        && proof["generation"]
++            .as_u64()
++            .is_some_and(|generation| (1..=i32::MAX as u64).contains(&generation));
++    let authority = match proof["authorityKind"].as_str() {
++        Some("reviewed_promotion") => selected_version,
++        Some("reviewed_qualified_stopped" | "reviewed_reconciliation") => {
++            proof["slot"] == "slot-b" && proof["generation"] == 2
++        }
++        _ => false,
++    };
+     if expected.len() != 64
+         || !expected.bytes().all(|b| b.is_ascii_hexdigit())
+-        || proof["schemaVersion"] != 1
++        || proof.as_object().is_none_or(|object| object.len() != 7)
++        || proof["schemaVersion"] != 2
+         || proof["state"] != "TRUSTED_INSTALLED"
+         || proof["sha256"] != expected
+-        || proof["slot"] != "slot-b"
+-        || proof["generation"] != 2
++        || !authority
+         || proof["receiptTransaction"]
+             .as_str()
+             .is_none_or(|s| s.len() != 32 || !s.bytes().all(|b| b.is_ascii_hexdigit()))
+@@ -458,7 +478,7 @@ fn validate_ready(value: &Value, root: &Path, config: &Path, seconds: u64) -> Re
+     }
+     Ok(())
+ }
+-async fn verify_mcp_at(endpoint: &str, token: &str) -> Result<(), String> {
++pub(crate) async fn verify_mcp_at(endpoint: &str, token: &str) -> Result<(), String> {
+     let url = reqwest::Url::parse(endpoint).map_err(|_| "INSTALLED_BACKEND_HTTP_INVALID")?;
+     if url.scheme() != "http"
+         || url.host_str() != Some("127.0.0.1")
+@@ -599,10 +619,22 @@ fn history_snapshot(root: &Path) -> Result<Vec<(String, String)>, String> {
+         "target/release/catdesk.exe.sha256".into(),
+         hash(&root.join("target/release/catdesk.exe.sha256"))?,
+     ));
++    let promotion_receipt = root.join(".catdesk/promotion-recovery/reviewed-promotion.json");
++    if promotion_receipt.exists() {
++        let receipt = regular(
++            root,
++            ".catdesk/promotion-recovery/reviewed-promotion.json",
++            2048,
++        )?;
++        output.push((
++            ".catdesk/promotion-recovery/reviewed-promotion.json".into(),
++            hash(&receipt)?,
++        ));
++    }
+     output.sort();
+     Ok(output)
+ }
+-fn backend_command(
++pub(crate) fn backend_command(
+     root: &Path,
+     binary: &Path,
+     config: &Path,
+@@ -945,20 +977,147 @@ mod tests {
+         assert!(validate_catalog(&json!({"result":{"tools":tools}})).is_err());
+     }
+     #[test]
+-    fn installed_backend_trust_requires_exact_selected_stopped_version() {
++    fn installed_backend_trust_accepts_reviewed_succession_and_keeps_legacy_identity() {
+         let sha = "a".repeat(64);
+-        let mut p = json!({"schemaVersion":1,"state":"TRUSTED_INSTALLED","sha256":sha,"slot":"slot-b","generation":2,"receiptTransaction":"a".repeat(32)});
++        let mut p = json!({"schemaVersion":2,"state":"TRUSTED_INSTALLED","sha256":sha,"slot":"slot-b","generation":2,"authorityKind":"reviewed_qualified_stopped","receiptTransaction":"a".repeat(32)});
+         assert!(validate_trust(&p, &sha).is_ok());
+         p["slot"] = json!("slot-a");
+         assert!(validate_trust(&p, &sha).is_err());
+-        p["slot"] = json!("slot-b");
++        p["generation"] = json!(3);
++        assert!(validate_trust(&p, &sha).is_err());
++        p["authorityKind"] = json!("reviewed_promotion");
++        assert!(validate_trust(&p, &sha).is_ok());
+         assert!(validate_trust(&p, &"b".repeat(64)).is_err());
++        for (field, value) in [
++            ("schemaVersion", json!(1)),
++            ("slot", json!("../slot-a")),
++            ("generation", json!(0)),
++            ("generation", json!(3.5)),
++            ("generation", json!(i32::MAX as u64 + 1)),
++            ("authorityKind", json!("operational_verified")),
++            ("receiptTransaction", json!("x".repeat(32))),
++        ] {
++            let mut changed = p.clone();
++            changed[field] = value;
++            assert!(validate_trust(&changed, &sha).is_err(), "{field}");
++        }
++        p["authorityKind"] = json!("reviewed_reconciliation");
++        assert!(validate_trust(&p, &sha).is_err());
++        p["slot"] = json!("slot-b");
++        p["generation"] = json!(2);
++        assert!(validate_trust(&p, &sha).is_ok());
++    }
++    #[cfg(windows)]
++    #[test]
++    fn selected_release_native_guards_reject_pending_and_unproven_promotion() {
++        let root = std::env::temp_dir().join(format!(
++            "catdesk-selected-authority-fixture-{}",
++            uuid::Uuid::new_v4()
++        ));
++        let slot = root.join(".catdesk/release-recovery/slot-a");
++        let release = root.join("target/release");
++        let promotion = root.join(".catdesk/promotion-recovery");
++        let helper = root.join("scripts/catdesk-release-recovery.ps1");
++        for dir in [&slot, &release, &promotion, helper.parent().unwrap()] {
++            fs::create_dir_all(dir).unwrap();
++        }
++        fs::write(
++            &helper,
++            include_bytes!("../scripts/catdesk-release-recovery.ps1"),
++        )
++        .unwrap();
++        // Inert bytes and synthetic receipts only, isolated from any installed
++        // root. This fixture never executes an artifact or creates real trust.
++        let bytes = b"non-executable-selected-release-fixture";
++        let sha = format!("{:x}", Sha256::digest(bytes));
++        for dir in [&slot, &release] {
++            fs::write(dir.join("catdesk.exe"), bytes).unwrap();
++            fs::write(dir.join("catdesk.exe.sha256"), &sha).unwrap();
++        }
++        let pointer = json!({"schemaVersion":1,"slot":"slot-a","generation":3,"sha256":sha});
++        let manifest = json!({"schemaVersion":1,"generation":3,"source":"reviewed_promotion","sha256":sha,"capturedAtUtc":"2026-10-28T00:00:00Z"});
++        let receipt = json!({"schemaVersion":1,"transactionId":"a".repeat(32),"authorizationId":"b".repeat(32),"stage":"CANONICAL_HANDOFF_PROVEN","candidateHash":sha,"canonicalRelativePath":"target\\release\\catdesk.exe","canonicalSha256":sha});
++        let pointer_path = root.join(".catdesk/release-recovery/current.json");
++        let manifest_path = slot.join("manifest.json");
++        let receipt_path = promotion.join("reviewed-promotion.json");
++        let pending_path = promotion.join("promotion-transaction.json");
++        let command = format!(
++            "{} {}",
++            prefix(&root, &helper),
++            selected_release_proof_script()
++        );
++        for case in 0..7 {
++            let mut p = pointer.clone();
++            let mut m = manifest.clone();
++            let mut r = receipt.clone();
++            if case == 1 {
++                r["canonicalSha256"] = json!("c".repeat(64));
++            }
++            if case == 2 {
++                r["stage"] = json!("SWAPPED_PENDING_HANDOFF");
++            }
++            if case == 3 {
++                m["source"] = json!("operational_verified");
++            }
++            if case == 4 {
++                p["generation"] = json!(4);
++            }
++            fs::write(&pointer_path, serde_json::to_vec(&p).unwrap()).unwrap();
++            fs::write(&manifest_path, serde_json::to_vec(&m).unwrap()).unwrap();
++            fs::write(&receipt_path, serde_json::to_vec(&r).unwrap()).unwrap();
++            if case == 5 {
++                fs::remove_file(&receipt_path).unwrap();
++            }
++            if case == 6 {
++                fs::write(&pending_path, b"{}").unwrap();
++            }
++            let proof = ps_once(&root, command.clone());
++            if case == 0 {
++                validate_trust(&proof.unwrap(), &sha).unwrap();
++            } else {
++                assert!(proof.is_err(), "unsafe fixture case {case} was accepted");
++            }
++        }
++        fs::remove_dir_all(root).unwrap();
++    }
++    #[cfg(windows)]
++    #[test]
++    #[ignore = "opt-in read-only inspection of the actual installed selected authority"]
++    fn installed_current_selected_authority_read_only() {
++        let root = PathBuf::from(
++            std::env::var_os("CATDESK_READONLY_INSTALLED_RELEASE_ROOT")
++                .expect("explicit existing root required"),
++        );
++        let helper = regular(&root, "scripts/catdesk-release-recovery.ps1", 131072).unwrap();
++        assert_eq!(
++            hash(&helper).unwrap(),
++            format!(
++                "{:x}",
++                Sha256::digest(include_bytes!("../scripts/catdesk-release-recovery.ps1"))
++            )
++        );
++        let image = regular(&root, "target/release/catdesk.exe", 134217728).unwrap();
++        let before = history_snapshot(&root).unwrap();
++        let command = format!(
++            "{} $lease=Enter-CatDeskStoppedLifecycleLease $root;try{{if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $lease)){{throw 'startup authority'}};{}}}finally{{$lease.Dispose()}}",
++            prefix(&root, &helper),
++            selected_release_proof_script()
++        );
++        let proof = ps_once(&root, command).unwrap();
++        validate_trust(&proof, &hash(&image).unwrap()).unwrap();
++        assert_eq!(history_snapshot(&root).unwrap(), before);
++        println!(
++            "READ_ONLY_SELECTED_RELEASE_FACTS={}",
++            json!({"slot":proof["slot"],"generation":proof["generation"],"authorityKind":proof["authorityKind"],"sha256":proof["sha256"],"authorityWrites":0,"backendStarts":0})
++        );
+     }
+     #[test]
+     fn installed_backend_script_holds_real_lease_without_mutating_release() {
+         let s = trust_command(Path::new("C:/root'quoted"), Path::new("C:/root/helper.ps1"));
+         assert!(s.contains("Read-CatDeskLkgPointer"));
+         assert!(s.contains("Read-CatDeskLkgSlot"));
++        assert!(s.contains("Get-CatDeskReviewedPromotionAuthority"));
++        assert!(s.contains("promotion-transaction.json"));
+         assert!(s.contains("-HeldLifecycleLease $lease"));
+         assert!(s.contains("ReadLine()"));
+         assert!(s.contains("root''quoted"));
+
+diff --git a/src/operator_installed_project.rs b/src/operator_installed_project.rs
+index 7117362eba1b66f1d62b626462fb44834407a9af..32354772b7615e4356ab3f68fd51afe234e6e99b 100644
+--- a/src/operator_installed_project.rs
++++ b/src/operator_installed_project.rs
+@@ -191,8 +191,9 @@ async fn verify_mcp(endpoint: &str, token: &str, expected: &Value) -> Result<(),
+ 
+ fn read_trust(root: &Path, helper: &Path) -> String {
+     format!(
+-        "{} $p=Read-CatDeskLkgPointer $root;$s=Read-CatDeskLkgSlot $root $p.Slot;$c=Get-CatDeskCanonicalPairEvidence $root;if($p.Hash -cne $s.Hash -or $p.Generation -ne $s.Generation -or $p.Slot -cne $s.Slot -or $c.Hash -cne $s.Hash){{throw 'selected release'}};$r=Get-CatDeskQualifiedStoppedAuthority $root $s.Hash;[pscustomobject]@{{schemaVersion=1;state='TRUSTED_INSTALLED';sha256=$s.Hash;slot=$s.Slot;generation=$s.Generation;receiptTransaction=$r.transactionId}}|ConvertTo-Json -Compress",
+-        prefix(root, helper)
++        "{} {}",
++        prefix(root, helper),
++        selected_release_proof_script()
+     )
+ }
+ 
+@@ -331,6 +332,7 @@ fn verify_pins(expected: &[(PathBuf, String)]) -> Result<(), String> {
+ fn pin_inputs(
+     root: &Path,
+     control: &Path,
++    proof: &Value,
+ ) -> Result<(Vec<fs::File>, Vec<(PathBuf, String)>, PathBuf), String> {
+     use std::os::windows::fs::OpenOptionsExt;
+     let runtime = catdesk_wake::development_runtime::root_for_workspace(control)?
+@@ -379,6 +381,27 @@ fn pin_inputs(
+             12288,
+         )?);
+     }
++    // Legacy migration inputs remain retained for the previous version, but
++    // the current selected artifact and its native promotion receipt must also
++    // stay pinned while this independent project endpoint serves.
++    let slot = proof["slot"]
++        .as_str()
++        .filter(|slot| matches!(*slot, "slot-a" | "slot-b"))
++        .ok_or("INSTALLED_BACKEND_AUTHORITY_UNPROVEN")?;
++    for leaf in ["catdesk.exe", "catdesk.exe.sha256", "manifest.json"] {
++        paths.push(regular(
++            root,
++            &format!(".catdesk/release-recovery/{slot}/{leaf}"),
++            134217728,
++        )?);
++    }
++    if proof["authorityKind"] == "reviewed_promotion" {
++        paths.push(regular(
++            root,
++            ".catdesk/promotion-recovery/reviewed-promotion.json",
++            2048,
++        )?);
++    }
+     for relative in [
+         ".catdesk/web-development/prepare-attempt.json",
+         ".catdesk/wake-bridge/owner.json",
+@@ -605,15 +628,18 @@ pub(super) fn run_owned(
+         watch = Some(HolderWatch::start(
+             holder.as_mut().ok_or("INSTALLED_PROJECT_HANDOFF_FAILED")?,
+         )?);
+-        let (_pins, expected_inputs, config) = pin_inputs(&root, &control)?;
++        expected_hash = hash(&binary)?;
++        validate_trust(&proof, &expected_hash)?;
++        let (_pins, expected_inputs, config) = pin_inputs(&root, &control, &proof)?;
+         expected_hash = hash(&binary)?;
+         validate_trust(&proof, &expected_hash)?;
+         // Complete byte pins are already held. This second supported read
+         // binds the selected pointer/slot/receipt to those exact pinned bytes.
+-        validate_trust(
+-            &ps_once(&root, read_trust(&root, &recovery))?,
+-            &expected_hash,
+-        )?;
++        let pinned_proof = ps_once(&root, read_trust(&root, &recovery))?;
++        validate_trust(&pinned_proof, &expected_hash)?;
++        if pinned_proof != proof {
++            return Err("INSTALLED_BACKEND_AUTHORITY_CHANGED".into());
++        }
+         verify_pins(&expected_inputs)?;
+         let history = history_snapshot(&root)?;
+         let path = run_directory(&root, &id)?;
+
+diff --git a/src/operator_web_cli.rs b/src/operator_web_cli.rs
+index 5e745b1b58358769fc7107d068811428103c0a0e..e2aef891d9c6093b16527f76fd58a10f08dc80fc 100644
+--- a/src/operator_web_cli.rs
++++ b/src/operator_web_cli.rs
+@@ -124,6 +124,8 @@ pub(crate) enum WebAction {
+         project_id: String,
+         input_file: PathBuf,
+         revoke: bool,
++        allow_manual_wake: bool,
++        native_queue_task_id: Option<String>,
+     },
+     ContextConfigure {
+         project_id: String,
+@@ -209,6 +211,18 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
+         .ok_or("WEB_USAGE: missing target action")?;
+     let mut options = BTreeMap::new();
+     let tail = &args[4..];
++    let manual_flags = tail
++        .iter()
++        .filter(|value| value.as_str() == "--allow-manual-wake")
++        .count();
++    if manual_flags > 1 || (manual_flags == 1 && (group != "work" || verb != "execution-grant")) {
++        return Err("WEB_USAGE: manual wake permission is execution-grant only".into());
++    }
++    let allow_manual_wake = manual_flags == 1;
++    let tail: Vec<_> = tail
++        .iter()
++        .filter(|value| value.as_str() != "--allow-manual-wake")
++        .collect();
+     if !tail.len().is_multiple_of(2) {
+         return Err("WEB_USAGE: each option requires one value".into());
+     }
+@@ -284,6 +298,20 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
+             } else {
+                 None
+             };
++            let native_queue_task_id = if verb == "execution-grant" {
++                options
++                    .remove("--native-queue-task-id")
++                    .map(|id| {
++                        if catdesk_wake::protocol::valid_id(id) && id.len() <= 128 {
++                            Ok(id.to_owned())
++                        } else {
++                            Err("WEB_USAGE: native queue task ID is invalid")
++                        }
++                    })
++                    .transpose()?
++            } else {
++                None
++            };
+             if !options.is_empty() {
+                 return Err("WEB_USAGE: unexpected work option".into());
+             }
+@@ -302,6 +330,8 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
+                     project_id: project_id.into(),
+                     input_file: input_file.into(),
+                     revoke: verb == "execution-revoke",
++                    allow_manual_wake,
++                    native_queue_task_id,
+                 })
+             } else if let Some(assignment_file) = assignment_file {
+                 Ok(WebAction::WorkAssociate {
+@@ -316,7 +346,10 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
+                 })
+             }
+         }
+-        ("review", "authorize" | "revoke" | "preflight" | "run" | "resume") => {
++        (
++            "review",
++            "authorize" | "revoke" | "preflight" | "run" | "resume" | "retry-pre-submit",
++        ) => {
+             let input_file = options
+                 .remove("--input-file")
+                 .ok_or("WEB_USAGE: --input-file is required")?;
+@@ -805,11 +838,21 @@ fn review_text(snapshot: &Value, expected_message_digest: &str) -> Result<String
+         || assistant["textComplete"] != true
+         || text.trim().is_empty()
+         || text.len() > 8192
+-        || text.to_ascii_lowercase().contains("response couldn’t load")
+-        || text.to_ascii_lowercase().contains("response couldn't load")
+     {
+         return Err("WEB_REVIEW_RESPONSE_NOT_COMPLETE".into());
+     }
++    // A rendered load-error card is neither a review nor an unfinished answer.
++    // Match its observable whitespace/quote variants without changing the
++    // returned response bytes or permitting any retry/submission action.
++    let normalized = text
++        .split_whitespace()
++        .collect::<Vec<_>>()
++        .join(" ")
++        .replace(['’', '‘'], "'")
++        .to_ascii_lowercase();
++    if normalized.contains("response couldn't load") {
++        return Err("WEB_REVIEW_RESPONSE_LOAD_ERROR".into());
++    }
+     Ok(text.to_owned())
+ }
+ 
+@@ -959,6 +1002,8 @@ pub(crate) fn registry_rollover_status(workspace: &Path, project: &str) -> Value
+ }
+ 
+ pub(crate) use rollover::WorkLease as WebWorkLease;
++#[cfg(all(test, windows))]
++pub(crate) use rollover::native_continuation_fixture;
+ 
+ pub(crate) fn acquire_web_work_lease(
+     workspace: &Path,
+@@ -1360,11 +1405,26 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
+             project_id,
+             input_file,
+             revoke,
+-        } => crate::web_work::execution_permission(
+-            &workspace,
+-            read_work_input(&input_file, &project_id)?,
+-            revoke,
+-        ),
++            allow_manual_wake,
++            native_queue_task_id,
++        } => {
++            let input = read_work_input(&input_file, &project_id)?;
++            if native_queue_task_id.is_some() {
++                crate::web_work::execution_permission_with_capabilities(
++                    &workspace,
++                    input,
++                    revoke,
++                    allow_manual_wake,
++                    native_queue_task_id.as_deref(),
++                )
++            } else if allow_manual_wake {
++                crate::web_work::execution_permission_with_manual_wake(
++                    &workspace, input, revoke, true,
++                )
++            } else {
++                crate::web_work::execution_permission(&workspace, input, revoke)
++            }
++        }
+         WebAction::ContextConfigure {
+             project_id,
+             input_file,
+@@ -1601,6 +1661,36 @@ mod tests {
+         .unwrap();
+         assert_eq!(success["eventVerified"], true);
+         assert_eq!(success["response"], "Verified review body.");
++        for placeholder in [
++            "This response couldn't load",
++            "This response\ncouldn’t load",
++        ] {
++            let unavailable = read_review_using(
++                &control,
++                "alpha",
++                &event.event_id,
++                None,
++                &|| Ok(()),
++                |_, _, _, _, _| SnapshotReadReport {
++                    snapshot: Some(json!({"messages":[
++                        {"role":"USER","text":event.message,"textComplete":true},
++                        {"role":"ASSISTANT","text":placeholder,"textComplete":true}
++                    ]})),
++                    failure: None,
++                    diagnostic: SnapshotDiagnostic {
++                        phase: SnapshotReadPhase::Complete,
++                        elapsed_millis: 10,
++                        budget_millis: 90000,
++                    },
++                },
++            )
++            .unwrap();
++            assert_eq!(unavailable["eventVerified"], false);
++            assert_eq!(unavailable["status"], "UNVERIFIED_EVENT_SNAPSHOT");
++            assert_eq!(unavailable["reason"], "WEB_REVIEW_RESPONSE_LOAD_ERROR");
++            assert_eq!(unavailable["sendAttempted"], false);
++            assert!(unavailable.get("response").is_none());
++        }
+         assert!(
+             read_review_using(
+                 &control,
+@@ -1780,6 +1870,54 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn review_read_distinguishes_load_failure_without_accepting_placeholder_text() {
++        let message_digest = catdesk_wake::protocol::digest("approved review request");
++        for placeholder in [
++            "This response couldn't load",
++            "This response couldn’t load",
++            "This RESPONSE\ncouldn’t\tload",
++            "This response\u{00a0}couldn‘t load",
++        ] {
++            let mut snapshot = json!({"messages":[
++                {"role":"USER","text":"approved review request","textComplete":true},
++                {"role":"ASSISTANT","text":placeholder,"textComplete":true}
++            ]});
++            assert_eq!(
++                review_text(&snapshot, &message_digest).unwrap_err(),
++                "WEB_REVIEW_RESPONSE_LOAD_ERROR",
++                "placeholder must remain unverified: {placeholder:?}"
++            );
++            assert_eq!(
++                review_text(&snapshot, &"0".repeat(64)).unwrap_err(),
++                "WEB_REVIEW_EVENT_NOT_LATEST_OR_INCOMPLETE"
++            );
++            snapshot["messages"][1]["textComplete"] = json!(false);
++            assert_eq!(
++                review_text(&snapshot, &message_digest).unwrap_err(),
++                "WEB_REVIEW_RESPONSE_NOT_COMPLETE"
++            );
++        }
++    }
++
++    #[test]
++    fn review_read_rejects_wrapped_load_error_instead_of_accepting_it_as_review() {
++        let message_digest = catdesk_wake::protocol::digest("approved review request");
++        for placeholder in [
++            "This RESPONSE\ncouldn’t\tload",
++            "This response\u{00a0}couldn‘t load",
++        ] {
++            let snapshot = json!({"messages":[
++                {"role":"USER","text":"approved review request","textComplete":true},
++                {"role":"ASSISTANT","text":placeholder,"textComplete":true}
++            ]});
++            assert!(
++                review_text(&snapshot, &message_digest).is_err(),
++                "load placeholder must not become verified review text: {placeholder:?}"
++            );
++        }
++    }
++
+     #[test]
+     fn review_read_requires_exact_latest_complete_delivered_pair() {
+         let message_digest = catdesk_wake::protocol::digest("approved review request");
+@@ -1844,6 +1982,28 @@ mod tests {
+         assert!(parse(&invalid).is_err());
+     }
+ 
++    #[test]
++    fn review_retry_pre_submit_accepts_only_frozen_project_input() {
++        let valid = args(&[
++            "operator",
++            "web",
++            "review",
++            "retry-pre-submit",
++            "--project-id",
++            "alpha",
++            "--input-file",
++            "review.json",
++        ]);
++        assert!(
++            matches!(parse(&valid), Ok(WebAction::ReviewAuthorization { operation, .. }) if operation == "retry-pre-submit")
++        );
++        for flag in ["--url", "--message", "--force", "--submit"] {
++            let mut invalid = valid.clone();
++            invalid.extend(args(&[flag, "override"]));
++            assert!(parse(&invalid).is_err());
++        }
++    }
++
+     #[test]
+     fn review_reconcile_has_only_existing_project_event_inputs() {
+         let valid = args(&[
+@@ -2027,7 +2187,9 @@ mod tests {
+                 WebAction::WorkExecutionPermission {
+                     project_id: "alpha".into(),
+                     input_file: "pins.json".into(),
+-                    revoke
++                    revoke,
++                    allow_manual_wake: false,
++                    native_queue_task_id: None,
+                 }
+             );
+             for option in [
+@@ -2043,6 +2205,64 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn native_queue_permission_requires_exact_local_grant_option() {
++        let base = args(&[
++            "operator",
++            "web",
++            "work",
++            "execution-grant",
++            "--project-id",
++            "alpha",
++            "--input-file",
++            "pins.json",
++            "--native-queue-task-id",
++            "native-task",
++        ]);
++        assert!(
++            matches!(parse(&base), Ok(WebAction::WorkExecutionPermission { native_queue_task_id: Some(id), .. }) if id == "native-task")
++        );
++        for verb in ["execution-revoke", "resume-prepare", "request"] {
++            let mut refused = base.clone();
++            refused[3] = verb.into();
++            assert!(parse(&refused).is_err());
++        }
++    }
++
++    #[test]
++    fn manual_wake_permission_requires_explicit_local_grant_flag() {
++        let base = args(&[
++            "operator",
++            "web",
++            "work",
++            "execution-grant",
++            "--project-id",
++            "alpha",
++            "--input-file",
++            "pins.json",
++        ]);
++        let mut permitted = base.clone();
++        permitted.push("--allow-manual-wake".into());
++        assert!(matches!(
++            parse(&permitted),
++            Ok(WebAction::WorkExecutionPermission {
++                allow_manual_wake: true,
++                revoke: false,
++                ..
++            })
++        ));
++        let mut duplicate = permitted.clone();
++        duplicate.push("--allow-manual-wake".into());
++        assert!(parse(&duplicate).is_err());
++        let mut refused = permitted.clone();
++        refused[3] = "execution-revoke".into();
++        assert!(parse(&refused).is_err());
++        refused[3] = "request".into();
++        assert!(parse(&refused).is_err());
++        permitted.push("false".into());
++        assert!(parse(&permitted).is_err());
++    }
++
+     #[test]
+     fn web_only_registration_requires_exact_project_git_scope() {
+         let complete = args(&[
+
+diff --git a/src/operator_web_rollover.rs b/src/operator_web_rollover.rs
+index e4bc2e1434c699a0d5b77e022a46782c89fc72a4..684a6707116cba82ad2d0b63fc86869736c0b9f8 100644
+--- a/src/operator_web_rollover.rs
++++ b/src/operator_web_rollover.rs
+@@ -376,6 +376,35 @@ pub(crate) struct WorkLease {
+ }
+ 
+ impl WorkLease {
++    /// Native routing may follow only this lease's completed continuation.
++    /// The queue must also preserve its own no-effect and ownership evidence.
++    pub(crate) fn check_native_continuation(
++        &self,
++        workspace: &Path,
++        project: &str,
++        original: &Target,
++        current: &Target,
++        event_id: &str,
++    ) -> Result<(), String> {
++        self.check_source_task(original, current, event_id)?;
++        let root = workspace
++            .canonicalize()
++            .map_err(|_| "WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
++        let store = self
++            ._store
++            .root
++            .canonicalize()
++            .map_err(|_| "WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
++        if original == current
++            || store != root.join(".catdesk/web-rollovers").join(project)
++            || self.approved_target.as_ref() != Some(current)
++            || self.approved_source_task_id.as_deref() != Some(event_id)
++        {
++            return Err("WEB_WORK_CONTINUATION_SOURCE_REQUIRED".into());
++        }
++        Ok(())
++    }
++
+     /// A completed continuation authorizes only its proved generation.
+     /// Manual target binding does not take ProjectStore's lock, so the caller
+     /// rechecks its selected target against this witness before changing work.
+@@ -3754,10 +3783,136 @@ fn execute_with_mode(
+     Ok(summary(&record))
+ }
+ 
++#[cfg(all(test, windows))]
++pub(crate) fn native_continuation_fixture(
++    root: &Path,
++    wake: &Store,
++    project: &str,
++    source_event: &str,
++) -> (Target, Target) {
++    tests::native_continuation_fixture(root, wake, project, source_event)
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    // Synthetic durable proof only: no browser, provider or native process.
++    #[cfg(windows)]
++    pub(super) fn native_continuation_fixture(
++        root: &Path,
++        wake: &Store,
++        project: &str,
++        source_event: &str,
++    ) -> (Target, Target) {
++        let registry_path = root.join(".catdesk/projects/projects.json");
++        let mut registry: crate::delegated::autonomy_projects::AutonomousProjectRegistryV1 =
++            serde_json::from_slice(&fs::read(&registry_path).unwrap()).unwrap();
++        let registered = registry
++            .projects
++            .iter_mut()
++            .find(|p| p.project_id == project)
++            .unwrap();
++        let source = wake.config().unwrap().targets[project].clone();
++        let current = wake
++            .set_target(
++                project,
++                source.generation,
++                &format!(
++                    "https://chatgpt.com/c/fixture-next-{}",
++                    uuid::Uuid::new_v4()
++                ),
++            )
++            .unwrap();
++        if !registered.chatgpt_target_history.contains(&source.url) {
++            registered.chatgpt_target_history.push(source.url.clone());
++        }
++        registered.chatgpt_target_history.push(current.url.clone());
++        registered.chatgpt_target_url = Some(current.url.clone());
++        registered.chatgpt_target_sha256 = Some(current.digest.clone());
++        let mut request = handoff_request(&registered.workspace);
++        request.project_id = project.into();
++        request.intent_id = uuid::Uuid::new_v4().to_string();
++        request.source_task_id = source_event.into();
++        request.source = source.clone();
++        request.native_thread_id = registered.codex_thread_id.clone();
++        request.event_id = format!("web-handoff-{}", request.intent_id);
++        request.message = handoff_request_message(
++            project,
++            &request.intent_id,
++            source_event,
++            &request.native_thread_id,
++        );
++        fs::write(registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
++        let mut record = record();
++        record.project_id = project.into();
++        record.source_task_id = source_event.into();
++        record.intent_id = request.intent_id.clone();
++        record.source = source.clone();
++        record.message_digest =
++            message_digest(project, &record.intent_id, &source.url, &record.handoff).unwrap();
++        record.phase = Phase::ContinuationQueued;
++        let mut bootstrap = receipt_for(&record);
++        bootstrap.destination_url = current.url.clone();
++        bootstrap.destination_digest = current.digest.clone();
++        record.receipt = Some(bootstrap);
++        record.bound_target = Some(current.clone());
++        record.handoff_event_id = Some(request.event_id.clone());
++        record.continuation_event_id = format!("web-continue-{}", record.intent_id);
++        record.context_meter_status = ContextMeterStatus::Recorded;
++        let store = ProjectStore::open(root, project).unwrap();
++        store.save_handoff_request(&request).unwrap();
++        store.save(&record).unwrap();
++        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
++        drop(store);
++        assert!(
++            acquire_web_work_lease(root, project).is_err(),
++            "pending continuation must fence work"
++        );
++        let message = continuation_message(&record, &current);
++        let event = wake
++            .produce_expected(
++                &record.continuation_event_id,
++                project,
++                "engineering_attention",
++                &message,
++                &current,
++            )
++            .unwrap();
++        let host = wake.host_lock().unwrap();
++        let claimed = wake.claim(&event, &host).unwrap();
++        wake.transition(
++            &event.event_id,
++            &claimed.owner,
++            DeliveryPhase::Submitting,
++            None,
++            None,
++        )
++        .unwrap();
++        let receipt = Receipt {
++            schema_version: 1,
++            event_id: event.event_id.clone(),
++            target_generation: current.generation,
++            target_digest: current.digest.clone(),
++            message_digest: digest(&message),
++            sent_utc: now(),
++            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
++        };
++        wake.record_exact_receipt_timer(&event.event_id, &receipt)
++            .unwrap();
++        wake.transition(
++            &event.event_id,
++            &claimed.owner,
++            DeliveryPhase::Sent,
++            Some(receipt),
++            None,
++        )
++        .unwrap();
++        wake.complete_timer(&event.event_id).unwrap();
++        drop(acquire_web_work_lease(root, project).unwrap());
++        (source, current)
++    }
++
+     #[test]
+     fn cancelled_scheduler_cannot_prepare_collect_or_execute_a_project() {
+         let root =
+
+diff --git a/src/project_mcp.rs b/src/project_mcp.rs
+index a21c0f6e939ab048e7445120750017788916a3e2..1da2ff9348f67a26e74e9ff32cbd0d6b34514515 100644
+--- a/src/project_mcp.rs
++++ b/src/project_mcp.rs
+@@ -36,7 +36,7 @@ const TRAFFIC_CHUNK_BYTES: usize = 8 * 1024;
+ /// transport retry may be a second provider-visible exchange; it is never
+ /// silently merged with a legitimate equal call. Re-recording a part of this
+ /// same invocation is idempotent in the existing context ledger.
+-struct TrafficObservation {
++pub(crate) struct TrafficObservation {
+     control: PathBuf,
+     key: Option<ConversationKey>,
+     invocation: String,
+@@ -189,7 +189,17 @@ fn response_traffic(response: &JsonRpcResponse) -> TrafficText {
+ 
+ impl TrafficObservation {
+     async fn start(context: &ProjectContext, current: &Selection, params: Value) -> Self {
+-        let control = context.registered.control_workspace.clone();
++        Self::start_scoped(
++            context.registered.control_workspace.clone(),
++            current,
++            params,
++        )
++        .await
++    }
++
++    /// Called only after exact project/task-key admission. This observes traffic;
++    /// it does not bind a worker, grant execution or attest provider identity.
++    pub(crate) async fn start_scoped(control: PathBuf, current: &Selection, params: Value) -> Self {
+         let mut observation = Self {
+             control: control.clone(),
+             key: None,
+@@ -250,7 +260,7 @@ impl TrafficObservation {
+         observation
+     }
+ 
+-    async fn finish(self, response: &mut JsonRpcResponse) {
++    pub(crate) async fn finish(self, response: &mut JsonRpcResponse) {
+         let mut result_status = "UNAVAILABLE";
+         if let Some(key) = self.key {
+             let text = response_traffic(response);
+
+diff --git a/src/project_mcp_task.rs b/src/project_mcp_task.rs
+index b6055a364d1cd8eaca3fada2e155cce957b9033d..9f6689d512bc91eff891c75e34c646b9c438f709 100644
+--- a/src/project_mcp_task.rs
++++ b/src/project_mcp_task.rs
+@@ -1,6 +1,7 @@
+ //! Operator-assigned isolated worktree editing for a fixed project connection.
+ //! Reuses delegated contracts, patch preimages/journal and project writer locks.
+-//! There is no provider launch, arbitrary command or ownership of the native root.
++//! Native queue launch requires an additional exact local capability; ordinary
++//! contract tools retain their isolated worktree and command restrictions.
+ 
+ use crate::delegated::{
+     autonomy_projects::{AutonomousProjectRegistryStoreV1, ResolvedProjectScopeV1},
+@@ -435,6 +436,14 @@ struct WebExecutionGrant {
+     source_event_id: String,
+     assignment: crate::web_work_state::WorkTaskAssignment,
+     key_sha256: String,
++    #[serde(default, skip_serializing_if = "manual_wake_disabled")]
++    allow_manual_wake: bool,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    native_queue: Option<crate::operator_codex_cli::NativeQueueSelection>,
++}
++
++fn manual_wake_disabled(value: &bool) -> bool {
++    !value
+ }
+ 
+ /// Explicit local opt-in. This permission follows only C46-proved source
+@@ -445,6 +454,30 @@ pub(crate) fn grant_web_execution(
+     current: &catdesk_wake::protocol::Target,
+     revoke: bool,
+ ) -> Result<Value, String> {
++    grant_web_execution_with_manual_wake(project, record, current, revoke, false)
++}
++
++pub(crate) fn grant_web_execution_with_manual_wake(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    current: &catdesk_wake::protocol::Target,
++    revoke: bool,
++    allow_manual_wake: bool,
++) -> Result<Value, String> {
++    grant_web_execution_with_capabilities(project, record, current, revoke, allow_manual_wake, None)
++}
++
++pub(crate) fn grant_web_execution_with_capabilities(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    current: &catdesk_wake::protocol::Target,
++    revoke: bool,
++    allow_manual_wake: bool,
++    native_queue_task_id: Option<&str>,
++) -> Result<Value, String> {
++    if revoke && (allow_manual_wake || native_queue_task_id.is_some()) {
++        return Err("WEB_TASK_GRANT_ARGUMENTS_INVALID".into());
++    }
+     let prepared = prepare_work_resume(project, record, current)?;
+     let link = record
+         .task_assignment
+@@ -465,6 +498,35 @@ pub(crate) fn grant_web_execution(
+     {
+         return Err("WEB_TASK_GRANT_REVOKED".into());
+     }
++    let native_queue = native_queue_task_id
++        .map(|id| {
++            let grant_path = directory.join("execution-grant.json");
++            if grant_path
++                .try_exists()
++                .map_err(|_| "WEB_TASK_GRANT_UNAVAILABLE")?
++            {
++                let retained: WebExecutionGrant =
++                    serde_json::from_slice(&read_assignment_bytes(&grant_path)?)
++                        .map_err(|_| "WEB_TASK_GRANT_INVALID")?;
++                if let Some(selection) = retained
++                    .native_queue
++                    .filter(|selection| selection.task_id == id)
++                {
++                    crate::operator_codex_cli::native_queue_selection_status(
++                        &project.control_workspace,
++                        &project.project.project_id,
++                        &selection,
++                    )?;
++                    return Ok(selection);
++                }
++            }
++            crate::operator_codex_cli::freeze_native_queue_selection(
++                &project.control_workspace,
++                &project.project.project_id,
++                id,
++            )
++        })
++        .transpose()?;
+     let key_path = execution_key_path(project, link, true)?;
+     let key = if key_path
+         .try_exists()
+@@ -495,19 +557,27 @@ pub(crate) fn grant_web_execution(
+         source_event_id: record.event_id.clone(),
+         assignment: link.clone(),
+         key_sha256: catdesk_wake::protocol::digest(&key),
++        allow_manual_wake,
++        native_queue: native_queue.clone(),
+     };
+     exact_file(
+         &directory.join("execution-grant.json"),
+         &serde_json::to_vec(&grant).map_err(|_| "WEB_TASK_GRANT_INVALID")?,
+     )?;
+-    Ok(
+-        json!({"status":"EXECUTION_GRANTED","projectId":project.project.project_id,
++    let mut result = json!({"status":"EXECUTION_GRANTED","projectId":project.project.project_id,
+         "requestId":record.request_id,"sourceEventId":record.event_id,"taskId":link.task_id,
+         "executionKeyFile":key_path,"executionKeyDisclosed":false,
+         "assignmentSha256":link.assignment_sha256,"scopeSha256":link.scope_sha256,
+         "targetGeneration":prepared["targetGeneration"],"targetSha256":prepared["targetSha256"],
+-        "executionBudgetSeconds":180,"executionAuthorized":true,"workerStarted":false,"nativeSessionAction":"NONE"}),
+-    )
++        "executionBudgetSeconds":180,"executionAuthorized":true,"workerStarted":false,"nativeSessionAction":"NONE"});
++    if allow_manual_wake {
++        result["manualWakeAllowed"] = json!(true);
++    }
++    if let Some(selection) = native_queue {
++        result["nativeQueue"] = json!({"selection":selection,"registeredWorkspace":project.project.workspace,
++            "normalNativeCli":true,"workerStarted":false,"separateFromIsolatedContractTools":true});
++    }
++    Ok(result)
+ }
+ 
+ fn execution_key_path(
+@@ -565,7 +635,7 @@ pub(crate) fn granted_handoff_context(
+         project, link, false,
+     )?)?)
+     .map_err(|_| "WEB_TASK_GRANT_INVALID")?;
+-    authorized_web_assignment(project, record, &key)?;
++    let (_, allow_manual_wake, native_queue) = authorized_web_grant(project, record, &key)?;
+     let prepared = prepare_work_resume(project, record, current)?;
+     let journal_root = directory.join("journal");
+     let (calls, proposals, applications) = if journal_root
+@@ -616,6 +686,20 @@ pub(crate) fn granted_handoff_context(
+             "callId":application.tool_call_id,"status":application.status,"pathsChanged":application.actual_paths_changed})).collect::<Vec<_>>(),
+         "completedCallReplayAllowed":false,"unknownCallReplayAllowed":false,"nativeSessionAction":"NONE"});
+     context["cachedSchemaTransport"] = crate::web_task_dispatch::cached_transport_metadata();
++    if allow_manual_wake {
++        context["manualWake"] = json!({"tool":"wake.manual_end_turn", "allowed":true,
++            "arguments":["sourceTurnId","priority","ttlSeconds"], "maximumTtlSeconds":catdesk_wake::protocol::MAX_WAKE_TTL_SECONDS,
++            "budget":"SHARED_ASSIGNMENT_MAX_TOOL_CALLS", "fixedServerMessage":true, "queueOnly":true});
++    }
++    if let Some(selection) = native_queue {
++        context["nativeQueue"] = json!({"tool":"native.codex.dispatch","statusTool":"native.codex.status","selection":selection.clone(),
++            "arguments":{},"registeredWorkspace":project.project.workspace,
++            "normalNativeCli":true,"separateFromIsolatedContractTools":true,
++            "scope":"EXACT_FROZEN_LOCAL_QUEUE_TASK_ONLY","retryWithNewCallIdAllowed":false});
++        context["nativeQueue"]["snapshot"] = crate::operator_codex_cli::native_queue_selection_status(
++            &project.control_workspace, &project.project.project_id, &selection)
++            .unwrap_or_else(|reason| json!({"status":"UNAVAILABLE_OR_CHANGED","reason":reason,"taskCompletionVerified":false}));
++    }
+     if let Some(report) = &record.reported_status {
+         // Snapshot metadata only; it cannot replace execution evidence, scope or
+         // grant checks. Omit the field for legacy records to retain their shape.
+@@ -640,6 +724,33 @@ pub(crate) fn authorized_web_assignment(
+     record: &crate::web_work_state::WorkRecord,
+     key: &str,
+ ) -> Result<PathBuf, String> {
++    authorized_web_grant(project, record, key).map(|(archive, _, _)| archive)
++}
++
++pub(crate) fn authorized_manual_wake_assignment(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    key: &str,
++) -> Result<PathBuf, String> {
++    let (archive, allowed, _) = authorized_web_grant(project, record, key)?;
++    if !allowed {
++        return Err("WEB_TASK_MANUAL_WAKE_NOT_GRANTED".into());
++    }
++    Ok(archive)
++}
++
++fn authorized_web_grant(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    key: &str,
++) -> Result<
++    (
++        PathBuf,
++        bool,
++        Option<crate::operator_codex_cli::NativeQueueSelection>,
++    ),
++    String,
++> {
+     if !valid_execution_key(key) {
+         return Err("WEB_TASK_GRANT_REQUIRED".into());
+     }
+@@ -666,6 +777,8 @@ pub(crate) fn authorized_web_assignment(
+         source_event_id: record.event_id.clone(),
+         assignment: link.clone(),
+         key_sha256: catdesk_wake::protocol::digest(key),
++        allow_manual_wake: grant.allow_manual_wake,
++        native_queue: grant.native_queue.clone(),
+     };
+     // Compare fixed-size digests without exposing the key in errors or status.
+     let key_matches = grant
+@@ -692,7 +805,380 @@ pub(crate) fn authorized_web_assignment(
+     if record.phase != "OPEN" || digest != link.assignment_sha256 {
+         return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
+     }
+-    Ok(archive)
++    if let Some(selection) = &grant.native_queue {
++        selection.validate()?;
++    }
++    Ok((archive, grant.allow_manual_wake, grant.native_queue))
++}
++
++#[derive(Deserialize, Serialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub(crate) struct ManualWakeRequest {
++    pub(crate) source_turn_id: String,
++    pub(crate) priority: u8,
++    pub(crate) ttl_seconds: u64,
++}
++
++impl ManualWakeRequest {
++    pub(crate) fn parse(arguments: Value) -> Result<Self, String> {
++        let request: Self = serde_json::from_value(arguments)
++            .map_err(|_| "WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID")?;
++        if request.source_turn_id.len() > 128
++            || !catdesk_wake::protocol::valid_id(&request.source_turn_id)
++            || request.ttl_seconds == 0
++            || request.ttl_seconds > catdesk_wake::protocol::MAX_WAKE_TTL_SECONDS
++        {
++            return Err("WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID".into());
++        }
++        Ok(request)
++    }
++}
++
++/// Shared durable call admission for explicitly granted extra capabilities.
++struct JournaledTaskCall {
++    journal: DelegatedJournal,
++    run: RunId,
++    tool_call_id: ToolCallId,
++}
++
++fn prepare_journaled_task_call(
++    project: &ResolvedProjectScopeV1,
++    inspected: &AssignmentInspection,
++    call_id: &str,
++    tool_name: &str,
++    arguments_hash: String,
++) -> Result<JournaledTaskCall, String> {
++    prepare_journaled_task_call_checked(
++        project,
++        inspected,
++        call_id,
++        tool_name,
++        arguments_hash,
++        true,
++    )
++}
++
++fn prepare_journaled_task_call_checked(
++    project: &ResolvedProjectScopeV1,
++    inspected: &AssignmentInspection,
++    call_id: &str,
++    tool_name: &str,
++    arguments_hash: String,
++    record: bool,
++) -> Result<JournaledTaskCall, String> {
++    use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
++    let tool_call_id = ToolCallId::new(call_id).map_err(|_| "PROJECT_TASK_CALL_INVALID")?;
++    let directory = task_directory(project, &inspected.contract.task_id, false)?;
++    let journal_root = directory.join("journal");
++    if !journal_root
++        .try_exists()
++        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
++    {
++        fs::create_dir(&journal_root).map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    }
++    plain_directory(&journal_root)?;
++    let existing = fs::read_dir(&journal_root)
++        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
++        .next()
++        .is_some();
++    let journal =
++        DelegatedJournal::open(&journal_root).map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    let run =
++        RunId::new(&inspected.contract.task_id).map_err(|_| "PROJECT_TASK_CONTRACT_INVALID")?;
++    if existing {
++        if journal
++            .load_contract(&run)
++            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
++            != inspected.contract
++        {
++            return Err("PROJECT_TASK_CONTRACT_CHANGED".into());
++        }
++    } else {
++        journal
++            .create_run(&inspected.contract)
++            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    }
++    let calls = journal
++        .load_tool_calls(&run)
++        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    if let Some(prior) = calls.get(tool_call_id.as_str()) {
++        if prior.tool_name != tool_name || prior.arguments_hash != arguments_hash {
++            return Err("PROJECT_TASK_CALL_ID_CONFLICT".into());
++        }
++        return Err(if prior.status == ToolCallStatus::Completed {
++            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
++        } else {
++            "PROJECT_TASK_CALL_RECORDED_NO_REPLAY"
++        }
++        .into());
++    }
++    // A new call/turn identity cannot route around an ambiguous earlier effect.
++    if calls.values().any(|call| {
++        !matches!(
++            call.status,
++            ToolCallStatus::Completed | ToolCallStatus::Failed
++        )
++    }) {
++        return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
++    }
++    if calls.len() >= inspected.contract.max_tool_calls as usize {
++        return Err("PROJECT_TASK_TOOL_BUDGET_EXCEEDED".into());
++    }
++    if !record {
++        return Ok(JournaledTaskCall {
++            journal,
++            run,
++            tool_call_id,
++        });
++    }
++    journal
++        .record_tool_call_requested(ToolCallRecordV1 {
++            schema_version: 1,
++            run_id: run.clone(),
++            tool_call_id: tool_call_id.clone(),
++            tool_name: tool_name.into(),
++            request_hash: arguments_hash.clone(),
++            arguments_hash,
++            mutation_kind: ToolMutationKind::Mutating,
++            status: ToolCallStatus::Requested,
++            result_hash: None,
++            outcome_summary: None,
++        })
++        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    for phase in [ToolCallStatus::PolicyAllowed, ToolCallStatus::Executing] {
++        journal
++            .transition_tool_call(&run, &tool_call_id, phase, None, None)
++            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    }
++    Ok(JournaledTaskCall {
++        journal,
++        run,
++        tool_call_id,
++    })
++}
++
++pub(crate) fn journal_manual_wake(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    key: &str,
++    call_id: &str,
++    request: &ManualWakeRequest,
++    expected: &catdesk_wake::protocol::Target,
++    publish: impl FnOnce() -> Result<catdesk_wake::protocol::Event, String>,
++) -> Result<Value, String> {
++    let archive = authorized_manual_wake_assignment(project, record, key)?;
++    let inspected = inspect_assignment(project, &archive, 180)?;
++    check_record_assignment(project, &inspected, record)?;
++    let arguments_hash =
++        stable_text_hash(&serde_json::to_string(request).map_err(|_| "PROJECT_TASK_CALL_INVALID")?);
++    let JournaledTaskCall {
++        journal,
++        run,
++        tool_call_id,
++    } = prepare_journaled_task_call(
++        project,
++        &inspected,
++        call_id,
++        "wake.manual_end_turn",
++        arguments_hash,
++    )?;
++    let event = match publish() {
++        Ok(event) => event,
++        Err(reason) => {
++            // These failures are proved before a queue write. Any unclassified
++            // I/O/atomic-write outcome keeps the task's existing unknown fence.
++            let phase = if matches!(
++                reason.as_str(),
++                "TARGET_EXPECTATION_MISMATCH"
++                    | "CONFIG_PROJECT_RETIRED"
++                    | "QUEUE_WAKE_METADATA_INVALID"
++                    | "QUEUE_EVENT_INVALID"
++                    | "QUEUE_EVENT_ID_CONFLICT"
++                    | "QUEUE_CAPACITY_EXCEEDED"
++                    | "WAKE_PROJECT_TARGET_CHANGED"
++                    | "WAKE_PROJECT_TARGET_MISMATCH"
++                    | "WAKE_HISTORICAL_EVENT_RETAINED"
++                    | "WAKE_ACTIVATION_INVALID"
++            ) {
++                ToolCallStatus::Failed
++            } else {
++                ToolCallStatus::OutcomeUnknown
++            };
++            journal
++                .transition_tool_call(&run, &tool_call_id, phase, None, Some(reason.clone()))
++                .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++            return Err(reason);
++        }
++    };
++    event.validate()?;
++    let metadata = event
++        .wake_metadata()?
++        .ok_or("QUEUE_WAKE_METADATA_INVALID")?;
++    if event.project_id != project.project.project_id
++        || event.target_generation != expected.generation
++        || metadata.purpose != catdesk_wake::protocol::WakePurpose::ManualEndTurn
++        || metadata.source_event_id != record.event_id
++        || metadata.source_turn_id != request.source_turn_id
++        || metadata.priority != request.priority
++        || metadata.expires_utc - event.created_utc != request.ttl_seconds
++    {
++        return Err("WEB_TASK_MANUAL_WAKE_EVENT_MISMATCH".into());
++    }
++    let result = json!({"status":"WAKE_INTENT_RECORDED", "projectId":event.project_id,
++        "eventId":event.event_id, "createdUtc":event.created_utc,
++        "targetGeneration":event.target_generation, "sourceTurnId":request.source_turn_id,
++        "expiresUtc":metadata.expires_utc,
++        "deliveryProved":false, "taskCompletionVerified":false,
++        "nativeSessionAction":"NONE", "browserStarted":false, "wakeHostStarted":false});
++    let result_hash = catdesk_wake::protocol::digest(&result.to_string());
++    journal
++        .transition_tool_call(
++            &run,
++            &tool_call_id,
++            ToolCallStatus::Completed,
++            Some(result_hash),
++            Some(format!(
++                "manual Wake intent {} recorded; delivery unverified",
++                event.event_id
++            )),
++        )
++        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
++    Ok(result)
++}
++
++pub(crate) fn native_status_selection(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    key: &str,
++) -> Result<crate::operator_codex_cli::NativeQueueSelection, String> {
++    let (_, _, selection) = authorized_web_grant(project, record, key)?;
++    selection.ok_or_else(|| "WEB_TASK_NATIVE_NOT_GRANTED".into())
++}
++
++pub(crate) struct NativeTaskCall {
++    pub(crate) selection: crate::operator_codex_cli::NativeQueueSelection,
++    journal: JournaledTaskCall,
++}
++
++pub(crate) struct PreparedNativeTaskCall {
++    inspected: AssignmentInspection,
++    selection: crate::operator_codex_cli::NativeQueueSelection,
++}
++
++/// Read-only Git/worktree inspection. The caller holds only its project Web
++/// lease here, never shared registry/Wake admission. No queue/journal effect.
++pub(crate) fn inspect_native_task_call(
++    project: &ResolvedProjectScopeV1,
++    record: &crate::web_work_state::WorkRecord,
++    key: &str,
++    task_id: &str,
++) -> Result<PreparedNativeTaskCall, String> {
++    let (archive, _, selection) = authorized_web_grant(project, record, key)?;
++    let selection = selection.ok_or("WEB_TASK_NATIVE_NOT_GRANTED")?;
++    let inspected = inspect_assignment(project, &archive, 180)?;
++    check_record_assignment(project, &inspected, record)?;
++    if inspected.contract.task_id != task_id {
++        return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
++    }
++    Ok(PreparedNativeTaskCall {
++        inspected,
++        selection,
++    })
++}
++
++impl PreparedNativeTaskCall {
++    /// Commit metadata only while the caller retains the exact paired target,
++    /// current registration and project lease. Preserve replay-before-migration
++    /// and migration-before-execution journal ordering.
++    pub(crate) fn commit(
++        self,
++        prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
++        record: &crate::web_work_state::WorkRecord,
++        key: &str,
++        call_id: &str,
++        lease: &crate::operator_facade::WebWorkLease,
++        current: &catdesk_wake::protocol::Target,
++    ) -> Result<NativeTaskCall, String> {
++        let project = prepared.scope();
++        let (_, _, selection) = authorized_web_grant(project, record, key)?;
++        if selection.as_ref() != Some(&self.selection) {
++            return Err("WEB_TASK_NATIVE_REQUEST_CHANGED".into());
++        }
++        check_record_assignment(project, &self.inspected, record)?;
++        let inspected = self.inspected;
++        let selection = self.selection;
++        // Keep call identity tied to the immutable grant, even after a proved
++        // continuation selects a linked native job. Check replay/unknown fences
++        // before changing queue metadata; record execution only after migration.
++        let hash = stable_text_hash(
++            &serde_json::to_string(&selection).map_err(|_| "WEB_TASK_NATIVE_SELECTION_INVALID")?,
++        );
++        prepare_journaled_task_call_checked(
++            project,
++            &inspected,
++            call_id,
++            "native.codex.dispatch",
++            hash.clone(),
++            false,
++        )?;
++        let selection = crate::operator_codex_cli::continue_native_queue_selection_prepared(
++            prepared,
++            &selection,
++            lease,
++            &record.target,
++            current,
++            &record.event_id,
++        )?;
++        crate::operator_codex_cli::check_native_queue_selection_prepared(prepared, &selection)?;
++        let journal = prepare_journaled_task_call(
++            project,
++            &inspected,
++            call_id,
++            "native.codex.dispatch",
++            hash,
++        )?;
++        Ok(NativeTaskCall { selection, journal })
++    }
++}
++
++impl NativeTaskCall {
++    pub(crate) fn finish(self, result: &Result<Value, String>) -> Result<(), String> {
++        let (phase, hash, summary) = match result {
++            Ok(value) if value["status"] == "prelaunch_refused" => (
++                ToolCallStatus::Failed, Some(catdesk_wake::protocol::digest(&value.to_string())),
++                "Native preflight refused before task claim/launch; retry only after prerequisite changes".into()),
++            Ok(value)
++                if value["status"] == "no_ready_tasks"
++                    || matches!(
++                        value["job"]["state"].as_str(),
++                        Some("NATIVE_EXITED_ZERO" | "FAILED" | "READY")
++                    ) =>
++            {
++                (
++                    ToolCallStatus::Completed,
++                    Some(catdesk_wake::protocol::digest(&value.to_string())),
++                    "Native dispatch receipt recorded; task verification remains separate".into(),
++                )
++            }
++            Ok(_) => (
++                ToolCallStatus::OutcomeUnknown,
++                None,
++                "Native dispatch needs recovery; no replay".into(),
++            ),
++            Err(reason) => (ToolCallStatus::OutcomeUnknown, None, reason.clone()),
++        };
++        self.journal
++            .journal
++            .transition_tool_call(
++                &self.journal.run,
++                &self.journal.tool_call_id,
++                phase,
++                hash,
++                Some(summary),
++            )
++            .map(|_| ())
++            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED".to_owned())
++    }
+ }
+ 
+ fn check_linked_assignment(

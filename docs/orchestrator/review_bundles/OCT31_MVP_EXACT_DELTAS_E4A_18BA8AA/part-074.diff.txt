@@ -1,0 +1,219 @@
++        let mut beta = if native {
++            native_fixture("beta")
++        } else {
++            fixture_with_manual_wake("beta", true)
++        };
+         let path = alpha.control.join(".catdesk/projects/projects.json");
+         let mut registry: AutonomousProjectRegistryV1 =
+             serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+@@ -710,11 +2466,32 @@ mod tests {
+         crate::web_work::associate(&alpha.control, beta.pins.clone(), &assignment).unwrap();
+         sent(&wake, &event);
+         beta.control = alpha.control.clone();
+-        let grant =
+-            crate::web_work::execution_permission(&beta.control, beta.pins.clone(), false).unwrap();
++        if native {
++            beta._native_queue = Some(crate::operator_codex_cli::native_queue_fixture(
++                &beta.control,
++                "beta",
++            ));
++        }
++        let expected_key = fresh_fixture_key_path(&beta.control, "beta");
++        let grant = crate::web_work::execution_permission_with_capabilities(
++            &beta.control,
++            beta.pins.clone(),
++            false,
++            !native,
++            native.then_some("native-fixture"),
++        )
++        .unwrap();
++        beta.keys
++            .push(OwnedFixtureKey::retain(expected_key, &grant));
+         beta.key =
+             serde_json::from_slice(&fs::read(grant["executionKeyFile"].as_str().unwrap()).unwrap())
+                 .unwrap();
++        (alpha, beta)
++    }
++
++    async fn central_http_route_fixture(cached: bool) {
++        let (alpha, beta) = paired_fixtures(false);
++        let shared_wake = ready_manual_wake(&alpha);
+ 
+         let mut app = crate::state::AppState::new_isolated_fixture(
+             0,
+@@ -784,6 +2561,20 @@ mod tests {
+             .await
+             .unwrap();
+         assert_eq!(wrong.status(), reqwest::StatusCode::UNAUTHORIZED);
++        let manual_unauthorized = client
++            .post(&url)
++            .json(&transport(manual_request(
++                &alpha,
++                "manual-no-auth",
++                "manual-turn",
++            )))
++            .send()
++            .await
++            .unwrap();
++        assert_eq!(
++            manual_unauthorized.status(),
++            reqwest::StatusCode::UNAUTHORIZED
++        );
+         assert!(
+             !alpha
+                 .control
+@@ -865,6 +2656,40 @@ mod tests {
+                     .contains("{ 1 }")
+             );
+         }
++        let wake_a = manual_request(&alpha, "manual-concurrent", "manual-turn");
++        let wake_b = manual_request(&beta, "manual-concurrent", "manual-turn");
++        let (wa, wb) = tokio::join!(rpc(wake_a.clone()), rpc(wake_b));
++        let mut events = std::collections::BTreeSet::new();
++        for (expected, response) in [("alpha", wa), ("beta", wb)] {
++            let value: Value = response.unwrap().json().await.unwrap();
++            assert!(value.get("error").is_none(), "{value}");
++            assert_eq!(value["result"]["structuredContent"]["projectId"], expected);
++            assert_eq!(
++                value["result"]["_meta"]["catdeskTaskLifecycle"]["isolatedWorktreeWriterClaimed"],
++                false
++            );
++            events.insert(
++                value["result"]["structuredContent"]["eventId"]
++                    .as_str()
++                    .unwrap()
++                    .to_owned(),
++            );
++        }
++        assert_eq!(events.len(), 2);
++        let duplicate: Value = rpc(wake_a).await.unwrap().json().await.unwrap();
++        assert_eq!(
++            duplicate["error"]["message"],
++            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
++        );
++        assert_eq!(
++            shared_wake
++                .events()
++                .unwrap()
++                .iter()
++                .filter(|event| event.wake_metadata().unwrap().is_some())
++                .count(),
++            2
++        );
+         let held = crate::operator_facade::acquire_web_work_lease(&alpha.control, "alpha").unwrap();
+         let (blocked, useful) = tokio::join!(
+             rpc(request(
+@@ -884,6 +2709,14 @@ mod tests {
+         let useful: Value = useful.unwrap().json().await.unwrap();
+         assert_eq!(blocked["error"]["message"], "WEB_ROLLOVER_PROJECT_BUSY");
+         assert!(useful.get("error").is_none(), "{useful}");
++        let (blocked, useful) = tokio::join!(
++            rpc(manual_request(&alpha, "held-manual", "manual-held-turn")),
++            rpc(manual_request(&beta, "useful-manual", "manual-next-turn"))
++        );
++        let blocked: Value = blocked.unwrap().json().await.unwrap();
++        let useful: Value = useful.unwrap().json().await.unwrap();
++        assert_eq!(blocked["error"]["message"], "WEB_ROLLOVER_PROJECT_BUSY");
++        assert!(useful.get("error").is_none(), "{useful}");
+         drop(held);
+         let replay: Value = rpc(apply(&beta)).await.unwrap().json().await.unwrap();
+         assert_eq!(
+diff --git a/src/web_work.rs b/src/web_work.rs
+index 534ada25535b3371fbd54252c4f8ef8654928cbc..9b6d94c47e2844670dc493a78b1bedec52c4aad5 100644
+--- a/src/web_work.rs
++++ b/src/web_work.rs
+@@ -3,7 +3,8 @@
+ 
+ use crate::{
+     delegated::autonomy_projects::{
+-        AutonomousProjectRegistryStoreV1, resolve_registered_project_from_control_root,
++        AutonomousProjectRegistryStoreV1, PreparedProjectScopeV1,
++        resolve_registered_project_from_control_root,
+     },
+     mcp, wake_protocol_client,
+     web_work_state::WorkLedger,
+@@ -77,7 +78,255 @@ pub(crate) fn execution_permission(
+     args: Value,
+     revoke: bool,
+ ) -> Result<Value, String> {
+-    assigned_action(workspace, args, AssignmentAction::Permission(revoke))
++    execution_permission_with_manual_wake(workspace, args, revoke, false)
++}
++
++pub(crate) fn execution_permission_with_manual_wake(
++    workspace: &Path,
++    args: Value,
++    revoke: bool,
++    allow_manual_wake: bool,
++) -> Result<Value, String> {
++    execution_permission_with_capabilities(workspace, args, revoke, allow_manual_wake, None)
++}
++
++pub(crate) fn execution_permission_with_capabilities(
++    workspace: &Path,
++    args: Value,
++    revoke: bool,
++    allow_manual_wake: bool,
++    native_queue_task_id: Option<&str>,
++) -> Result<Value, String> {
++    if revoke && (allow_manual_wake || native_queue_task_id.is_some()) {
++        return Err("WEB_TASK_GRANT_ARGUMENTS_INVALID".into());
++    }
++    assigned_action(
++        workspace,
++        args,
++        AssignmentAction::Permission {
++            revoke,
++            allow_manual_wake,
++            native_queue_task_id,
++        },
++    )
++}
++
++pub(crate) struct NativeDispatchAdmission {
++    _lease: crate::operator_facade::WebWorkLease,
++    pub(crate) control: std::path::PathBuf,
++    pub(crate) project_id: String,
++    pub(crate) call: crate::project_mcp_task::NativeTaskCall,
++}
++
++impl NativeDispatchAdmission {
++    pub(crate) fn finish(self, result: &Result<Value, String>) -> Result<(), String> {
++        // Consume the complete admission so its project lease remains held
++        // until the exact journal outcome has been durably recorded.
++        self.call.finish(result)
++    }
++}
++
++pub(crate) fn prepare_native_dispatch(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++    call_id: &str,
++) -> Result<NativeDispatchAdmission, String> {
++    prepare_native_dispatch_with_inspection(
++        workspace,
++        pins,
++        key,
++        task_id,
++        call_id,
++        crate::project_mcp_task::inspect_native_task_call,
++    )
++}
++
++pub(crate) fn prepare_native_dispatch_with_inspection(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++    call_id: &str,
++    inspect: impl FnOnce(
++        &crate::delegated::autonomy_projects::ResolvedProjectScopeV1,
++        &crate::web_work_state::WorkRecord,
++        &str,
++        &str,
++    ) -> Result<crate::project_mcp_task::PreparedNativeTaskCall, String>,
++) -> Result<NativeDispatchAdmission, String> {
++    let request = AssignmentRequest::parse(pins)?;
++    let prepared = PreparedProjectScopeV1::resolve(workspace, &request.project_id)

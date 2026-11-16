@@ -1,0 +1,157 @@
++        let entered = Arc::new(tokio::sync::Notify::new());
++        let (release, released) = std::sync::mpsc::channel();
++        let root = alpha.control.clone();
++        let pins = alpha.pins.clone();
++        let key = alpha.key.clone();
++        let notified = entered.clone();
++        let job = alpha._native_queue.as_ref().unwrap().job_file("alpha");
++        let original_job = fs::read(&job).unwrap();
++        let pending = tokio::task::spawn_blocking(move || {
++            crate::web_work::prepare_native_dispatch_with_inspection(
++                &root,
++                pins,
++                &key,
++                "task-fixture",
++                "slow-native-preparation",
++                |scope, record, key, task| {
++                    let inspected = crate::project_mcp_task::inspect_native_task_call(
++                        scope, record, key, task,
++                    )?;
++                    notified.notify_one();
++                    released
++                        .recv_timeout(Duration::from_secs(45))
++                        .map_err(|_| "CONTROLLED_INSPECTION_TIMEOUT".to_owned())?;
++                    Ok(inspected)
++                },
++            )
++        });
++        tokio::time::timeout(Duration::from_secs(20), entered.notified())
++            .await
++            .unwrap();
++        let project_lease_held =
++            crate::operator_facade::acquire_web_work_lease(&alpha.control, "alpha").is_err();
++        let root = alpha.control.clone();
++        let shared_locks_free = tokio::task::spawn_blocking(move || {
++            let registry = crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1::open_read_only(root.join(".catdesk/projects")).unwrap();
++            let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(&root).unwrap()).unwrap();
++            registry.with_registration_lock(|| wake.with_config_read_only(|_| Ok(()))).is_ok()
++        }).await.unwrap();
++        let journal = alpha
++            .control
++            .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal");
++        let no_early_effect = !journal.exists() && fs::read(&job).unwrap() == original_job;
++        let peer = tokio::time::timeout(Duration::from_secs(20), async {
++            let preview = call(&beta, request(&beta, "peer-preview", "patch.preview", json!({"patchId":"peer-preparation-patch","operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 58 }"}]}))).await;
++            if preview.get("error").is_some() { return preview; }
++            call(&beta, request(&beta, "peer-apply", "patch.apply", json!({"patchId":"peer-preparation-patch"}))).await
++        }).await;
++        release.send(()).unwrap();
++        let admission = tokio::time::timeout(Duration::from_secs(20), pending)
++            .await
++            .unwrap()
++            .unwrap()
++            .unwrap();
++        // This test stops at admission. Close its journal explicitly with a
++        // known no-launch result; never leave an EXECUTING effect behind.
++        admission.finish(&Ok(json!({"status":"prelaunch_refused","nativeTurnStarted":false,"reason":"CONTROLLED_PREPARATION_ONLY"}))).unwrap();
++        assert!(project_lease_held && shared_locks_free && no_early_effect);
++        let peer = peer.expect("a paused native preparation cannot stall another project");
++        assert!(peer.get("error").is_none(), "{peer}");
++        assert!(
++            fs::read_to_string(beta.task.join("src/lib.rs"))
++                .unwrap()
++                .contains("{ 58 }")
++        );
++        for path in [
++            alpha.task.join("src/lib.rs"),
++            alpha.native.join("src/lib.rs"),
++            beta.native.join("src/lib.rs"),
++        ] {
++            assert!(fs::read_to_string(path).unwrap().contains("{ 1 }"));
++        }
++        assert_eq!(fs::read(&job).unwrap(), original_job);
++        assert!(!native_proof(&alpha).exists() && !native_proof(&beta).exists());
++        drop(crate::operator_facade::acquire_web_work_lease(&alpha.control, "alpha").unwrap());
++    }
++
++    #[test]
++    fn native_dispatch_rechecks_authority_after_inspection_before_any_queue_or_journal_effect() {
++        for changed in ["alpha", "catdesk", "assignment", "target"] {
++            let f = native_fixture("alpha");
++            let job = f._native_queue.as_ref().unwrap().job_file("alpha");
++            let original_job = fs::read(&job).unwrap();
++            let error = crate::web_work::prepare_native_dispatch_with_inspection(
++                &f.control,
++                f.pins.clone(),
++                &f.key,
++                "task-fixture",
++                "changed-native-preparation",
++                |scope, record, key, task| {
++                    let inspected = crate::project_mcp_task::inspect_native_task_call(
++                        scope, record, key, task,
++                    )?;
++                    match changed {
++                        "assignment" => {
++                            let archive = f.control.join(
++                                ".catdesk/project-mcp-tasks/alpha/task-fixture/assignment.json",
++                            );
++                            let mut bytes = fs::read(&archive).unwrap();
++                            bytes.push(b'\n');
++                            fs::write(archive, bytes).unwrap();
++                        }
++                        "target" => {
++                            // Manual binding intentionally does not acquire the
++                            // per-project Web lease. Its paired CAS can win
++                            // during preparation; final admission must refuse.
++                            crate::mcp::operator_bind_project_web_target(
++                                &f.control,
++                                "alpha",
++                                "https://chatgpt.com/c/manual-preparation-successor",
++                                f.pins["expectedTargetSha256"].as_str(),
++                                f.pins["expectedTargetGeneration"].as_u64().unwrap(),
++                            )
++                            .unwrap();
++                        }
++                        project => {
++                            let path = f.control.join(".catdesk/projects/projects.json");
++                            let mut registry: AutonomousProjectRegistryV1 =
++                                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
++                            registry
++                                .projects
++                                .iter_mut()
++                                .find(|p| p.project_id == project)
++                                .unwrap()
++                                .chatgpt_target_history
++                                .push(format!(
++                                    "https://chatgpt.com/c/preparation-history-{project}"
++                                ));
++                            fs::write(path, serde_json::to_vec(&registry).unwrap()).unwrap();
++                        }
++                    }
++                    Ok(inspected)
++                },
++            )
++            .err()
++            .expect("changed preparation authority must refuse");
++            assert_eq!(
++                error,
++                match changed {
++                    "assignment" => "WEB_TASK_GRANT_SCOPE_MISMATCH",
++                    "target" => "WEB_CONTEXT_TARGET_CHANGED",
++                    _ => "WEB_WORK_PROJECT_REGISTRATION_CHANGED",
++                }
++            );
++            assert_eq!(fs::read(&job).unwrap(), original_job);
++            assert!(
++                !f.control
++                    .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal")
++                    .exists()
++            );
++            assert!(!native_proof(&f).exists());
++            drop(crate::operator_facade::acquire_web_work_lease(&f.control, "alpha").unwrap());
++        }
++    }
++
++    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++    async fn native_status_slow_lookup_releases_shared_locks_and_peer_can_patch() {
++        let (alpha, beta) = paired_fixtures(true);

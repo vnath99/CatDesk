@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-09T21:22:20.6986040+00:00",
+  "classification": "SOURCE_QUALIFIED_NOT_INSTALLED",
+  "sourcePath": "src/mcp.rs",
+  "sourceFileSha256": "98fd65cb4766a02e2b0dc1f1315e9b4f5e7bcbc5fac2fadc986b4f10d4edc75f",
+  "behavior": {
+    "scope": "EXISTING_NORMAL_SHELL_RUN_COMMAND_RESULT",
+    "fullOutputMetadata": ["stdoutUtf8Bytes", "stdoutSha256", "stderrUtf8Bytes", "stderrSha256"],
+    "identityBasis": "EXACT_CAPTURED_UTF8_TEXT_RETURNED_IN_THE_SAME_STRUCTURED_RESULT",
+    "summaryOnlyMetadata": "NULL_NO_HIDDEN_OUTPUT_LENGTH_OR_HASH",
+    "unicodeAndTerminalNewlinesPreserved": true,
+    "originalOperatingSystemByteIdentityClaimed": false,
+    "normalizedOrRedactedLogIdentityClaimed": false,
+    "existingCaptureTruncationAndDecodingUnchanged": true,
+    "authenticationExecutionLoggingRequestSchemaAndOwnerUnchanged": true,
+    "newToolOrServiceAdded": false
+  },
+  "verification": {
+    "independentSourceReview": "PASS",
+    "formatCheck": "PASS",
+    "focusedRunCommandTests": {"passed": 12, "failed": 0, "newTests": 4, "elapsedOwnerSeconds": 159.275},
+    "strictRootAllTargetClippy": "PASS",
+    "clippyElapsedOwnerSeconds": 32.378,
+    "eachOwnerMaximumSeconds": 180,
+    "timeoutsOrTerminationFailures": 0,
+    "coverage": ["UTF8_UNICODE", "CRLF_LF_AND_NO_FINAL_LF", "EMPTY_OUTPUT", "SEPARATE_ERROR_STREAMS", "SUMMARY_MODE_PRIVACY", "CAPTURED_OUTPUT_VERSUS_LOG_NORMALIZATION", "EXISTING_ROUTING_AND_OUTPUT_GUARDS"]
+  },
+  "acceptanceLimits": {
+    "originalClientValidationFailureResolved": false,
+    "historicalResponseReconstructed": false,
+    "inconclusiveReviewReclassified": false,
+    "protectedInstallationChanged": false,
+    "liveMetadataAcceptance": "NOT_RUN",
+    "producerAuthorityCreated": false,
+    "c1": "INCOMPLETE"
+  }
+}

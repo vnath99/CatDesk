@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T21:47:56.003425+00:00",
+  "classification": "ACTUAL_WINDOWS_OWNED_INTERACTIVE_CONSOLE_CONTEXT_QUALIFIED_NO_BROWSER_TEST_YET",
+  "sourceBaseCommit": "e7315f7f15a1b70c76062aa8088d955f85188fe7",
+  "priorOperatorFailure": {
+    "ordinaryAndAppTerminals": "RECORDED_DIRECT_ROOT_MISMATCH",
+    "packagedPowerShellParentAndBundledChild": "MISMATCH_REPRODUCED",
+    "furtherOperatorTerminalRetriesRequested": false
+  },
+  "qualification": {
+    "explicitCreateNewConsole": true,
+    "newConsoleFlags": "CREATE_NEW_CONSOLE_ONLY",
+    "rootIdentitiesMatched": 2,
+    "consoleInputRedirected": false,
+    "consoleOutputRedirected": false,
+    "sameVerifiedNativePowerShell": true,
+    "killOnJobClose": true,
+    "jobLimitFlags": 8192,
+    "breakawayAllowed": false,
+    "silentBreakawayAllowed": false,
+    "alternateUserOrElevation": false,
+    "outerMaximumMilliseconds": 20000,
+    "elapsedMilliseconds": 2183,
+    "childNaturalExit": true,
+    "outerExitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "existingReviewedContainmentOwnerReused": true,
+    "rootInspectorAndControllerUnchanged": true
+  },
+  "failedAttemptsPreserved": [
+    {
+      "label": "implicit",
+      "exitCode": 1,
+      "elapsedMilliseconds": 1949,
+      "parentResultSha256": "af5335a0d9bf032e66e304ccf90fde68e6f09dded86b10d819cb076a6748d534"
+    },
+    {
+      "label": "allocate",
+      "exitCode": 1,
+      "elapsedMilliseconds": 1001,
+      "parentResultSha256": "07260293e8ad03c6da4c407c1bf6fb43a0f21aadd1621f54c7a862dfdeb56496"
+    }
+  ],
+  "failureReasons": [
+    "Implicit console inherited redirected input and refused qualification",
+    "AllocConsole could not allocate a console; no browser or CatDesk command ran"
+  ],
+  "artifacts": {
+    "consoleResultSha256": "fc24205859a89cccc5931a9ce70932aff7cdf044931fdfcafa7d15e36368f711",
+    "workerResultSha256": "e503660e82cbfb79ca0356c68e82a9a70f807205804b5daa3bafd4962d88d55f",
+    "parentResultSha256": "ca8477b21bb7a1956fc0e6501f47cc22d199a271480bed54419ff3e5b2aba9f0",
+    "preparedAttendedWorkflowSha256": "02ae36bcb3d8ed84d2cfc43418eb4a64a8aa0a248a11365319d8655c7692a208"
+  },
+  "preparedAttendedWorkflow": {
+    "launched": false,
+    "outerMaximumSeconds": 180,
+    "consoleMaximumSeconds": 150,
+    "visibleConsoleForHumanInspection": true,
+    "existingProfileAndRegisteredByovdOnly": true,
+    "entryAndOriginalControllerAuthorityRechecksPreserved": true,
+    "humanEnterClosesNormally": true,
+    "uncertainOrTimedOutCleanupRequiresReconciliationNotMarkerClearing": true,
+    "availabilityQuestionIsNotNewPermissionRequest": true
+  },
+  "preservation": {
+    "protectedPinsUnchangedInMatchingView": 131,
+    "browserStarts": 0,
+    "catdeskCommands": 0,
+    "profileRecreation": false,
+    "productionRootOrAuthorityChanges": false,
+    "guardOrProducerReviewChanges": false,
+    "projectBindingChanges": false,
+    "unknownSendReplay": false
+  },
+  "remaining": "WAIT_FOR_OPERATOR_AVAILABILITY_THEN_ONE_OWNED_ATTENDED_INSPECTION_NO_MORE_TERMINAL_COMMANDS",
+  "installedAndActualWebAcceptance": "OPEN",
+  "goal": "ACTIVE"
+}

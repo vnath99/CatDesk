@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T04:28:30.317237+00:00",
+  "classification": "ACTUAL_TRUSTED_INSTALLED_C254_AUTHENTICATED_OFFICIAL_CONNECTOR_NOT_TWO_WEB_CODING",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "documentationBaseCommit": "88423b49190a452889323f3d89138f1a19b3a95e",
+  "installedReviewedSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "installedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "owner": {
+    "existingPublicLifecycle": true,
+    "existingRuntimeAliasProfileAndKeyReference": true,
+    "forwarderSourceSha256": "d95a88b733a44c1466ecb165cb72ec965e3f2959b531ab36a3a8a2b670da42cd",
+    "workflowSha256": "d52b6af36ffb57efbacc577b8ae4ad1337965975e8521bc6b0bc9af181cf69e3",
+    "maximumSeconds": 180,
+    "startedUtc": "2026-10-31T04:19:08.7395874+00:00",
+    "finishedUtc": "2026-10-31T04:19:53.8250356+00:00",
+    "naturalExitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "authentication": {
+    "generatedTestBearerInOwnedChildMemoryOnly": true,
+    "headerThroughExistingQualifiedHelper": true,
+    "tokenInArgumentsLogsEvidenceOrProfile": false,
+    "persistentConfigurationChanges": 0,
+    "parentEnvironmentChanged": false,
+    "missingBearerStatus": 401,
+    "wrongBearerStatus": 401,
+    "authenticatedInitializeStatus": 200,
+    "authenticatedCatalogStatus": 200,
+    "toolCount": 102,
+    "centralTaskToolAdvertised": true
+  },
+  "connector": {
+    "tool": "catdesk_transport_status",
+    "oneReadOnlyProbe": true,
+    "responseReceived": true,
+    "isError": false,
+    "started": {
+      "current_time": "2026-10-31 04:19:36 UTC"
+    },
+    "finished": {
+      "current_time": "2026-10-31 04:19:37 UTC"
+    },
+    "authReportedMode": "BEARER_REQUIRED",
+    "servingCanonicalParity": "MATCH",
+    "transportReportedHealth": "CONFIGURED_UNVERIFIED",
+    "httpStatusExposed": false,
+    "actualChatGPTWebConversationCaller": false,
+    "projectTaskExecuted": false
+  },
+  "preservation": {
+    "protectedPinsUnchanged": 131,
+    "additionalExistingCriticalPinsUnchanged": 5100,
+    "officialProfileBytesUnchanged": true,
+    "productionExecutableOrFingerprintChanges": 0,
+    "projectBindingChanges": 0,
+    "projectTaskActions": 0,
+    "providerMessages": 0,
+    "browserWakeOrRecurringStarts": 0,
+    "newTunnels": 0,
+    "existingRuntimeStopped": true,
+    "publicBackendStopped": true,
+    "remainingPort3200Owners": 0
+  },
+  "installedAdmission": {
+    "canonicalRegistryProjects": 4,
+    "productionWakeTargetCount": 1,
+    "canonicalPairing": [
+      {
+        "registeredConversationPresent": true,
+        "productionWakeTargetPresent": false,
+        "exactPairAgrees": false,
+        "projectLabel": "canonical-project-1"
+      },
+      {
+        "registeredConversationPresent": true,
+        "productionWakeTargetPresent": false,
+        "exactPairAgrees": false,
+        "projectLabel": "canonical-project-2"
+      },
+      {
+        "registeredConversationPresent": false,
+        "productionWakeTargetPresent": false,
+        "exactPairAgrees": true,
+        "projectLabel": "canonical-project-3"
+      },
+      {
+        "registeredConversationPresent": true,
+        "productionWakeTargetPresent": true,
+        "exactPairAgrees": false,
+        "projectLabel": "canonical-project-4"
+      }
+    ],
+    "controlledFiveProjectRegistryMigrated": false,
+    "existingOwnerControlWorkspaceOption": "INSTALLED_RUN_PROJECT_ONLY_NOT_CENTRAL_FOREGROUND",
+    "automaticRegistryCopyOrRebindPerformed": false
+  },
+  "releaseGate": {
+    "currentDevelopmentSourceHasIndependentReleaseAcceptance": false,
+    "genuineLatestReviewVerdict": "INCONCLUSIVE",
+    "newPromotionAttempted": false,
+    "retainedC254AuthorityUnchanged": true
+  },
+  "remaining": {
+    "twoDistinctWebCodingConversations": "OPEN",
+    "intendedFiveProjectControlScopeOnOfficialRoute": "OPEN_EXPLICIT_BOUNDED_CENTRAL_OWNER_SCOPE_REQUIRED",
+    "normalNativeCliExecutionThroughWeb": "OPEN_INSTALLED_QUALIFICATION",
+    "unattendedServing": "NOT_ACTIVATED"
+  },
+  "nextExecutableTask": "EXTEND_EXISTING_FINITE_INSTALLED_BACKEND_OWNER_WITH_EXPLICIT_VALIDATED_CENTRAL_CONTROL_WORKSPACE_REUSING_CURRENT_REGISTRY_AND_RETAINED_INSTALLED_IMAGE",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}

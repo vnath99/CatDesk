@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-31",
+  "timezone": "America/New_York",
+  "classification": "SOURCE_QUALIFIED_WITH_ONE_READONLY_INSTALLED_AUTH_PROBE",
+  "comparisonBase": "3b4885ec3f4f76e3690ce176afe8cec774be7386",
+  "userDirection": "Create fresh project chats with the existing v5 app mention, preserving predecessors and native work.",
+  "implementation": {
+    "appBootstrap": "Optional chatgptAppMention in newly prepared handoffs selects a distinct persisted APP_JSON_ESCAPED_V1 format. The only qualified mention is @CatDesk-Local-Tunnel-v5. It appears on the first message line; identity and escaped handoff remain in the same frozen message.",
+    "compatibility": "Omitted mention preserves historical serialization, message bytes and digests. Old readers reject unsupported new handoffs. The existing browser/composer transaction, ownership, draft, CAS and unknown-submission guards remain in force.",
+    "packageGate": "App-prefixed creation refuses before browser launch if verified primitives lack the matching format marker; old-format operations remain supported.",
+    "authenticationReference": "Public lifecycle probes and both daemon launch modes reuse the existing Windows User bearer reference only when no explicit process token exists. Explicit project-process credentials retain precedence; invalid credentials fail closed. Only a child start environment receives the inherited reference; parent and User environments are not rewritten.",
+    "scope": "No new browser owner, queue, registry, authorization framework or tunnel. Mention text does not prove app activation, identify a caller or grant native execution."
+  },
+  "tests": {
+    "rootRollover": {"passed": 75, "failed": 0, "ignored": 1, "note": "Ignored fixture child is invoked by the bounded process-exit test."},
+    "wakeEnvelope": {"passed": 2, "failed": 0, "coverage": "Old/new cross-language golden digests, invalid mentions, wire limit and unsupported old primitives."},
+    "pythonNewConversation": {"passed": 80, "failed": 0},
+    "pythonAdapter": {"passed": 43, "failed": 0},
+    "userBearerActualChild": {"checksPerShell": 15, "shells": ["Windows PowerShell 5.1", "PowerShell 7"], "actualChildPerShell": true, "productionAuthWrites": 0, "networkRequests": 0},
+    "strictReadiness": {"passed": 18, "failed": 0},
+    "existingBootstrapAndLifecycleFixtures": "PASS",
+    "rootAndWakeStrictAllTargetClippy": "PASS",
+    "formatting": "PASS"
+  },
+  "retainedRegressionEvidence": [
+    "New User-reference regression first reproduced USER_REFERENCE_NOT_USED_BY_OLD_LAUNCHER before the implementation correction.",
+    "A pre-existing load-error test expected generic completion uncertainty. The existing implementation correctly emits RESPONSE_LOAD_ERROR; the assertion now verifies that failure-specific behavior. No response retry or USER resend was added."
+  ],
+  "installedReadOnlyQualification": {
+    "observedUtc": "2026-11-01T03:13:40.2260431Z",
+    "sourceHelperSha256": "a2dd236a2cc7dbb14e24e2144e04c7d94056e6673b7d31bc29b09b5d81998567",
+    "parentProcessTokenAbsent": true,
+    "authenticatedCatalogHttp": 200,
+    "tools": 102,
+    "namedDispatcherListed": true,
+    "childStartInfoMatchedConfiguredReference": true,
+    "networkRequests": 1,
+    "processStarts": 0,
+    "parentAndUserEnvironmentPreserved": true,
+    "canonicalImageChanged": false,
+    "newSourceInstalled": false
+  },
+  "reviewAuthority": "Retained exact Web review is INCONCLUSIVE; source acceptance, acknowledgment and producer/promotion authority are not established by these changes.",
+  "liveChatInitialization": "NOT_RUN_IN_THIS_SOURCE_CHECKPOINT",
+  "productionPromotion": false,
+  "fullMilestoneComplete": false
+}

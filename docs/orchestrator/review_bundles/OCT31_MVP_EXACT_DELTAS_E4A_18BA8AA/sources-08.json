@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "sources",
+  "offset": 56,
+  "entries": [
+    {
+      "path": "wake/src/runtime_reobserve.rs",
+      "baseBlob": "c6e65b2a42c52f6e76b78f5de1082958a6c2a711",
+      "targetBlob": "e6018abf836d0b11cc2eb1ac8ec3e169200f69cd",
+      "patchSha256": "06245db1be45c456e73eee325d2ed8a09c8887e04fc3d3a07ccdb962520d2f6a",
+      "startByte": 771064,
+      "endByte": 776803
+    },
+    {
+      "path": "wake/src/runtime_response.rs",
+      "baseBlob": "11c944ac79b2c3cd8057a29b7106ebf85511c80c",
+      "targetBlob": "b722756e940a9db077fca9f5d9e8919d0a1f875e",
+      "patchSha256": "77d044559047695837b8e34b384733e4c6a4182eac178d8e5875c8bf09f34a04",
+      "startByte": 776803,
+      "endByte": 785344
+    },
+    {
+      "path": "wake/src/runtime_scheduler.rs",
+      "baseBlob": "3f09b3ee0036a8119f26e1aca115bee6bc1694f4",
+      "targetBlob": "00b4750977eb336b9b62cfcbec91386f596692a0",
+      "patchSha256": "107d246190043e61c357330f12302bd0fc0957e34277a4a48cb65f01f0d33635",
+      "startByte": 785344,
+      "endByte": 802867
+    },
+    {
+      "path": "wake/src/runtime_snapshot.rs",
+      "baseBlob": "fc0d1c176a40896cb8b6660e71e31c7db2f8f48f",
+      "targetBlob": "2b5017530ac00fabb85429cb47ab9a94ace70e39",
+      "patchSha256": "e3da44edec190e0a4b47f252979647712602a838ee4eb398438987b252887ae1",
+      "startByte": 802867,
+      "endByte": 809078
+    },
+    {
+      "path": "wake/src/store.rs",
+      "baseBlob": "30ee46b148ae8c57f741492355ab63f86f058d72",
+      "targetBlob": "31eb5f963d079a3fe2b7c29647befc6f8d1f5dd5",
+      "patchSha256": "bd5cfa686ef8aa0f3c42395881a1681085c102b76d5204f0011587eb3397180b",
+      "startByte": 809078,
+      "endByte": 852746
+    },
+    {
+      "path": "wake/tests/protocol_store.rs",
+      "baseBlob": "eee5cac65d0c2475a61c71ab9829855be148fb7c",
+      "targetBlob": "fa09cba5788a3de0e6ef7f639940e79caae98669",
+      "patchSha256": "88950175a46071123f9161823367837d8015ed2011082f9bd72b4c98e113bcbe",
+      "startByte": 852746,
+      "endByte": 854642
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "baseBlob": "0e14ea83732dd8ad276b441b871da0b5102a6ab5",
+      "targetBlob": "cbf70e68cb28cc50977b2f850b14303f3e076dff",
+      "patchSha256": "ae13463e0225051b823e8588af706334dfeae10565234aedb19b689346ecb4f2",
+      "startByte": 854642,
+      "endByte": 867593
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "baseBlob": "eb9bae7c05beeb66897998f4cc234762373f5d98",
+      "targetBlob": "bfb9d7b98689812afc0c7d7c92711ce89b6705e0",
+      "patchSha256": "d7f3a45a9aa0b0202264923eab6b0d1b8b815ffc9e730c02559ee2075c7ac247",
+      "startByte": 867593,
+      "endByte": 869938
+    }
+  ]
+}

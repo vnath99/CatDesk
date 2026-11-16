@@ -1,0 +1,183 @@
+-    if (snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT" and
+-            not snapshot["messages"][-1]["textComplete"]):
+-        snapshot["bodyDiagnostics"] = sink.message_body_diagnostics(cdp)
++    def require_review_turn():
++        if review is not None and sink.trusted_turn_anchor_state(cdp, review["message"]) != (1, 1):
++            raise bridge.Attention("SOURCE_REVIEW_SEQUENCE_UNPROVEN")
++    require_review_turn()
++    snapshot = bounded_source_snapshot(bridge, sink, cdp,
++        max_message_bytes=32768 if review is not None else 8192, review_pair=review is not None)
++    if review is not None:
++        messages = snapshot["messages"]
++        if (len(messages) != 2 or [item["role"] for item in messages] != ["USER", "ASSISTANT"] or
++                not messages[0]["textComplete"] or
++                bridge.normalize_message(messages[0]["text"]) != review["message"]):
++            raise bridge.Attention("SOURCE_REVIEW_USER_WITNESS_REQUIRED")
++        require_review_turn()
++    if snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT":
++        last = snapshot["messages"][-1]
++        normalized = bridge.normalize_message(last["text"]).replace("’", "'").replace("‘", "'").lower()
++        if not last["textComplete"] or "this response couldn't load" in normalized:
++            snapshot["bodyDiagnostics"] = sink.message_body_diagnostics(cdp)
+     if not sink.exact(cdp.get_current_url()):
+         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+     payload = {
+@@ -711,12 +747,21 @@ def source_snapshot(bridge, sb, request):
+     # The private snapshot reader has a separate wire allowance: JSON escaping
+     # and identity metadata must not consume the 8 KiB raw-text budget and
+     # discard a complete USER witness preceding a complete assistant answer.
+-    # Ordinary adapter frames and all snapshot text/count bounds stay unchanged.
++    # Ordinary frames and generic context limits stay unchanged; receipt-bound
++    # review pair text limits were applied above.
+     while (len(json.dumps(payload, separators=(",", ":")).encode("utf-8")) + 1 >
+            SOURCE_SNAPSHOT_RESPONSE_BYTES):
+         messages = snapshot["messages"]
+         snapshot["truncated"] = True
+-        if len(messages) > 1:
++        if review is not None:
++            # Escaping/metadata may exhaust the unchanged64KiB wire cap.
++            # Retain the exact USER and honestly mark the answer incomplete.
++            if len(messages) != 2 or not messages[-1]["text"]:
++                raise bridge.Attention("SOURCE_SNAPSHOT_TOO_LARGE")
++            answer = messages[-1]
++            answer["text"] = answer["text"][:len(answer["text"]) // 2]
++            answer.update(textComplete=False, revisionComplete=False, revisionHash=None)
++        elif len(messages) > 1:
+             del messages[0]
+         elif messages and messages[0]["text"]:
+             text = messages[0]["text"]
+@@ -916,8 +961,24 @@ def observe_response(bridge, sb, request):
+     stage = bounded_response_observation(bridge, sink, cdp, message, expected)
+     if stage not in {"RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
+         raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
+-    emit({"stage": stage, "eventId": event_id, "targetGeneration": generation,
+-          "targetDigest": target["digest"], "messageDigest": expected})
++    frame = {"stage": stage, "eventId": event_id, "targetGeneration": generation,
++             "targetDigest": target["digest"], "messageDigest": expected}
++    reason = getattr(sink, "response_observation_reason", None)
++    if reason is not None:
++        pending = {"DOCUMENT_LOADING", "GENERATION_ACTIVE", "EDITOR_NOT_READY",
++                   "ASSISTANT_NOT_MOUNTED", "ASSISTANT_BODY_UNPROVEN",
++                   "ASSISTANT_COMPLETION_ACTION_UNPROVEN"}
++        if not isinstance(reason, str) or (reason not in pending if stage == "RESPONSE_PENDING" else reason != "COMPLETE"):
++            raise bridge.Attention("RESPONSE_PROBE_DIAGNOSTIC_INVALID")
++        frame["diagnosticReason"] = reason
++    controls = getattr(sink, "response_observation_controls", None)
++    if controls is not None:
++        if (reason is None or not bridge.valid_response_control_diagnostics(controls) or
++                (stage == "RESPONSE_COMPLETE" and
++                 not (controls["assistantBodyPresent"] and controls["completionActionFound"]))):
++            raise bridge.Attention("RESPONSE_PROBE_DIAGNOSTIC_INVALID")
++        frame["completionControls"] = controls
++    emit(frame)
+ 
+ 
+ def startup_reason(error):
+diff --git a/wake/src/bin/CatDeskWakeProfileProbe.rs b/wake/src/bin/CatDeskWakeProfileProbe.rs
+index 1388796b803ff241e37ba6cad078c21d046fda08..e66c442a4735017c4960cad8d4658105d779acb4 100644
+--- a/wake/src/bin/CatDeskWakeProfileProbe.rs
++++ b/wake/src/bin/CatDeskWakeProfileProbe.rs
+@@ -1,8 +1,7 @@
+ use catdesk_wake::store::Store;
+-use std::io::{Read, Write};
+ use std::path::{Path, PathBuf};
+-use std::process::{Command, Stdio};
+-use std::time::{Duration, Instant};
++use std::process::Command;
++use std::time::Duration;
+ 
+ fn main() {
+     if let Err(error) = run() {
+@@ -75,107 +74,55 @@ fn run() -> Result<(), &'static str> {
+ }
+ 
+ fn run_bounded(command: &mut Command, timeout: Duration) -> Result<Vec<String>, &'static str> {
+-    #[cfg(windows)]
+-    {
+-        use std::os::windows::process::CommandExt;
+-        command.creation_flags(0x08000000);
+-    }
+-    let mut child = command
+-        .stdin(Stdio::piped())
+-        .stdout(Stdio::piped())
+-        .stderr(Stdio::null())
+-        .spawn()
+-        .map_err(|_| "PROBE_LAUNCH_FAILED")?;
+-    let job = match catdesk_wake::process_job::Job::assign(&child) {
+-        Ok(job) => job,
+-        Err(_) => {
+-            let _ = child.kill();
+-            let _ = child.wait();
+-            return Err("PROBE_CONTAINMENT_FAILED");
+-        }
+-    };
+-    // The script waits for this handshake before importing Selenium or opening Chrome.
+-    let result = (|| {
+-        child
+-            .stdin
+-            .take()
+-            .ok_or("PROBE_PIPE_FAILED")?
+-            .write_all(b"START\n")
+-            .map_err(|_| "PROBE_PIPE_FAILED")?;
+-        let deadline = Instant::now() + timeout;
+-        loop {
+-            if let Some(status) = child.try_wait().map_err(|_| "PROBE_WAIT_FAILED")? {
+-                return if status.success() {
+-                    Ok(())
+-                } else {
+-                    Err("PROBE_FAILED")
+-                };
+-            }
+-            if Instant::now() >= deadline {
+-                return Err("PROBE_PROCESS_TIMEOUT");
+-            }
+-            std::thread::sleep(Duration::from_millis(25));
+-        }
+-    })();
+-    // Close only this probe's job, including any child retaining its output pipe.
+-    drop(job);
+-    let _ = child.kill();
+-    let _ = child.wait();
+-    result?;
+-    let mut bytes = Vec::new();
+-    child
+-        .stdout
+-        .take()
+-        .ok_or("PROBE_PIPE_FAILED")?
+-        .take(16_385)
+-        .read_to_end(&mut bytes)
+-        .map_err(|_| "PROBE_OUTPUT_FAILED")?;
+-    if bytes.len() > 16_384 {
+-        return Err("PROBE_OUTPUT_TOO_LARGE");
+-    }
+-    let text = std::str::from_utf8(&bytes).map_err(|_| "PROBE_OUTPUT_INVALID")?;
+-    Ok(text
+-        .lines()
+-        .filter(|line| {
+-            let Some(state) = line.strip_prefix("PROBE:") else {
+-                return false;
+-            };
+-            let state = state.strip_prefix("FINAL:").unwrap_or(state);
+-            matches!(
+-                state,
+-                "EXACT_READY_IDLE"
+-                    | "EXACT_READY_BUSY"
+-                    | "EXACT_NO_EDITOR"
+-                    | "LOGIN_VISIBLE"
+-                    | "CAPTCHA_VISIBLE"
+-                    | "HOME"
+-                    | "TARGET_DRIFT"
+-                    | "CHROME_ERROR"
+-                    | "URL_UNAVAILABLE"
+-                    | "URL_INVALID"
+-            )
+-        })
+-        .take(64)
+-        .map(str::to_owned)
+-        .collect())
++    catdesk_wake::readiness_probe::run_bounded(command, timeout)
+ }
+ 
+ #[cfg(all(test, windows))]
+ mod tests {
+     use super::*;

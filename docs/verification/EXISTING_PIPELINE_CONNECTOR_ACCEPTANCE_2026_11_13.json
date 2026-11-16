@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-13T03:06:34.983521+00:00",
+  "documentationParent": "8992500d697fd485091fd188defaf6a265ceea93",
+  "stage": "LIVE_ACCEPTED_FOR_BOUNDED_EXISTING_SERVING_PIPELINE_ONLY",
+  "scope": "PUBLIC_BACKEND_ONLY_START_BEARER_REJECTION_EXISTING_OFFICIAL_OWNER_SINGLE_V5_STATUS_CLEANUP",
+  "startedUtc": "2026-11-13T03:02:52.9206173+00:00",
+  "finishedUtc": "2026-11-13T03:03:36.5972022+00:00",
+  "maximumSeconds": 180,
+  "canonicalSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+  "localBackend": {
+    "startState": "LOCAL_BACKEND_READY",
+    "readinessGate": "READY",
+    "authenticationMode": "BEARER",
+    "toolCount": 102,
+    "centralDispatcherPublished": true,
+    "missingBearerStatus": 401,
+    "wrongBearerStatus": 401,
+    "publicStopState": "STOPPED",
+    "ownedDaemonExited": true,
+    "finalListenerAbsent": true,
+    "finalDaemonAbsent": true
+  },
+  "officialOwner": {
+    "currentAuthorityChecksPassed": true,
+    "existingAliasProfileAndTunnelOnly": true,
+    "ready": true,
+    "healthAndReadinessGate": "READY",
+    "cleanupProved": true,
+    "profileUnchanged": true,
+    "connectAttempted": true,
+    "stopped": true,
+    "newTunnels": 0,
+    "persistentAuthenticationChanges": 0
+  },
+  "connector": {
+    "attempts": 1,
+    "structuredResponseReturned": true,
+    "isError": false,
+    "upstream429ObservedThisWindow": false,
+    "transportHealth": "CONFIGURED_UNVERIFIED",
+    "localMcpAuth": "BEARER_REQUIRED",
+    "canonicalServingParity": "MATCH",
+    "centralConnectionReady": true,
+    "centralExecutionAuthorized": false,
+    "providerConversationVerified": false,
+    "clientCatalogVerified": false,
+    "cachedSchemaCentralRouteAdvertised": true,
+    "buildState": "unknown",
+    "wakeStatusFileIsLiveProcessProof": false
+  },
+  "preservation": {
+    "pinsChecked": 1685,
+    "pinMismatches": 0,
+    "pinSetUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "missingSeedPathsUnchanged": true,
+    "passed": true
+  },
+  "containment": {
+    "kind": "KILL_ON_JOB_CLOSE",
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "retainedFailures": [
+    {
+      "operation": "READ_ONLY_OWNER_DIAGNOSTIC",
+      "failure": "Expected state instead of actual runtime_state in status schema.",
+      "lifecycleActions": 0,
+      "correctedSuccessorPassed": true,
+      "resultSha256": "a0e6bf33c3a457614f41d120559d6896abe85a3d06fc3d515052792cbd8400aa"
+    },
+    {
+      "operation": "FIRST_PIPELINE_WINDOW",
+      "failure": "Unable to find type [CatDesk.BoundedNativeProcess].",
+      "officialConnectionAttempted": false,
+      "backendCleanupPassed": true,
+      "preservationPassed": true,
+      "callerCorrection": "Initialize lifecycle runner before importing Secure MCP initializer; use qualified Secure MCP five-argument Run overload.",
+      "productTypeNamespaceChanged": false,
+      "resultSha256": "f6c28ffda89f1b44aab5914a2ec546451aa0261e54b7a51fd6227a54c9c63a86"
+    }
+  ],
+  "actualWindowsRunnerAbi": {
+    "lifecycleRunArities": [
+      4
+    ],
+    "secureMcpRunArities": [
+      4,
+      5
+    ],
+    "childProcessesStartedByAbiCheck": 0
+  },
+  "proofHashes": {
+    "qualify-existing-pipeline-qualified-abi.ps1": "378b6f6265fabde78c8a33454f0f8d9bcd3041c3d29447a18bae1f8f8005552c",
+    "snapshot-state.py": "24dd3862ad02afb81f1b4478ee4906b190ac08dfd5497ba64c51cfd854c1fb02",
+    "attempt.private.json": "2477d727beecfe22b92aff1cb59231a312e0a2c7e90898ae2834b05201c63c59",
+    "result.private.json": "b553d1330940a25428c6f40d1ef0207f6e5a9a6bba46b9bb66b9e1b924ab07b8",
+    "owner.private.json": "2634abc785396a3d66d7878260cb5deeec5df348280b017d2eae820c0f215e11",
+    "preservation.private.json": "8846b616f8b899fcf53cc06e135a9151a8a7a5ae79701a1556a344e4b8b538af",
+    "serving-ready.private.json": "3267595f237a04691e0a3a5f0976b36593c2213e955d3e648fc9051e2ca90c7e",
+    "connector-complete.private.json": "abb67223dec081aa4b4b5ca0a03f387dd70d7badc542a0eb65b1bb34ebf052f8",
+    "connector-result.raw-private.json": "18a9cd455bc06457f14067ad453778259f075cafde414860ca54302c93d3c2d3",
+    "official-owner/official-result.private.json": "dc685a44aece8aa0efb91e14a8fa641c8603172277dfcde0b80edce3e01558e9"
+  },
+  "qualifiedLeafSha256": "b25019c1035bc596dcc0ed46c3330e74d0451496bc21dbdbaad5228f4015f6aa",
+  "readOnlyAuthorityResultSha256": "964f1d275a8f0f0810c9ea01ecc9a0243a65f402e7cbf28bc92f031a2cea6e91",
+  "browserStarts": 0,
+  "wakeStarts": 0,
+  "messagesSent": 0,
+  "nativeProjectActions": 0,
+  "newCandidateExecuted": false,
+  "newCandidatePromoted": false,
+  "recurringAutomationEnabled": false,
+  "protectedMigrationInstalled": false,
+  "webEditCheckpointSelfWakeAccepted": false,
+  "remaining": [
+    "One already requested operator-view comparison before fresh purpose-bound Wake migration inputs.",
+    "Controlled installed restart and separately authorized protected update/rollback qualification.",
+    "Genuine independent canonical/direct-task source review and producer authority before installing the new candidate.",
+    "Actual project-bound Web edits, verification, Git checkpoint/sync, self-Wake/readback and independent second-project acceptance."
+  ],
+  "qualificationLimit": "Serving was stopped after the test. Success does not prove unattended recovery, persistent supervision, future connector availability, current Wake host liveness or Web task authorization."
+}

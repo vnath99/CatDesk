@@ -1,0 +1,214 @@
++        || !valid_digest(&auth.prior_canonical_sha256)
++        || auth.prior_canonical_sha256 == auth.candidate_sha256
++    {
++        return Err(format!(
++            "{LABEL} exact terminal pre-mutation evidence required"
++        ));
++    }
++    Ok(())
++}
++
++fn validate_failed_intent(
++    workspace: &Path,
++    auth: &ReviewedPromotionAuthorizationV1,
++    intent: &BackendOnlyIntent,
++    proof: &serde_json::Value,
++) -> Result<(), String> {
++    let workspace = canonical_directory(workspace, "failed intent root")?;
++    let created = proof["intentCreatedUnix"]
++        .as_u64()
++        .ok_or("failed handoff intent time unproven")?;
++    if intent.schema_version != 4
++        || intent.status != "INTENT_RECORDED"
++        || intent.profile != "LOCAL_BACKEND_ONLY"
++        || intent.mcp_authenticated
++        || intent.old_pid == 0
++        || !intent.old_owns_configured_port
++        || intent.mcp_port != 3200
++        || intent.old_listener_ports != [3200]
++        || intent.startup_delay_seconds > 30
++        || intent.build_sha256 != auth.candidate_sha256
++        || intent.recovery.len() > 512
++        || created < auth.generation.saturating_sub(30)
++        || created > auth.expires_at_unix.saturating_add(30)
++        || canonical_directory(Path::new(&intent.workspace_path), "failed intent workspace")?
++            != workspace
++        || canonical_workspace_file(
++            &workspace,
++            Path::new(&intent.build_path),
++            "failed intent candidate",
++        )? != workspace
++            .join(&auth.candidate_relative_path)
++            .canonicalize()
++            .map_err(|_| "failed intent candidate unavailable")?
++    {
++        return Err("failed handoff intent is not bound to this pre-swap attempt".into());
++    }
++    Ok(())
++}
++
++fn inspect_locked(
++    workspace: &Path,
++    parent: &Guard,
++    transaction: &str,
++    prior: Option<&Journal>,
++) -> Result<Plan, String> {
++    let archived = archive_name(transaction)?;
++    let control =
++        if prior.is_some_and(|v| v.plan.transaction_id == transaction && v.phase != "COMPLETED") {
++            match (
++                optional_child(parent, "promotion-control")?,
++                optional_child(parent, &archived)?,
++            ) {
++                (Some(current), None) => current,
++                (None, Some(old)) => old,
++                _ => return Err(format!("{LABEL} recovery location ambiguous")),
++            }
++        } else {
++            child(parent, "promotion-control")?
++        };
++    let hashes = record_hashes(&control)?;
++    let auth: ReviewedPromotionAuthorizationV1 = read_json(&control, "authorization.json")?;
++    let claim: ReviewedPromotionClaimV1 = read_json(&control, "claim.json")?;
++    let result: ReviewedPromotionResultV1 = read_json(&control, "result.json")?;
++    let preflight: ReviewedPromotionPreflightV1 = read_json(&control, "preflight.json")?;
++    validate_terminal_binding(
++        &auth,
++        &preflight,
++        &claim,
++        &result,
++        &read_relative_regular(&control, "worker-owner", 32, LABEL)?,
++        transaction,
++    )?;
++    if workspace
++        .join(".catdesk/promotion-recovery/promotion-transaction.json")
++        .try_exists()
++        .map_err(|_| "promotion transaction unavailable")?
++    {
++        return Err(format!(
++            "{LABEL} disk transaction requires its original recovery"
++        ));
++    }
++    let attestation = validate_producer_attestation(
++        workspace,
++        &auth.review_session_id,
++        &auth.review_record_id,
++        &auth.review_record_sha256,
++        &auth.snapshot_expected,
++        &auth.candidate_relative_path,
++        &auth.candidate_sha256,
++    )?;
++    if attestation.attestation_digest != auth.build_attestation_sha256
++        || attestation.build_attempt_id != auth.build_attempt_id
++    {
++        return Err(format!("{LABEL} attestation differs"));
++    }
++    let mut handoffs = parent.try_clone(LABEL)?;
++    handoffs.descend_existing("restart-handoff", LABEL)?;
++    let raw = read_optional_relative_regular(&handoffs, "latest.json", 4096, LABEL)?;
++    let saved = prior
++        .filter(|j| j.plan.transaction_id == transaction)
++        .and_then(|j| j.plan.historical_handoff_sha256.as_ref());
++    let raw = match (raw, saved) {
++        (None, Some(sha)) => Some(read_relative_regular(
++            &handoffs,
++            &format!("retired-{sha}.json"),
++            4096,
++            LABEL,
++        )?),
++        (v, _) => v,
++    };
++    let mut handoff: Option<ReloadHandoffStateV1> = None;
++    let mut intent: Option<BackendOnlyIntent> = None;
++    if let Some(raw) = &raw {
++        let value = receipt_json(raw)?;
++        match value["schemaVersion"].as_u64() {
++            Some(1) => {
++                handoff = Some(serde_json::from_value(value).map_err(|_| "legacy receipt invalid")?)
++            }
++            Some(4) => {
++                intent = Some(
++                    serde_json::from_value(value).map_err(|_| "backend intent fields invalid")?,
++                )
++            }
++            _ => return Err("retirement receipt mode is unknown".into()),
++        }
++    }
++    let snapshot = validate_committed_snapshot(workspace, &auth.snapshot_expected)?;
++    let helper = snapshot
++        .entries
++        .iter()
++        .find(|v| v.relative_path == "scripts/catdesk-release-recovery.ps1")
++        .ok_or("reviewed recovery helper is absent from the accepted snapshot")?;
++    let proof = if intent.is_some() {
++        inspect_owners_context(
++            workspace,
++            &auth,
++            handoff.as_ref(),
++            &helper.sha256,
++            false,
++            None,
++            intent.as_ref(),
++        )?
++    } else {
++        inspect_owners(workspace, &auth, handoff.as_ref(), &helper.sha256)?
++    };
++    if let Some(intent) = &intent {
++        validate_failed_intent(workspace, &auth, intent, &proof)?;
++    }
++    if let Some(h) = &handoff {
++        if h.schema_version != 1
++            || h.status != "REPLACEMENT_READY_PENDING_TRANSPORT_RECONNECT"
++            || h.stage != "complete"
++            || h.port != 3200
++            || h.old_pid == 0
++            || h.new_pid.is_none_or(|v| v == 0)
++            || h.rollback_attempted
++            || h.rollback_ready
++            || h.completed_at_unix == 0
++            || h.replacement_sha256 == auth.prior_canonical_sha256
++            || h.replacement_sha256 == auth.candidate_sha256
++            || proof["originalSha256"] != h.replacement_sha256
++            || proof["qualifiedUnix"]
++                .as_u64()
++                .is_none_or(|v| v <= h.completed_at_unix)
++        {
++            return Err(format!(
++                "{LABEL} historical receipt is not superseded by verified stopped authority"
++            ));
++        }
++    }
++    let plan = Plan {
++        schema_version: 1,
++        transaction_id: transaction.into(),
++        prior_sha256: auth.prior_canonical_sha256,
++        candidate_sha256: auth.candidate_sha256,
++        records: hashes,
++        historical_handoff_sha256: raw.as_ref().map(|v| digest(v)),
++        trusted_release_evidence_sha256: digest(&bytes(&proof)?),
++    };
++    if prior.is_some_and(|j| j.plan.transaction_id == transaction && j.plan != plan) {
++        return Err(format!("{LABEL} recovery evidence changed"));
++    }
++    Ok(plan)
++}
++
++#[cfg(windows)]
++pub(crate) fn inspect(workspace: &Path, transaction: &str) -> Result<serde_json::Value, String> {
++    let parent = metadata(workspace)?;
++    let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
++    let previous = journal(&parent)?;
++    if let Some(value) = &previous {
++        if value.phase == "COMPLETED" && value.plan.transaction_id == transaction {
++            verify_archive(&parent, value)?;
++            return Ok(summary(value));
++        }
++    }
++    let plan = inspect_locked(workspace, &parent, transaction, previous.as_ref())?;
++    Ok(summary(&Journal {
++        schema_version: 1,
++        phase: "ELIGIBLE".into(),
++        evidence_sha256: digest(&bytes(&plan)?),
++        plan,
++    }))
++}

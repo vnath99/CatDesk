@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-16T13:59:43.933444+00:00",
+  "scope": "DEVELOPMENT_BRANCH_INTEGRATION_NOT_PROTECTED_RELEASE",
+  "pr": "https://github.com/vnath99/CatDesk/pull/26",
+  "mergedAt": "2026-11-16T13:58:04Z",
+  "featureHead": "e727654e8670530de35f7c97fb6ae48a21d880e1",
+  "developmentBaseBefore": "ab73736028894d1c75d3e4cbb7db72cfd479f414",
+  "developmentMergeCommit": "ef145ec74aa8c9a815115ac90605e6f71dbec2ba",
+  "verifiedRemoteDevelopmentSha": "ef145ec74aa8c9a815115ac90605e6f71dbec2ba",
+  "identicalReviewedHeadAndMergeTree": "a513f20c2ae4ff2f41b64d8b608f01b22cd06dd7",
+  "mergeParentsVerified": true,
+  "canonicalDevelopmentBranch": "codex/web-rollover-oct17",
+  "normalGithubMerge": true,
+  "adminOverrideOrForcePush": false,
+  "mainTargeted": false,
+  "newNativeReviewContract": false,
+  "otherWorktreesUpdated": false,
+  "ownedWorktree": {
+    "branch": "codex/wake-lifecycle-nov14",
+    "fastForwardOnly": true,
+    "treeBytesChangedByFastForward": false
+  },
+  "assessment": {
+    "scope": "Coordinator integration assessment of development isolation/catalog gating, settled read/preview recovery and immutable evidence matching, diagnostic-only native failures, preserved budget readback, exact frozen review/readiness observations, supervisor ownership scope and bounded browser teardown. No new findings. Not an independent full candidate/release review or producer approval.",
+    "sourcePaths": [
+      "catdesk.ps1",
+      "scripts/catdesk-dev-lane.ps1",
+      "scripts/catdesk-doctor.ps1",
+      "scripts/test-catdesk-lifecycle.ps1",
+      "scripts/wake_readiness_visual_probe.py",
+      "src/delegated/autonomous_contract.rs",
+      "src/delegated/autonomy_state.rs",
+      "src/mcp.rs",
+      "src/operator_facade.rs",
+      "src/operator_review_observation.rs",
+      "src/project_mcp_task.rs",
+      "src/project_task_command.rs",
+      "src/project_task_recovery.rs",
+      "tests/test_wake_readiness_probe.py",
+      "wake/src/development_runtime.rs",
+      "wake/src/readiness_probe.rs",
+      "wake/src/runtime.rs",
+      "wake/src/runtime_adapter_teardown_tests.rs"
+    ],
+    "formalIndependentReleaseApproval": false,
+    "formalGithubApprovalFabricated": false
+  },
+  "validation": {
+    "basis": "Retained source-bound evidence; merge tree equals the already qualified feature head exactly.",
+    "newBuilds": 0,
+    "repeatedLiveTests": 0,
+    "repeatedSourceRegressions": 0,
+    "evidenceSha256": {
+      "F7_04_01_BROWSER_TEARDOWN_2026_11_16.json": "e7237e7720117d38d00eda1973b4e4c692be9ab9b30d9b9f6e2a6df9f2b22151",
+      "F7_04_01_DEVELOPMENT_RUNTIME_2026_11_16.json": "8835aa5339cb78859eb7a65f0e406548ce10bf0334ffa23d02109d8cbdd88722",
+      "F7_04_01_FRESH_WAKE_2026_11_16.json": "2bb25d241130a8304c9af2a1e8ae17797b01645b5f827e1c5e25d59a75f982f4",
+      "APPROVED_REVIEW_CONTEXT_OBSERVATION_2026_11_15.json": "2d45305e76eae6de05b2d3d6f80894886d3774865cf7a06083f0b15c9ecf3b70",
+      "BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json": "0828ad72ebe937dd413a3ffd98265bce7b1f7976093958877bcae5b850c24123",
+      "SUPERVISOR_STARTUP_HEALTH_2026_11_15.json": "a3d007d081be37ee8b5cd834b665003951fd625d90045f7992877ee9cbec3ce1",
+      "SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json": "0c02d54f246b7cdbf9a99365dfcf9682f66cd88a6800c8d836a1b67158b8f627",
+      "NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json": "a1c2e36adcc78ed4ccf5c093a7e451570ffcd71ac86543d99f2a9633d38d5988"
+    },
+    "hostedChecksVisible": 0,
+    "hostedCiAcceptanceClaimed": false,
+    "githubAcceptedOrdinaryMergeWithoutOverride": true
+  },
+  "runtime": {
+    "operations": 0,
+    "protectedInstallationOrRollbackSelection": false,
+    "selectedDevelopmentPackageChanged": false,
+    "originalF7ClaimOrReportChanged": false,
+    "d22DeliveryOrFenceChanged": false,
+    "wakeRootOrSignatureOperation": false,
+    "browserTunnelProfileBindingOrNativeSessionOperation": false
+  },
+  "preservedCandidate": {
+    "sourceCommit": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+    "developmentWorkingHealth": "OPERATOR_RECORDED_WITH_EXPLICIT_SCOPE",
+    "exactCandidateFullReviewOrProtectedProducerAuthority": false,
+    "previousVerifiedDevelopmentFallbackRetained": true
+  },
+  "remaining": {
+    "originalF7": "PARTIAL original report retained; its unchanged old artifacts do not contain the correction.",
+    "changedCandidate": "Scoped source patch PASS and working development health do not constitute full candidate/artifact review or protected producer authority.",
+    "originalD22": "UNKNOWN original delivery remains fenced, no replay or invented report.",
+    "protectedWake": "One coherent physical root/current/control/config and current purpose-bound native signing/admission remain unresolved.",
+    "product": "Actual Web-originated edit/verification/Git checkpoint/chat-issued self-Wake, two-project independence and installed recovery/rollover acceptance remain OPEN."
+  },
+  "next": "Keep completed qualification and merge evidence. Publish this substantive integration receipt through the same reviewed feature-branch workflow. Do not run another unchanged test, rebuild, collector or review admission; protected gates stay independent."
+}

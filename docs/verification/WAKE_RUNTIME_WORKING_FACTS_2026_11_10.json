@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-10T08:53:04.519229+00:00",
+  "classification": "SEPARATELY_REVIEWED_UNSIGNED_ACTUAL_WAKE_RUNTIME_LIFECYCLE_FACTS",
+  "sourceCommit": "dba8fc374622c93f9b8ca3744f8ba59f99fb7030",
+  "manifestSha256": "34d668ad6ecfc1d133c38b4c0d981a10e237b16c46ae9b35518999f502ee6ed8",
+  "rawBuildMapSha256": "a78a100af3a6279bb703beccb3f2b08df9d35c4ac96b467760e65d236e0b2344",
+  "generatedDevelopmentMapSha256": "7bc76565121561f08d959679d511a6837e498f3c86d2f287d3e5d2272f3a47de",
+  "artifactTuple": [
+    {
+      "name": "CatDeskWakeHost.exe",
+      "byteLength": 4224512,
+      "sha256": "8cc7dac3793c78cd6d23e826328d40f796f89b6f737c3540e4387f79f10c2df7"
+    },
+    {
+      "name": "CatDeskBinagotchy.exe",
+      "byteLength": 76638208,
+      "sha256": "ed1d49eb32b9e64470a4808dd66dd21af92fe5d2f48a84dd8f16bb8a83224d80"
+    },
+    {
+      "name": "adapter.py",
+      "byteLength": 66268,
+      "sha256": "11ef16ca7d7636c861dc1b6492f5e74ade269c03ed34e77dc4407da9fa606b9b"
+    },
+    {
+      "name": "wake_bridge.py",
+      "byteLength": 299980,
+      "sha256": "5671574c987ca5962c5e181ba7a26a84ba418c8a64a1864134cc58ba6b958a6f"
+    }
+  ],
+  "facts": {
+    "scope": "WAKE_RUNTIME",
+    "observedUtcSeconds": 1794298544,
+    "actualPausedStarts": 2,
+    "ownerVerified": true,
+    "startupVerified": true,
+    "normalStopVerified": true,
+    "originalRawRecordsRewritten": false
+  },
+  "evidenceMethod": "Exact selected code enters HostLease and starts its OwnerProofServer before fresh PAUSED status; OS child identity and bounded foreground receipts independently match two distinct runs.",
+  "independentEngineeringReview": {
+    "actualEvidenceReviewedByNonauthor": true,
+    "canonicalManifestAndClosedReceiptReviewed": true,
+    "materialDefects": 0,
+    "fullIndependentSourceReviewEstablished": false
+  },
+  "limitations": [
+    "No independent OwnerProofServer challenge was sent; current working receipt semantics do not mandate that method.",
+    "Actual execution occurred under the existing development owner, using identical artifact bytes with a different generated MAP.",
+    "This narrow lifecycle receipt does not supply full independent source review, signed approval, broker bootstrap, installed recovery or Web acceptance."
+  ],
+  "authority": {
+    "unsigned": true,
+    "publicKeyEnrolled": false,
+    "signingAuthorityCreated": false,
+    "fullReleaseApprovalEstablished": false,
+    "protectedInstalledPreviousReleaseDeclared": false,
+    "independentOwnerProofChallengePerformed": false,
+    "browserWakeQualified": false,
+    "productionQualified": false
+  },
+  "evidenceSha256": {
+    "derivation": "078b63c55be107f3aca21968de523757c845d2f449bf4710294ad01ff8e0acff",
+    "closedWorkingReceipt": "41d6db6d7a5032facd6347a79dd5978e42dd185568cc37ab8e08883248a7ee04",
+    "originalEvidence": [
+      "7809d41962a5ad8dc850711042cd1a8c1876450f9fcdcc21234f453b86256a00",
+      "e5540ba64ea1610b27ce897e441314184a585229a0b19561b0cc265420e87ed7",
+      "b3d3e098f69615b158ffe2508635c519a4cd63308c8cc27198e0772c79dfb460",
+      "9e8f3d41826a4c6a5189b0c469334c0125fc2ba9d959a9d1f398e3003f2c0890",
+      "18bfac34f89ff244b29f37669e49b92b03be96280514c53dd5f8086d6237de94"
+    ]
+  },
+  "next": "Retain these lifecycle facts for the genuine release reviewer; they do not replace full source review, approved signer enrollment or the protected bootstrap and selection procedure."
+}

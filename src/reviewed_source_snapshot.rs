@@ -393,6 +393,7 @@ fn build_manifest(
     expected: &ReviewedSourceSnapshotExpectedV1,
     entries: Vec<ReviewedSourceEntryV1>,
 ) -> Result<ReviewedSourceSnapshotV1, String> {
+    validate_captured_completion_outputs(&entries, expected)?;
     let authority_digest = authority_digest(expected)?;
     let mut manifest = ReviewedSourceSnapshotV1 {
         schema_version: REVIEWED_SOURCE_SNAPSHOT_SCHEMA_VERSION,
@@ -476,6 +477,7 @@ fn validate_snapshot_directory(
         return Err("reviewed source snapshot authority mismatch".into());
     }
     validate_entries(&manifest.entries)?;
+    validate_captured_completion_outputs(&manifest.entries, &canonical)?;
     if manifest.manifest_digest != manifest_digest(&manifest)?
         || manifest.snapshot_id
             != sha256(format!(
@@ -504,6 +506,26 @@ fn validate_snapshot_directory(
         entries: manifest.entries,
         bytes_root: bytes_guard.path().to_path_buf(),
     })
+}
+
+/// Completion reports outside the build input set retain their separate output
+/// authority. A declared output that is also a build input must describe the
+/// exact captured bytes, both at commit and on every immutable replay.
+fn validate_captured_completion_outputs(
+    entries: &[ReviewedSourceEntryV1],
+    expected: &ReviewedSourceSnapshotExpectedV1,
+) -> Result<(), String> {
+    for output in &expected.current_outputs {
+        if let Some(entry) = entries.iter().find(|entry| {
+            entry
+                .relative_path
+                .eq_ignore_ascii_case(&output.artifact_id)
+        }) && !entry.sha256.eq_ignore_ascii_case(&output.sha256)
+        {
+            return Err("reviewed source snapshot completion bytes mismatch".into());
+        }
+    }
+    Ok(())
 }
 
 fn validate_entries(entries: &[ReviewedSourceEntryV1]) -> Result<(), String> {
@@ -1423,6 +1445,57 @@ mod tests {
                 sha256: None,
             }],
         }
+    }
+
+    #[test]
+    fn source_completion_hash_must_match_captured_bytes() {
+        let root = workspace();
+        let mut authority = expected();
+        authority.completion_artifact_ids = vec!["src/main.rs".into()];
+        authority.current_outputs[0].artifact_id = "src/main.rs".into();
+        authority.current_outputs[0].sha256 = sha256(fs::read(root.join("src/main.rs")).unwrap());
+        authority.baseline_observations[0].artifact_id = "src/main.rs".into();
+        fs::write(
+            root.join("src/main.rs"),
+            b"// changed after output measurement\n",
+        )
+        .unwrap();
+        assert!(create_or_validate_reviewed_source_snapshot(&root, &authority).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn source_completion_hash_is_enforced_on_replay_with_consistent_manifest_digests() {
+        let root = workspace();
+        let mut authority = expected();
+        authority.completion_artifact_ids = vec!["src/main.rs".into()];
+        authority.current_outputs[0].artifact_id = "src/main.rs".into();
+        authority.current_outputs[0].sha256 = sha256(fs::read(root.join("src/main.rs")).unwrap());
+        authority.baseline_observations[0].artifact_id = "src/main.rs".into();
+        let snapshot = create_or_validate_reviewed_source_snapshot(&root, &authority).unwrap();
+        // Mutable workspace edits must not invalidate the original immutable snapshot.
+        fs::write(root.join("src/main.rs"), b"// live source advanced\n").unwrap();
+        assert!(validate_committed_snapshot(&root, &authority).is_ok());
+        let manifest_path = snapshot.bytes_root.parent().unwrap().join("manifest.json");
+        let mut manifest: ReviewedSourceSnapshotV1 =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        let changed = b"// different snapshot content\n";
+        fs::write(snapshot.bytes_root.join("src/main.rs"), changed).unwrap();
+        let entry = manifest
+            .entries
+            .iter_mut()
+            .find(|entry| entry.relative_path == "src/main.rs")
+            .unwrap();
+        entry.sha256 = sha256(changed);
+        entry.byte_length = changed.len() as u64;
+        manifest.manifest_digest = manifest_digest(&manifest).unwrap();
+        manifest.snapshot_id = sha256(format!(
+            "{SNAPSHOT_ID_DOMAIN}|{}|{}",
+            manifest.authority_digest, manifest.manifest_digest
+        ));
+        fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(validate_committed_snapshot(&root, &authority).is_err());
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

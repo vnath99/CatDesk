@@ -1,0 +1,65 @@
+{
+  "recurringAutomationEnabled": false,
+  "exactSourceCi": "UNVERIFIED",
+  "twoIndependentWebCodingAcceptance": "OPEN",
+  "sourceWorkingPins": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "c5d7ec05c14a770a5f3a4db4cac3c82f6ea6dae6da8054f6fdee32dc6717ef59"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "bdf973fca4129857e39b0c78f707258195fc3c2d0c220bf35b64b73ee00b2222"
+    }
+  ],
+  "regression": {
+    "initialTestFixtureErrorPreservedAndCorrected": true,
+    "productionCodeUnchangedDuringRed": true,
+    "redErrors": 0,
+    "wrongHostChatQueryFragmentAndCredentialsCovered": true,
+    "equivalentRoutesBothDirectionsCovered": true,
+    "redTestsRun": 7,
+    "redFailures": 11,
+    "redActualExitCode": 1
+  },
+  "sourceParent": "9c1ace613a8949be6849e2b028bd069774b60ecf",
+  "sourceParentRemoteShaVerified": true,
+  "change": {
+    "noBindingChanges": true,
+    "nativeCasStillBindsExactObservedDocument": true,
+    "capturesObservedUrlBeforeEdit": true,
+    "usesExistingConversationIdentityPolicy": true,
+    "homeRolloverRulesPreserved": true,
+    "routeChangeAfterObservationRefused": true,
+    "noRetryAfterUncertainEdit": true,
+    "invalidOrDifferentChatRefusedBeforeEvaluation": true
+  },
+  "productionPromotion": false,
+  "addressedFinding": {
+    "problem": "Native editor CAS rejected equivalent validated conversation routes.",
+    "path": "scripts/wake_bridge.py",
+    "originalLine": 2402,
+    "review": "C252"
+  },
+  "branch": "codex/web-rollover-oct17",
+  "qualification": {
+    "rolloverEditorPassed": 78,
+    "terminationFailed": false,
+    "errors": 0,
+    "resultSha256": "802d75c376c379b868e96ce2d2e8e4b3007555ca53572d4968989b308751b806",
+    "containmentSha256": "64d903d3909d663d621232d5f5fa23c31ecf2daa2c08d76267ece01af09d81d0",
+    "passed": 236,
+    "failed": 0,
+    "adapterPassed": 32,
+    "ownerTimedOut": false,
+    "bridgePassed": 126,
+    "elapsedSeconds": 184.01600000006147
+  },
+  "checkpoint": "C253",
+  "classification": "SOURCE_QUALIFIED_CORRECTION_PENDING_INDEPENDENT_REVIEW_AND_DEVELOPMENT_UPDATE",
+  "rolloverCanariesReplayed": 0,
+  "milestoneComplete": false,
+  "selectedDevelopmentPackageChanged": false,
+  "date": "2026-10-28",
+  "independentReview": "PENDING"
+}

@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "purpose": "PARTIAL_SOURCE_REVIEW_ONLY_NOT_RELEASE_AUTHORITY",
+  "batchId": "b007",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "patchBytes": 54572,
+  "sourcePaths": [
+    "scripts/catdesk-doctor.ps1",
+    "scripts/promote-reviewed-catdesk-build.ps1",
+    "scripts/setup-secure-mcp.ps1",
+    "scripts/start-catdesk-stack.ps1",
+    "scripts/test-backend-only-native-capability.ps1",
+    "scripts/test-catdesk-autostart-supervisor.ps1"
+  ],
+  "units": [
+    {
+      "unitId": "u003",
+      "path": "scripts/catdesk-doctor.ps1",
+      "skipLines": 0,
+      "takeLines": 217,
+      "bytes": 19921,
+      "sha256": "24323db3501c7580cbdc1396d6768203e5f0b9b7be618373521a65d88d8e47d1",
+      "baseBlob": null,
+      "targetBlob": "8e849888f819aa566cd317781d8cd2c4cb8acca1"
+    },
+    {
+      "unitId": "u004",
+      "path": "scripts/catdesk-doctor.ps1",
+      "skipLines": 217,
+      "takeLines": 100,
+      "bytes": 8329,
+      "sha256": "c17cfe28487aa43774ba76495b035cb1b958ea3a626c14a9c365c429892bcbf0",
+      "baseBlob": null,
+      "targetBlob": "8e849888f819aa566cd317781d8cd2c4cb8acca1"
+    },
+    {
+      "unitId": "u005",
+      "path": "scripts/promote-reviewed-catdesk-build.ps1",
+      "skipLines": 0,
+      "takeLines": 22,
+      "bytes": 2000,
+      "sha256": "fd97f44ac5925b9123a094e9d2ad3481408ccb9c8ace040d5b86c3b048f00f77",
+      "baseBlob": "beec5e3d460ebdbe413a4e40feab470f1c3471a6",
+      "targetBlob": "38b312b85a81957852e5e48e7b5c87cb130f3db6"
+    },
+    {
+      "unitId": "u006",
+      "path": "scripts/setup-secure-mcp.ps1",
+      "skipLines": 0,
+      "takeLines": 116,
+      "bytes": 7763,
+      "sha256": "34aadab41e8c405e947e43c7ca758450a3df748aa3bce36a5ff10d4a902a3b29",
+      "baseBlob": "de0c6fdeaf2285aae46fce6a0eb6e4c3f0754ee9",
+      "targetBlob": "4afc1afb9b539dfd914f906cb0f29352cd69a308"
+    },
+    {
+      "unitId": "u007",
+      "path": "scripts/start-catdesk-stack.ps1",
+      "skipLines": 0,
+      "takeLines": 144,
+      "bytes": 9644,
+      "sha256": "d7be5f498d13cc9bd8248b88100fdf2b9eb31e66f8926d78c346ba846da1cdfc",
+      "baseBlob": "8f4e08f978c2e4ed96989da7993bfd3a87f0debd",
+      "targetBlob": "3a6b958b04b394d7731c0d3920f16bec952d9bb8"
+    },
+    {
+      "unitId": "u008",
+      "path": "scripts/test-backend-only-native-capability.ps1",
+      "skipLines": 0,
+      "takeLines": 29,
+      "bytes": 1599,
+      "sha256": "a5472d43443473d7b630f76e437e0c9aac3315b38998f581754172839ea84e19",
+      "baseBlob": null,
+      "targetBlob": "1ba610bc295c71e989351ee5c8790ed4e7ac329a"
+    },
+    {
+      "unitId": "u009",
+      "path": "scripts/test-catdesk-autostart-supervisor.ps1",
+      "skipLines": 0,
+      "takeLines": 57,
+      "bytes": 5316,
+      "sha256": "eadf30f4f38929813478c3ffaa259224d9b8b27f1b8a7d962d5e07e52e6bf1f6",
+      "baseBlob": "82bcfbf766c91b43aabbf6ca368e278f2b0a4602",
+      "targetBlob": "c6018eea45cd434efa243249d85d0ffc617e5fd8"
+    }
+  ],
+  "cumulativeSourceAccepted": false,
+  "requiredReplyMarker": "NOV01_GIT_SOURCE_BATCH_ONLY",
+  "requiredReplyFields": [
+    "marker",
+    "sourceCommit",
+    "batchId",
+    "verdict",
+    "findings",
+    "inspectedUnitIds",
+    "inspectedPaths",
+    "limitations",
+    "cumulativeSourceAccepted"
+  ],
+  "permittedVerdicts": [
+    "REVIEWED_BATCH",
+    "FAIL",
+    "INCONCLUSIVE"
+  ]
+}

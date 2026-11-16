@@ -1,0 +1,237 @@
+{
+  "recordedUtc": "2026-10-23T12:53:51.1194821Z",
+  "localDate": "2026-10-23",
+  "task": "C28-REGISTERED-ESCAPED-HANDOFF-INTERRUPTION-RECOVERY",
+  "classification": "ACTUAL_SELECTED_DEVELOPMENT_REGISTERED_PRE_SEND_CRASH_RECOVERY",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "6945fbee84a618d86617312ab3f8ae1c84c598a2",
+  "qualifiedSource": "1fe093686f950786d54fbc71451770a7be57677e",
+  "codeCommit": "6dab09fcfb0c2e1c51841dc087e0945c229c78d1",
+  "sourceFiles": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "bd3331a475096efa392eabc14eb35a49301790c735cb16d39238ae66f552ad00"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "481433742517b3fc9a305ce4f4481e7d5cb1020d4fe6f56aaddb51f4e1085447"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+    },
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+    },
+    {
+      "path": "src/project_task_command.rs",
+      "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "sha256": "34c2b623f54c6ea3cb76ac677b391f19d9b302884c25c84301975a46d9ded411"
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "sha256": "bebd6d8fb4b6a6e3ea2a17944c82e6dfdc967dfa6c5b0d8683375abb4cc8b02c"
+    },
+    {
+      "path": "wake/adapter.py",
+      "sha256": "854dde9301d98466f1c6fd7b34d46348d0a44e7ae0b2903a31033b8552adc809"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "7f117ae02fa1519017f9fd24b85d073f898ee2283e96561cc6fa35fd309523bd"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "7e3688b46ce78aaf568624b06ea8be889c79465936d1d70f3f21ad8c0d0b6cb4"
+    }
+  ],
+  "selectedPackage": "1.0.0-dev.85-f6688c48555f403f479c85cd9f97d0fd1663fc71dd086b52754cee91afc115de",
+  "runtimeSourceChanges": 0,
+  "sourceTestProofReused": 156,
+  "preparationStages": [
+    {
+      "classification": "BOUNDED_FRESH_RECOVERY_TASK_DELIVERY",
+      "failure": null,
+      "startedUtc": "2026-10-23T12:26:55.2676352Z",
+      "finishedUtc": "2026-10-23T12:27:56.4693832Z",
+      "recordsChecked": 183,
+      "unexpectedChanges": 0,
+      "ownedProcesses": 0
+    },
+    {
+      "classification": "NEW_TASK_BOUND_RECOVERY_HANDOFF_QUEUED",
+      "failure": null,
+      "startedUtc": "2026-10-23T12:30:23.462842Z",
+      "finishedUtc": "2026-10-23T12:30:59.8348262Z",
+      "recordsChecked": 186,
+      "unexpectedChanges": 0,
+      "ownedProcesses": 0
+    },
+    {
+      "classification": "BOUNDED_NEW_RECOVERY_HANDOFF_DELIVERY",
+      "failure": null,
+      "startedUtc": "2026-10-23T12:32:56.054205Z",
+      "finishedUtc": "2026-10-23T12:34:03.6723292Z",
+      "recordsChecked": 188,
+      "unexpectedChanges": 0,
+      "ownedProcesses": 0
+    },
+    {
+      "classification": "SOURCE_GENERATED_SCHEMA2_HANDOFF_COLLECTED",
+      "failure": null,
+      "startedUtc": "2026-10-23T12:36:05.0011379Z",
+      "finishedUtc": "2026-10-23T12:36:41.2284457Z",
+      "recordsChecked": 191,
+      "ownedProcesses": 0
+    }
+  ],
+  "interruption": {
+    "startedUtc": "2026-10-23T12:38:57.6178279Z",
+    "bindingsChanged": false,
+    "outerMaximumSeconds": 180,
+    "ownedProcesses": 0,
+    "recordsChecked": 192,
+    "checkpoint": "SUBMITTING_DRAFT_READY",
+    "ownedRootExited": true,
+    "ownedRootTerminatedBeforeSend": true,
+    "unexpectedChanges": 0,
+    "messagesSent": 0,
+    "finishedUtc": "2026-10-23T12:40:02.5782755Z",
+    "pinnedExactIdentity": true
+  },
+  "readOnlyDraftInspection": {
+    "startedUtc": "2026-10-23T12:46:34.380931Z",
+    "messageSha256": "a6c5c4d653d45e6b992857ee48a9d71a0d9126823dd14427d7e35d33bb7d4b2c",
+    "classification": "EXACT_OWNED",
+    "messagesSent": 0,
+    "changedRecords": 0,
+    "recordsChecked": 192,
+    "ownedProcesses": 0,
+    "actualBytes": 4379,
+    "finishedUtc": "2026-10-23T12:46:47.5467885Z",
+    "draftCleared": false
+  },
+  "recovery": {
+    "ownedProcesses": 0,
+    "bootstrapMessages": 1,
+    "exactUserReceipt": true,
+    "sourceSnapshotVerifiedBeforeCommit": true,
+    "unexpectedNewRecords": 0,
+    "allowedNewRecords": 2,
+    "retyping": 0,
+    "blindResends": 0,
+    "unexpectedChanges": 0,
+    "bootstrapAssistantCompleted": true,
+    "classification": "BOUNDED_DRAFT_READY_RESTART_AND_FIRST_SEND",
+    "allowedChangedRecords": 5,
+    "startedUtc": "2026-10-23T12:47:02.9952907Z",
+    "sourceGeneration": 2,
+    "previousCompletedRecordByteExact": true,
+    "otherEightPairsAndHistoryPreserved": true,
+    "recordsChecked": 192,
+    "boundGeneration": 3,
+    "outerMaximumSeconds": 180,
+    "elapsedSeconds": 71.0482474,
+    "actualIssuedUrlVerified": true,
+    "finishedUtc": "2026-10-23T12:48:14.0435381Z",
+    "existingGuardedPairedCommit": true
+  },
+  "restoredPolicy": {
+    "automaticObservationEnabled": false,
+    "browserStarted": false,
+    "configuredBudgetTokens": 96000,
+    "onlyControlledProjectPolicyChanged": true,
+    "bindingsChanged": false,
+    "automaticRolloverEnabled": false,
+    "atUtc": "2026-10-23T12:48:21.7511443Z",
+    "rolloverTriggerTokens": 72000
+  },
+  "continuation": {
+    "ownedProcesses": 0,
+    "timer": "COMPLETE",
+    "projectWorkPerformed": false,
+    "outerMaximumSeconds": 180,
+    "taskIdEchoObserved": false,
+    "assistantReportedHttpStatus": 429,
+    "hostTreeExitProved": true,
+    "eventBoundBodyVerified": true,
+    "unexpectedChanges": 0,
+    "responseCharacters": 1319,
+    "bodyReadFinishedUtc": "2026-10-23T12:50:54.984562Z",
+    "delivery": "SENT",
+    "startedUtc": "2026-10-23T12:48:35.5772663Z",
+    "hostMaximumSeconds": 130,
+    "newMessages": 1,
+    "unexpectedNewRecords": 0,
+    "bodyReadStartedUtc": "2026-10-23T12:50:19.9865993Z",
+    "projectMarkerObserved": true,
+    "nativeTaskCompletionClaimed": false,
+    "intentObserved": true,
+    "assistantReportedReadOnlyMcpAttempts": 3,
+    "elapsedSeconds": 88.3711123,
+    "checkpointPendingObserved": true,
+    "finishedUtc": "2026-10-23T12:50:03.9483786Z",
+    "responseSha256": "72d55b347bdb05ec3bc8a07ba4dbfc6a8959747240214e36ba7f15a4c28fac2c",
+    "receiptAndIdentityProofIsNotUsefulCodingProof": true
+  },
+  "freshProcessReadback": {
+    "oldUnknownSubmissionJournalsPreserved": true,
+    "pairedGeneration": 3,
+    "contextHistory": 3,
+    "recordsChecked": 197,
+    "continuationReceiptProved": true,
+    "pairedProjects": 9,
+    "allOriginalFiveBindingsPreserved": true,
+    "ownedProcesses": 0,
+    "workspaceCanaryUnchanged": true,
+    "finishedUtc": "2026-10-23T12:51:47.3137483Z",
+    "changedRecords": 0,
+    "registryPredecessors": 2,
+    "startedUtc": "2026-10-23T12:51:44.3398841Z"
+  },
+  "dependencies": {
+    "directConnectorCheckUtc": "2026-10-23T12:48:01.3593979Z",
+    "directConnectorHttpStatus": 429,
+    "code": "UNAVAILABLE",
+    "settingsOrTunnelChanged": false,
+    "assistantReportedAdditionalAttempts": 3,
+    "assistantRequestTimesNotIndependentlyKnown": true,
+    "directRetries": 0,
+    "directConnectorCalls": 1,
+    "ci": "UNVERIFIED"
+  },
+  "cleanup": {
+    "recurringStarts": 0,
+    "productionChanged": false,
+    "controls": "BOTH_STOPPED",
+    "completedCanaryReplayed": false,
+    "ownedProcesses": 0,
+    "unknownDraftsCleared": 0,
+    "nativeSessionActions": 0,
+    "allHandlesTerminal": true,
+    "authenticationProfile": "EXISTING_REUSED"
+  },
+  "acceptance": {
+    "C": "OPEN_BLOCKED_WEB_PROJECT_USEFUL_SIBLING_PROGRESS",
+    "J": "PASS_BOUNDED_OWNED_TREE_CLEANUP",
+    "protectedInstalled": "NOT_ACCEPTED",
+    "I": "PASS_SELECTED_PENDING_DRAFT_AND_COMPLETED_FRESH_PROCESS_REOPEN_PAIRED_COMMIT_CRASH_OPEN",
+    "milestone": "PARTIAL",
+    "automaticMonitoring": "NOT_YET_CURRENT_LIVE_QUALIFIED",
+    "unattended": "NOT_ACTIVATED",
+    "H": "PASS_SELECTED_REGISTERED_DRAFT_READY_INTERRUPTION_EXACT_RECOVERY_ADDITIONAL_PHASES_OPEN",
+    "F": "PASS_ADDITIONAL_REGISTERED_CONTROLLED_URL_BINDING_AND_CONTINUATION_RECEIPT",
+    "B": "OPEN_ACTUAL_CONCURRENT_WEB_MCP_CODING"
+  },
+  "nextExecutableTask": "Qualify the existing context-monitor driver in a bounded scoped foreground run without new messages or binding changes, then remaining paired-commit recovery phases. Actual Web MCP coding requires the connector dependency to recover. Never replay completed C28 or held legacy operations.",
+  "operatorAction": "NONE_FOR_NEXT_ELIGIBLE_LOCAL_SOURCE_OR_CONTROLLED_MONITOR_WORK",
+  "privacy": "PRIVATE_URLS_IDS_MACHINE_PATHS_TRANSCRIPTS_AND_PROFILES_OMITTED"
+}

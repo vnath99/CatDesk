@@ -62,6 +62,9 @@ try {
     $malformedTask = $base.Clone(); $malformedTask.AutostartStatus = { param($root) 'AUTOSTART_CONFLICT' }
     $taskFailure = & $checker -Workspace $workspace -ExpectedWakeTargetSha256 $wakeHash -TestSeams $malformedTask | ConvertFrom-Json
     Require ((Gate $taskFailure 'AUTOSTART_OWNERSHIP') -eq 'FAIL') 'autostart mismatch fails closed'
+    $stoppedMonitor = $base.Clone(); $stoppedMonitor.AutostartStatus = { param($root) 'AUTOSTART_REGISTERED_MONITOR_STOPPED' }
+    $monitorFailure = & $checker -Workspace $workspace -ExpectedWakeTargetSha256 $wakeHash -TestSeams $stoppedMonitor | ConvertFrom-Json
+    Require ($monitorFailure.overallState -eq 'FAIL' -and (Gate $monitorFailure 'AUTOSTART_OWNERSHIP') -eq 'FAIL') 'registered persistence without a running monitor cannot qualify unattended production acceptance'
     $nonPersistent = $base.Clone(); $nonPersistent.PersistentAutostartSurface = { param($root) $false }
     $supervisorFailure = & $checker -Workspace $workspace -ExpectedWakeTargetSha256 $wakeHash -TestSeams $nonPersistent | ConvertFrom-Json
     Require ((Gate $supervisorFailure 'PERSISTENT_SUPERVISOR') -eq 'FAIL') 'non-persistent supervisor fails preflight'

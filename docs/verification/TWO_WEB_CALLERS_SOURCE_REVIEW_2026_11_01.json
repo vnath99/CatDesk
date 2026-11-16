@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T06:42:41.471281+00:00",
+  "classification": "TWO_DISTINCT_REGISTERED_WEB_CONVERSATIONS_EXECUTED_READONLY_PUBLIC_SOURCE_CALLS",
+  "actualRegisteredWebCallers": 2,
+  "differentCurrentConversationTargets": true,
+  "verifiedGenerationEach": 2,
+  "evidence": "Exact project-specific USER delivery and assistant response receipts, plus command logs correlated to each frozen task and bounded time window.",
+  "reviewSourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "newCarrierReviews": [
+    {
+      "sourcePath": "src/web_work.rs",
+      "expectedGitPatchBytes": 24445,
+      "verdict": "REVIEWED_PARTIAL",
+      "exactUserDeliveryReceipt": true,
+      "completedResponseVerified": true,
+      "responseSha256": "72d41a55263ecf4baf7eb8de6a123f3bbcaf0e0e45bd61e3e4d1a327c8716df9",
+      "matchingServerCommandLogs": [
+        "ccb763afdab50d9aaba257908ced544efa2206ee83b29b9546472f27e590cdd4"
+      ],
+      "nativeTasksStarted": 0,
+      "sourceAccepted": false
+    },
+    {
+      "sourcePath": "src/operator_web_rollover.rs",
+      "expectedGitPatchBytes": 40264,
+      "verdict": "INCONCLUSIVE",
+      "exactUserDeliveryReceipt": true,
+      "completedResponseVerified": true,
+      "responseSha256": "792ff7a34459589d725c0a2f0dd1612116b14d5acc1ad4305c8c605da47cebca",
+      "matchingServerCommandLogs": [
+        "fd0612ac546908b3fe3e552042fc6bd704a857e6d39d57e3d10debb67795069d"
+      ],
+      "nativeTasksStarted": 0,
+      "sourceAccepted": false
+    }
+  ],
+  "newSourceAcceptance": false,
+  "perProjectWorkspaceCodingAcceptance": false,
+  "nativeExecutionAcceptance": false,
+  "independence": {
+    "existingOpenOtherProjectWebHoldsPreserved": true,
+    "nativeSessionsInterrupted": false,
+    "wrongWorkspaceWriteAttempted": false,
+    "blockedNativeReleaseDidNotPreventReadOnlyWork": true
+  },
+  "inputBlocker": {
+    "sourcePath": "src/operator_web_rollover.rs",
+    "wholePatchBytes": 40264,
+    "outcome": "ACTUAL_WEB_TOOL_OUTPUT_TRUNCATED",
+    "requestResent": false,
+    "existingSmallUnitsPrepared": 3,
+    "maximumPartBytes": 19983,
+    "smallPartLiveReadQualified": false,
+    "nextAction": "Publish and read one exact small Git blob, verify its bytes, then use the changed input method for the missing source coverage."
+  },
+  "remaining": [
+    "Partial public-source access does not establish authenticated task execution against separate assigned project directories.",
+    "Cumulative source review/acknowledgment/producer promotion and two-project edit/native verification remain open.",
+    "No completed canary, uncertain send or held C49 request was replayed."
+  ],
+  "operatorActionRequired": false,
+  "fullMultiProjectAcceptance": false
+}

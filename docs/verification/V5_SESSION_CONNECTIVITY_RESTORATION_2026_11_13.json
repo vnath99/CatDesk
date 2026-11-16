@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-14T03:05:41.424978+00:00",
+  "userFacingDateZone": "America/New_York",
+  "documentationParent": "928cc08a8d94fed73662e4d47316cad73b32301b",
+  "trigger": "User-reported INVALID_ARGUMENT: McpServerError: Session terminated",
+  "scope": "Restore existing production backend and retained official Secure MCP owner; no installation or task replay",
+  "initialEvidence": {
+    "publicDiagnosis": "DEGRADED",
+    "primaryLayer": "LOCAL_DAEMON",
+    "backendListenerCount": 0,
+    "canonicalDaemonCount": 0,
+    "tunnelClientCount": 0,
+    "officialRuntimeGate": "RUNTIME_STATUS_NOT_READY",
+    "canonicalReleaseGate": "READY",
+    "localConfigurationGate": "READY",
+    "existingBearerAndRuntimeKeyReferencesAvailable": true,
+    "autostartStatus": "AUTOSTART_REGISTERED_MONITOR_STOPPED"
+  },
+  "failureAttribution": {
+    "confirmedFaultedLayers": [
+      "LOCAL_DAEMON_STOPPED",
+      "OFFICIAL_RUNTIME_STOPPED"
+    ],
+    "exactUpstreamSessionTerminationReasonEstablished": false,
+    "originalErrorCorrelationIdSupplied": false,
+    "lastRecordedBoundedQualificationExplicitlyStoppedBothLayers": true,
+    "inference": "The stopped serving layers are sufficient to explain unavailability. Retained cleanup evidence and an absent monitor explain why prior bounded qualification did not imply ongoing serving. This does not prove the exact upstream session error or original historical shutdown cause.",
+    "authDefectOrMissingToolNotInferredFromError": true,
+    "wakeRootComparisonDependencyForThisRestoration": false
+  },
+  "recoveryActions": [
+    {
+      "owner": "Existing public catdesk.ps1 lifecycle",
+      "action": "start -BackendOnly",
+      "result": "LOCAL_BACKEND_READY",
+      "canonicalSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+      "wakeOrGuiStarted": false
+    },
+    {
+      "owner": "Existing Secure MCP runtimes manager",
+      "action": "Connect the exact retained alias/profile/tunnel with qualified child-only bearer forwarding",
+      "result": "EXISTING_PRODUCTION_OWNER_READY",
+      "profileUnchanged": true,
+      "newTunnelCount": 0,
+      "persistentAuthenticationChanges": 0
+    }
+  ],
+  "verification": {
+    "authenticatedMcpHttpStatus": 200,
+    "missingBearerHttpStatus": 401,
+    "incorrectBearerHttpStatus": 401,
+    "localToolsListCount": 102,
+    "localNamedTaskDispatcherPublished": true,
+    "visibleV5ClientMetadataToolCount": 101,
+    "namedTaskDispatcherVisibleInThisClientMetadata": false,
+    "toolCatalogScopesKeptDistinct": true,
+    "canonicalServingParity": "MATCH",
+    "backendReady": true,
+    "officialHealthAndReadinessVerified": true,
+    "publicDiagnosisAfter": "HEALTHY",
+    "connector": {
+      "freshReadOnlyTool": "catdesk_transport_status",
+      "attempts": 1,
+      "isError": false,
+      "structuredResponseReturned": true,
+      "localMcpAuth": "BEARER_REQUIRED",
+      "configuredTransportHealth": "CONFIGURED_UNVERIFIED",
+      "statusToolRemoteCheckEnabled": false,
+      "successfulCaller": "CURRENT_CODEX_CONNECTED_V5_TOOL_SESSION",
+      "affectedChatGptWebCallerVerified": false,
+      "upstream429Observed": false,
+      "sessionTerminatedObserved": false
+    },
+    "wakeHostLivenessNotInferredFromOldStatusFile": true
+  },
+  "persistenceAndOwnership": {
+    "productionServingLeftRunning": true,
+    "backendOwnerImageAndCreationInstanceVerified": true,
+    "officialOwnerAliasProfileAndTunnelVerified": true,
+    "tunnelClientProcessCount": 1,
+    "wakeHostProcessCount": 0,
+    "temporaryBrowsersOrWakeProcessesStarted": 0,
+    "recurringAutomationEnabled": false,
+    "autostartMonitorObserved": "REGISTERED_BUT_STOPPED",
+    "stableSupervisorStatus": {
+      "action": "supervisor_status",
+      "activationBlocked": "SUPERVISOR_ROOT_UNAVAILABLE",
+      "frontDoor3201": "SUPERVISOR_3201_PROBE_UNAVAILABLE",
+      "readiness": "SUPERVISOR_ROOT_UNAVAILABLE",
+      "reviewedSupervisorImage": "SUPERVISOR_LIFECYCLE_READY",
+      "startup": "SUPERVISOR_LIFECYCLE_READY",
+      "startupDefinition": "SUPERVISOR_STARTUP_DEFINITION_ABSENT",
+      "startupPolicy": "SUPERVISOR_LIFECYCLE_READY"
+    },
+    "stableSupervisorPreflight": "SUPERVISOR_ROOT_UNAVAILABLE",
+    "unattendedFailureOrRebootRecoveryQualified": false,
+    "normalProductionOwnersNotTerminatedAsTestCleanup": true,
+    "codexLauncherLifetimeIndependenceQualified": false
+  },
+  "preservation": {
+    "pinsChecked": 1685,
+    "pinMismatches": 0,
+    "pinSetUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "missingSeedPathsUnchanged": true,
+    "passed": true
+  },
+  "releaseAndTaskChanges": {
+    "newCandidateBuiltOrPromoted": false,
+    "fingerprintsRewritten": false,
+    "projectBindingsOrGrantsChanged": false,
+    "historicalTasksOrMessagesReplayed": false,
+    "nativeProjectExecution": false,
+    "sourceCodeChanged": false
+  },
+  "acceptance": {
+    "installedLocalAuthAndOfficialPipeline": "LIVE_ACCEPTED_CURRENT_RESTORATION",
+    "publishedV5ConnectorFromCurrentSession": "LIVE_ACCEPTED",
+    "affectedChatGptWebFreshCall": "PENDING_ONE_READ_ONLY_CLIENT_CHECK",
+    "unattendedSupervisor": "BLOCKED_FIXED_ROOT_UNAVAILABLE_NO_ACTIVATION_ATTEMPT",
+    "fullDirectWebEditCheckpointSelfWake": "NOT_TESTED_BY_THIS_CONNECTIVITY_RECOVERY"
+  },
+  "nextAction": "One fresh catdesk_transport_status call from the affected ChatGPT Web conversation, with no historical task retry or connection-setting changes. Independently qualify the existing supervisor ownership/policy before unattended recovery is claimed.",
+  "proofHashes": {
+    "connector-result.raw-private.json": "c5b0c1a3f18f4e2ec96ed002ab68d175f41ee0d61b47f5cbc3bf54bcc7b86616",
+    "diagnose-after.private.json": "9287a4008c4e0decd651554222373322b5ab2da834c97c7b07f844d8ad89d677",
+    "diagnose-before.private.json": "83706361d9ebef8fca88c8e0ef6df14e7c2eaf3aca2cf600d8dfddbd0387bbf0",
+    "installed-health-after.private.json": "16968d5980bedb1eeab748a41575a1ad9463a8d7c76ff83e1831b81ca48087a0",
+    "owner-inventory-before.private.json": "8ffea98e07446b064cf808d829950a4e2b1acec8afebdff5a1101aa524a1ef11",
+    "preservation.private.json": "8846b616f8b899fcf53cc06e135a9151a8a7a5ae79701a1556a344e4b8b538af",
+    "process-ownership-after.private.json": "f61edfbaeedacf76e5916102dfccbe66212f8b6556113ed63fa737b7afada2fc",
+    "public-start.private.json": "a608861f37786f6db82552dbcfcac597ea0f1d1c091fce9f082aff524bba28ac",
+    "restore-existing-official-owner-once.ps1": "d6bfbfdaebd3883383b8a4eb4ccb73d8ebc0655365cb32433239ba15e2945ac2",
+    "restore-official-result.private.json": "d7e1a3124e687c71fda6af7eab4b53e67f6aeedcf2c90f4ef7837a2f40ea43c0",
+    "stable-supervisor-preflight.private.json": "9e2b1ffabedc12059d09f713a8fdd4eb4d48a433c483223ff698b2384299b241",
+    "stable-supervisor-status.private.json": "97a84c74751b4f86ac03a15b4c7b7cd1835d397a6c1680db7ea23add1d37d20c"
+  }
+}

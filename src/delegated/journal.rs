@@ -448,7 +448,7 @@ impl DelegatedJournal {
         read_json(&self.run_dir(run_id)?.join("patch_applications.json"))
     }
 
-    fn run_dir(&self, run_id: &RunId) -> Result<PathBuf, JournalError> {
+    pub(crate) fn run_dir(&self, run_id: &RunId) -> Result<PathBuf, JournalError> {
         Ok(self.root.join(safe_run_segment(run_id)?))
     }
 
