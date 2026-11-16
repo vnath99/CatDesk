@@ -727,6 +727,17 @@ pub struct AutonomousSessionLockV1 {
 }
 
 impl AutonomousStateStoreV1 {
+    /// Inspection must not manufacture a missing session store.
+    pub fn open_existing(root: impl AsRef<Path>) -> Result<Self, AutonomyStateError> {
+        let root = root.as_ref().to_path_buf();
+        if !root.is_dir() {
+            return Err(AutonomyStateError::Validation(
+                "existing autonomous state store required".into(),
+            ));
+        }
+        Ok(Self { root })
+    }
+
     pub fn open(root: impl AsRef<Path>) -> Result<Self, AutonomyStateError> {
         let root = root.as_ref().to_path_buf();
         fs::create_dir_all(&root).map_err(io_error)?;
