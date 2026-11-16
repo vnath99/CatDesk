@@ -129,3 +129,7 @@ Evidence/background: [original current architecture](../orchestrator/CANONICAL_C
 ## 2026-11-16T02:38:42.136005+00:00 — Existing startup owner qualification
 
 The actual installed health-cycle qualification denied all recovery calls in its child, allowed only one genuine status read and released real singleton guards on exit. It preserved 1,724 state pins and the startup registration. The child module-path source correction changes no credentials, producer authority, release selection, binding or replay fence. The historical reason the monitor stopped is not established by this reproduced launch-environment defect. [Installed and source evidence](../verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).
+
+## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
+
+Known full-stack and backend-only commands are compared exactly, including existing principal/settings constraints. A mode flag is not authority to overwrite, widen or remove another scope; mixed records and surviving unregistered monitor signals are refused. This changes no protected release, signing, browser, project or unknown-operation permissions. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).

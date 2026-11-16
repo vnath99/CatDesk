@@ -294,3 +294,11 @@ Evidence: [docs/verification/NATIVE_C1_RESPONSE_READBACK_2026_11_15.json](docs/v
 Agent: Codex. Source: 199ff74e5bbe3a181bd18a900197cf0e5c84de81. Outcome: partial. Installed doctor distinguishes live daemon from stopped registered monitor; one recovery-denied health cycle passes and cleans up; cross-edition child module-path launch defect fixed in source only. Next: Qualify backend-only recovery and monitor stop/cleanup through the existing disposable-state test path before any persistent activation; preserve independent review and migration gates..
 
 Evidence: [docs/verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json](docs/verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json); command: Supported read-only installed status and one bounded backend-only monitor health cycle; lifecycle and doctor regressions; exit 0; SHA-256 a3d007d081be37ee8b5cd834b665003951fd625d90045f7992877ee9cbec3ce1.
+
+<!-- catdesk-activity:nov15-backend-only-autostart-scope sha256:8c5ac9ab607dcac363be7fdcbf7b266a01d6656023cff20870a81c7d9fb34361 -->
+
+## 2026-11-16T02:51:59.272044+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: f016c2919957610f65ac08fc3a1aac8413cca788. Outcome: partial. Source facade supports exact backend-only startup scope with conflict and surviving-monitor refusals; doctor shares ownership interpretation; both Windows shell fixture suites pass; no installed migration or recurring activation. Next: Resume the existing review/producer and installed direct-Web delivery/Git qualification on new authority or definitive original-delivery evidence; do not repeat completed recovery canaries. Keep independently demonstrated source fixes eligible..
+
+Evidence: [docs/verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json](docs/verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json); command: Public lifecycle scope fixtures under both PowerShell editions plus doctor regression tests; persistence effects injected; exit 0; SHA-256 0828ad72ebe937dd413a3ffd98265bce7b1f7976093958877bcae5b850c24123.

@@ -1,5 +1,11 @@
 # CatDesk important commands
 
+## 2026-11-16T02:51:59.272044+00:00 — Development-only backend startup scope
+
+Source `f016c2919957610f65ac08fc3a1aac8413cca788` supports `.\catdesk.ps1 autostart enable -BackendOnly` through the existing owner. This spelling is SOURCE-TESTED, not a command to apply to the unchanged installed facade now. Both logon registration and immediate monitor arguments retain the flag. Ordinary `.\catdesk.ps1 autostart status` reads either exact known registration and reports `scope=BACKEND_ONLY` or `scope=FULL_STACK`; this describes registration scope, not independently verified live process behavior.
+
+Enable never converts an existing scope. `AUTOSTART_SCOPE_CONFLICT` preserves mismatched/mixed known records; `AUTOSTART_UNREGISTERED_MONITOR_ACTIVE` refuses to register over a surviving monitor whose scope is not proved. Foreign commands/principals remain conflicts. Disable removes exact owned persistence only; it does not stop a monitor. Any future scope transition needs the existing monitor confirmed exited and the existing authorized release/lifecycle process. No migration or recurring activation occurred. The retained C110 fault/recovery canaries were not repeated; new fixtures use injected persistence/process effects and a read-only Windows child. [Evidence](docs/verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
+
 ## 2026-11-16T02:38:42.136005+00:00 — Startup status and bounded monitor scope
 
 Use `./catdesk.ps1 doctor` for passive layer reporting and `./catdesk.ps1 autostart status` for the existing workspace registration/monitor signal. A running daemon does not prove a live supervisor. Installed status is AUTOSTART_REGISTERED_MONITOR_STOPPED; the existing HKCU Run fallback is full-stack, with no exact scheduled task. The separate protected stable-supervisor root/startup definition is absent. Neither observation authorizes provisioning or enabling recurring automation.

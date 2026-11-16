@@ -154,3 +154,7 @@ The operator favors the simple UI from the upstream [Xeift/CatDesk preview](http
 ## 2026-11-16T02:38:42.136005+00:00 — Existing startup owner qualification
 
 The existing immediate workspace-monitor launcher now initializes a Windows PowerShell child with its host-default module path. Its executable, arguments, hidden window, singleton and unrelated environment remain unchanged; the parent environment is untouched. This corrects a reproduced Core-only module shadowing failure without another launcher service. The source fix is not installed. [Installed and source evidence](../verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).
+
+## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
+
+The facade and passive doctor share exact task/Run scope interpretation. Both logon and immediate arguments carry BackendOnly when explicitly selected; ordinary status reads the actual known registration. Mixed scopes and a surviving unregistered monitor fail closed. Registered scope and a mutex signal do not prove live process scope. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).

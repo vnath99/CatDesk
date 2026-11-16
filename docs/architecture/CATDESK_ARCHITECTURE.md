@@ -190,3 +190,7 @@ Do not transpose original dates into claims of present runtime success. Each tra
 ## 2026-11-16T02:38:42.136005+00:00 — Existing startup owner qualification
 
 The workspace autostart monitor and protected stable supervisor are existing distinct owners. Current installed evidence shows a live canonical daemon, a full-stack HKCU Run registration with its monitor stopped, and no provisioned stable-supervisor root. One bounded backend-only installed health cycle is accepted for observation and cleanup only; automatic recovery and reboot behavior remain unverified. [Installed and source evidence](../verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).
+
+## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
+
+The existing public lifecycle now admits explicit backend-only autostart selection at source level. It reuses the same task/Run identity and monitor, with no additional service or scheduler. The currently installed full-stack registration is unchanged; the source feature does not establish unattended recovery. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).

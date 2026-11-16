@@ -152,3 +152,7 @@ Relevant legacy/current files: [prior architecture](../orchestrator/CANONICAL_CU
 ## 2026-11-16T02:38:42.136005+00:00 — Existing startup owner qualification
 
 The installed passive doctor distinguishes canonical listener health from stopped startup monitoring. A normal read-only health cycle does not qualify daemon-loss recovery, reboot recovery or stable-supervisor activation. Existing registration is full-stack, so indefinite activation remains held until backend-only scope and stop/cleanup are qualified through existing mechanisms. Do not provision the absent protected root or rewrite an owned registration as a diagnostic side effect. [Installed and source evidence](../verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).
+
+## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
+
+Backend-only startup selection is a source capability awaiting the normal release path. Enable cannot convert an existing scope. Disable removes only exact owned persistence and does not terminate its monitor; a surviving unregistered monitor blocks re-registration. Preserve historical C110 recovery/no-replacement evidence instead of repeating it as current installed acceptance. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
