@@ -41,6 +41,7 @@ pub(crate) fn frozen_observation(line: &str) -> Option<serde_json::Value> {
                 | "RESPONSE_NETWORK_ERROR"
                 | "LOGIN_OR_PROFILE_REQUIRED"
                 | "RESPONSE_EXPECTED_USER_DUPLICATED"
+                | "RESPONSE_USER_REPRESENTATION_MISMATCH"
                 | "RESPONSE_SEQUENCE_DRIFT"
                 | "RESPONSE_TARGET_DRIFT"
                 | "RESPONSE_TIMEOUT_RETRY_REQUIRED"
@@ -855,6 +856,13 @@ mod tests {
         let line = format!("PROBE:FROZEN_OBSERVATION:{value}");
         assert_eq!(super::frozen_observation(&line), Some(value.clone()));
         assert_eq!(super::sanitized_rows(&line), vec![line]);
+        let mut mismatch = value.clone();
+        mismatch["matchingUserCount"] = serde_json::json!(0);
+        mismatch["responseState"] = serde_json::json!("RESPONSE_USER_REPRESENTATION_MISMATCH");
+        assert_eq!(
+            super::frozen_observation(&format!("PROBE:FROZEN_OBSERVATION:{mismatch}")),
+            Some(mismatch)
+        );
         for (key, wrong) in [
             ("body", serde_json::json!("PRIVATE_RESPONSE")),
             ("resendAuthorized", serde_json::json!(true)),

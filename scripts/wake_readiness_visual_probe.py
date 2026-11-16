@@ -262,12 +262,19 @@ def report_frozen_observation(sink, cdp, message, report=print, sleep=time.sleep
         first, comparison = sink.submission_diagnostic_sample(cdp, message)
         sleep(.25)
         current, witness = sink.submission_diagnostic_sample(cdp, message)
+        metadata = dict(current)
+        metadata["stable"] = current == first and witness == comparison
+        # Existing native submission metadata filtering remains the boundary.
+        # Keep the independent semantic/anchor readers visible without text.
+        report("PROBE:SUBMISSION:" + json.dumps(metadata, separators=(",", ":"), sort_keys=True), flush=True)
         count = current.get("expectedUserCount")
         if type(count) is not int or count < 0 or current != first or witness != comparison:
             raise ValueError("frozen observation unstable")
         value.update(stable=True, matchingUserCount=count)
         if count == 0:
-            value["responseState"] = "EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN"
+            trusted = current.get("trustedMatches")
+            value["responseState"] = ("RESPONSE_USER_REPRESENTATION_MISMATCH"
+                if type(trusted) is int and trusted > 0 else "EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN")
         elif count > 1:
             value["responseState"] = "EXPECTED_USER_DUPLICATED"
         else:
@@ -279,7 +286,7 @@ def report_frozen_observation(sink, cdp, message, report=print, sleep=time.sleep
     except Exception as error:
         reason = str(error)
         if reason in {"RESPONSE_LOAD_ERROR", "RESPONSE_NETWORK_ERROR", "LOGIN_OR_PROFILE_REQUIRED",
-                      "RESPONSE_EXPECTED_USER_DUPLICATED", "RESPONSE_SEQUENCE_DRIFT", "RESPONSE_TARGET_DRIFT",
+                      "RESPONSE_EXPECTED_USER_DUPLICATED", "RESPONSE_USER_REPRESENTATION_MISMATCH", "RESPONSE_SEQUENCE_DRIFT", "RESPONSE_TARGET_DRIFT",
                       "RESPONSE_TIMEOUT_RETRY_REQUIRED", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}:
             value["responseState"] = reason
     report("PROBE:FROZEN_OBSERVATION:" + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)

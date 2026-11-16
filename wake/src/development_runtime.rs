@@ -2487,6 +2487,11 @@ fn inspect_prepared_readiness(
             .rev()
             .find_map(|line| crate::readiness_probe::frozen_observation(line))
             .unwrap_or(Value::Null);
+        result["submissionObservation"] = rows
+            .iter()
+            .rev()
+            .find_map(|line| crate::readiness_probe::submission_observation(line))
+            .unwrap_or(Value::Null);
         result["deliveryReceiptProven"] = json!(false);
         result["resendAuthorized"] = json!(false);
     }

@@ -14,6 +14,26 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_frozen_observation_distinguishes_trusted_representation_mismatch_without_body(self):
+        for trusted,state in [(0,'EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN'),
+                              (1,'RESPONSE_USER_REPRESENTATION_MISMATCH')]:
+            sample=dict(expectedUserCount=0,trustedMatches=trusted,composerClass='UNAVAILABLE',
+                        composerBytes=0,legacyAvailable=False,readersAgree=None,
+                        legacyMatchesExpected=None,lastUserMatches=False,turnsAfter=0,
+                        stable=False,coverage='VISIBLE_BOUNDED_ONLY')
+            sink=types.SimpleNamespace(frozen_observation_digest=lambda m:'a'*64,
+                submission_diagnostic_sample=mock.Mock(return_value=(sample,'same')),
+                observe_cooperative_response=mock.Mock())
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.probe.report_frozen_observation(sink,object(),'PRIVATE_USER',sleep=lambda _:None)
+            lines=output.getvalue().splitlines()
+            self.assertEqual(json.loads(lines[0].split('PROBE:SUBMISSION:')[1])['trustedMatches'],trusted)
+            value=json.loads(lines[1].split('PROBE:FROZEN_OBSERVATION:')[1])
+            self.assertEqual(value['responseState'],state)
+            self.assertFalse(value['resendAuthorized']);self.assertNotIn('PRIVATE_',output.getvalue())
+            sink.observe_cooperative_response.assert_not_called()
+
     def test_frozen_observation_input_is_hash_pinned_bounded_and_inert(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'original.frozen.txt'
