@@ -374,3 +374,11 @@ Evidence: [docs/verification/F7_04_01_FRESH_WAKE_2026_11_16.json](docs/verificat
 Agent: CatDesk current development owner. Source: ef145ec74aa8c9a815115ac90605e6f71dbec2ba. Outcome: partial. PR26 merged through normal GitHub controls into canonical development at ef145ec7. Both merge parents and exact equality to the qualified feature tree verified. No builds, tests, runtime changes or protected release authority; working development candidate and fallback retained.. Next: Publish integration receipt through the existing feature workflow. Preserve f7 PARTIAL, d22 UNKNOWN and coherent protected-state/purpose gates. Full Web edit/checkpoint/self-Wake remains OPEN; no unchanged qualification replay..
 
 Evidence: [docs/verification/DEVELOPMENT_INTEGRATION_PR26_2026_11_16.json](docs/verification/DEVELOPMENT_INTEGRATION_PR26_2026_11_16.json); command: Normal exact-head GitHub PR26 merge, authoritative remote SHA and merge parent/tree verification; owned worktree fast-forward only; exit 0; SHA-256 4c985c0cd255e6159c5b1d8614391639c8a23d151f66225926c22028502ba1ea.
+
+<!-- catdesk-activity:runtime-bearer-recovery-nov16 sha256:1c18cd37f4ad580a0c11c361a042cfdddcf9d0c8ca7f9b525ead70e1c3ea3266 -->
+
+## 2026-11-16T15:14:03.240359+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: e2d28eb5de852afe83574cd2ce39c297951139c9. Outcome: partial. Existing tunnel auth restored with exact profile preserved; configured bearer, canonical parity and v5 Codex response pass. Automatic reconnect patch has five focused tests and scoped independent source PASS; fresh Web status fields remain unverified. Next: Integrate reviewed development patch; retain original f7 PARTIAL, d22 UNKNOWN and protected Wake state gates. Do not repeat completed delivery, collector or auth checks.
+
+Evidence: [docs/verification/MANAGED_RUNTIME_AUTH_RESTORATION_2026_11_16.json](docs/verification/MANAGED_RUNTIME_AUTH_RESTORATION_2026_11_16.json); command: Retained bounded owner recovery, focused native tests and attributable public source review; exit 0; SHA-256 96fbf33d6d3dd5bf29e3f7105c0c15e74168cb219ceecb996eea78e43a084002.
