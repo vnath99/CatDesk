@@ -382,3 +382,11 @@ Evidence: [docs/verification/DEVELOPMENT_INTEGRATION_PR26_2026_11_16.json](docs/
 Agent: Codex. Source: e2d28eb5de852afe83574cd2ce39c297951139c9. Outcome: partial. Existing tunnel auth restored with exact profile preserved; configured bearer, canonical parity and v5 Codex response pass. Automatic reconnect patch has five focused tests and scoped independent source PASS; fresh Web status fields remain unverified. Next: Integrate reviewed development patch; retain original f7 PARTIAL, d22 UNKNOWN and protected Wake state gates. Do not repeat completed delivery, collector or auth checks.
 
 Evidence: [docs/verification/MANAGED_RUNTIME_AUTH_RESTORATION_2026_11_16.json](docs/verification/MANAGED_RUNTIME_AUTH_RESTORATION_2026_11_16.json); command: Retained bounded owner recovery, focused native tests and attributable public source review; exit 0; SHA-256 96fbf33d6d3dd5bf29e3f7105c0c15e74168cb219ceecb996eea78e43a084002.
+
+<!-- catdesk-activity:current-serving-root-reconciliation-nov16 sha256:25604a31c199b7f3aba2742ae97ee5ec2e446413654a13b1fac5e215770c6ab7 -->
+
+## 2026-11-16T15:53:55.893040+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 68359f85845c1a07df21f37efb417bb593654753. Outcome: partial. Actual backend provenance identifies the coherent current serving Wake root. Legacy host stopped cooperatively; 894 preservation checks pass. Fresh unsigned existing-bootstrap proposal prepared; no keys, signatures, enrollment or installation. Next: Obtain genuine exact-purpose operator signature, then existing elevated native preflight. Retain original f7 PARTIAL, d22 UNKNOWN and full exact-candidate release gates; no replay or root merging.
+
+Evidence: [docs/verification/CURRENT_SERVING_WAKE_ROOT_RECONCILIATION_2026_11_16.json](docs/verification/CURRENT_SERVING_WAKE_ROOT_RECONCILIATION_2026_11_16.json); command: Bounded native fixed-root correlation, supported Wake Stop, preservation and exact unsigned-wire verification; exit 0; SHA-256 2540a5a5084613611e8b955df44ec44c576e6e0c6db07b0049e951bd90f0ec79.
