@@ -289,9 +289,15 @@ async fn configure_official_runtime_mode(
             drop(app);
             if reconnect_now {
                 if let Ok(tunnel_id) = std::env::var("CATDESK_OPENAI_TUNNEL_ID") {
-                    if connect_official_runtime(&client_path, &alias, &tunnel_id, &local_mcp_url)
-                        .await
-                        .is_err()
+                    if connect_official_runtime(
+                        &client_path,
+                        &alias,
+                        &tunnel_id,
+                        &local_mcp_url,
+                        mcp_auth_token.as_deref(),
+                    )
+                    .await
+                    .is_err()
                     {
                         let mut app = state.lock().await;
                         app.transport_health.health = TransportHealth::Degraded;
@@ -374,9 +380,15 @@ async fn configure_official_runtime_mode(
                     );
                     app.transport_health.health = TransportHealth::Connecting;
                 }
-                connect_official_runtime(&client_path, &alias, &tunnel_id, &local_mcp_url)
-                    .await
-                    .map_err(|error| error.to_string())?;
+                connect_official_runtime(
+                    &client_path,
+                    &alias,
+                    &tunnel_id,
+                    &local_mcp_url,
+                    mcp_auth_token.as_deref(),
+                )
+                .await
+                .map_err(|error| error.to_string())?;
             }
         }
     }
@@ -551,6 +563,7 @@ async fn start_openai_runtime_monitor_if_needed(
                                 &alias,
                                 &tunnel_id,
                                 &local_endpoint,
+                                mcp_auth_token.as_deref(),
                             )
                             .await;
                         }
