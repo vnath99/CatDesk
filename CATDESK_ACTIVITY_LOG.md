@@ -390,3 +390,11 @@ Evidence: [docs/verification/MANAGED_RUNTIME_AUTH_RESTORATION_2026_11_16.json](d
 Agent: Codex. Source: 68359f85845c1a07df21f37efb417bb593654753. Outcome: partial. Actual backend provenance identifies the coherent current serving Wake root. Legacy host stopped cooperatively; 894 preservation checks pass. Fresh unsigned existing-bootstrap proposal prepared; no keys, signatures, enrollment or installation. Next: Obtain genuine exact-purpose operator signature, then existing elevated native preflight. Retain original f7 PARTIAL, d22 UNKNOWN and full exact-candidate release gates; no replay or root merging.
 
 Evidence: [docs/verification/CURRENT_SERVING_WAKE_ROOT_RECONCILIATION_2026_11_16.json](docs/verification/CURRENT_SERVING_WAKE_ROOT_RECONCILIATION_2026_11_16.json); command: Bounded native fixed-root correlation, supported Wake Stop, preservation and exact unsigned-wire verification; exit 0; SHA-256 2540a5a5084613611e8b955df44ec44c576e6e0c6db07b0049e951bd90f0ec79.
+
+<!-- catdesk-activity:exact-runtime-intake-fallback-source-nov16 sha256:fdb5c37059585c3e479e47a4ad6de2528a3394ffec3ec2aa8a6609942bc49d27 -->
+
+## 2026-11-16T16:32:45.088031+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: f920c4a416901b79da0a70aa6d1d0ece150f78f3. Outcome: partial. Existing 06d artifacts staged for exact review with native-format manifest and local evidence, leaving independent review absent. Retained-base teardown gap confirmed and existing fix backported in source; three Windows tests and strict checks pass. Next: Await original operator signature and genuine candidate review/authority. Preserve historical fallback and all unknowns; no new component build, installation or equivalent review contract.
+
+Evidence: [docs/verification/EXACT_RUNTIME_INTAKE_AND_FALLBACK_SOURCE_2026_11_16.json](docs/verification/EXACT_RUNTIME_INTAKE_AND_FALLBACK_SOURCE_2026_11_16.json); command: Existing artifact and Git identity checks, actual retained-base Windows tests and scoped source review; exit 0; SHA-256 b3671365296dfeb25cbc92f346f38e1a394ea377165989f55a6d7f2e58087525.
