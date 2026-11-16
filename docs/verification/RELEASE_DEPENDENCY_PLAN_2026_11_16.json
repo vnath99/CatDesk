@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-16T11:25:19.221928+00:00",
+  "scope": "EXISTING_RELEASE_DEPENDENCIES_AND_ORIGINAL_HUMAN_APPROVED_F7_ADMISSION",
+  "newReviewContractCreated": false,
+  "f7": {
+    "status": "ACTIVE",
+    "contractId": "nov15-independent-f7-wake-review",
+    "contractHash": "fnv1a64:f0ca191204309d3b",
+    "contractSha256": "8d1a48465217f1bb9363fbb74e36bc275f378305fe086321f608391c3def00a7",
+    "sourceCommit": "f7f1dedeb2584469e252969f195c43c5b4d3aa6a",
+    "expiresUtc": "2026-11-22T05:20:56Z",
+    "authority": "DIRECT_HUMAN_APPROVAL_OF_ORIGINAL_CONTRACT_NOT_VERDICT",
+    "stateBefore": {
+      "state": "DRAFT",
+      "stateVersion": 1,
+      "approvedContractHash": null,
+      "providerTurnCount": 0
+    },
+    "stateAfter": {
+      "active": true,
+      "providerThreadCaptured": false,
+      "providerTurnCount": 1,
+      "repairAttempts": 0,
+      "retryNotBeforeUnix": null,
+      "sessionId": "nov15-independent-f7-wake-review",
+      "state": "WAITING_FOR_CHATGPT",
+      "stateVersion": 4
+    },
+    "providerAccountingTurnIsNotReviewerExecution": true,
+    "reviewerStarted": false,
+    "reviewMessagesSent": 0,
+    "reviewReportProduced": false,
+    "producerAuthority": false,
+    "scope": "Independent report-only review; no source edits, test replay, project work, publication, signing, installation or binding changes",
+    "caps": {
+      "totalSeconds": 7200,
+      "providerTurns": 64,
+      "toolCalls": 256,
+      "initialFrozenPromptSeconds": 180
+    },
+    "next": "Admit the original frozen starter only to a verified eligible review destination through existing delivery/ownership controls; then retain genuine coverage/findings before finalization.",
+    "deliveryLimitation": "The f7 intake freezes source, contract and starter but no destination. The separately approved d22 destination/batch is not f7 delivery consent; its UNKNOWN request must not be overlaid. Registered-project review delivery must pass paired-target and active-request admission. No eligible f7 external delivery has been established.",
+    "approvalQuestionResolved": true,
+    "firstAdmissionAttempt": {
+      "failure": "LOCAL_POLICY_CHANGED",
+      "approved": false,
+      "claimed": false,
+      "reason": "Wrapper incorrectly required d22 workspace local policy MANUAL_OFF generation 1; f7 has default INDEFINITE generation 0 with NOT_READY. No policy was changed. Corrected wrapper pins the actual f7 policy and retains no-web-auto."
+    },
+    "boundedAdmission": {
+      "maximumMilliseconds": 120000,
+      "backendLifetimeSeconds": 40,
+      "backendExited": true,
+      "endpointClosed": true,
+      "containment": "KILL_ON_JOB_CLOSE",
+      "timedOut": false,
+      "terminationFailed": false,
+      "configurationAuthorityUnchanged": true
+    },
+    "preservation": {
+      "pinsChecked": 1730,
+      "rawPinMismatches": 8,
+      "unaffectedPins": 1722,
+      "pinSetAndProfilesAndTaskInventoryUnchanged": true,
+      "otherReviewAndExistingAccountingRecordsUnchanged": true,
+      "reviewSourceClean": true,
+      "qualification": "Raw all-bytes preservation did not pass: config plus Wake status and six rollover auto-status files changed. Config authority comparison passed. Remaining status-file changes are retained as unclassified concurrent observations, not attributed to this owner or labeled harmless. No claim of total runtime immutability."
+    }
+  },
+  "d22": {
+    "status": "BLOCKED",
+    "sourceCommit": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+    "delivery": "UNKNOWN_DELIVERY_NO_REPLAY",
+    "originalNativeClaim": "WAITING_FOR_CHATGPT_VERSION_4",
+    "knownEvidence": "Original first-party sender returned thread ID only; no actual task turn handle. Completed bounded DOM observation had zero matches and ambiguous editor; this does not prove no submission.",
+    "supportedRecovery": "Recover authoritative original message/turn/delivery evidence and response, reconcile exact frozen identity plus real native claim timing/output attribution, then original report/finalization/ack/snapshot/producer gates.",
+    "noCurrentGenericClearCommandEstablished": true,
+    "notApplicable": [
+      "Rollover-only ABANDONED_UNKNOWN_NO_REPLAY disposition",
+      "LOGIN_OR_PROFILE_REQUIRED pre-submit retry",
+      "Session cancel/supersession as delivery proof or review authority"
+    ],
+    "ifEvidenceUnavailable": "Keep UNKNOWN and do not resend. Explicit reviewed retirement may close coordination only; it cannot create independent review or producer authority. No replacement contract or grant is created.",
+    "noUnchangedProbeRepeated": true,
+    "f7IsNotD22Substitute": true
+  },
+  "wakeMigration": {
+    "status": "BLOCKED",
+    "rootEvidence": "2026-11-14T14:06:49.4763375Z elevated two-root comparison supplied by operator",
+    "rootConclusion": "RECORDED_ROOT_FOUND_STATE_NOT_PROVEN",
+    "recordedRoot": "Recorded physical root has matching STOPPED control/config but missing current.json.",
+    "otherRoot": "Different physical root has reference current bytes but changed control/config and control not STOPPED.",
+    "oldProposal": "Expired; preserve unsigned bytes and comparison history. Do not collect/sign it again.",
+    "firstPrerequisite": "A reviewed operator state disposition must establish one intended physical root with coherent current/control/config, exact hashes and STOPPED state. Never assemble reference files across roots or synthesize a pointer. No supported automatic restoration command for this observed split has been established.",
+    "bootstrapReuse": "Retain already reviewed 0d6 installer/broker/bootstrap inputs. Candidate runtime does not automatically require rebuilding the fixed broker.",
+    "existingPublicSignerFingerprintSha256": "25a0e9226e1eb836ee263d16eef7d8995855bb009a4d69309aca6f12841d0beb",
+    "signingPrerequisite": "Operator approves existing issuer for Wake bootstrap purpose; actual offline signer availability remains unestablished. No private key inspected or new key generated.",
+    "bootstrapPurpose": "FIRST_FIXED_BROKER_PROVISION_ONLY",
+    "bootstrapDomain": "CatDeskWakeFirstBrokerBootstrapV1",
+    "firstSelectionDomain": "CatDeskWakeSameStateRootSelectionApprovalV3",
+    "minimumSequence": [
+      "Resolve coherent root without changing protected state during diagnosis",
+      "Complete genuine f7 report and exact candidate/local evidence; validate previous working evidence or explicitly reviewed legacy reconstruction",
+      "Freeze fresh purpose-bound bootstrap inputs only after coherent state exists, obtain genuine offline signature with approved existing issuer",
+      "Elevated interactive native bootstrap preflight, then separately authorized execute through wake/install.ps1 -Bootstrap",
+      "Separate signed V3 first selection/reconstruction through fixed broker; local-user updates cannot perform first reconstruction",
+      "Bounded installed lifecycle, interruption/rollback and existing-v5 task acceptance before retiring old mechanisms"
+    ],
+    "buildProfileFinding": "The V3 qualified-release/receipt predicates bind exact source, manifests, PASS evidence, full independent coverage and working previous evidence; they do not demand a Cargo release-profile label. The retained f7 GUI/Host were built already. No additional build is prescribed solely because its profile is dev with sha2 optimized.",
+    "selectionCompleteIsRuntimeHealthy": false,
+    "operatorOnlyActions": [
+      "Coherent root/state disposition if restoration requires protected writes",
+      "Existing issuer purpose approval and offline signing",
+      "Elevated native bootstrap/initial signed maintenance admission"
+    ],
+    "commandsAreConditionalNotReadyToExecute": true
+  },
+  "installedDirectWeb": {
+    "status": "BLOCKED_FOR_NEW_ACCEPTANCE_PRESERVED_ACCEPTED_BASELINE",
+    "preserved": "Installed backend/start/restart/authentication/rollback and original v5 success remain accepted for their dated scope.",
+    "missingInstalledCapabilities": [
+      "Qualified scoped-work adapter pair",
+      "Work-delivery CLI",
+      "Scoped Git checkpoint path"
+    ],
+    "minimumReleaseDependencies": "Wake companion qualification and backend review/ack/snapshot/reviewed-build producer are independent chains; both required installed capabilities must be ready for full task lifecycle. Neither chain grants the other authority.",
+    "afterGates": "Revalidate and first-deliver the already associated never-delivered fresh acceptance event; perform authorized edit, independent verification, verified Git checkpoint, one self-Wake and continuation; then second-project isolation. Do not replay C1/C49/d22 unknown work.",
+    "fullAcceptance": false,
+    "newTunnelOrConnectionRequired": false
+  },
+  "actionsThisRecord": {
+    "candidateBuilds": 0,
+    "sourceTestsRepeated": 0,
+    "browserWakeTunnelStarts": 0,
+    "messagesSent": 0,
+    "protectedInstallationsOrBindingsChanged": 0,
+    "unknownRequestsResent": 0,
+    "newReviewContracts": 0,
+    "otherSessionsInterrupted": false
+  },
+  "sourceBasis": [
+    "src/delegated/autonomy_supervisor.rs approve/request_direct_work_claim",
+    "src/delegated/autonomous_controller.rs direct output attribution",
+    "src/operator_review_observation.rs original consent/identity admission",
+    "src/operator_web_quarantine.rs rollover-only disposition",
+    "src/web_review_work.rs exact pre-submit retry and project review admission",
+    "wake/src/install_broker_bootstrap_files.rs FixedBootstrapFiles::observe",
+    "wake/src/install_broker_bootstrap.rs native bootstrap admission",
+    "wake/src/runtime_same_state_install.rs validate_receipt",
+    "wake/src/install_broker_same_state_approval.rs validate_release"
+  ],
+  "goalComplete": false
+}

@@ -1,5 +1,19 @@
 # CatDesk important commands
 
+## 2026-11-16T11:25:19Z — Original review admission and conditional migration
+
+Use the [single release dependency plan](CATDESK_PROJECT_HANDOFF.md#2026-11-16t112519z--one-release-dependency-plan). Original f7 contract `nov15-independent-f7-wake-review`, hash `fnv1a64:f0ca191204309d3b`, is human-approved and claimed at version 4. Do not approve/claim it again, create a replacement or confuse direct-work accounting with a running independent reviewer. The original prompt was sent once to the verified existing registered CatDesk chat through the existing first-party transport; actual USER identity was observed but assistant review was absent at the 178-second boundary. No resend or unchanged polling. Resume report validation only on genuine original response evidence. [Bounded outcome](docs/verification/F7_ORIGINAL_REVIEW_DELIVERY_2026_11_16.json).
+
+The existing bootstrap command remains **conditional, not ready to run**:
+
+```powershell
+& ./wake/install.ps1 -Bootstrap -QualifiedHost $reviewedInstallerHost -ExpectedHostSha256 $installerSha256 -ApprovalFile $freshSignedBootstrapEnvelope -ExpectedApprovalSha256 $envelopeSha256 -ExpectedPublicKeySha256 $approvedWakeIssuerSha256
+```
+
+All variables must resolve to genuine exact reviewed inputs. Default is native read-only preflight; `-Execute` is a separate protected operation after success and applicable authorization. Requires one coherent existing physical state root, exact current/control/config bytes with STOPPED control, valid purpose signature and qualified elevated interactive owner. The current split-root comparison fails these prerequisites. Do not sign expired proposals, seed missing current.json or rerun collectors. Initial signed V3 selection/reconstruction is separate; `install-broker submit-local` cannot replace it. No copy-paste Execute or signing command is justified yet.
+
+For d22, `inspect-review-request` has already completed its bounded observation. Repeat only on material new evidence. Neither rollover-only `ABANDONED_UNKNOWN_NO_REPLAY`, pre-submit login retry, cancellation nor supersession proves original review delivery failure or authorizes producer/promotion. [Exact distinctions](docs/verification/RELEASE_DEPENDENCY_PLAN_2026_11_16.json).
+
 ## 2026-11-16T02:51:59.272044+00:00 — Development-only backend startup scope
 
 Source `f016c2919957610f65ac08fc3a1aac8413cca788` supports `.\catdesk.ps1 autostart enable -BackendOnly` through the existing owner. This spelling is SOURCE-TESTED, not a command to apply to the unchanged installed facade now. Both logon registration and immediate monitor arguments retain the flag. Ordinary `.\catdesk.ps1 autostart status` reads either exact known registration and reports `scope=BACKEND_ONLY` or `scope=FULL_STACK`; this describes registration scope, not independently verified live process behavior.
