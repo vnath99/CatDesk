@@ -2456,10 +2456,10 @@ fn inspect_prepared_readiness(
         .and_then(|row| row.strip_prefix("PROBE:FINAL:"))
         .ok_or("DEV_READINESS_FINAL_UNOBSERVED")?;
     require_stopped_control(&prepared.root)?;
-    if let Some((path, expected)) = frozen_request {
-        if hash_file(path, 65536)? != expected {
-            return Err("DEV_OBSERVATION_REQUEST_CHANGED".into());
-        }
+    if let Some((path, expected)) = frozen_request
+        && hash_file(path, 65536)? != expected
+    {
+        return Err("DEV_OBSERVATION_REQUEST_CHANGED".into());
     }
     keep_target_current()?;
     let browser_observation = if final_state == "OBSERVATION_UNAVAILABLE" {
