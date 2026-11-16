@@ -48,6 +48,7 @@ def load_observation_sink(path, expected_sha256, profile, url):
     sink = module.CdpSink(url, profile, 30, 20)
     if not callable(getattr(sink, "browser_surface_observation", None)):
         raise ValueError("observation primitives unsupported")
+    sink.frozen_observation_digest = lambda message: module.digest(module.normalize_message(message))
     return sink
 
 
@@ -228,6 +229,60 @@ def report_submission(sink, cdp, message, report=print, sleep=time.sleep):
         report("PROBE:SUBMISSION_STATE:OBSERVED", flush=True)
     except Exception:
         report("PROBE:SUBMISSION_STATE:OBSERVATION_UNAVAILABLE", flush=True)
+
+
+def load_frozen_observation_message(path, expected_sha256):
+    """Operator diagnostic input, never a delivery record or execution grant."""
+    if (path is None or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256 or "")
+            or path.is_symlink() or getattr(path, "is_junction", lambda: False)()
+            or not path.is_file() or path.parent.is_symlink()
+            or getattr(path.parent, "is_junction", lambda: False)()):
+        raise ValueError("frozen observation input unavailable")
+    with path.open("rb") as stream:
+        raw = stream.read(65537)
+    if not raw or len(raw) > 65536 or hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise ValueError("frozen observation input changed")
+    message = raw.decode("utf-8")
+    if not message.strip() or "\x00" in message:
+        raise ValueError("frozen observation input invalid")
+    return message
+
+
+def report_frozen_observation(sink, cdp, message, report=print, sleep=time.sleep):
+    """Classify an original unknown send without inventing receipt authority.
+
+    No body, composer text, click, refresh, submission or recovery transition.
+    Absence in a loaded DOM cannot prove that the original send failed.
+    """
+    value = dict(basis="FROZEN_REQUEST_DOM_ONLY_NOT_DELIVERY_RECEIPT",
+                 messageDigest=sink.frozen_observation_digest(message), stable=False,
+                 matchingUserCount=None, responseState="UNPROVEN",
+                 deliveryReceiptProven=False, resendAuthorized=False)
+    try:
+        first, comparison = sink.submission_diagnostic_sample(cdp, message)
+        sleep(.25)
+        current, witness = sink.submission_diagnostic_sample(cdp, message)
+        count = current.get("expectedUserCount")
+        if type(count) is not int or count < 0 or current != first or witness != comparison:
+            raise ValueError("frozen observation unstable")
+        value.update(stable=True, matchingUserCount=count)
+        if count == 0:
+            value["responseState"] = "EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN"
+        elif count > 1:
+            value["responseState"] = "EXPECTED_USER_DUPLICATED"
+        else:
+            first_state = sink.observe_cooperative_response(cdp, message, value["messageDigest"])
+            sleep(.25)
+            state = sink.observe_cooperative_response(cdp, message, value["messageDigest"])
+            if first_state == state and state in {"RESPONSE_COMPLETE", "RESPONSE_PENDING"}:
+                value["responseState"] = state
+    except Exception as error:
+        reason = str(error)
+        if reason in {"RESPONSE_LOAD_ERROR", "RESPONSE_NETWORK_ERROR", "LOGIN_OR_PROFILE_REQUIRED",
+                      "RESPONSE_EXPECTED_USER_DUPLICATED", "RESPONSE_SEQUENCE_DRIFT", "RESPONSE_TARGET_DRIFT",
+                      "RESPONSE_TIMEOUT_RETRY_REQUIRED", "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"}:
+            value["responseState"] = reason
+    report("PROBE:FROZEN_OBSERVATION:" + json.dumps(value, separators=(",", ":"), sort_keys=True), flush=True)
 
 
 def report_composer_apps(sink, cdp, report=print):
@@ -512,6 +567,8 @@ def main():
     parser.add_argument("--read-only", action="store_true")
     parser.add_argument("--delivery-file", type=Path)
     parser.add_argument("--delivery-sha256")
+    parser.add_argument("--frozen-observation-file", type=Path)
+    parser.add_argument("--frozen-observation-sha256")
     parser.add_argument("--receipt-only", action="store_true")
     parser.add_argument("--response-only", action="store_true")
     parser.add_argument("--historical-response", action="store_true")
@@ -540,8 +597,22 @@ def main():
             print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
             return 0
     message = None
+    frozen_observation = None
     receipt_delivery = None
     response_delivery = None
+    if args.frozen_observation_file is not None or args.frozen_observation_sha256 is not None:
+        if (not args.read_only or args.profile is None or sink is None or args.seconds > 90
+                or args.delivery_file is not None or args.delivery_sha256 is not None
+                or args.receipt_only or args.response_only or args.task_diagnostics
+                or args.historical_response or args.source_review_diagnostics or args.await_existing_response
+                or args.inspect_app_menu or args.inspect_response_trace or args.inspect_historical_trace):
+            return 2
+        try:
+            frozen_observation = load_frozen_observation_message(
+                args.frozen_observation_file, args.frozen_observation_sha256)
+        except Exception:
+            print("PROBE:FROZEN_OBSERVATION_STATE:INPUT_UNAVAILABLE", flush=True)
+            return 0
     if args.await_existing_response and (not (args.task_diagnostics and args.response_only and args.read_only
             and args.profile is not None and args.delivery_file is not None) or args.receipt_only
             or args.historical_response or args.source_review_diagnostics or args.inspect_app_menu
@@ -641,6 +712,11 @@ def main():
                 report_submission(sink, cdp, message)
             else:
                 print("PROBE:SUBMISSION_STATE:TARGET_UNAVAILABLE", flush=True)
+        if frozen_observation is not None:
+            if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
+                report_frozen_observation(sink, cdp, frozen_observation)
+            else:
+                print("PROBE:FROZEN_OBSERVATION_STATE:TARGET_UNAVAILABLE", flush=True)
         if receipt_delivery is not None:
             if surface is not None and surface.get("route") == "EXACT" and surface.get("document") == "COMPLETE":
                 report_persisted_receipt(sink, cdp, receipt_delivery, deadline=deadline)
