@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-16T13:27:02.027438+00:00",
+  "scope": "EXISTING_UNPROTECTED_DEVELOPMENT_CANDIDATE_AND_REAL_READ_ONLY_BROWSER_QUALIFICATION",
+  "sourceCommit": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+  "sourceTree": "92f4f7f9240d9a058fec5c74505ee623f8c50a42",
+  "originalF7": {
+    "authorizedOriginalWorkflowUsed": true,
+    "reviewVerdict": "PARTIAL",
+    "sourceFinding": "F7-04-01",
+    "originalReportPreserved": true,
+    "nativeStateLastObserved": "WAITING_FOR_CHATGPT",
+    "nativeStateVersion": 4,
+    "fullReleaseAuthority": false,
+    "oldClaimRenewedOrReset": false,
+    "next": "Retain original attributable PARTIAL report. The unchanged original f7 artifacts do not contain the fix. Do not continue beyond the original lease/caps or reinterpret this approval as authority for changed source."
+  },
+  "patchReview": {
+    "reviewKey": "F70401_PATCH_06D1A5BA",
+    "verdict": "PASS",
+    "scope": "SCOPED DEVELOPMENT SOURCE PATCH ONLY",
+    "sourceCommit": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+    "findingCount": 0,
+    "reportSha256": "cef23f1f785018a925537e074ce4cf2f7be538877fe8e66193122b5672872a6a",
+    "newNativeContractCreated": false,
+    "protectedProducerOrPromotionAuthority": false
+  },
+  "developmentBuild": {
+    "commands": [
+      "cargo build --locked --offline --bin catdesk",
+      "cargo build --locked --offline --manifest-path wake/Cargo.toml --bin CatDeskWakeHost"
+    ],
+    "profile": "dev with sha2 opt-level 3",
+    "artifactSha256": {
+      "CatDeskBinagotchy.exe": "0d9568d765defa26bd0bf9062ec7ba2019144c1f6096406f2443a3254d7c7620",
+      "CatDeskWakeHost.exe": "4489976970dae0f9d093843ee6938bd716afcf01df2d4cf993d8f89b3cecf015",
+      "adapter.py": "d9e1e68a6e48ccb45d132e287d2f13cdbef9c75d252ad64123ef73eb5d0ee118",
+      "wake_bridge.py": "eea29aff3cb6518a2c03e97bbb361d3e52357b5e47a81ca63fdaaa69da890f5d"
+    },
+    "artifactLengths": {
+      "CatDeskBinagotchy.exe": 77860864,
+      "CatDeskWakeHost.exe": 5472768,
+      "adapter.py": 75704,
+      "wake_bridge.py": 313218
+    },
+    "buildEvidenceSha256": "ff4fa4e5be5fd6a69dcd5843c1942fff172e020ebbbf9b1f0270761d75e20293",
+    "brokerRebuilt": false,
+    "cleanSource": true
+  },
+  "developmentSelection": {
+    "packageId": "1.0.0-dev.85-18885fbba3d6d430290509fc36356b3168c0847dbad1ffbd2477cbca256dbf44",
+    "mechanism": "Existing operator web-dev-runtime update-package",
+    "status": "PACKAGE_UPDATED_STOPPED",
+    "oldPackageStillExact": true,
+    "previousVerifiedReleaseRetained": true,
+    "previousVerifiedSource": "947aeda5371f738459d5fea9f7830785f778698a",
+    "currentVerification": "NOT_RECORDED",
+    "fullWakeHealthOrProtectedQualificationClaimed": false,
+    "bindingsTasksQueuesAndControlUnchanged": true,
+    "rawPreservationPinCount": 1730,
+    "rawPreservationPinMismatches": 2,
+    "rawMismatchesNotRepresentedAsAllBytesUnchanged": true
+  },
+  "localBackend": {
+    "startedUtc": "2026-11-16T12:54:10.873471+00:00",
+    "finishedUtc": "2026-11-16T12:55:14.102184+00:00",
+    "ready": true,
+    "unauthenticatedStatus": 401,
+    "wrongBearerStatus": 401,
+    "authenticatedInitializeStatus": 200,
+    "authenticatedCatalogStatus": 200,
+    "toolCount": 78,
+    "scopedWebDispatcherPublished": true,
+    "productionActivationPublished": false,
+    "productionListenerPresentBeforeDuringAfter": true,
+    "controllerExitedNormally": true,
+    "developmentListenerClosed": true,
+    "rawPreservationPinCount": 1730,
+    "rawPreservationPinMismatches": 7,
+    "profileIdentitiesAndTaskInventoryUnchanged": true,
+    "rawMismatchesNotRepresentedAsAllBytesUnchanged": true,
+    "authenticatedLocalMcpIsNotFreshWebV5Acceptance": true
+  },
+  "realBrowser": {
+    "profile": "EXISTING_AUTHORIZED_UNPROTECTED_DEVELOPMENT_PROFILE",
+    "owner": "Existing selected native adapter, retained private Job and bounded SeleniumBase/CDP path",
+    "captures": 1,
+    "frozenReadOnlyInspections": 1,
+    "messagesSent": 0,
+    "capture": {
+      "startedUtc": "2026-11-16T13:01:25.640975+00:00",
+      "finishedUtc": "2026-11-16T13:02:04.653944+00:00",
+      "browserBindingVerified": true,
+      "recordedMessages": 4,
+      "excerptOnlyMessages": 0,
+      "uncertainMessages": 0,
+      "rawTextPersisted": false,
+      "coverage": "RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY",
+      "initialHistoryGap": true,
+      "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+      "observedEstimateTokens": 22193,
+      "configuredBudgetTokens": 96000,
+      "automaticObservationEnabled": false,
+      "automaticRolloverEnabled": false
+    },
+    "diagnosticCorrection": "An earlier commentary misread excerptMessages:0 as zero visible messages. Source and retained frame establish recordedMessages:4 and zero excerpt-only messages. No DOM extraction defect or login failure follows from that field.",
+    "callerOriginIsNotBrowserLogin": "originAuthenticated:false is the standalone operator origin classification, not evidence that the browser lost authentication.",
+    "frozenInspection": {
+      "startedUtc": "2026-11-16T13:09:17.605429+00:00",
+      "finishedUtc": "2026-11-16T13:09:51.497530+00:00",
+      "state": "EXACT_READY_IDLE",
+      "history": "PRESENT",
+      "editor": "READY",
+      "composer": "EMPTY",
+      "generation": "IDLE",
+      "matchingOriginalUsers": 1,
+      "lastUserMatchesOriginal": false,
+      "turnsAfterOriginal": 3,
+      "responseState": "RESPONSE_SEQUENCE_DRIFT",
+      "deliveryReceiptProven": false,
+      "resendAuthorized": false,
+      "meaning": "The historical USER is present but is not the latest exchange. Preserve historical receipts and task state. This observation does not create delivery proof, a current response classification or resend eligibility."
+    },
+    "cleanup": {
+      "bothOwnersExited": true,
+      "profileQuiescentAfterBoth": true,
+      "profileIdentityUnchanged": true,
+      "bindingsTasksQueuesAndControlUnchanged": true,
+      "cleanupErrorReported": false,
+      "scope": "Real read-only Chrome use of the new development teardown, not installed production or full Wake acceptance."
+    }
+  },
+  "production": {
+    "protectedInstallationChanged": false,
+    "existingV5OrTunnelChanged": false,
+    "priorAcceptedBackendRestartAuthRollbackAndV5ResultsPreserved": true,
+    "recurringAutomationEnabled": false,
+    "nativeDevelopmentSessionsInterrupted": false
+  },
+  "tracks": {
+    "developmentCorrection": {
+      "state": "ACCEPTED",
+      "scope": "Scoped source patch, three native Windows tests, local build/MCP and bounded read-only development browser checks"
+    },
+    "originalF7ReleaseReview": {
+      "state": "BLOCKED",
+      "dependency": "Original report is PARTIAL with a real finding and incomplete cumulative coverage. Corrected source is different from the exact approved f7 input. Full exact-candidate independent review/artifact qualification is not established by a narrow patch PASS."
+    },
+    "originalD22Delivery": {
+      "state": "BLOCKED",
+      "dependency": "UNKNOWN original delivery still lacks an attributable original provider USER/turn/response. No replay, fabricated report, fence reset or generic clear-and-promote transition."
+    },
+    "protectedWakeMigration": {
+      "state": "BLOCKED",
+      "dependency": "No single physical root matches the retained current/control/config plus STOPPED state. Recorded root lacks current.json; other root has different control/config and is not STOPPED. Expired proposals remain unsigned. Existing purpose signing/elevated admission gates follow coherent state, not replace it."
+    },
+    "installedDirectWebLifecycle": {
+      "state": "BLOCKED",
+      "dependency": "Existing installed path lacks scoped work delivery/adapter and scoped Git capability. Genuine backend and Wake release chains are needed. Prior local/connector success cannot substitute for Web edit/checkpoint/self-Wake acceptance."
+    }
+  },
+  "nextExecutableOperation": "Publish these substantive qualification results on the existing feature branch and verify the remote SHA. Preserve exact candidate artifacts and the working fallback; no additional unchanged browser, d22 or root probes. Release progression requires genuine coherent protected state and exact candidate review/producer authority through the existing mechanisms.",
+  "operatorActionNow": "No generic retry, login, collector or signature is requested. A reviewed disposition of the conflicting protected root/state is the operator-only prerequisite; do not merge roots, seed a pointer, sign expired inputs or issue install Execute before that procedure and its exact inputs are qualified.",
+  "fullWebEditVerificationGitSelfWake": "OPEN",
+  "twoProjectIndependence": "OPEN"
+}
