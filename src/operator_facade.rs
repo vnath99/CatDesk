@@ -21,6 +21,9 @@ mod development_backend;
 
 #[path = "operator_installed_backend.rs"]
 mod installed_backend;
+#[cfg(windows)]
+#[path = "operator_review_observation.rs"]
+mod review_observation;
 pub(crate) use installed_backend::diagnostic_error_code as installed_backend_error_code;
 
 #[cfg(windows)]
@@ -170,6 +173,13 @@ pub(crate) enum WebDevelopmentAction {
     },
     InspectReadiness {
         project_id: String,
+        frozen_request: Option<(PathBuf, String)>,
+    },
+    InspectReviewRequest {
+        workflow: PathBuf,
+        expected_sha256: String,
+        turn: usize,
+        preflight_only: bool,
     },
     ReconcileLogin {
         project_id: String,
@@ -355,8 +365,23 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
             && (args.len() == 7 || args[7] == "--execute") => Ok(WebDevelopmentAction::ReconcileLogin {
                 project_id: args[4].clone(), marker_sha256: args[6].clone(), execute: args.len() == 8,
             }),
-        Some("inspect-readiness") if args.len()==5 && args[3]=="--project-id"
-            && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::InspectReadiness {project_id:args[4].clone()}),
+        Some("inspect-readiness") if matches!(args.len(),5|9) && args[3]=="--project-id"
+            && catdesk_wake::protocol::valid_id(&args[4])
+            && (args.len()==5 || (args[5]=="--frozen-observation-file" && args[7]=="--expected-request-sha256"
+                && !args[6].is_empty() && args[6].len()<=4096 && !args[6].chars().any(char::is_control)
+                && args[8].len()==64
+                && args[8].bytes().all(|b|b.is_ascii_digit()||(b'a'..=b'f').contains(&b)))) =>
+            Ok(WebDevelopmentAction::InspectReadiness {project_id:args[4].clone(),
+                frozen_request:if args.len()==9 {Some((PathBuf::from(&args[6]),args[8].clone()))}else{None}}),
+        Some("inspect-review-request") if matches!(args.len(),9|10) && args[3]=="--workflow-intent"
+            && args[5]=="--expected-workflow-sha256" && args[7]=="--turn"
+            && !args[4].is_empty() && args[4].len()<=4096 && !args[4].chars().any(char::is_control)
+            && args[6].len()==64 && args[6].bytes().all(|b| b.is_ascii_digit()||(b'a'..=b'f').contains(&b))
+            && args[8].parse::<usize>().is_ok_and(|n|(1..=8).contains(&n))
+            && (args.len()==9 || args[9]=="--preflight") =>
+            Ok(WebDevelopmentAction::InspectReviewRequest {workflow:PathBuf::from(&args[4]),
+                expected_sha256:args[6].clone(),turn:args[8].parse().map_err(|_|"review turn required")?,
+                preflight_only:args.len()==10}),
         Some("login") if args.len() == 5
             && args[3] == "--project-id"
             && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::Login {
@@ -451,6 +476,7 @@ fn login_web_development(workspace: &Path, project_id: &str) -> Result<serde_jso
 fn inspect_web_development_readiness(
     workspace: &Path,
     project_id: &str,
+    frozen_request: Option<(&Path, &str)>,
 ) -> Result<serde_json::Value, String> {
     let workspace = workspace
         .canonicalize()
@@ -471,7 +497,11 @@ fn inspect_web_development_readiness(
         &root,
         &target.url,
     )?;
-    let mut result = catdesk_wake::development_runtime::inspect_readiness(&workspace, &target.url)?;
+    let mut result = catdesk_wake::development_runtime::inspect_readiness_with_frozen_request(
+        &workspace,
+        &target.url,
+        frozen_request,
+    )?;
     lease.check_target(&expected)?;
     let after = mcp::operator_read_project_web_target(&workspace, project_id)
         .map_err(|_| "DEV_READINESS_TARGET_CHANGED")?
@@ -1108,9 +1138,16 @@ pub(crate) async fn execute_operator_action(
                 WebDevelopmentAction::Login { project_id } => {
                     login_web_development(workspace, &project_id)
                 }
-                WebDevelopmentAction::InspectReadiness { project_id } => {
-                    inspect_web_development_readiness(workspace, &project_id)
-                }
+                WebDevelopmentAction::InspectReadiness {
+                    project_id,
+                    frozen_request,
+                } => inspect_web_development_readiness(
+                    workspace,
+                    &project_id,
+                    frozen_request
+                        .as_ref()
+                        .map(|(path, hash)| (path.as_path(), hash.as_str())),
+                ),
                 WebDevelopmentAction::ReconcileLogin {
                     project_id,
                     marker_sha256,
@@ -1118,6 +1155,18 @@ pub(crate) async fn execute_operator_action(
                 } => {
                     reconcile_web_development_login(workspace, &project_id, &marker_sha256, execute)
                 }
+                WebDevelopmentAction::InspectReviewRequest {
+                    workflow,
+                    expected_sha256,
+                    turn,
+                    preflight_only,
+                } => review_observation::inspect(
+                    workspace,
+                    &workflow,
+                    &expected_sha256,
+                    turn,
+                    preflight_only,
+                ),
                 WebDevelopmentAction::ReconcileRootView {
                     authority_sha256,
                     root_view_sha256,
@@ -3002,6 +3051,49 @@ mod tests {
     }
 
     #[test]
+    fn approved_review_observation_cli_requires_frozen_workflow_and_turn_without_overrides() {
+        let valid = [
+            "operator",
+            "web-dev-runtime",
+            "inspect-review-request",
+            "--workflow-intent",
+            "review-workflow-intent.private.json",
+            "--expected-workflow-sha256",
+            &"a".repeat(64),
+            "--turn",
+            "1",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+        assert!(parse_operator_action(valid.clone()).is_ok());
+        let mut preflight = valid.clone();
+        preflight.push("--preflight".into());
+        assert!(matches!(
+            parse_operator_action(preflight),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::InspectReviewRequest {
+                    preflight_only: true,
+                    ..
+                }
+            )))
+        ));
+        for turn in ["0", "9", "-1", "1.0"] {
+            let mut changed = valid.clone();
+            changed[8] = turn.into();
+            assert!(parse_operator_action(changed).is_err());
+        }
+        for flag in ["--url", "--profile", "--send", "--approve", "--claim"] {
+            let mut changed = valid.clone();
+            changed.extend([flag.into(), "override".into()]);
+            assert!(parse_operator_action(changed).is_err());
+        }
+        let mut changed = valid;
+        changed[6] = "0".repeat(63);
+        assert!(parse_operator_action(changed).is_err());
+    }
+
+    #[test]
     fn web_development_inspect_readiness_requires_only_registered_project() {
         let valid = [
             "operator",
@@ -3011,6 +3103,29 @@ mod tests {
             "alpha",
         ];
         assert!(parse_operator_action(valid.into_iter().map(str::to_string)).is_ok());
+        let mut observation = valid.into_iter().map(str::to_string).collect::<Vec<_>>();
+        observation.extend([
+            "--frozen-observation-file".into(),
+            "original.frozen.txt".into(),
+            "--expected-request-sha256".into(),
+            "a".repeat(64),
+        ]);
+        assert!(matches!(
+            parse_operator_action(observation.clone()),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::InspectReadiness {
+                    frozen_request: Some(_),
+                    ..
+                }
+            )))
+        ));
+        for hash in ["".into(), "A".repeat(64), "a".repeat(63)] {
+            let mut changed = observation.clone();
+            changed[8] = hash;
+            assert!(parse_operator_action(changed).is_err());
+        }
+        observation.extend(["--url".into(), "https://chatgpt.com/c/other".into()]);
+        assert!(parse_operator_action(observation).is_err());
         for flag in ["--profile", "--url", "--message", "--seconds", "--send"] {
             let mut args = valid.into_iter().map(str::to_string).collect::<Vec<_>>();
             args.extend([flag.into(), "override".into()]);
@@ -3104,7 +3219,7 @@ mod tests {
             "DEV_RUNTIME_NOT_PREPARED"
         );
         assert_eq!(
-            inspect_web_development_readiness(&workspace, "alpha").unwrap_err(),
+            inspect_web_development_readiness(&workspace, "alpha", None).unwrap_err(),
             "DEV_RUNTIME_NOT_PREPARED"
         );
         fs::remove_dir(workspace).unwrap();

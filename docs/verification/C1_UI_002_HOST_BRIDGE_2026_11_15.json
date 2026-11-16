@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-16T03:25:25.230164+00:00",
+  "userDateZone": "America/New_York",
+  "taskId": "C1-UI-002",
+  "branch": "codex/c1-ui-002-content-fallback",
+  "sourceCommit": "f8cc3d88981271cca33a3da04b3ec7e036c2e610",
+  "scope": "ACTUAL_INLINE_HTML_IN_NODE_HOST_FIXTURES_AND_LOCAL_SELENIUMBASE_CDP_NOT_INSTALLED_CHATGPT_RENDER_ACCEPTANCE",
+  "sourceBlobSha256": {
+    "src/widget/catdesk_dashboard.html": "169c1ff0b6c0c0ed58431a045c7b608062ad04d7c9477a6adde4ce2b825eceb4",
+    "tests/widget_host_bridge.test.js": "9aaeeb9acaf058abbc011aef27ddb1838aa388128db1d330bf88ca3cebf728f9",
+    "tests/widget_host_bridge_browser.py": "dd9c916b03939262f54b9b59ebce330a1914d90716095215041081acb7a9d19e"
+  },
+  "demonstratedGap": "Original widget neither initialized standard MCP Apps nor read canonical tool-result _meta without legacy globals; current host metadata envelopes also need normalization.",
+  "liveTimeoutRootCause": "UNPROVEN_NO_RECENT_FORK_REGRESSION_CLAIM",
+  "implementation": [
+    "one ui/initialize and correlated initialized notification",
+    "parent-window and JSON-RPC identity checks",
+    "canonical hidden metadata and legacy globals normalize into the existing validated renderer",
+    "bounded initialization timeout with fixed redacted diagnostics and no retry",
+    "numeric deduplicated size notifications keep standard content visible",
+    "no automatic tool call, follow-up or project action",
+    "empty correlated host ping response",
+    "teardown stops observers/animations and ignores late standard and legacy results",
+    "unsupported host requests receive fixed error without echoing arguments"
+  ],
+  "nodeQualification": {
+    "originalTenCaseMatrix": "EXPECTED_RED_ON_UNMODIFIED_53E9F4D",
+    "baselineExitCode": 1,
+    "finalCases": 14,
+    "passed": 14,
+    "failed": 0,
+    "command": "node --test tests/widget_host_bridge.test.js",
+    "scope": "ACTUAL_FULL_INLINE_SCRIPT_WITH_STUBBED_DOM_AND_HOST"
+  },
+  "localBrowser": {
+    "scope": "LOCAL_HEADLESS_BROWSER_FIXTURE_NOT_CHATGPT_HOST_ACCEPTANCE",
+    "passed": true,
+    "elapsedSeconds": 6.516,
+    "state": {
+      "standardRendered": true,
+      "legacyRendered": true,
+      "refusalVisible": true,
+      "standardHeight": 168,
+      "standardFits": true,
+      "privateErrorVisible": false,
+      "pong": true,
+      "teardown": true,
+      "lateResultVisible": false,
+      "counts": {
+        "standard": 1,
+        "legacy": 1,
+        "refused": 1
+      }
+    },
+    "widgetSha256": "7f5b306f40968a28b9150382b689776b27fe292874e411fbd2b836a1529c99d4",
+    "chatgptRequests": 0,
+    "mcpToolExecutions": 0,
+    "authenticatedProfileUsed": false,
+    "browserContextExited": true
+  },
+  "boundedOwner": {
+    "startedUtc": "2026-11-16T03:23:55.9266523+00:00",
+    "finishedUtc": "2026-11-16T03:24:03.6429859+00:00",
+    "maximumSeconds": 90,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "containment": "KILL_ON_JOB_CLOSE",
+    "workerSha256": "cefc6fea27b6830f09f7b19cc6193905b58f1892c41da068b67cce210473d6bc"
+  },
+  "preservation": {
+    "pinsChecked": 1724,
+    "pinMismatches": 0,
+    "pinSetUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "missingSeedPathsUnchanged": true,
+    "passed": true,
+    "packagedDriverBytesUnchanged": true,
+    "remainingTestOwnedProcesses": 0,
+    "authenticatedProfileUsed": false,
+    "projectBindingsChanged": false
+  },
+  "priorAttempt": {
+    "state": "WINDOWS_SB_HEADLESS_WRAPPER_DRIVER_COPY_REFUSED_BEFORE_RENDER",
+    "writeGuardRetained": true,
+    "approvedRuntimeBytesChanged": false,
+    "resolution": "Existing SeleniumBase pure-CDP launcher used for the same local fixture; no new dependency or owner service."
+  },
+  "limits": [
+    "No actual ChatGPT or Codex host rendering qualification",
+    "No application release build or protected installation",
+    "Existing interactive action controls were not ported or qualified over standard tools/call",
+    "No MCP task, Wake, production lifecycle or external message executed",
+    "No producer, review verdict, release or replay authority created"
+  ],
+  "nextAction": "Review the source-bound UI change through the existing workflow, then qualify resource and actual host rendering only after an authorized release; keep direct-Web task/review/migration fences independent.",
+  "sources": [
+    "https://developers.openai.com/plugins/build/chatgpt-ui",
+    "https://developers.openai.com/plugins/reference",
+    "https://github.com/openai/mcp-extensions/blob/main/AGENTS.md",
+    "https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx"
+  ],
+  "accepted": {
+    "localFixtureRendering": true,
+    "independentReview": false,
+    "mergedIntoIntegration": false,
+    "installed": false,
+    "actualHostUI": false,
+    "webEditCheckpointSelfWake": false
+  },
+  "priorQualification": {
+    "sourceCommit": "aa9d59ee3142a5bec0c0d2cb9bb86e624cfae549",
+    "localRenderAndSizeAccepted": true,
+    "historyPreserved": true
+  }
+}

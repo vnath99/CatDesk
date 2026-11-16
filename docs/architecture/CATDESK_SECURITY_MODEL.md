@@ -1,5 +1,27 @@
 # CatDesk — Security and Authority Model
 
+**Decision 2026-11-16T01:38:56.316414+00:00:** The original f410 consent hash matches its historical record; current native approval is read, never created. Cancellation, expiry, changed inputs/claim and another native owner fail closed. Actual reads preserve native version 4 and the entire frozen batch. No key, grant, delivery receipt, verdict or producer authority is generated. Visible absence cannot authorize a resend or be relabeled as confirmed pre-submit failure. [Evidence](../verification/APPROVED_REVIEW_CONTEXT_OBSERVATION_2026_11_15.json).
+
+**Decision 2026-11-16T00:34:15.175115+00:00:** Frozen-request observation retains the original registered-project lease, exact paired target/generation, stopped host, exclusive browser lock and contained process cleanup. Native filtering rejects private fields and claimed receipt/resend authority. Unregistered d22 destination remains refused; its external review approval does not silently authorize a binding change. [Evidence](../verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
+
+**Decision 2026-11-16T00:09:22.940282+00:00:** The explicit operator decision authorized exactly one DACL-only RX application to the existing runtime readers plus one bounded native version check. Both completed; no write/owner/SACL rights, accounts, credentials, release authority, original task replay or grant change. Budget readback is advisory and cannot refill or authorize work. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
+**Decision 2026-11-15T22:34:51Z:** Only new disposable ACLs were changed during testing. Changing the existing interpreter ACL remains a separate exact resource-owner decision. DACL-only access preserves owner/SACL and requests no elevation; it creates no signer, account, grant or replay authority. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
+
+**Decision 2026-11-15T21:34:58Z:** Interpreter launch denial is reproduced by version-only inspection; neither this output nor daemon readiness grants replay, ACL/configuration changes, grant replacement or protected promotion. Disposable access tests must preserve original task and installation. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
+
+**Decision 2026-11-15T21:01:12Z:** Reported sandbox error text is untrusted diagnostic evidence, never proof that a target did not run or authority for retry, permission changes or recovery. Original prelaunch allowlist and ownership fences are unchanged. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
+
+**Source validation 2026-11-15T20:32:08Z:** retained proposal operations are now checked against their original full diff hash within the existing non-writing recovery validation. This adds no tool call, replay, authority, install or service. Source `9d96f8e32f3fdf8b528d15eda453e9398f74a392` passes eight native recovery tests and strict checks; selected live test app remains source `79a449b`.
+
+**Decision 2026-11-15T20:23:03Z:** Native Job/owner exit, exact task/registration/assignment, clean worktree and immutable journal snapshots still gate retirement. Only completed READ_ONLY read/search/preview calls with matching state/history/proposal/event evidence are newly eligible; original claims and completed call IDs are preserved. Any command, mutation, unsettled/unknown result, legacy owner or inconsistent receipt remains outside that path. Sandbox error text is a diagnostic, never authority to weaken permissions or infer a safe replay. See [dated proof](../verification/SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json).
+
+**Release-model clarification 2026-11-15T19:33:36Z:** one system and one unchanged canonical v5 interface. Frozen independently verified releases are production; authorized source/worktrees/builds and isolated local fixture tests are development. Reuse current selection, immutable artifacts, existing fallback/promotion/rollback and bounded owners. No new installation, release manager, tunnel, plugin, external connection or backend infrastructure. Local source work proceeds independently of protected-release acceptance.
+
+## 2026-11-15T19:18:45Z — Development/production separation decision
+
+Standing authorization covers source inspection/editing, local tests/builds, isolated development fixtures and recovery, inert review drafts and reviewed feature publication under existing workspace ownership. Preserve independent protected release/signing, credential, destructive, external-submission, cross-project and uncertain-replay boundaries. The existing realm predicate now refuses production supervisor activation from valid or incomplete development state, both in publication and cached dispatch. No platform rule or original exact review-start decision was weakened. See [dated qualification](../verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json) and [current handoff](../../CATDESK_PROJECT_HANDOFF.md) for exact maturity and remaining gates.
+
 > **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Reviewed consolidation reference; defensive design reference, not a grant to execute local commands, select releases, change browser state or send messages.
 > **Security objective:** Give ChatGPT Web useful *bounded* local capabilities while preserving project isolation, exact task attribution, idempotent side-effect handling and externally owned trust boundaries.
 
@@ -103,3 +125,15 @@ Tests must identify their verification maturity and exact artifact. This checkli
 **Decision at `2026-11-14T18:47:56Z`:** consolidate project/workspace capability, transport ownership, no-replay, privacy and protected release trust into one security-model reference while retaining the source's existing guards. Changes to authority, authentication, external effects or release signing require an independently reviewed milestone/ticket and a new UTC decision entry here. Routine incident audit stays in [CATDESK_ACTIVITY_LOG.md](../../CATDESK_ACTIVITY_LOG.md).
 
 Evidence/background: [original current architecture](../orchestrator/CANONICAL_CURRENT_ARCHITECTURE.md), [transport security](../tunnel/TRANSPORT_SECURITY_MODEL.md), [stable transport plan](../tunnel/STABLE_MCP_TRANSPORT_ARCHITECTURE.md), [wake independence](../orchestrator/WAKE_INDEPENDENCE.md), [release lifecycle](../orchestrator/CATDESK_PRODUCTION_RELEASE_LIFECYCLE.md), [T-0484 rollover](../orchestrator/tickets/T-0484_POST_MULTI_PROJECT_CONTEXT_METER_AUTO_COMPACTION.md), and [project MCP files](../../src/project_mcp.rs). Original task journals and protected state are local authority and are not published in documentation.
+
+## 2026-11-16T02:38:42.136005+00:00 — Existing startup owner qualification
+
+The actual installed health-cycle qualification denied all recovery calls in its child, allowed only one genuine status read and released real singleton guards on exit. It preserved 1,724 state pins and the startup registration. The child module-path source correction changes no credentials, producer authority, release selection, binding or replay fence. The historical reason the monitor stopped is not established by this reproduced launch-environment defect. [Installed and source evidence](../verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).
+
+## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
+
+Known full-stack and backend-only commands are compared exactly, including existing principal/settings constraints. A mode flag is not authority to overwrite, widen or remove another scope; mixed records and surviving unregistered monitor signals are refused. This changes no protected release, signing, browser, project or unknown-operation permissions. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
+
+## 2026-11-16T03:27:34.014882+00:00 — Local UI host bridge qualification
+
+Widget bridge messages are restricted to the parent and correlated JSON-RPC identities. The renderer accepts only its known metadata/schema, uses fixed initialization errors, acknowledges teardown and ignores late results. Tests exercise wrong window sources, malformed/duplicate/late messages and refused host requests without exposing raw arguments. No project grant, no-replay or release boundary is weakened. [Exact source and local evidence](../verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json).

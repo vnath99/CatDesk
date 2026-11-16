@@ -1,5 +1,27 @@
 # CatDesk — Components and Interface Contracts
 
+**Decision 2026-11-16T01:38:56.316414+00:00:** The local inspect-review-request command binds existing workflow/contract/consent/message hashes, actual approved WAITING_FOR_CHATGPT task, lease and state version; it holds the original native session lock and existing browser owner and rechecks after observation. Preflight starts no browser. Existing registered-project inspection still refuses unregistered targets; the review-only path carries explicit original destination approval and no Wake authority. Existing filtered submission metadata now retains semantic/anchor agreement counters. [Evidence](../verification/APPROVED_REVIEW_CONTEXT_OBSERVATION_2026_11_15.json).
+
+**Decision 2026-11-16T00:34:15.175115+00:00:** inspect-readiness optionally accepts a frozen request file and exact raw SHA-256. Native pre/post hash checks, hash-pinned embedded probe and existing primitives return only a strict metadata frame. Normal readiness remains compatible. This mode creates no delivery receipt and cannot authorize a resend; no new MCP tool or plugin is added. [Evidence](../verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
+
+**Decision 2026-11-16T00:09:22.940282+00:00:** Existing task metadata/resume now exposes journal-derived toolBudget. Terminal failed calls count; unreadable journals return null recorded/remaining counts. Original immutable admission and contract limits are retained across rollover. Elapsed limits are per serving connection; hidden ChatGPT turn usage is unknown. No new tool or plugin is required; this source change is not installed. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
+**Decision 2026-11-15T22:34:51Z:** Native logical filesystem permissions and OS resource ACLs are separate layers. Controlled private fixtures prove read/execute provisioning repairs this failure class and still denies writes; the application command implementation is unchanged. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
+
+**Decision 2026-11-15T21:34:58Z:** The Unix app-server control socket requires WebSocket HTTP Upgrade; JSONL applies to its stdio transport. Existing bounded proxy diagnosis now verifies readiness without a new daemon. Command probes reuse the real runner, not a parallel implementation. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
+
+**Decision 2026-11-15T21:01:12Z:** Future verify.command receipts optionally carry failureDiagnostic before the existing receipt hash/persistence. Successful receipts and existing tool contracts stay compatible; original private receipts are not rewritten. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
+
+**Source validation 2026-11-15T20:32:08Z:** retained proposal operations are now checked against their original full diff hash within the existing non-writing recovery validation. This adds no tool call, replay, authority, install or service. Source `9d96f8e32f3fdf8b528d15eda453e9398f74a392` passes eight native recovery tests and strict checks; selected live test app remains source `79a449b`.
+
+**Decision 2026-11-15T20:23:03Z:** Dedicated-owner task recovery now admits exact settled read/search/preview histories using the existing retirement transaction. `coldRecoveryProfile` describes this as DEDICATED_NAMED_JOB_NONMUTATING; the legacy zeroCallRecoveryOwnerClaim field remains for interface compatibility. The existing `review read` command is the event-bound body reader; `work response` reobserves installed timer state. No tool publication, connection or second reader service is added. See [dated proof](../verification/SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json).
+
+**Release-model clarification 2026-11-15T19:33:36Z:** one system and one unchanged canonical v5 interface. Frozen independently verified releases are production; authorized source/worktrees/builds and isolated local fixture tests are development. Reuse current selection, immutable artifacts, existing fallback/promotion/rollback and bounded owners. No new installation, release manager, tunnel, plugin, external connection or backend infrastructure. Local source work proceeds independently of protected-release acceptance.
+
+## 2026-11-15T19:18:45Z — Development/production separation decision
+
+The existing runtime is implemented in `wake/src/development_runtime.rs` and `src/operator_development_backend.rs` / `src/operator_development_project.rs`. Reuse `web-dev-runtime` package/status/run commands and the existing suspended-child owner. A normal root application build is the packaged Binagotchy app; unchanged Host/adapter/bridge may be retained with explicit component provenance. Production supervisor activation is omitted and refused in the development realm; read-only status/preflight remain available. See [dated qualification](../verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json) and [current handoff](../../CATDESK_PROJECT_HANDOFF.md) for exact maturity and remaining gates.
+
 > **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Reviewed consolidation reference; source paths verified against the November 14 development inventory, not a claim of deployed qualification.
 > **Authority:** [System architecture](CATDESK_ARCHITECTURE.md) determines product flow; [security](CATDESK_SECURITY_MODEL.md) governs authorization; [release/recovery](CATDESK_RELEASE_AND_RECOVERY.md) governs operational lifecycle. Live capability status comes from the [project handoff](../../CATDESK_PROJECT_HANDOFF.md) and original journals.
 
@@ -128,3 +150,15 @@ The operator favors the simple UI from the upstream [Xeift/CatDesk preview](http
 **Architecture adoption timestamp:** `2026-11-14T18:47:56Z` — component boundaries clarified and single-active-project policy specified for MVP. Material future component contract revisions must be appended with timestamp, rationale and related milestone; routine test results belong in the root [activity log](../../CATDESK_ACTIVITY_LOG.md).
 
 **Source pointers:** `src/project_mcp.rs`, `src/project_mcp_task.rs`, `src/operator_web_receipts.rs`, `src/operator_web_rollover.rs`, `src/operator_web_auto.rs`, `src/delegated/autonomy_projects.rs`, `src/delegated/provider_router.rs`, `wake/src/runtime.rs`, `wake/src/protocol.rs`, `scripts/wake_bridge.py`, `wake/adapter.py`; [historical technical index](../orchestrator/ARCHITECTURE_DOCUMENT_INDEX.md). These identify source responsibilities and do **not** assert that the installed release contains every feature.
+
+## 2026-11-16T02:38:42.136005+00:00 — Existing startup owner qualification
+
+The existing immediate workspace-monitor launcher now initializes a Windows PowerShell child with its host-default module path. Its executable, arguments, hidden window, singleton and unrelated environment remain unchanged; the parent environment is untouched. This corrects a reproduced Core-only module shadowing failure without another launcher service. The source fix is not installed. [Installed and source evidence](../verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).
+
+## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
+
+The facade and passive doctor share exact task/Run scope interpretation. Both logon and immediate arguments carry BackendOnly when explicitly selected; ordinary status reads the actual known registration. Mixed scopes and a surviving unregistered monitor fail closed. Registered scope and a mutex signal do not prove live process scope. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
+
+## 2026-11-16T03:27:34.014882+00:00 — Local UI host bridge qualification
+
+C1-UI-002 retains the existing widget/resource identity and appearance. The source bridge adds bounded initialization, validated parent messages, result hydration, size notifications, health ping and teardown. It automatically invokes no server tool, follow-up or retry. The source remains on the existing independent UI feature branch under PR 27. [Exact source and local evidence](../verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json).

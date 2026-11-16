@@ -314,6 +314,7 @@ function Get-AutostartSupervisorWorkspaceId {
 }
 
 function Get-AutostartDefinition {
+    param([bool]$LocalOnly = [bool]$BackendOnly)
     $root = (Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
     $directory = Get-Item -LiteralPath $root -Force -ErrorAction Stop
     if ($directory -isnot [IO.DirectoryInfo]) { throw 'autostart workspace is not a directory' }
@@ -326,6 +327,7 @@ function Get-AutostartDefinition {
     $powershellHost = Get-AutostartPowerShellHost
     $arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Workspace "{1}"' -f $supervisor, $root
     $monitorArguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Workspace "{1}" -InitialDelaySeconds 0' -f $supervisor, $root
+    if ($LocalOnly) { $arguments += ' -BackendOnly'; $monitorArguments += ' -BackendOnly' }
     $runKeyName = "CatDesk.Autostart.$workspaceId"
     [pscustomobject]@{
         TaskPath = '\'
@@ -335,11 +337,36 @@ function Get-AutostartDefinition {
         Execute = $powershellHost
         Arguments = $arguments
         MonitorArguments = $monitorArguments
+        BackendOnly = $LocalOnly
         UserId = (Get-AutostartCurrentUser)
         RunKeyPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
         RunKeyName = $runKeyName
         RunKeyValue = ('"{0}" {1}' -f $powershellHost, $arguments)
     }
+}
+
+function Get-AutostartRegistration {
+    $definition = Get-AutostartDefinition
+    $alternate = Get-AutostartDefinition -LocalOnly:(-not $BackendOnly)
+    $task = Get-AutostartTask -Definition $definition
+    $runValue = Get-OwnedAutostartRunKeyValue -Definition $definition
+    $taskOwned = Test-OwnedAutostartTask -Task $task -Definition $definition
+    $runOwned = Test-OwnedAutostartRunKey -Value $runValue -Definition $definition
+    $alternateTaskOwned = Test-OwnedAutostartTask -Task $task -Definition $alternate
+    $alternateRunOwned = Test-OwnedAutostartRunKey -Value $runValue -Definition $alternate
+    $conflict = ''
+    if (($taskOwned -or $runOwned) -and ($alternateTaskOwned -or $alternateRunOwned)) {
+        $conflict = 'AUTOSTART_SCOPE_CONFLICT'
+    } elseif ($alternateTaskOwned -or $alternateRunOwned) {
+        $definition = $alternate
+        $taskOwned = $alternateTaskOwned
+        $runOwned = $alternateRunOwned
+    }
+    if (($null -ne $task -and -not $taskOwned) -or
+        (-not [string]::IsNullOrWhiteSpace([string]$runValue) -and -not $runOwned)) {
+        if (-not $conflict) { $conflict = 'AUTOSTART_CONFLICT' }
+    }
+    [pscustomobject]@{ Definition = $definition; TaskOwned = $taskOwned; RunOwned = $runOwned; Conflict = $conflict }
 }
 
 function Get-AutostartPowerShellHost {
@@ -535,11 +562,29 @@ function Test-AutostartSupervisorRunning {
     }
 }
 
+function New-AutostartSupervisorProcessStartInfo {
+    param($Definition)
+    $info = [Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = $Definition.Execute
+    $info.Arguments = $Definition.MonitorArguments
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    # The persisted owner is Windows PowerShell. Inheriting PowerShell 7's
+    # module path can select Core-only built-ins and make ordinary commands
+    # unavailable. Let the child initialize its host-appropriate module path;
+    # do not change the parent environment or the registered command identity.
+    $info.EnvironmentVariables.Remove('PSModulePath')
+    return $info
+}
+
 function Start-AutostartSupervisor {
     param($Definition)
     Invoke-LifecycleSeam -Name 'AutostartSupervisorStart' -Arguments @($Definition) -Default {
         param($expected)
-        Start-Process -FilePath $expected.Execute -ArgumentList $expected.MonitorArguments -WindowStyle Hidden -ErrorAction Stop | Out-Null
+        $process = [Diagnostics.Process]::Start((New-AutostartSupervisorProcessStartInfo -Definition $expected))
+        if ($null -eq $process) { throw 'autostart supervisor did not start' }
+        $process.Dispose()
     }
 }
 
@@ -578,25 +623,37 @@ function Unregister-OwnedAutostartTask {
 function Invoke-AutostartLifecycle {
     if ($AutostartAction -notin @('enable', 'status', 'disable')) { throw 'autostart requires enable, status, or disable' }
     try {
-        $definition = Get-AutostartDefinition
-        $task = Get-AutostartTask -Definition $definition
-        $taskOwned = Test-OwnedAutostartTask -Task $task -Definition $definition
-        $runValue = Get-OwnedAutostartRunKeyValue -Definition $definition
-        $runOwned = Test-OwnedAutostartRunKey -Value $runValue -Definition $definition
-        $taskConflict = ($null -ne $task -and -not $taskOwned)
-        $runConflict = (-not [string]::IsNullOrWhiteSpace([string]$runValue) -and -not $runOwned)
-        if ($taskConflict -or $runConflict) { Write-LifecycleStatus 'AUTOSTART_CONFLICT'; return }
+        $registration = Get-AutostartRegistration
+        if ($registration.Conflict) { Write-LifecycleStatus $registration.Conflict; return }
+        $definition = $registration.Definition
+        $taskOwned = $registration.TaskOwned
+        $runOwned = $registration.RunOwned
+        # Status observes either exact existing scope. Enabling must never
+        # convert it implicitly; explicit backend-only removal cannot remove a
+        # broader full-stack registration. Default disable removes its exact
+        # existing known definition, as before.
+        if (($taskOwned -or $runOwned) -and $definition.BackendOnly -ne [bool]$BackendOnly -and
+            ($AutostartAction -ceq 'enable' -or ($AutostartAction -ceq 'disable' -and $BackendOnly))) {
+            Write-LifecycleStatus 'AUTOSTART_SCOPE_CONFLICT'; return
+        }
+        $scopeDetail = if ($definition.BackendOnly) { 'scope=BACKEND_ONLY' } else { 'scope=FULL_STACK' }
         switch ($AutostartAction) {
             'status' {
                 if ($taskOwned -or $runOwned) {
-                    if (Test-AutostartSupervisorRunning -Definition $definition) { Write-LifecycleStatus 'AUTOSTART_ENABLED' }
-                    else { Write-LifecycleStatus 'AUTOSTART_REGISTERED_MONITOR_STOPPED' }
+                    if (Test-AutostartSupervisorRunning -Definition $definition) { Write-LifecycleStatus 'AUTOSTART_ENABLED' $scopeDetail }
+                    else { Write-LifecycleStatus 'AUTOSTART_REGISTERED_MONITOR_STOPPED' $scopeDetail }
                     return
                 }
                 Write-LifecycleStatus 'AUTOSTART_DISABLED'; return
             }
             'enable' {
                 if (-not $taskOwned -and -not $runOwned) {
+                    # Disable only removes persistence. A surviving monitor
+                    # has no independently established scope and must exit
+                    # before a new registration can label or reuse its guard.
+                    if (Test-AutostartSupervisorRunning -Definition $definition) {
+                        Write-LifecycleStatus 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE'; return
+                    }
                     $taskRegistered = $false
                     try {
                         Register-OwnedAutostartTask -Definition $definition
@@ -622,7 +679,7 @@ function Invoke-AutostartLifecycle {
                 # before reporting ENABLED, so a subsequent daemon-loss drill cannot
                 # strand control between registration and the next logon.
                 Ensure-AutostartSupervisorRunning -Definition $definition
-                Write-LifecycleStatus 'AUTOSTART_ENABLED'; return
+                Write-LifecycleStatus 'AUTOSTART_ENABLED' $scopeDetail; return
             }
             'disable' {
                 if ($taskOwned) { Unregister-OwnedAutostartTask -Definition $definition }
@@ -985,7 +1042,7 @@ function Invoke-CatDeskOnlyStop {
 }
 
 try {
-    if ($BackendOnly -and $Command -notin @('start', 'recover')) { throw 'BackendOnly is limited to start and recover' }
+    if ($BackendOnly -and $Command -notin @('start', 'recover', 'autostart')) { throw 'BackendOnly is limited to start, recover and autostart' }
     if ($Command -ne 'doctor' -and ($ObservationFile -or $ProjectWorkspace -or $WakeRoot -or $Human)) { throw 'doctor options require doctor' }
     switch ($Command) {
         'install' { Invoke-InstallPreparation }

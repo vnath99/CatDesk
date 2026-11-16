@@ -889,7 +889,7 @@ fn validate_slug(value: &str, label: &str) -> Result<(), ContractPolicyError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use uuid::Uuid;
 
@@ -950,7 +950,7 @@ mod tests {
         assert_eq!(boundaries["protectedReleaseChecksUnchanged"], true);
     }
 
-    fn contract() -> AutonomousDevelopmentContractV1 {
+    pub(crate) fn contract() -> AutonomousDevelopmentContractV1 {
         let root = std::env::temp_dir().join(format!("catdesk-adc-{}", Uuid::new_v4()));
         std::fs::create_dir_all(root.join("src")).expect("workspace");
         AutonomousDevelopmentContractV1 {

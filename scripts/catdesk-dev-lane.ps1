@@ -13,7 +13,9 @@ param(
 # This facade never installs CatDesk, starts a daemon, changes production
 # configuration, owns the official Secure MCP tunnel, or submits Wake events.
 # Source build/test execution remains on the normal operator's Rust toolchain;
-# a separately reviewed isolated instance is required before adding 'run'.
+# runtime execution is already provided separately by operator web-dev-runtime
+# run-backend/run-project-backend; use that existing isolated owner, not a
+# duplicate 'run' action or protected production promotion.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 

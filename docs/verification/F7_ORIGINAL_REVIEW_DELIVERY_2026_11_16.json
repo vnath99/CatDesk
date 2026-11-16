@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-16T11:34:53.217Z",
+  "scope": "ORIGINAL_HUMAN_APPROVED_F7_SINGLE_PUBLIC_SOURCE_REVIEW_DELIVERY",
+  "contractId": "nov15-independent-f7-wake-review",
+  "nativeHash": "fnv1a64:f0ca191204309d3b",
+  "sourceCommit": "f7f1dedeb2584469e252969f195c43c5b4d3aa6a",
+  "nativeState": "WAITING_FOR_CHATGPT",
+  "nativeStateVersion": 4,
+  "newContractCreated": false,
+  "destinationAdmission": {
+    "previouslyRegisteredProject": "catdesk",
+    "registryAndWakePaired": true,
+    "generation": 34,
+    "registryDigestRevalidated": true,
+    "activeWorkIntent": "NONE",
+    "rollover": "NONE",
+    "firstPartyIdentityMatched": true,
+    "firstPartyIdleBeforeSend": true,
+    "noBindingChanged": true,
+    "authority": "Original f7 exact human review-start authorization plus standing routine public-source review scope for registered verified projects"
+  },
+  "transport": "EXISTING_FIRST_PARTY_CODEX_APP_SEND_MESSAGE_TO_THREAD",
+  "sendCalls": 1,
+  "payloadFileSha256": "32e03b26c8f36faefa964710707d01a4068533a9e1231a61bd6552d07b665b3f",
+  "userEvidence": {
+    "actualTurnAndUserMessageIdentifiersRetainedPrivately": true,
+    "matchingOriginalUserCount": 1,
+    "comparison": "Full frozen body matches; first-party history omits only the final LF",
+    "sourceAndContractAndTaskIdentityMatched": true,
+    "wakeReceiptFabricated": false
+  },
+  "responseEvidence": {
+    "monitorSeconds": 178,
+    "threadStatus": "active",
+    "taskTurnContainsUserOnly": true,
+    "assistantReviewObserved": false,
+    "providerErrorReturned": null,
+    "historicalAssistantResponseExcluded": true,
+    "completedUserTurnIsNotAssistantCompletion": true
+  },
+  "result": "USER_SUBMISSION_OBSERVED_REVIEW_RESPONSE_PENDING_UNVERIFIED",
+  "reviewVerdict": null,
+  "reportFinalized": false,
+  "producerAuthority": false,
+  "noReplay": true,
+  "unknownD22RequestTouched": false,
+  "furtherUnchangedPolling": "STOPPED_PENDING_NEW_PROVIDER_EVIDENCE",
+  "remainingAutomaticStep": "On genuine original response notification, read only that attributable turn, validate coverage and retain its report through the original contract; finalize/ack/snapshot/producer only if their independent gates pass. No new approval or replacement contract is needed for the existing authorized scope.",
+  "operatorActionForF7ReviewStart": "NONE_ALREADY_AUTHORIZED_AND_APPLIED",
+  "effects": {
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "tunnelStarts": 0,
+    "recurringJobs": 0,
+    "protectedInstallationChanges": 0,
+    "projectBindingChanges": 0,
+    "otherSessionsInterrupted": false
+  },
+  "fullWebEditCheckpointSelfWakeAcceptance": false
+}

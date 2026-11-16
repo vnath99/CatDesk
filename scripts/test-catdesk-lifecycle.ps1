@@ -53,6 +53,41 @@ function New-OwnedTask($Definition) {
     }
 }
 
+# Exercise the real cross-edition child environment without starting a monitor,
+# backend, persistence registration or lifecycle action.
+$launchAst = [Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens, [ref]$errors)
+$launchDefinition = @($launchAst.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'New-AutostartSupervisorProcessStartInfo' }, $true))
+Require ($launchDefinition.Count -eq 1) 'one supervisor launch definition exists'
+Invoke-Expression $launchDefinition[0].Extent.Text
+$parentModulePath = $env:PSModulePath
+$childHost = (Get-Command powershell.exe -CommandType Application -ErrorAction Stop).Path
+$probe = "`$ProgressPreference='SilentlyContinue'; `$cmd=Get-Command Get-FileHash -ErrorAction Stop; @{hashCommandAvailable=(`$null -ne `$cmd);edition=`$PSVersionTable.PSEdition}|ConvertTo-Json -Compress"
+$probeArguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probe))
+$probeInfo = New-AutostartSupervisorProcessStartInfo -Definition ([pscustomobject]@{ Execute = $childHost; MonitorArguments = $probeArguments })
+Require ($probeInfo.FileName -ceq $childHost -and $probeInfo.Arguments -ceq $probeArguments) 'child command identity is unchanged'
+Require (-not $probeInfo.UseShellExecute -and $probeInfo.CreateNoWindow) 'child remains hidden without a shell launcher'
+Require (-not $probeInfo.EnvironmentVariables.ContainsKey('PSModulePath')) 'child initializes its own module path'
+Require ($probeInfo.EnvironmentVariables['PATH'] -ceq $env:PATH) 'unrelated child environment is preserved'
+Require ($env:PSModulePath -ceq $parentModulePath) 'parent module environment is unchanged'
+$probeInfo.RedirectStandardOutput = $true
+$probeInfo.RedirectStandardError = $true
+$probeChild = [Diagnostics.Process]::new()
+$probeChild.StartInfo = $probeInfo
+$probeStarted = $false
+try {
+    $probeStarted = $probeChild.Start()
+    Require $probeStarted 'real Windows PowerShell child starts'
+    Require ($probeChild.WaitForExit(10000)) 'read-only child exits within ten seconds'
+    $probeOutput = $probeChild.StandardOutput.ReadToEnd()
+    $probeErrors = $probeChild.StandardError.ReadToEnd()
+    Require ($probeChild.ExitCode -eq 0 -and $probeErrors.Length -eq 0 -and $probeOutput.Length -lt 1024) "child command lookup succeeds without errors (exit=$($probeChild.ExitCode), stderrBytes=$($probeErrors.Length), stdoutBytes=$($probeOutput.Length))"
+    $probeResult = $probeOutput | ConvertFrom-Json
+    Require ($probeResult.hashCommandAvailable -and $probeResult.edition -ceq 'Desktop') 'Windows PowerShell loads its own hash cmdlet'
+} finally {
+    if ($probeStarted -and -not $probeChild.HasExited) { $probeChild.Kill(); Require ($probeChild.WaitForExit(5000)) 'owned child cleanup completes' }
+    $probeChild.Dispose()
+}
+
 $actions = [Collections.Generic.List[string]]::new()
 $canonical = [pscustomobject]@{ Path = 'C:\fixture\target\release\catdesk.exe'; Sha256 = 'a' * 64 }
 $base = @{
@@ -503,6 +538,57 @@ try {
     $fallbackDisable = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'disable' -Seams $fallback | ConvertFrom-Json
     Require ($fallbackDisable.state -eq 'AUTOSTART_DISABLED' -and ([string]::Join(',', $actions)) -eq 'runkey-unregister') 'disable removes only the exact owned run-key fallback'
     $actions.Clear()
+
+    # Scope is part of the exact persisted command, not permission to rewrite
+    # an existing owner. All registration/process effects below are fixtures.
+    $backendEnabled = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'enable' -Seams $autostart -FixtureBackendOnly | ConvertFrom-Json
+    Require ($backendEnabled.state -ceq 'AUTOSTART_ENABLED' -and $backendEnabled.detail -ceq 'scope=BACKEND_ONLY') 'backend-only scope is selectable through the public facade'
+    $backendDefinition = $Global:CatDeskAutostartDefinitions[$Global:CatDeskAutostartDefinitions.Count - 1]
+    Require ($backendDefinition.BackendOnly -and $backendDefinition.Arguments.EndsWith(' -BackendOnly') -and $backendDefinition.MonitorArguments.EndsWith(' -BackendOnly')) 'logon and immediate monitor commands retain backend-only scope'
+    Require ($backendDefinition.TaskName -ceq $normalDefinition.TaskName -and $backendDefinition.Execute -ceq $normalDefinition.Execute) 'backend-only mode reuses the existing owner identity'
+    $actions.Clear()
+    $backendStatus = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $autostart | ConvertFrom-Json
+    Require ($backendStatus.state -ceq 'AUTOSTART_ENABLED' -and $backendStatus.detail -ceq 'scope=BACKEND_ONLY' -and $actions.Count -eq 0) 'ordinary status recognizes the exact backend-only registration without starting anything'
+    $widen = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'enable' -Seams $autostart | ConvertFrom-Json
+    Require ($widen.state -ceq 'AUTOSTART_SCOPE_CONFLICT' -and $actions.Count -eq 0) 'default enable cannot widen an existing backend-only owner'
+    $backendDoctor = Invoke-FixtureFacade -Command 'doctor' -Seams $autostart | ConvertFrom-Json
+    Require ((@($backendDoctor.layers | Where-Object layer -CEQ 'PERSISTENT_SUPERVISOR')[0]).code -ceq 'SUPERVISOR_MONITOR_SIGNAL_PRESENT') 'doctor recognizes the same exact backend-only owner as status'
+    Require ($actions.Count -eq 0) 'doctor never starts or edits the registered owner'
+
+    $Global:CatDeskAutostartRunValue = $normalDefinition.RunKeyValue
+    foreach ($action in @('status','enable','disable')) {
+        $mixed = Invoke-FixtureFacade -Command 'autostart' -AutostartAction $action -Seams $autostart -FixtureBackendOnly | ConvertFrom-Json
+        Require ($mixed.state -ceq 'AUTOSTART_SCOPE_CONFLICT' -and $actions.Count -eq 0) 'different exact task/Run scopes fail closed without merging owners'
+    }
+    $mixedDoctor = Invoke-FixtureFacade -Command 'doctor' -Seams $autostart | ConvertFrom-Json
+    Require ((@($mixedDoctor.layers | Where-Object layer -CEQ 'PERSISTENT_SUPERVISOR')[0]).code -ceq 'SUPERVISOR_REGISTRATION_CONFLICT') 'doctor reports mixed registration scopes as a conflict'
+    $Global:CatDeskAutostartRunValue = $null
+    $Global:CatDeskAutostartFixtureTask = New-OwnedTask $normalDefinition
+    foreach ($action in @('enable','disable')) {
+        $narrow = Invoke-FixtureFacade -Command 'autostart' -AutostartAction $action -Seams $autostart -FixtureBackendOnly | ConvertFrom-Json
+        Require ($narrow.state -ceq 'AUTOSTART_SCOPE_CONFLICT' -and $actions.Count -eq 0) 'backend-only mutation cannot replace or remove an existing full-stack owner'
+    }
+    $fullStatus = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $autostart -FixtureBackendOnly | ConvertFrom-Json
+    Require ($fullStatus.detail -ceq 'scope=FULL_STACK' -and $actions.Count -eq 0) 'status reports actual existing scope rather than the requested flag'
+    $Global:CatDeskAutostartFixtureTask = $null
+    $Global:CatDeskAutostartSupervisorRunning = $false
+    $backendFallback = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'enable' -Seams $fallback -FixtureBackendOnly | ConvertFrom-Json
+    Require ($backendFallback.state -ceq 'AUTOSTART_ENABLED' -and $Global:CatDeskAutostartRunValue.EndsWith(' -BackendOnly')) 'existing Run fallback preserves backend-only scope'
+    $actions.Clear()
+    $backendFallbackStatus = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $fallback | ConvertFrom-Json
+    Require ($backendFallbackStatus.detail -ceq 'scope=BACKEND_ONLY' -and $actions.Count -eq 0) 'ordinary status recognizes backend-only Run fallback'
+    $backendFallbackDisable = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'disable' -Seams $fallback | ConvertFrom-Json
+    Require ($backendFallbackDisable.state -ceq 'AUTOSTART_DISABLED' -and ($actions -join ',') -ceq 'runkey-unregister') 'default disable removes only the exact existing known backend-only Run value'
+    $actions.Clear()
+    foreach ($localOnly in @($false,$true)) {
+        $survivingMonitor = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'enable' -Seams $autostart -FixtureBackendOnly:$localOnly | ConvertFrom-Json
+        Require ($survivingMonitor.state -ceq 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE' -and $actions.Count -eq 0) 'an unregistered surviving monitor is never relabeled or reused as a new scope'
+        Require ($null -eq $Global:CatDeskAutostartFixtureTask -and $null -eq $Global:CatDeskAutostartRunValue) 'surviving monitor refusal creates no persistence'
+    }
+    foreach ($command in @('install','status','diagnose','doctor','stop','wake')) {
+        $invalidScope = Invoke-FixtureFacade -Command $command -Seams $autostart -FixtureBackendOnly | ConvertFrom-Json
+        Require ($invalidScope.state -ceq 'ACTION_REQUIRED' -and $actions.Count -eq 0) 'backend-only switch remains refused outside its explicit lifecycle commands'
+    }
     $missingAction = Invoke-FixtureFacade -Command 'autostart' -Seams $autostart | ConvertFrom-Json
     Require ($missingAction.state -eq 'ACTION_REQUIRED') 'autostart requires an explicit action'
     Require ($actions.Count -eq 0) 'missing autostart action is non-mutating'

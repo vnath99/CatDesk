@@ -1,5 +1,27 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-16T01:38:56.316414+00:00:** Two bounded source-controller observations preserved 1,724 pins and cleaned their owned processes. Genuine approval context exists, but original review delivery/report remains unproven: platform returned only thread ID, while both bounded browser readers find zero matching USER messages. Hold that chain without repeated probes. Selected packages, canonical connection and protected releases remain unchanged; f7 start and physical-root migration authority are independent gates. [Evidence](../verification/APPROVED_REVIEW_CONTEXT_OBSERVATION_2026_11_15.json).
+
+**Decision 2026-11-16T00:34:15.175115+00:00:** The source-candidate observer was built separately and live-qualified without changing selection, immutable retained packages or protected production. One no-send observation preserved 1,724 pins and cleaned all owned processes. Source/live diagnostic evidence does not supply independent review verdicts, signed installer authority or complete Web coding acceptance. [Evidence](../verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
+
+**Decision 2026-11-16T00:09:22.940282+00:00:** The runtime-access failure was repaired through its approved resource-owner procedure without a CatDesk/Wake promotion. Actual interpreter version execution passed; the selected development package and protected production release remain unchanged. Source budget readback passed four targeted regressions, Clippy and formatting; it is not independently reviewed release authority. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
+**Decision 2026-11-15T22:34:51Z:** No backend or Wake upgrade is needed to address the native interpreter permission dependency. A frozen owner-scoped read/execute repair is preflight-ready, not executed; genuine protected release/review gates still apply to separate missing installed Web capabilities. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
+
+**Decision 2026-11-15T21:34:58Z:** Native diagnostic probes qualify only their exact runtime layers. No candidate rebuild/selection or protected upgrade occurred; existing frozen production, fallback and canonical v5 remain unchanged. Interpreter qualification is a separate unresolved local dependency. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
+
+**Decision 2026-11-15T21:01:12Z:** This source-only diagnostic change does not rebuild/select a package or confer promotion authority. Selected development app remains 79a449b, prior verified fallback is retained, and production/v5 stay unchanged. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
+
+**Source validation 2026-11-15T20:32:08Z:** retained proposal operations are now checked against their original full diff hash within the existing non-writing recovery validation. This adds no tool call, replay, authority, install or service. Source `9d96f8e32f3fdf8b528d15eda453e9398f74a392` passes eight native recovery tests and strict checks; selected live test app remains source `79a449b`.
+
+**Decision 2026-11-15T20:23:03Z:** Current development source 79a449b was built and selected through the existing unprotected package transaction with the previous verified 947aeda fallback retained. Its backend/recovery/edit/Wake parts have live evidence, but the native verifier failed; do not mark the whole candidate healthy or confer protected release authority. Production and the single canonical v5 interface are unchanged. Preserve failed receipts and continue eligible work; do not treat ordinary development as production promotion. See [dated proof](../verification/SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json).
+
+**Release-model clarification 2026-11-15T19:33:36Z:** one system and one unchanged canonical v5 interface. Frozen independently verified releases are production; authorized source/worktrees/builds and isolated local fixture tests are development. Reuse current selection, immutable artifacts, existing fallback/promotion/rollback and bounded owners. No new installation, release manager, tunnel, plugin, external connection or backend infrastructure. Local source work proceeds independently of protected-release acceptance.
+
+## 2026-11-15T19:18:45Z — Development/production separation decision
+
+Unprotected development package updates and local verification records are independent of protected installer/broker/signing authority. The existing transaction preserves immutable versions and a previously verified fallback; new health must be measured before recording a working current package. Compiled script identity checks remain strict: use a controller from matching source instead of weakening them. Current package selection, authenticated local health and cleanup are qualified; protected promotion and fresh remote Web acceptance are not implied. The canonical external v5 connection remains unchanged. Missing installed delivery/Git/adapter capabilities are handled by the existing genuine reviewed release process, not a development tunnel or silent rerouting. See [dated qualification](../verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json) and [current handoff](../../CATDESK_PROJECT_HANDOFF.md) for exact maturity and remaining gates.
+
 > **Revision timestamp (UTC):** `2026-11-14T18:47:56Z` · **Status:** Reviewed consolidation reference; does not authorize an installation, privileged broker operation, signer creation or recovery action.
 > **Contract:** Simple operator experience with conservative, evidence-driven restore. For architecture see [CATDESK_ARCHITECTURE.md](CATDESK_ARCHITECTURE.md); for security and journal prohibitions see [CATDESK_SECURITY_MODEL.md](CATDESK_SECURITY_MODEL.md).
 
@@ -126,3 +148,15 @@ Global startup, release/promotion and browser leases must be separate; one statu
 **Decision recorded at `2026-11-14T18:47:56Z`:** make recover/diagnose a first-class operator experience while preserving current release authority separation and external tunnel ownership. Changes to process authority, release/rollback rules or installation require their own dated milestone/ticket and independent review; ordinary incident outcomes go into the root activity log, not this architecture file.
 
 Relevant legacy/current files: [prior architecture](../orchestrator/CANONICAL_CURRENT_ARCHITECTURE.md), [three-lane design](../orchestrator/CATDESK_SIMPLIFIED_DEV_RELEASE_WAKE_MODEL.md), [release lifecycle](../orchestrator/CATDESK_PRODUCTION_RELEASE_LIFECYCLE.md), [T-0485 Wake broker](../orchestrator/tickets/T-0485_WAKE_PROTECTED_INSTALL_BROKER.md), [transport design](../tunnel/STABLE_MCP_TRANSPORT_ARCHITECTURE.md), and [root commands](../../CATDESK_IMPORTANT_COMMANDS.md). Historical status is evidence only and cannot supply fresh trust.
+
+## 2026-11-16T02:38:42.136005+00:00 — Existing startup owner qualification
+
+The installed passive doctor distinguishes canonical listener health from stopped startup monitoring. A normal read-only health cycle does not qualify daemon-loss recovery, reboot recovery or stable-supervisor activation. Existing registration is full-stack, so indefinite activation remains held until backend-only scope and stop/cleanup are qualified through existing mechanisms. Do not provision the absent protected root or rewrite an owned registration as a diagnostic side effect. [Installed and source evidence](../verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).
+
+## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
+
+Backend-only startup selection is a source capability awaiting the normal release path. Enable cannot convert an existing scope. Disable removes only exact owned persistence and does not terminate its monitor; a surviving unregistered monitor blocks re-registration. Preserve historical C110 recovery/no-replacement evidence instead of repeating it as current installed acceptance. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
+
+## 2026-11-16T03:27:34.014882+00:00 — Local UI host bridge qualification
+
+UI fixture qualification is not release authority. The original source and every intermediate browser result remain recorded; a Windows headless wrapper driver-copy attempt was refused by a retained write guard, and the existing pure-CDP launcher completed without driver changes. Independent source review and the normal release/actual-host checks remain required; no connection refresh or protected upgrade was performed. [Exact source and local evidence](../verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json).

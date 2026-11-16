@@ -2182,12 +2182,29 @@ fn require_observed_target_generation(store: &Store, url: &str, expected: u64) -
 }
 
 fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight> {
+    profile_observation_preflight(workspace, target_url, &|store| {
+        require_login_target(store, target_url)?;
+        store
+            .config()?
+            .targets
+            .values()
+            .find(|target| target.url == target_url)
+            .map(|target| target.generation)
+            .ok_or_else(|| "DEV_LOGIN_TARGET_NOT_REGISTERED".into())
+    })
+}
+
+fn profile_observation_preflight(
+    workspace: &Path,
+    target_url: &str,
+    require_target_authority: &dyn Fn(&Store) -> Result<u64>,
+) -> Result<LoginPreflight> {
     protocol::validate_target(target_url)?;
     let (root, authority) = validated_authority(workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
     validate_against_production(&authority, target_url)?;
     let store = Store::open(&root)?;
     require_stopped_control(&root)?;
-    require_login_target(&store, target_url)?;
+    let target_generation = require_target_authority(&store)?;
     let host = store.host_lock()?;
     let browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
     // A target or control change while locks were acquired must not open a
@@ -2199,7 +2216,9 @@ fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight>
     }
     validate_against_production(&checked_authority, target_url)?;
     require_stopped_control(&root)?;
-    require_login_target(&store, target_url)?;
+    if require_target_authority(&store)? != target_generation {
+        return Err("DEV_READINESS_TARGET_CHANGED".into());
+    }
     let python = browser_child_path(&root.join("runtime/python.exe"), false)?;
     let profile = browser_child_path(&root.join("browser-profile"), true)?;
     plain(&profile, true)?;
@@ -2212,13 +2231,6 @@ fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight>
         .get("wake_bridge.py")
         .cloned()
         .ok_or("DEV_RUNTIME_PACKAGE_MANIFEST_MISMATCH")?;
-    let target_generation = store
-        .config()?
-        .targets
-        .values()
-        .find(|target| target.url == target_url)
-        .ok_or("DEV_LOGIN_TARGET_NOT_REGISTERED")?
-        .generation;
     Ok(LoginPreflight {
         root,
         python,
@@ -2347,10 +2359,78 @@ fn development_readiness_command(
 /// Inspect the existing registered development profile without interaction,
 /// message entry, queue mutation, a new profile, or production policy changes.
 pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
+    inspect_readiness_with_frozen_request(workspace, target_url, None)
+}
+
+/// The same registered-target, stopped-host, profile-lock and contained owner.
+/// This observes a pinned original request; it grants no send or receipt authority.
+pub fn inspect_readiness_with_frozen_request(
+    workspace: &Path,
+    target_url: &str,
+    frozen_request: Option<(&Path, &str)>,
+) -> Result<Value> {
     let prepared = login_preflight(workspace, target_url)?;
+    let generation = prepared.target_generation;
+    let root = prepared.root.clone();
+    inspect_prepared_readiness(workspace, prepared, target_url, frozen_request, &|| {
+        require_observed_target_generation(&Store::open(&root)?, target_url, generation)
+    })
+}
+
+/// Called only by the local operator's existing approved-review workflow.
+/// The caller revalidates its original native contract/claim and destination
+/// consent; no registry entry, Wake generation, send or release authority exists.
+pub fn inspect_approved_review_request(
+    workspace: &Path,
+    target_url: &str,
+    request: &Path,
+    expected: &str,
+    keep_approved: &dyn Fn() -> Result<()>,
+) -> Result<Value> {
+    let prepared = profile_observation_preflight(workspace, target_url, &|_| {
+        keep_approved()?;
+        Ok(0)
+    })?;
+    let mut result = inspect_prepared_readiness(
+        workspace,
+        prepared,
+        target_url,
+        Some((request, expected)),
+        keep_approved,
+    )?;
+    let fields = result
+        .as_object_mut()
+        .ok_or("DEV_OBSERVATION_RESULT_INVALID")?;
+    fields.remove("registeredTargetSha256");
+    fields.remove("registeredTargetGeneration");
+    result["targetAuthority"] = json!("ORIGINAL_APPROVED_REVIEW_NOT_WAKE_BINDING");
+    result["targetSha256"] = json!(protocol::digest(target_url));
+    result["wakeBindingAuthority"] = json!(false);
+    Ok(result)
+}
+
+fn inspect_prepared_readiness(
+    workspace: &Path,
+    prepared: LoginPreflight,
+    target_url: &str,
+    frozen_request: Option<(&Path, &str)>,
+    keep_target_current: &dyn Fn() -> Result<()>,
+) -> Result<Value> {
+    keep_target_current()?;
     // Keep the compiled probe off Windows' bounded command line. The existing
     // contained runner supplies its verified bytes and START only over stdin.
     let (mut command, program) = development_readiness_command(&prepared, target_url)?;
+    if let Some((path, expected)) = frozen_request {
+        plain(path, false)?;
+        if hash_file(path, 65536)? != expected {
+            return Err("DEV_OBSERVATION_REQUEST_CHANGED".into());
+        }
+        command
+            .arg("--frozen-observation-file")
+            .arg(path)
+            .arg("--frozen-observation-sha256")
+            .arg(expected);
+    }
     let marker = dev_dir(&canonical_workspace(workspace)?).join("login-active.json");
     write_json_new(
         &marker,
@@ -2376,11 +2456,12 @@ pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
         .and_then(|row| row.strip_prefix("PROBE:FINAL:"))
         .ok_or("DEV_READINESS_FINAL_UNOBSERVED")?;
     require_stopped_control(&prepared.root)?;
-    require_observed_target_generation(
-        &Store::open(&prepared.root)?,
-        target_url,
-        prepared.target_generation,
-    )?;
+    if let Some((path, expected)) = frozen_request
+        && hash_file(path, 65536)? != expected
+    {
+        return Err("DEV_OBSERVATION_REQUEST_CHANGED".into());
+    }
+    keep_target_current()?;
     let browser_observation = if final_state == "OBSERVATION_UNAVAILABLE" {
         None
     } else {
@@ -2392,15 +2473,29 @@ pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
         .iter()
         .rev()
         .find_map(|line| crate::readiness_probe::tab_observation(line));
-    Ok(
-        json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"BROWSER_READINESS_OBSERVED",
+    let mut result = json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"BROWSER_READINESS_OBSERVED",
         "observations":rows,"finalState":final_state,"authenticationVerified":false,
         "browserObservation":browser_observation,"tabObservation":tab_observation,
         "registeredTargetSha256":protocol::digest(target_url),
         "registeredTargetGeneration":prepared.target_generation,
         "advisory":true,"browserReadOnly":true,"sendAttempted":false,
-        "hostStarted":false,"schedulerStarted":false,"ownedTreeExited":true}),
-    )
+        "hostStarted":false,"schedulerStarted":false,"ownedTreeExited":true});
+    if let Some((_, expected)) = frozen_request {
+        result["frozenRequestSha256"] = json!(expected);
+        result["frozenObservation"] = rows
+            .iter()
+            .rev()
+            .find_map(|line| crate::readiness_probe::frozen_observation(line))
+            .unwrap_or(Value::Null);
+        result["submissionObservation"] = rows
+            .iter()
+            .rev()
+            .find_map(|line| crate::readiness_probe::submission_observation(line))
+            .unwrap_or(Value::Null);
+        result["deliveryReceiptProven"] = json!(false);
+        result["resendAuthorized"] = json!(false);
+    }
+    Ok(result)
 }
 
 /// Open only the prepared development browser profile for manual sign-in.
@@ -4118,6 +4213,84 @@ mod tests {
         drop(input);
         drop(job);
         cleanup(&parent);
+    }
+
+    #[test]
+    fn approved_review_observation_rechecks_authority_with_existing_profile_locks() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let url = "https://chatgpt.com/c/explicit-approved-review-fixture";
+        assert!(
+            Store::open(&root)
+                .unwrap()
+                .config()
+                .unwrap()
+                .targets
+                .is_empty()
+        );
+        let checks = std::cell::Cell::new(0);
+        let proof = || {
+            checks.set(checks.get() + 1);
+            Ok(0)
+        };
+        let prepared = profile_observation_preflight(&workspace, url, &|_| proof()).unwrap();
+        assert_eq!(checks.get(), 2);
+        assert_eq!(prepared.target_generation, 0);
+        assert!(runtime::browser_session_lock(&root, Duration::ZERO).is_err());
+        drop(prepared);
+        let error = profile_observation_preflight(&workspace, url, &|_| {
+            Err("EXACT_REVIEW_APPROVAL_REVOKED".into())
+        })
+        .err()
+        .unwrap();
+        assert_eq!(error, "EXACT_REVIEW_APPROVAL_REVOKED");
+        assert!(!dev_dir(&workspace).join("login-active.json").exists());
+        assert!(runtime::browser_session_lock(&root, Duration::ZERO).is_ok());
+        assert!(
+            Store::open(&root)
+                .unwrap()
+                .config()
+                .unwrap()
+                .targets
+                .is_empty()
+        );
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn frozen_request_inspector_refuses_unregistered_target_or_changed_input_before_browser() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let url = "https://chatgpt.com/c/frozen-observation-fixture";
+        let request = workspace.join("original.frozen.txt");
+        fs::write(&request, b"frozen original request").unwrap();
+        assert_eq!(
+            inspect_readiness_with_frozen_request(
+                &workspace,
+                url,
+                Some((&request, &"0".repeat(64)))
+            )
+            .unwrap_err(),
+            "DEV_LOGIN_TARGET_NOT_REGISTERED"
+        );
+        Store::open(&root)
+            .unwrap()
+            .set_target("canary-project", 0, url)
+            .unwrap();
+        assert_eq!(
+            inspect_readiness_with_frozen_request(
+                &workspace,
+                url,
+                Some((&request, &"0".repeat(64)))
+            )
+            .unwrap_err(),
+            "DEV_OBSERVATION_REQUEST_CHANGED"
+        );
+        assert!(!dev_dir(&workspace).join("login-active.json").exists());
+        assert!(runtime::browser_session_lock(&root, Duration::ZERO).is_ok());
+        fs::remove_dir_all(parent).unwrap();
     }
 
     #[test]

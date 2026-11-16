@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T22:34:51Z",
+  "sourceCommit": "ab1b6ddabbf8ad4d1bab05831b9bd06db94ad24b",
+  "status": "CONTROLLED_FIXTURE_REPAIR_VERIFIED_REAL_RUNTIME_AUTHORIZATION_PENDING",
+  "productionCommandImplementationUnchanged": true,
+  "productionReleaseChanged": false,
+  "canonicalV5ConnectionChanged": false,
+  "selectedDevelopmentPackageChanged": false,
+  "originalInterpreterOrAclChanged": false,
+  "originalTaskGrantOrReceiptChanged": false,
+  "originalTaskReplayed": false,
+  "newAccountsKeysServicesOrTunnels": false,
+  "defaultCommandTestsPassed": 5,
+  "defaultIgnoredLiveProbes": 5,
+  "privateBaseline": {
+    "cleanupProved": true,
+    "exitCode": 1,
+    "failureDiagnostic": {
+      "basis": "REPORTED_PROCESS_OUTPUT",
+      "layer": "NATIVE_SANDBOX",
+      "reason": "SPAWN_ACCESS_DENIED_REPORTED",
+      "retryAuthorized": false,
+      "schemaVersion": 1,
+      "targetExecution": "UNVERIFIED"
+    },
+    "launchRefused": true,
+    "privateReceiptSha256": "f90256413b66ae41d219ce26cb2ce11cc1c0d3021a8277ec05633c4409e38e56",
+    "timedOut": false
+  },
+  "afterFixtureOnlyDaclProvision": {
+    "cleanupProved": true,
+    "elapsedMs": 657,
+    "exitCode": 0,
+    "expectedOutputObserved": true,
+    "failureDiagnostic": null,
+    "nativeCliSha256": "2692c8c7bb2cf8b0aefe638741fc90236f4b824c59578ce84994f9de58200993",
+    "privateReceiptSha256": "d1ee650577831c8bfdf65d9a5884d8dec0c449651ab67c46dc3ece0f31ad2884",
+    "stagedRuntimeFiles": {
+      "minimalStdlib": {
+        "fileCount": 123,
+        "manifestSha256": "8a6a3763f367f7d18e2285285a387cc2ebbb7aa9f8eedd6bd95683c4fce378d6"
+      },
+      "python.exe": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "python3.dll": "fb975a606e7fbf74f64260e3f60c3490b4f74a183c0926fd6ed1ac4c52ac7b1c",
+      "python312.dll": "9a0e3435aaa680d868150f87ab3e388ad2eebc22f87e036155c7b4eda8cd2120",
+      "vcruntime140.dll": "052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4",
+      "vcruntime140_1.dll": "6a99bc0128e0c7d6cbbf615fcc26909565e17d4ca3451b97f8987f9c6acbc6c8"
+    },
+    "timedOut": false
+  },
+  "samePreviouslyRefusedFixtureAfterProvision": {
+    "cleanupProved": true,
+    "elapsedMs": 711,
+    "exitCode": 0,
+    "expectedOutputObserved": true,
+    "failureDiagnostic": null,
+    "nativeCliSha256": "2692c8c7bb2cf8b0aefe638741fc90236f4b824c59578ce84994f9de58200993",
+    "privateReceiptSha256": "65bb80a0b0c8f577fa935070f7ac700769130193f68adbcc2864a7a31073e06d",
+    "stagedRuntimeFiles": {},
+    "timedOut": false
+  },
+  "readOnlyWriteProbe": {
+    "cleanupProved": true,
+    "exitCode": 0,
+    "privateReceiptSha256": "c9e411fc7e672243bed646094ce6170a4a0660d4ba4cabf7d7a0e1d1d20472f0",
+    "timedOut": false,
+    "writeDenied": true
+  },
+  "fixtureProvision": {
+    "existingRuntimeChanged": false,
+    "ownerOrSaclRequested": false,
+    "readExecutePrincipalCount": 2,
+    "scope": "EXISTING_OWNED_DISPOSABLE_FIXTURE_DACL_ONLY",
+    "writeOrOwnershipGranted": false,
+    "credentialReads": 0,
+    "accountsCreated": 0,
+    "elevationRequested": false
+  },
+  "sourceChecks": [
+    {
+      "name": "private-runtime-readonly",
+      "startedUtc": "2026-11-15T22:16:39.0462098+00:00",
+      "finishedUtc": "2026-11-15T22:16:41.7615159+00:00",
+      "exitCode": 0,
+      "arguments": [
+        "test",
+        "--locked",
+        "--offline",
+        "--bin",
+        "catdesk",
+        "project_task_command::windows::tests::native_private_runtime_with_access_is_read_only",
+        "--",
+        "--ignored",
+        "--nocapture"
+      ]
+    },
+    {
+      "name": "full-clippy",
+      "startedUtc": "2026-11-15T22:16:41.7670277+00:00",
+      "finishedUtc": "2026-11-15T22:17:09.1692323+00:00",
+      "exitCode": 0,
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ]
+    },
+    {
+      "name": "format",
+      "startedUtc": "2026-11-15T22:17:09.1715596+00:00",
+      "finishedUtc": "2026-11-15T22:17:13.8811646+00:00",
+      "exitCode": 0,
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ]
+    }
+  ],
+  "owner": {
+    "workerSha256": "332ad8d33004532861f0590f694b6aa9ee200c05d5cbe96c155b67907ea0ecec",
+    "maximumSeconds": 600,
+    "terminationFailed": false,
+    "finishedUtc": "2026-11-15T22:17:13.9066708+00:00",
+    "startedUtc": "2026-11-15T22:16:38.6389706+00:00",
+    "timedOut": false,
+    "containment": "KILL_ON_JOB_CLOSE",
+    "exitCode": 0,
+    "schemaVersion": 1
+  },
+  "corrections": [
+    "Default inherited fixture ACLs did not reproduce the private runtime refusal; that negative-control failure was retained, not counted as a repair.",
+    "An explicit native policy runtime-read declaration did not repair a genuinely private fixture. The speculative production policy/canonicalization change was withdrawn before commit.",
+    "General PowerShell Set-Acl requested unavailable SeSecurityPrivilege on the fixture. Authoritative readback found zero reader ACEs. The documented DACL-only API succeeded without elevation or SACL/owner requests.",
+    "An initial private repair-script writing command failed at parse time before execution; the final script was created with a direct patch and preflighted read-only."
+  ],
+  "realRuntimeProposal": {
+    "proposalSha256": "75b134ce8158328e22cc0b996cf7b6ae35cefc9493efb3e8633d8c482a159099",
+    "scriptSha256": "99e25101082f52fe001cca93dbb546c97cf0d075df023e78191cf71fbc1d7f62",
+    "state": "PREFLIGHT_READY_NOT_AUTHORIZED",
+    "physicalPathAndIdentityVerified": true,
+    "ownerWriteDacReady": true,
+    "coreImageSetFrozen": true,
+    "readExecuteReaders": 2,
+    "writeOrOwnerOrAuditChangesAllowed": false,
+    "privateSnapshotRetained": true,
+    "executeCalled": false,
+    "taskReplayAllowed": false
+  },
+  "authority": "Resource-owner authorization for an existing runtime ACL is separate from CatDesk protected release/producer/signing authority. No new signing or release mechanism.",
+  "nextAction": "Obtain one exact runtime-owner decision for the frozen read/execute proposal, then bounded version verification only. Original-task continuation still requires its existing guard revalidation; no automatic replay.",
+  "acceptance": "Fixture access repair and write denial are verified, not installed-runtime repair or Web edit/checkpoint/self-Wake acceptance."
+}

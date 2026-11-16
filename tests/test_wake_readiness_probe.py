@@ -14,6 +14,98 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+    def test_frozen_observation_distinguishes_trusted_representation_mismatch_without_body(self):
+        for trusted,state in [(0,'EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN'),
+                              (1,'RESPONSE_USER_REPRESENTATION_MISMATCH')]:
+            sample=dict(expectedUserCount=0,trustedMatches=trusted,composerClass='UNAVAILABLE',
+                        composerBytes=0,legacyAvailable=False,readersAgree=None,
+                        legacyMatchesExpected=None,lastUserMatches=False,turnsAfter=0,
+                        stable=False,coverage='VISIBLE_BOUNDED_ONLY')
+            sink=types.SimpleNamespace(frozen_observation_digest=lambda m:'a'*64,
+                submission_diagnostic_sample=mock.Mock(return_value=(sample,'same')),
+                observe_cooperative_response=mock.Mock())
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.probe.report_frozen_observation(sink,object(),'PRIVATE_USER',sleep=lambda _:None)
+            lines=output.getvalue().splitlines()
+            self.assertEqual(json.loads(lines[0].split('PROBE:SUBMISSION:')[1])['trustedMatches'],trusted)
+            value=json.loads(lines[1].split('PROBE:FROZEN_OBSERVATION:')[1])
+            self.assertEqual(value['responseState'],state)
+            self.assertFalse(value['resendAuthorized']);self.assertNotIn('PRIVATE_',output.getvalue())
+            sink.observe_cooperative_response.assert_not_called()
+
+    def test_frozen_observation_input_is_hash_pinned_bounded_and_inert(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'original.frozen.txt'
+            raw = b'PRIVATE_FROZEN_REVIEW\r\noriginal request'
+            path.write_bytes(raw)
+            self.assertEqual(self.probe.load_frozen_observation_message(
+                path, hashlib.sha256(raw).hexdigest()), raw.decode())
+            for content, expected in [(raw, '0'*64), (b'', hashlib.sha256(b'').hexdigest()),
+                                      (b'a'*65537, hashlib.sha256(b'a'*65537).hexdigest()),
+                                      (b'a\x00b', hashlib.sha256(b'a\x00b').hexdigest()),
+                                      (b'\xff', hashlib.sha256(b'\xff').hexdigest())]:
+                path.write_bytes(content)
+                with self.subTest(size=len(content)), self.assertRaises((ValueError, UnicodeError)):
+                    self.probe.load_frozen_observation_message(path, expected)
+
+    def test_frozen_observation_never_proves_receipt_or_exports_text(self):
+        for count, result, expected in [
+            (0, 'RESPONSE_COMPLETE', 'EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN'),
+            (2, 'RESPONSE_COMPLETE', 'EXPECTED_USER_DUPLICATED'),
+            (1, 'RESPONSE_COMPLETE', 'RESPONSE_COMPLETE'),
+            (1, 'RESPONSE_PENDING', 'RESPONSE_PENDING'),
+            (1, RuntimeError('RESPONSE_LOAD_ERROR'), 'RESPONSE_LOAD_ERROR'),
+            (1, RuntimeError('LOGIN_OR_PROFILE_REQUIRED'), 'LOGIN_OR_PROFILE_REQUIRED'),
+            (1, RuntimeError('RESPONSE_TARGET_DRIFT'), 'RESPONSE_TARGET_DRIFT'),
+            (1, RuntimeError('PRIVATE_CREDENTIAL'), 'UNPROVEN')]:
+            observer = mock.Mock(side_effect=result) if isinstance(result, Exception) else mock.Mock(return_value=result)
+            sink = types.SimpleNamespace(frozen_observation_digest=lambda m: 'a'*64,
+                submission_diagnostic_sample=mock.Mock(return_value=(dict(expectedUserCount=count), 'same-document')),
+                observe_cooperative_response=observer)
+            output=io.StringIO()
+            with self.subTest(count=count,expected=expected), contextlib.redirect_stdout(output):
+                self.probe.report_frozen_observation(sink, object(), 'PRIVATE_USER', sleep=lambda _:None)
+            value=json.loads(output.getvalue().split('PROBE:FROZEN_OBSERVATION:')[1])
+            self.assertEqual(value['responseState'], expected)
+            self.assertFalse(value['deliveryReceiptProven'])
+            self.assertFalse(value['resendAuthorized'])
+            self.assertNotIn('PRIVATE_',output.getvalue())
+            if count != 1: observer.assert_not_called()
+
+    def test_frozen_observation_changed_samples_fail_closed(self):
+        for samples in [[(dict(expectedUserCount=1),'doc-a'),(dict(expectedUserCount=1),'doc-b')],
+                        [(dict(expectedUserCount=1),'doc-a'),(dict(expectedUserCount=0),'doc-a')],
+                        [(dict(expectedUserCount=None),'doc-a')]*2]:
+            sink=types.SimpleNamespace(frozen_observation_digest=lambda m:'a'*64,
+                submission_diagnostic_sample=mock.Mock(side_effect=samples),
+                observe_cooperative_response=mock.Mock())
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.probe.report_frozen_observation(sink,object(),'PRIVATE_USER',sleep=lambda _:None)
+            value=json.loads(output.getvalue().split('PROBE:FROZEN_OBSERVATION:')[1])
+            self.assertEqual(value['responseState'],'UNPROVEN')
+            self.assertFalse(value['stable'])
+            sink.observe_cooperative_response.assert_not_called()
+
+    def test_frozen_observation_cannot_mix_with_delivery_or_action_modes(self):
+        with tempfile.TemporaryDirectory() as profile:
+            base=['--read-only','--profile',profile,'--frozen-observation-file','original.txt',
+                  '--frozen-observation-sha256','a'*64]
+            cases=[base+[flag] for flag in ['--response-only','--receipt-only','--task-diagnostics',
+                '--source-review-diagnostics','--await-existing-response','--historical-response',
+                '--inspect-app-menu','--inspect-response-trace','--inspect-historical-trace']]
+            cases += [base+['--delivery-file','old.json'],base+['--seconds','91'],
+                      [item for item in base if item!='--read-only']]
+            for flags in cases:
+                argv=['probe','--conversation-url','https://chatgpt.com/c/fixture',
+                      '--primitives','wake_bridge.py','--primitives-sha256','a'*64]+flags
+                with self.subTest(flags=flags), mock.patch.object(sys,'argv',argv), \
+                     mock.patch.object(self.probe,'load_observation_sink',return_value=mock.Mock()), \
+                     mock.patch.object(self.probe,'load_frozen_observation_message') as loader:
+                    self.assertEqual(self.probe.main(),2)
+                    loader.assert_not_called()
+
     def test_trace_report_uses_exact_delivery_and_masks_observer_exceptions(self):
         delivery=dict(messageDigest='a'*64,event=dict(message='PRIVATE_USER'))
         value=dict(schemaVersion=1,basis='TASK_BOUND_TRACE_UI_NOT_NATIVE_RECEIPT',state='CONTROL_UNSUPPORTED',

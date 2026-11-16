@@ -253,14 +253,10 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
     try {
         $policy=Invoke-LifecycleSeam -Name 'DoctorSupervisorPolicy' -Arguments @() -Default {
             if(-not (Test-DoctorFacadeWorkspaceScope (Join-Path $PSScriptRoot '..') $Workspace)){return 'SUPERVISOR_OBSERVER_SCOPE_MISMATCH'}
-            $definition=Get-AutostartDefinition
-            $task=Get-AutostartTask -Definition $definition
-            $taskOwned=Test-OwnedAutostartTask -Task $task -Definition $definition
-            $run=Get-OwnedAutostartRunKeyValue -Definition $definition
-            $runOwned=Test-OwnedAutostartRunKey -Value $run -Definition $definition
-            if(($null -ne $task -and -not $taskOwned) -or ($null -ne $run -and -not $runOwned)){return 'SUPERVISOR_REGISTRATION_CONFLICT'}
-            if(-not $taskOwned -and -not $runOwned){return 'SUPERVISOR_NOT_REGISTERED'}
-            if(Test-AutostartSupervisorRunning -Definition $definition){return 'SUPERVISOR_MONITOR_SIGNAL_PRESENT'}
+            $registration=Get-AutostartRegistration
+            if($registration.Conflict){return 'SUPERVISOR_REGISTRATION_CONFLICT'}
+            if(-not $registration.TaskOwned -and -not $registration.RunOwned){return 'SUPERVISOR_NOT_REGISTERED'}
+            if(Test-AutostartSupervisorRunning -Definition $registration.Definition){return 'SUPERVISOR_MONITOR_SIGNAL_PRESENT'}
             return 'SUPERVISOR_REGISTERED_MONITOR_STOPPED'
         }
         if($policy -isnot [string] -or $policy -cnotin @('SUPERVISOR_NOT_REGISTERED','SUPERVISOR_REGISTERED_MONITOR_STOPPED','SUPERVISOR_MONITOR_SIGNAL_PRESENT','SUPERVISOR_REGISTRATION_CONFLICT','SUPERVISOR_OBSERVER_SCOPE_MISMATCH')){throw 'SUPERVISOR_METADATA_INVALID'}

@@ -1,5 +1,123 @@
 # CatDesk important commands
 
+## November 16 — Development qualification readback
+
+Source `06d1a5ba3326c8f2d591370c3f2d2f4946fc2290` is built and selected in the existing **unprotected development** runtime through `operator web-dev-runtime update-package`. Authenticated local MCP and bounded read-only context/readiness operations passed; their owners exited and the profile was quiescent afterward. Subsequent one-message development Wake, exact receipt/timer, native frozen-request response classification and expected acknowledgment body hashes passed. The new test was closed with existing `operator web work resolve`; existing `operator web-dev-runtime record-verification --input-file <exact-local-evidence>` now records OPERATOR_RECORDED development health. This is local operator-provided scoped evidence, not full independent candidate review or protected release authority. Previous verified fallback retained. Do not repeat the completed task or commands unchanged, or apply them to protected production. [Initial scope](docs/verification/F7_04_01_DEVELOPMENT_RUNTIME_2026_11_16.json); [actual Wake/readback and health record](docs/verification/F7_04_01_FRESH_WAKE_2026_11_16.json).
+
+For context diagnostics, `recordedMessages` counts qualified body observations; `excerptMessages` counts excerpt-only observations. The observed values were four and zero respectively. `originAuthenticated:false` describes standalone caller origin, not browser login failure. Initial-history uncertainty remains explicit. The frozen inspector found one historical USER followed by three later turns, so RESPONSE_SEQUENCE_DRIFT is expected attribution refusal, not failed-delivery proof. No resend, Retry, reload or task execution follows from these read-only results.
+
+Original f7 approval has been consumed for its original exact workflow. Preserve its PARTIAL report, native state and caps; do not approve/claim again or use the scoped correction review as full release authority. d22 UNKNOWN and root/signing migration remain separate gates. No current collector, signing or installation Execute command is ready merely because development qualification passed.
+
+**November 16 — adapter exit proof:** development source corrects F7-04-01 using the existing private Job accounting. `BROWSER_JOB_EXIT_UNPROVEN` means cleanup is unqualified, not confirmed failed delivery. The existing browser lock is retained for the live owner lifetime; do not force-unlock it or resend a Wake. Ordinary retirement preserves ATTENTION and refuses its pre-submit browser retry after unproved cleanup. Existing native ownership/lifecycle recovery remains required. Three disposable Windows process tests and strict root/Wake checks pass; no installed upgrade or actual Chrome teardown acceptance follows. [Exact scope](docs/verification/F7_04_01_BROWSER_TEARDOWN_2026_11_16.json).
+
+**2026-11-16 original f7 review continuation:** the first assistant response is now attributable and PARTIAL. Use the same approved contract, registered target and exact-source input set; do not approve/claim again or resend the original prompt. Coverage-specific followups remain bounded by the original lease/caps and routine review authorization. Preserve turn/message IDs and original response bytes; the review's mistaken contractId hash field must be explicitly corrected by the reviewer rather than rewritten locally. The [public source input index](docs/verification/F7_FROZEN_REVIEW_INPUTS_2026_11_16.json) is a sanitized derivative, not a signature, compiler-input attestation or release grant. [Partial-review evidence](docs/verification/F7_PARTIAL_REVIEW_2026_11_16.json).
+
+## 2026-11-16T11:25:19Z — Original review admission and conditional migration
+
+Use the [single release dependency plan](CATDESK_PROJECT_HANDOFF.md#2026-11-16t112519z--one-release-dependency-plan). Original f7 contract `nov15-independent-f7-wake-review`, hash `fnv1a64:f0ca191204309d3b`, is human-approved and claimed at version 4. Do not approve/claim it again, create a replacement or confuse direct-work accounting with a running independent reviewer. The original prompt was sent once to the verified existing registered CatDesk chat through the existing first-party transport; actual USER identity was observed but assistant review was absent at the 178-second boundary. No resend or unchanged polling. Resume report validation only on genuine original response evidence. [Bounded outcome](docs/verification/F7_ORIGINAL_REVIEW_DELIVERY_2026_11_16.json).
+
+The existing bootstrap command remains **conditional, not ready to run**:
+
+```powershell
+& ./wake/install.ps1 -Bootstrap -QualifiedHost $reviewedInstallerHost -ExpectedHostSha256 $installerSha256 -ApprovalFile $freshSignedBootstrapEnvelope -ExpectedApprovalSha256 $envelopeSha256 -ExpectedPublicKeySha256 $approvedWakeIssuerSha256
+```
+
+All variables must resolve to genuine exact reviewed inputs. Default is native read-only preflight; `-Execute` is a separate protected operation after success and applicable authorization. Requires one coherent existing physical state root, exact current/control/config bytes with STOPPED control, valid purpose signature and qualified elevated interactive owner. The current split-root comparison fails these prerequisites. Do not sign expired proposals, seed missing current.json or rerun collectors. Initial signed V3 selection/reconstruction is separate; `install-broker submit-local` cannot replace it. No copy-paste Execute or signing command is justified yet.
+
+For d22, `inspect-review-request` has already completed its bounded observation. Repeat only on material new evidence. Neither rollover-only `ABANDONED_UNKNOWN_NO_REPLAY`, pre-submit login retry, cancellation nor supersession proves original review delivery failure or authorizes producer/promotion. [Exact distinctions](docs/verification/RELEASE_DEPENDENCY_PLAN_2026_11_16.json).
+
+## 2026-11-16T02:51:59.272044+00:00 — Development-only backend startup scope
+
+Source `f016c2919957610f65ac08fc3a1aac8413cca788` supports `.\catdesk.ps1 autostart enable -BackendOnly` through the existing owner. This spelling is SOURCE-TESTED, not a command to apply to the unchanged installed facade now. Both logon registration and immediate monitor arguments retain the flag. Ordinary `.\catdesk.ps1 autostart status` reads either exact known registration and reports `scope=BACKEND_ONLY` or `scope=FULL_STACK`; this describes registration scope, not independently verified live process behavior.
+
+Enable never converts an existing scope. `AUTOSTART_SCOPE_CONFLICT` preserves mismatched/mixed known records; `AUTOSTART_UNREGISTERED_MONITOR_ACTIVE` refuses to register over a surviving monitor whose scope is not proved. Foreign commands/principals remain conflicts. Disable removes exact owned persistence only; it does not stop a monitor. Any future scope transition needs the existing monitor confirmed exited and the existing authorized release/lifecycle process. No migration or recurring activation occurred. The retained C110 fault/recovery canaries were not repeated; new fixtures use injected persistence/process effects and a read-only Windows child. [Evidence](docs/verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
+
+## 2026-11-16T02:38:42.136005+00:00 — Startup status and bounded monitor scope
+
+Use `./catdesk.ps1 doctor` for passive layer reporting and `./catdesk.ps1 autostart status` for the existing workspace registration/monitor signal. A running daemon does not prove a live supervisor. Installed status is AUTOSTART_REGISTERED_MONITOR_STOPPED; the existing HKCU Run fallback is full-stack, with no exact scheduled task. The separate protected stable-supervisor root/startup definition is absent. Neither observation authorizes provisioning or enabling recurring automation.
+
+One installed backend-only health cycle passed under a test-only recover-denial guard and exited naturally. This is not an unattended repair or reboot drill. Source `199ff74e5bbe3a181bd18a900197cf0e5c84de81` preserves the existing command, hidden owner and singleton while allowing Windows PowerShell to initialize its own child module path. Both PowerShell 7 and Windows PowerShell lifecycle tests pass. Do not modify installed scripts or registration to apply this development fix outside the existing release procedure. Historical stop causes remain unproven. [Qualification](docs/verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).
+
+## 2026-11-16T01:38:56.316414+00:00 — Inspect the original approved review context
+
+Qualified development source `8657bd00dca887c7f6911718641f262647a42ac6` supports this local-only operation through the same bounded owner:
+
+```powershell
+& $qualifiedController operator web-dev-runtime inspect-review-request --workflow-intent $originalFrozenWorkflow --expected-workflow-sha256 $frozenWorkflowSha256 --turn 1 --preflight
+```
+
+Variables must come from the exact existing approved packet and qualified controller. Preflight verifies the original native contract/claim and frozen consent without opening a browser; it explicitly reports browserOwnerVerified false. Removing only --preflight requests the bounded read-only observation. This is not an installed-production command claim or permission to repeat the completed diagnostic. It uses the existing host/profile locks, production isolation checks, hash-pinned embedded program and original selected primitives; original native state is locked and revalidated before/after. No URL/profile override, approval/claim, send, binding, key, verdict or producer operation exists.
+
+The actual f410 observation is complete: exact destination, loaded history, ambiguous editor, zero semantic and trusted USER matches. Draft emptiness is UNKNOWN. This is visible bounded absence, not proof of failed submission. Original sender metadata has no actual turn handle; preserve UNKNOWN/no replay and hold all conditional followups. Do not repeat this read unchanged or ask for the same existing consent again. Definitive provider outcome or explicit supported recovery disposition is needed for that path. [Evidence](docs/verification/APPROVED_REVIEW_CONTEXT_OBSERVATION_2026_11_15.json).
+
+## 2026-11-16T00:34:15.175115+00:00 — Observe a frozen request without replay
+
+Development source `8327f8a9e1760c7550bf4ba674d401bd3e0af3fd` extends the existing registered-project inspector:
+
+```powershell
+& $qualifiedController operator web-dev-runtime inspect-readiness --project-id $registeredProject --frozen-observation-file $originalFrozenRequest --expected-request-sha256 $frozenRequestSha256
+```
+
+Run from the existing development control workspace with the qualified controller; these are local variables bound by the existing reviewed owner, not literal values to guess. This does not change the selected package or installed production command. The inspector retains project lease/CAS checks, exact paired URL/generation, stopped-host and exclusive browser ownership, bounded embedded-program execution, native output filtering and descendant cleanup. There is no URL/profile override, click, refresh, send, receipt creation or automatic resend. The request is checked before and after observation; the helper independently checks its bytes before browser import. Missing/duplicate/unstable USER or response failures remain explicit; absence is not confirmed failed submission.
+
+Actual controlled observation passed with one matching USER and RESPONSE_COMPLETE, zero submissions and unchanged state. It provides structural classification, not body/error extraction, delivery proof or full Web task acceptance. The separate d22 review destination is unregistered and is not admitted by this command; do not rebind it or fabricate a delivery to use this path. [Evidence](docs/verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
+
+**Verified follow-up 2026-11-16T00:09:22.940282+00:00:** source `1ae346351db6c4659d08f1d0e755a46ddd49b411` adds journal-derived remaining tool-call budget to task metadata/resume. Counts survive close/reopen and conversation rollover, include failed calls, and remain unknown when the journal cannot be read. Elapsed scope is explicitly per serving connection; ChatGPT turn usage is unknown. Four targeted tests, strict workspace Clippy and formatting pass. This is source-only readback; no budget reset, grant change, selected-package rebuild or protected upgrade. The separately authorized actual-runtime RX repair and native version check passed. Full Web edit/checkpoint/self-Wake remains OPEN. [Evidence](docs/verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
+**Approved runtime repair 2026-11-15T23:00:48.899963+00:00:** the frozen DACL-only operation applied once under explicit user authorization. The actual installed interpreter now passes its bounded native version check; images are unchanged, write/owner/audit rights were not granted, and both owners exited normally. No original-task replay, package, production release or v5 change. This supersedes the earlier pending runtime-owner decision. [Actual result](docs/verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
+## 2026-11-15T22:34:51Z — Runtime-owner repair is separate from release promotion
+
+The existing native sandbox accounts need OS read/execute access to the approved interpreter. Logical native root-read permissions did not provision a genuinely private fixture. A speculative application policy change was discarded; the production runner remains byte-for-byte unchanged. Existing accounts plus a DACL-only read/execute grant repaired a private fixture, including the exact previously refused copy, while an actual write probe was denied.
+
+The private frozen proposal is preflight-ready: directory identity/physical path, owner WRITE_DAC, five core image hashes and both existing native reader identities are checked. Only its exact resource-owner approval remains; do not run Execute, setup, elevation, fingerprint edits or original-task calls before that decision. Proposal SHA-256 `75b134ce8158328e22cc0b996cf7b6ae35cefc9493efb3e8633d8c482a159099`; script SHA-256 `99e25101082f52fe001cca93dbb546c97cf0d075df023e78191cf71fbc1d7f62`. Private path/SDDL/SIDs remain in the established local audit checkpoint, not GitHub. Timestamps/log references do not invalidate it; changed resource/ACL/image/account identities do.
+
+The source-only ignored probes `native_private_runtime_without_access_is_refused` and `native_private_runtime_with_access_is_read_only` require distinct unprovisioned/provisioned disposable parent states, exact approved interpreter path/SHA and test-only `CATDESK_TEST_PRIVATE_RUNTIME_PARENT`. Never point these fixture preparations at an existing install, project, profile or authentication directory. They preserve negative-control and private receipt evidence; ordinary tests skip live probes. No new installation, account, connector or release manager. [Evidence](docs/verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
+
+## 2026-11-15T21:34:58Z — Bounded real-runner qualification
+
+From the authorized source/build worktree, with the existing Rust toolchain and target directory configured:
+
+```text
+cargo test --locked --offline --bin catdesk project_task_command::windows::tests::native_system_lookup_uses_actual_command_owner -- --ignored --nocapture
+```
+
+This ignored Windows integration probe calls the actual fixed-command runner, not a separate sandbox approximation. It performs one system-only lookup in disposable state with a 15-second command bound, retains exact private failure receipts and emits only bounded metadata. No task/grant, model call, setup, install or Web send. The separate ignored `native_python_version_uses_actual_command_owner` requires test-only `CATDESK_TEST_NATIVE_PYTHON` and `CATDESK_TEST_NATIVE_PYTHON_SHA256` from the already approved interpreter identity; it runs only isolated/bytecode-disabled version inspection. Do not repeat its current known failure without a changed prerequisite. Never substitute these probes for the original verifier or full Web acceptance.
+
+Readiness was qualified through the existing app-server proxy using the documented WebSocket HTTP Upgrade, initialize and `windowsSandbox/readiness` only. Raw JSONL is not the Unix control-socket wire protocol. No new daemon, connection configuration, setup or credential was used. READY is scoped to that existing 0.169.0 daemon; it does not qualify the original 0.163.0 verifier or interpreter. [Evidence](docs/verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
+
+**Development update 2026-11-15T21:01:12Z:** future native verification receipts now have a bounded advisory sandbox-spawn diagnostic; source 7b4e1d6d passed five targeted command tests, strict Clippy and formatting. Original failed receipt/task and production/v5 remain unchanged. No new connection, package selection, replay, setup or release authority. [Evidence](docs/verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
+
+Source-only follow-up 2026-11-15T20:32:08Z: `9d96f8e32f3fdf8b528d15eda453e9398f74a392` additionally validates retained operations against the original full preview-diff hash without executing or recording a tool call. The changed-operations denial, all eight native recovery tests, strict Clippy and formatting pass. The live-tested selected app remains the exact `79a449b` build; no candidate rebuild or protected promotion was performed for this follow-up.
+
+## 2026-11-15T20:23:03Z — Use the existing event-bound body reader
+
+```text
+<qualified-controller> operator web review read --project-id <registered-id> --event-id <exact-SENT-event>
+```
+
+Despite its historical `review` name, this existing reader handles the exact ordinary diagnostic event after delivery. It requires matching project, paired target generation/digest, SENT receipt and message hash, then uses the selected qualified browser owner for bounded read-only snapshotting. Require `eventVerified: true`; extract only necessary markers/errors, never arbitrary fallback snapshots. This grants no review verdict, execution, retry or release authority. `operator web work response` is installed timer re-observation and can return already-COMPLETE metadata without a body; do not treat its development refusal as proof that the body reader is missing.
+
+The original local task now has one completed patch and a failed native sandbox verifier receipt. Keep its exact assignment, original HEAD, uncommitted assigned-file edit and call IDs. Do not repeat the completed read/preview/apply/verify, change its command profile or create a replacement grant. After genuine new environment evidence, revalidate the existing task through supported controls before any new verification action. The observed CLI is 0.163.0; its help does not support the newer documented `sandbox setup` command, so no setup command is currently prescribed. Preserve all managed permissions and existing sandbox selection. [recovery and live evidence](docs/verification/SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json).
+
+Latest decision 2026-11-15T19:33:36Z: one system and canonical v5 connection; frozen releases are production, source/builds are development. Existing local test facilities require no external setup or production upgrade. Local task test reached accepted read/preview only, then stopped on a harness receipt-parsing error; its original task remains fenced, with no edit/verify/Git/Wake acceptance. Production/profiles preserved and test-process cleanup verified. See [dated audit](CATDESK_ACTIVITY_LOG.md) and [qualification](docs/verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json).
+
+## 2026-11-15T19:18:45Z — Use the existing development owner, not production promotion
+
+From the already prepared development control workspace, invoke the hash-qualified development app/controller, never a production launcher:
+
+```text
+<qualified-dev-controller> operator web-dev-runtime status
+<matching-source-dev-controller> operator web-dev-runtime update-package --package <exact-four-file-directory>
+<qualified-dev-controller> operator web-dev-runtime record-verification --input-file <in-workspace-evidence.json>
+<qualified-dev-controller> operator web-dev-runtime run-backend --max-runtime-seconds 60
+<qualified-dev-controller> operator web-dev-runtime run-project-backend --project-id <registered-dev-id> --project-target-generation <n> --project-target-sha256 <digest> --max-runtime-seconds 180 --project-task-contract <absolute-contract>
+```
+
+`run-backend` requires a valid process-only `CATDESK_MCP_AUTH_TOKEN`; do not print it or put it on the command line. Use its issued random-loopback readiness URL, not production port 3200. The existing foreground owner bounds and drains the child; no recurring service is enabled. Package update requires stopped Host/browser/backend owners, exact inventory and scripts matching the controller's compiled source. A mismatch is a refusal, not permission to relax the check. Source build/test facade `scripts/catdesk-dev-lane.ps1` stays source-only; the existing operator commands above already supply the runtime lane. Local development verification is never production review authority. [development qualification](docs/verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json).
+
+The installed-adapter refusal documented below blocks only that production send. Keep that original queued task unchanged; use separate registered development projects and bindings for development acceptance. Keep the single canonical v5 connection and its matching bootstrap; test newer functionality through local MCP harnesses without external infrastructure changes. Actual Web use of missing installed operations requires their genuine reviewed release authority. Protected review/migration is a separate track, not an ordinary build/test prerequisite.
+
 November 15 fresh central-chat qualification: the operator's one-time setup is complete. Native history verified one exact frozen setup USER and its completed acknowledgment. The installed `operator web target bind --project-id <new-project> --conversation-url <verified-issued-url> --expected-current-target-sha256 none --expected-wake-generation 0` paired only the new project at generation 1; do not rerun it. One request and its scoped assignment are now recorded and associated, without a grant/key or delivery. The original prepared zero retry budget failed validation; an unissued compatible revision changes only that field to the legacy schema minimum 1, retaining no-resend instructions and every existing replay fence. The old input is preserved.
 
 The installed source does not parse `operator web work deliver`. One bounded attempt using the retained hash-qualified development controller reached the existing selected-package preflight and refused `SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED` before browser creation. That source-controller operation is not installed-backend qualification. Do not repeat delivery, change its adapter/bridge allowlist or route around the guard. The selected package lacks the exact supported scoped native-entry pair; its reviewed upgrade is now a demonstrated delivery prerequisite. The backend's separate reviewed promotion is required for its missing delivery CLI and scoped Git checkpoint capability. Future first-chat creation must use CatDesk automation after legitimate installed capability qualification; repeated operator setup is not the intended workflow. [Actual results](docs/verification/FRESH_CENTRAL_WEB_PAIRING_2026_11_15.json).
@@ -164,3 +282,11 @@ Rows distinguish no/open/multiple work requests, target mismatch, missing delive
 | HTTP 429 / Session terminated | Connector/upstream/session; diagnose once after serving/auth ready and preserve exact error |
 
 For completed integration, primary edition differences and preservation evidence, read the [final synchronization record](docs/verification/DOC_SYNC_STATE_2026_11_14.json). These are documentation/source checks, not fresh runtime health or installed product acceptance.
+
+## 2026-11-16T03:27:34.014882+00:00 — Existing widget host fixture
+
+On `codex/c1-ui-002-content-fallback`, run `node --test tests/widget_host_bridge.test.js` for the actual inline-widget protocol matrix. The opt-in `<qualified-runtime-python> -I -B tests/widget_host_bridge_browser.py --output-directory <fresh-local-directory>` must run with the existing SeleniumBase runtime through the qualified bounded whole-tree owner; retained qualification uses pure CDP, a driver write guard and a 90-second maximum. It opens only a local fixture with disposable test state, never an authenticated profile or ChatGPT destination. These are local component tests, not installed host acceptance. The existing v5 connection, tool identity, resource identity and server authorization remain unchanged. [Evidence](docs/verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json).
+
+## 2026-11-16T03:38:42.121767+00:00 — Event-driven admission hold
+
+No new recovery/start/collector command is prescribed. The first independently admissible review operation requires the already-pending exact f7 review-start decision; draft-only authorization does not approve or claim the contract. After that genuine decision, reuse the original native review contract and source/artifact checks. Backend producer work separately needs definitive original d22 delivery/review evidence or an explicitly supported UNKNOWN recovery disposition. Protected Wake migration separately needs coherent physical state and legitimate purpose-bound authority; expired proposals must not be rerun. No new key, connection, replacement task or bypass is requested. [Current prerequisites](docs/verification/OPERATIONAL_ACCEPTANCE_BLOCKERS_2026_11_15.json).

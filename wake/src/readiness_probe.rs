@@ -6,6 +6,53 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub(crate) fn frozen_observation(line: &str) -> Option<serde_json::Value> {
+    let text = line.strip_prefix("PROBE:FROZEN_OBSERVATION:")?;
+    if text.len() > 1024 {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(text).ok()?;
+    if value.as_object()?.len() != 7
+        || value["basis"] != "FROZEN_REQUEST_DOM_ONLY_NOT_DELIVERY_RECEIPT"
+        || value["messageDigest"].as_str()?.len() != 64
+        || !value["messageDigest"]
+            .as_str()?
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        || value["stable"].as_bool().is_none()
+        || (!value["matchingUserCount"].is_null()
+            && !value["matchingUserCount"]
+                .as_u64()
+                .is_some_and(|n| n <= 256))
+        || value["deliveryReceiptProven"] != false
+        || value["resendAuthorized"] != false
+        || (matches!(
+            value["responseState"].as_str(),
+            Some("RESPONSE_COMPLETE" | "RESPONSE_PENDING")
+        ) && (value["stable"] != true || value["matchingUserCount"] != 1))
+        || !matches!(
+            value["responseState"].as_str()?,
+            "UNPROVEN"
+                | "RESPONSE_COMPLETE"
+                | "RESPONSE_PENDING"
+                | "EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN"
+                | "EXPECTED_USER_DUPLICATED"
+                | "RESPONSE_LOAD_ERROR"
+                | "RESPONSE_NETWORK_ERROR"
+                | "LOGIN_OR_PROFILE_REQUIRED"
+                | "RESPONSE_EXPECTED_USER_DUPLICATED"
+                | "RESPONSE_USER_REPRESENTATION_MISMATCH"
+                | "RESPONSE_SEQUENCE_DRIFT"
+                | "RESPONSE_TARGET_DRIFT"
+                | "RESPONSE_TIMEOUT_RETRY_REQUIRED"
+                | "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"
+        )
+    {
+        return None;
+    }
+    Some(value)
+}
+
 /// Whitelist metadata at the native boundary, even if a helper prints content.
 pub(crate) fn composer_app_observation(line: &str) -> Option<serde_json::Value> {
     let text = line.strip_prefix("PROBE:APP:")?;
@@ -599,6 +646,9 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             let Some(state) = line.strip_prefix("PROBE:") else {
                 return false;
             };
+            if state.starts_with("FROZEN_OBSERVATION:") {
+                return frozen_observation(line).is_some();
+            }
             if state.starts_with("SURFACE:") {
                 return surface_observation(line).is_some();
             }
@@ -765,6 +815,8 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             // duplicate-key values or formatting from an untrusted helper.
             let canonical = if let Some(value) = surface_observation(line) {
                 format!("PROBE:SURFACE:{value}")
+            } else if let Some(value) = frozen_observation(line) {
+                format!("PROBE:FROZEN_OBSERVATION:{value}")
             } else if let Some(value) = composer_app_observation(line) {
                 format!("PROBE:APP:{value}")
             } else if let Some(value) = app_menu_observation(line) {
@@ -796,6 +848,37 @@ fn sanitized_rows(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn frozen_request_observation_is_metadata_only_and_never_delivery_authority() {
+        let value = serde_json::json!({"basis":"FROZEN_REQUEST_DOM_ONLY_NOT_DELIVERY_RECEIPT",
+            "messageDigest":"a".repeat(64),"stable":true,"matchingUserCount":1,
+            "responseState":"RESPONSE_COMPLETE","deliveryReceiptProven":false,"resendAuthorized":false});
+        let line = format!("PROBE:FROZEN_OBSERVATION:{value}");
+        assert_eq!(super::frozen_observation(&line), Some(value.clone()));
+        assert_eq!(super::sanitized_rows(&line), vec![line]);
+        let mut mismatch = value.clone();
+        mismatch["matchingUserCount"] = serde_json::json!(0);
+        mismatch["responseState"] = serde_json::json!("RESPONSE_USER_REPRESENTATION_MISMATCH");
+        assert_eq!(
+            super::frozen_observation(&format!("PROBE:FROZEN_OBSERVATION:{mismatch}")),
+            Some(mismatch)
+        );
+        for (key, wrong) in [
+            ("body", serde_json::json!("PRIVATE_RESPONSE")),
+            ("resendAuthorized", serde_json::json!(true)),
+            ("deliveryReceiptProven", serde_json::json!(true)),
+            ("responseState", serde_json::json!("PRIVATE_ERROR")),
+            ("messageDigest", serde_json::json!("PRIVATE_KEY")),
+            ("matchingUserCount", serde_json::json!(257)),
+        ] {
+            let mut changed = value.clone();
+            changed[key] = wrong;
+            let line = format!("PROBE:FROZEN_OBSERVATION:{changed}");
+            assert!(super::frozen_observation(&line).is_none());
+            assert!(super::sanitized_rows(&line).is_empty());
+        }
+    }
+
     fn accepted_json_frames() -> [(&'static str, serde_json::Value); 11] {
         let response = serde_json::json!({"stage":"RESPONSE_COMPLETE",
             "eventId":format!("web-work-{}", "a".repeat(64)),"targetGeneration":1,

@@ -1,5 +1,27 @@
 # CatDesk — System Architecture
 
+**Decision 2026-11-16T01:38:56.316414+00:00:** The existing development observer now also accepts the original approved public-review context through its native claim and frozen consent. No competing approval registry, owner, service, profile, tunnel or Wake binding is created. A successful context preflight is not a successful external review or release proof. [Evidence](../verification/APPROVED_REVIEW_CONTEXT_OBSERVATION_2026_11_15.json).
+
+**Decision 2026-11-16T00:34:15.175115+00:00:** Unknown-send diagnostics reuse the existing registered-project inspector and SeleniumBase primitives. No new owner, scheduler, profile, tunnel or authorization system. A real source-candidate no-send observation found one exact USER and complete response; installed production and full task acceptance remain separate. [Evidence](../verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
+
+**Decision 2026-11-16T00:09:22.940282+00:00:** The authorized resource ACL repair and actual installed-interpreter native version check are accepted. They add no backend, connection, release manager or native model dependency. Continue direct-Web acceptance separately; interpreter launch alone is not task verification. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
+
+**Decision 2026-11-15T22:34:51Z:** Reuse the existing native runner. The verified private-runtime repair is resource-owner read/execute provisioning to existing accounts, not a new backend, policy or execution subsystem. Source development and protected production acceptance remain independent. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
+
+**Decision 2026-11-15T21:34:58Z:** Readiness and task verification are distinct: existing daemon READY and actual system-command success do not qualify the failed approved interpreter. Reuse the existing owner and diagnostics; no new infrastructure. [Evidence](../verification/NATIVE_SANDBOX_READINESS_AND_COMMAND_QUALIFICATION_2026_11_15.json).
+
+**Decision 2026-11-15T21:01:12Z:** Use the existing command receipt path for advisory native sandbox diagnostics; no new runtime, connection or recovery subsystem. The local verifier failure does not stop unrelated source or Wake work. [Evidence](../verification/NATIVE_COMMAND_FAILURE_DIAGNOSTIC_2026_11_15.json).
+
+**Source validation 2026-11-15T20:32:08Z:** retained proposal operations are now checked against their original full diff hash within the existing non-writing recovery validation. This adds no tool call, replay, authority, install or service. Source `9d96f8e32f3fdf8b528d15eda453e9398f74a392` passes eight native recovery tests and strict checks; selected live test app remains source `79a449b`.
+
+**Decision 2026-11-15T20:23:03Z:** The existing source/build/test lane now demonstrates a scoped local MCP edit and an actual diagnostic Wake plus automatic body readback while production remains unchanged. The failed fixed verifier is a native sandbox dependency, not a global development or Wake blocker. This is partial local/control-plane evidence; real Web-origin editing, verification, checkpoint and self-Wake acceptance remain open. See [dated proof](../verification/SETTLED_READ_ONLY_TASK_RECOVERY_2026_11_15.json).
+
+**Release-model clarification 2026-11-15T19:33:36Z:** one system and one unchanged canonical v5 interface. Frozen independently verified releases are production; authorized source/worktrees/builds and isolated local fixture tests are development. Reuse current selection, immutable artifacts, existing fallback/promotion/rollback and bounded owners. No new installation, release manager, tunnel, plugin, external connection or backend infrastructure. Local source work proceeds independently of protected-release acceptance.
+
+## 2026-11-15T19:18:45Z — Development/production separation decision
+
+Development and production are separate execution realms using the same existing components. Source work, isolated package selection and bounded authenticated development backends do not depend on protected production review/signing. Only shared browser operations require their existing exclusive owner; do not add another launcher, scheduler or browser service. One canonical v5 interface serves ChatGPT Web. Local binaries/MCP harnesses/SeleniumBase tests provide independent development; no duplicate external infrastructure. Full actual Web acceptance remains OPEN until missing installed operations are legitimately qualified. See [dated qualification](../verification/DEVELOPMENT_PRODUCTION_SEPARATION_2026_11_15.json) and [current handoff](../../CATDESK_PROJECT_HANDOFF.md) for exact maturity and remaining gates.
+
 > **Architecture baseline:** 2026-11-14 · **Revision timestamp (UTC):** `2026-11-14T18:47:56Z`  
 > **Document status:** Reviewed consolidation; canonical design on integration of PR #8 into development. It is **not** an operational authorization.
 > **Product owner requirements:** November 14, 2026. **Code/evidence basis:** the existing `codex/web-rollover-oct17` development line and the documentation consolidation branch, checked November 14, 2026.  
@@ -164,3 +186,15 @@ Do not transpose original dates into claims of present runtime success. Each tra
 - [C0/C1 acceptance](../orchestrator/C0_C1_ACCEPTANCE_2026_11_07.md) — direct Web loop and separation of native work.
 - [Wake semantics](../orchestrator/MCP_WAKE_BRIDGE_SEMANTICS.md), [Wake independence](../orchestrator/WAKE_INDEPENDENCE.md), [three-lane model](../orchestrator/CATDESK_SIMPLIFIED_DEV_RELEASE_WAKE_MODEL.md) — historical/qualified design portions only.
 - [Original worker decision](../orchestrator/ARCHITECTURE_DECISION_WORKER_RUNTIME.md) — original design rationale, not this product's current core loop.
+
+## 2026-11-16T02:38:42.136005+00:00 — Existing startup owner qualification
+
+The workspace autostart monitor and protected stable supervisor are existing distinct owners. Current installed evidence shows a live canonical daemon, a full-stack HKCU Run registration with its monitor stopped, and no provisioned stable-supervisor root. One bounded backend-only installed health cycle is accepted for observation and cleanup only; automatic recovery and reboot behavior remain unverified. [Installed and source evidence](../verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).
+
+## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
+
+The existing public lifecycle now admits explicit backend-only autostart selection at source level. It reuses the same task/Run identity and monitor, with no additional service or scheduler. The currently installed full-stack registration is unchanged; the source feature does not establish unattended recovery. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
+
+## 2026-11-16T03:27:34.014882+00:00 — Local UI host bridge qualification
+
+The existing UI branch now initializes the standard MCP Apps display bridge and normalizes canonical or legacy metadata into the original renderer. This is a source component improvement, separate from project-execution authority and currently uninstalled. The local real-browser fixture passes; live ChatGPT timeout causality and actual host acceptance remain unproved. [Exact source and local evidence](../verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json).

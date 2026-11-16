@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-16T02:51:59.272044+00:00",
+  "sourceCommit": "f016c2919957610f65ac08fc3a1aac8413cca788",
+  "scope": "SOURCE_REGRESSION_AND_REAL_WINDOWS_HASH_CMDLET_CHILD_NOT_INSTALLED_STARTUP_MIGRATION",
+  "demonstratedGap": "Existing monitor accepts BackendOnly, but public facade previously rejected it for autostart and could only persist full-stack recovery.",
+  "implementation": {
+    "publicFlag": "catdesk.ps1 autostart enable -BackendOnly",
+    "sameOwnerIdentity": true,
+    "sameTaskAndRunNames": true,
+    "fullStackDefaultCommandUnchanged": true,
+    "logonAndImmediateCommandsCarryScope": true,
+    "statusReadsActualExactScope": true,
+    "doctorUsesSameOwnershipReader": true,
+    "implicitScopeConversion": "AUTOSTART_SCOPE_CONFLICT",
+    "mixedTaskAndRunScopes": "AUTOSTART_SCOPE_CONFLICT",
+    "unregisteredSurvivingMonitor": "AUTOSTART_UNREGISTERED_MONITOR_ACTIVE",
+    "disableMeaning": "UNREGISTER_ONLY_NOT_MONITOR_TERMINATION"
+  },
+  "verification": {
+    "lifecycle": [
+      {
+        "host": "POWERSHELL_7",
+        "startedUtc": "2026-11-16T02:49:31.031008+00:00",
+        "finishedUtc": "2026-11-16T02:49:37.368573+00:00",
+        "exitCode": 0
+      },
+      {
+        "host": "WINDOWS_POWERSHELL_5",
+        "startedUtc": "2026-11-16T02:49:37.369581+00:00",
+        "finishedUtc": "2026-11-16T02:49:43.302175+00:00",
+        "exitCode": 0
+      }
+    ],
+    "doctorAssertions": 213,
+    "doctorResult": "PASS",
+    "coveredCases": [
+      "backend-only task registration and immediate launch arguments",
+      "ordinary status reads exact backend-only scope",
+      "requested backend-only status reports actual full-stack registration",
+      "backend-only mutation refuses existing full-stack owner",
+      "full-stack enable refuses existing backend-only owner",
+      "mixed exact task/Run scopes refused by status enable disable and doctor",
+      "foreign task principal and command still refused",
+      "backend-only existing Run fallback and exact removal",
+      "surviving unregistered monitor refused without registration",
+      "BackendOnly refused on unrelated lifecycle commands",
+      "parent module environment unchanged and real Windows child hash command available"
+    ]
+  },
+  "effects": {
+    "actualStartupRegistrationWrites": 0,
+    "actualMonitorStarts": 0,
+    "backendOrBrowserOrWakeOrTunnelStarts": 0,
+    "projectTasksOrUnknownSendsReplayed": 0,
+    "protectedReleaseOrBindingChanges": 0,
+    "newExternalConnections": 0,
+    "newSchedulerOrOwner": false,
+    "persistenceEffectsInTests": "INJECTED_FIXTURE_ONLY",
+    "realProcessesInTests": "BOUNDED_WINDOWS_POWERSHELL_READONLY_CMDLET_PROBE"
+  },
+  "retainedPriorEvidence": {
+    "path": "C110_NORMAL_PRE_READY_FALLBACK_2026_10_24.json",
+    "actualScope": "Historical frozen candidate disposable recovery and post-ready no-replacement qualification",
+    "repeated": false,
+    "currentInstalledScopeNotInferred": true
+  },
+  "remaining": {
+    "installedBackendOnlyStartupSelection": "NOT_PERFORMED_EXISTING_FULL_STACK_REGISTRATION_PRESERVED",
+    "gracefulMonitorStop": "UNVERIFIED_DISABLE_DOES_NOT_STOP_EXISTING_MONITOR",
+    "unattendedAndRebootRecovery": "UNVERIFIED",
+    "directWebEditCheckpointSelfWake": "OPEN",
+    "f7ReviewStart": "EXACT_DECISION_PENDING_ONCE",
+    "d22ReviewDelivery": "UNKNOWN_NO_REPLAY",
+    "wakeMigration": "PROTECTED_STATE_NOT_PROVEN"
+  },
+  "nextAction": "Resume the existing review/producer and installed direct-Web delivery/Git qualification on new authority or definitive original-delivery evidence; do not repeat completed recovery canaries. Keep independently demonstrated source fixes eligible."
+}

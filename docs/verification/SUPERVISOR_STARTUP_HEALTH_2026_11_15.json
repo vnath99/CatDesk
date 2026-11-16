@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-16T02:38:42.136005+00:00",
+  "sourceCommit": "199ff74e5bbe3a181bd18a900197cf0e5c84de81",
+  "scope": "INSTALLED_PASSIVE_STARTUP_DIAGNOSTICS_AND_BOUNDED_HEALTH_ONLY_MONITOR_SOURCE_LAUNCH_FIX_NOT_PROMOTED",
+  "canonicalExecutableSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+  "installedFacadeSha256": "a2a7f64a65377e9d4d75231bf969ec729f071dbc7dfbbac874027a80000cf632",
+  "installedStartupObservation": {
+    "startedUtc": "2026-11-16T01:52:21.972824+00:00",
+    "finishedUtc": "2026-11-16T01:52:28.789554+00:00",
+    "workspaceState": "AUTOSTART_REGISTERED_MONITOR_STOPPED",
+    "registration": "EXACT_EXISTING_HKCU_RUN_VALUE",
+    "backendOnlyFlag": false,
+    "workspaceScheduledTask": "ABSENT_EXACT_NAME_QUERY_WIN32_2",
+    "stableScheduledTask": "ABSENT_EXACT_NAME_QUERY_WIN32_2",
+    "stableSupervisor": {
+      "readiness": "SUPERVISOR_ROOT_UNAVAILABLE",
+      "activationBlocked": "SUPERVISOR_ROOT_UNAVAILABLE",
+      "reviewedSupervisorImage": "SUPERVISOR_LIFECYCLE_READY",
+      "startup": "SUPERVISOR_LIFECYCLE_READY",
+      "startupPolicy": "SUPERVISOR_LIFECYCLE_READY",
+      "startupDefinition": "SUPERVISOR_STARTUP_DEFINITION_ABSENT",
+      "frontDoor3201": "SUPERVISOR_3201_PROBE_UNAVAILABLE"
+    },
+    "historicalMonitorExitCause": "NOT_ESTABLISHED",
+    "historicalDaemonStopCause": "NOT_ESTABLISHED"
+  },
+  "installedDoctor": {
+    "startedUtc": "2026-11-16T02:15:10.331220+00:00",
+    "finishedUtc": "2026-11-16T02:15:17.671596+00:00",
+    "readOnly": true,
+    "networkRequests": 0,
+    "runtimeStarts": 0,
+    "repairs": 0,
+    "layers": [
+      {
+        "layer": "RELEASE_PAIR",
+        "status": "PASS",
+        "code": "RELEASE_PAIR_VERIFIED",
+        "nextDiagnostic": "catdesk.ps1 diagnose"
+      },
+      {
+        "layer": "RECOVERY_AUTHORITY",
+        "status": "PASS",
+        "code": "RECOVERY_AUTHORITY_AVAILABLE",
+        "nextDiagnostic": "catdesk.ps1 diagnose"
+      },
+      {
+        "layer": "LOCAL_DAEMON",
+        "status": "PASS",
+        "code": "CANONICAL_LISTENER_PRESENT",
+        "nextDiagnostic": "catdesk.ps1 diagnose"
+      },
+      {
+        "layer": "PERSISTENT_SUPERVISOR",
+        "status": "FAIL",
+        "code": "SUPERVISOR_REGISTERED_MONITOR_STOPPED",
+        "nextDiagnostic": "QUALIFY_EXISTING_SUPERVISOR_RESTART_WITHOUT_STARTING_WAKE"
+      }
+    ]
+  },
+  "crossEditionReproduction": {
+    "inheritedModulePath": "GET_FILE_HASH_UNAVAILABLE_CORE_UTILITY_SHADOWS_DESKTOP",
+    "hostDefaultModulePath": "GET_FILE_HASH_AVAILABLE_DESKTOP_ONLY",
+    "firstAttempt": "FAILED_BEFORE_MONITOR_LOAD_NO_RECOVERY_OR_STATE_CHANGE",
+    "productionHistoricalCauseProven": false
+  },
+  "boundedInstalledHealthCycle": {
+    "startedUtc": "2026-11-16T02:34:49.8268666+00:00",
+    "finishedUtc": "2026-11-16T02:34:54.0030475+00:00",
+    "scope": "INSTALLED_MONITOR_ONE_HEALTH_CYCLE_RECOVERY_DENIED",
+    "powerShellVersion": "5.1.26100.9711",
+    "maximumCycles": 1,
+    "backendOnly": true,
+    "statusReads": 1,
+    "recoveryRequestsRefused": 0,
+    "recoveryActions": 0,
+    "states": [
+      "READY",
+      "MONITORING_COMPLETE"
+    ],
+    "singletonMutexesAbsentAfter": true,
+    "failure": null
+  },
+  "boundedOwner": {
+    "startedUtc": "2026-11-16T02:34:46.6551435+00:00",
+    "finishedUtc": "2026-11-16T02:34:56.4795887+00:00",
+    "maximumSeconds": 150,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "containment": "KILL_ON_JOB_CLOSE",
+    "workerSha256": "610303e76136ef095f49bc37c7a41494e912d34d2ada72488a01e98076dc0403"
+  },
+  "preservation": {
+    "pinsChecked": 1724,
+    "pinMismatches": 0,
+    "pinSetUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "missingSeedPathsUnchanged": true,
+    "passed": true,
+    "startupRegistrationUnchanged": true,
+    "canonicalExecutableUnchanged": true,
+    "installedFacadeUnchanged": true,
+    "finalWorkspaceState": "AUTOSTART_REGISTERED_MONITOR_STOPPED"
+  },
+  "sourceChange": {
+    "component": "catdesk.ps1 existing immediate supervisor launcher",
+    "behavior": "Host-default child PSModulePath; exact command and other environment retained; parent environment unchanged; hidden child and existing singleton retained.",
+    "newConnectionOrService": false,
+    "installedOrEnabled": false
+  },
+  "verification": {
+    "powerShell7LifecycleFixtures": "PASS_WITH_REAL_WINDOWS_CHILD",
+    "windowsPowerShell5LifecycleFixtures": {
+      "exitCode": 0,
+      "startedUtc": "2026-11-16T02:36:53.550473+00:00",
+      "finishedUtc": "2026-11-16T02:36:56.816091+00:00"
+    },
+    "supervisorFixtures": "PASS",
+    "doctorFixtures": "PASS_213_ASSERTIONS",
+    "diffWhitespace": "PASS"
+  },
+  "remaining": {
+    "unattendedRecovery": "UNVERIFIED",
+    "rebootRecovery": "UNVERIFIED",
+    "persistentEnable": "HELD_EXISTING_FULL_STACK_SCOPE_NOT_CHANGED",
+    "stableProtectedRootProvisioning": "NOT_PERFORMED",
+    "directWebEditCheckpointSelfWake": "OPEN",
+    "d22ReviewDelivery": "UNKNOWN_NO_REPLAY",
+    "operatorActionForThisDevelopmentChange": "NONE"
+  },
+  "nextExecutableOperation": "Qualify backend-only recovery and monitor stop/cleanup through the existing disposable-state test path before any persistent activation; preserve independent review and migration gates."
+}
