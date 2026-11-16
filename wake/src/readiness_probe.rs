@@ -538,6 +538,16 @@ pub(crate) fn run_bounded_observed_program(
     run_bounded_observed_input(command, timeout, rows, &input)
 }
 
+fn finish_probe_processes(
+    job: &crate::process_job::Job,
+    child: &mut std::process::Child,
+) -> Result<(), &'static str> {
+    job.terminate_and_wait_empty(Duration::from_secs(5))
+        .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
+    child.wait().map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
+    Ok(())
+}
+
 fn run_bounded_observed_input(
     command: &mut Command,
     timeout: Duration,
@@ -574,10 +584,25 @@ fn run_bounded_observed_input(
             }
         }
     };
+    run_assigned_observer(child, job, timeout, rows, input)
+}
+
+fn run_assigned_observer(
+    mut child: std::process::Child,
+    job: crate::process_job::Job,
+    timeout: Duration,
+    rows: &mut Vec<String>,
+    input: &[u8],
+) -> Result<(), &'static str> {
+    // Even an exceptional missing pipe must cross the same Job-empty barrier.
+    // Extract both before creating a reader, so this branch owns no I/O thread.
+    let (Some(mut stdin), Some(output)) = (child.stdin.take(), child.stdout.take()) else {
+        finish_probe_processes(&job, &mut child)?;
+        return Err("PROBE_PIPE_FAILED");
+    };
     // Drain while the helper runs: waiting before reading can fill the Windows
     // pipe and turn a healthy observer into a misleading process timeout.
     // Memory stays bounded even if library output exceeds the protocol budget.
-    let output = child.stdout.take().ok_or("PROBE_PIPE_FAILED")?;
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
     std::thread::spawn(move || {
         let mut output = output;
@@ -598,7 +623,6 @@ fn run_bounded_observed_input(
     // A blocked stdin write is part of the same deadline. Drain it only after
     // the existing Job proves all readers exited; never abandon a writer.
     let deadline = Instant::now() + timeout;
-    let mut stdin = child.stdin.take().ok_or("PROBE_PIPE_FAILED")?;
     let input = input.to_vec();
     let (input_tx, input_rx) = std::sync::mpsc::sync_channel(1);
     std::thread::spawn(move || {
@@ -623,9 +647,7 @@ fn run_bounded_observed_input(
     })();
     // A normal helper exit is insufficient: retained descendants may still own
     // Chrome/profile resources or the output pipe. Prove the exact Job empty.
-    job.terminate_and_wait_empty(Duration::from_secs(5))
-        .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
-    child.wait().map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
+    finish_probe_processes(&job, &mut child)?;
     let input_result = input_rx
         .recv_timeout(Duration::from_secs(5))
         .map_err(|_| "PROBE_CLEANUP_UNVERIFIED")?;
@@ -1143,6 +1165,127 @@ mod tests {
             Err("PROBE_PROGRAM_SIZE_INVALID")
         );
         assert!(rows.is_empty());
+    }
+
+    #[cfg(windows)]
+    fn assigned_probe_with_live_descendant(
+        missing_stdin: bool,
+    ) -> (
+        std::process::Child,
+        crate::process_job::Job,
+        std::os::windows::io::OwnedHandle,
+    ) {
+        use std::io::{BufRead, BufReader};
+        use std::os::windows::{io::FromRawHandle, process::CommandExt};
+        let mut child = Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                r#"
+if ([Console]::In.ReadLine() -cne 'START') { exit 2 }
+$p = [System.Diagnostics.ProcessStartInfo]::new()
+$p.FileName = 'powershell.exe'
+$p.Arguments = '-NoProfile -NonInteractive -Command Start-Sleep -Seconds 30'
+$p.UseShellExecute = $false
+$p.CreateNoWindow = $true
+$descendant = [System.Diagnostics.Process]::Start($p)
+[Console]::Out.WriteLine($descendant.Id)
+[Console]::Out.Flush()
+$null = [Console]::In.ReadLine()
+"#,
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .creation_flags(0x0800_0000)
+            .spawn()
+            .unwrap();
+        let job = match crate::process_job::Job::assign(&child) {
+            Ok(job) => job,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("fixture Job assignment: {error}");
+            }
+        };
+        let mut input = child.stdin.take().unwrap();
+        let output = child.stdout.take().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let reader = std::thread::spawn(move || {
+            let mut reader = BufReader::new(output);
+            let mut line = String::new();
+            let result = reader
+                .read_line(&mut line)
+                .map_err(|e| e.to_string())
+                .and_then(|_| line.trim().parse::<u32>().map_err(|e| e.to_string()));
+            let _ = tx.send((reader.into_inner(), result));
+        });
+        input.write_all(b"START\n").unwrap();
+        let (output, pid) = match rx.recv_timeout(Duration::from_secs(10)) {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = finish_probe_processes(&job, &mut child);
+                reader.join().unwrap();
+                panic!("bounded fixture readiness: {error}");
+            }
+        };
+        reader.join().unwrap();
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut std::ffi::c_void;
+        }
+        let raw = unsafe { OpenProcess(0x0010_0000, 0, pid.unwrap()) };
+        assert!(!raw.is_null());
+        let descendant = unsafe { std::os::windows::io::OwnedHandle::from_raw_handle(raw) };
+        if missing_stdin {
+            child.stdout = Some(output);
+            drop(input);
+        } else {
+            child.stdin = Some(input);
+            drop(output);
+        }
+        assert!(job.active_processes().unwrap() >= 1);
+        (child, job, descendant)
+    }
+
+    #[cfg(windows)]
+    fn verify_missing_pipe_cleanup(missing_stdin: bool) {
+        use std::os::windows::io::AsRawHandle;
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn WaitForSingleObject(handle: *mut std::ffi::c_void, milliseconds: u32) -> u32;
+        }
+        let (child, job, descendant) = assigned_probe_with_live_descendant(missing_stdin);
+        assert_eq!(
+            unsafe { WaitForSingleObject(descendant.as_raw_handle(), 0) },
+            258
+        );
+        let mut rows = Vec::new();
+        let start = Instant::now();
+        assert_eq!(
+            run_assigned_observer(child, job, Duration::from_secs(2), &mut rows, b"START\n"),
+            Err("PROBE_PIPE_FAILED")
+        );
+        assert!(rows.is_empty());
+        assert!(start.elapsed() < Duration::from_secs(8));
+        assert_eq!(
+            unsafe { WaitForSingleObject(descendant.as_raw_handle(), 0) },
+            0,
+            "a pipe refusal may return only after the actual owned descendant exited"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn readiness_cleanup_missing_stdout_reaps_owned_descendant() {
+        verify_missing_pipe_cleanup(false);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn readiness_cleanup_missing_stdin_reaps_owned_descendant() {
+        verify_missing_pipe_cleanup(true);
     }
 
     #[cfg(windows)]
