@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-16T19:01:23.641991+00:00",
+  "sourceCommit": "0c28d6135d97c953ff19067c5f44c5486e265b72",
+  "scope": "SOURCE_DIAGNOSTIC_CORRECTION_NOT_INSTALLED_OWNER_QUIESCENCE",
+  "finding": "Public autostart status and disable could report DISABLED after persistence removal while the existing monitor guard remained observable. Enable already refused that state.",
+  "sourcePaths": [
+    {
+      "path": "catdesk.ps1",
+      "blob": "e6ae60909010612682993c0b289d65c096240b95"
+    },
+    {
+      "path": "scripts/catdesk-doctor.ps1",
+      "blob": "25c154b9e16bdf8de6581069d9280ef371b9f303"
+    },
+    {
+      "path": "scripts/test-catdesk-lifecycle.ps1",
+      "blob": "1c828c7458dcb97ef7b924f3447d4f49b826bbc7"
+    }
+  ],
+  "behavior": {
+    "statusWithoutRegistrationAndWithGuard": "AUTOSTART_UNREGISTERED_MONITOR_ACTIVE",
+    "disableAfterOwnedPersistenceRemovalAndWithGuard": "AUTOSTART_UNREGISTERED_MONITOR_ACTIVE",
+    "enableExistingRefusalUnchanged": true,
+    "noGuardObserved": "AUTOSTART_DISABLED",
+    "doctorCode": "SUPERVISOR_UNREGISTERED_MONITOR_ACTIVE",
+    "doctorStatus": "FAIL",
+    "nextDiagnostic": "RECONCILE_EXISTING_MONITOR_OWNER_BEFORE_MIGRATION_OR_SCOPE_CHANGE",
+    "newProcessStopOrScopeConversion": false,
+    "guardObservationDoesNotProveLivenessOrQuiescence": true,
+    "monitorQueryErrorsAreNotNewMigrationAuthority": true
+  },
+  "verificationPowerShellVersions": {
+    "core": "7.6.9",
+    "desktop": "5.1.26100.9818"
+  },
+  "verification": [
+    {
+      "command": "pwsh -NoProfile -File scripts/test-catdesk-lifecycle.ps1",
+      "exitStatus": 0,
+      "result": "consumer lifecycle fixture tests passed"
+    },
+    {
+      "command": "pwsh -NoProfile -File scripts/test-catdesk-doctor.ps1",
+      "exitStatus": 0,
+      "result": "doctor tests passed: 213 assertions"
+    },
+    {
+      "command": "powershell.exe -NoProfile -File scripts/test-catdesk-lifecycle.ps1",
+      "exitStatus": 0,
+      "result": "consumer lifecycle fixture tests passed"
+    },
+    {
+      "command": "powershell.exe -NoProfile -File scripts/test-catdesk-doctor.ps1",
+      "exitStatus": 0,
+      "result": "doctor tests passed: 213 assertions"
+    },
+    {
+      "command": "git diff --check",
+      "exitStatus": 0
+    }
+  ],
+  "actualWindowsEvidence": {
+    "realNamedMutex": true,
+    "monitorObservationSeamRemoved": true,
+    "realGuardObservedByStatusDisableEnableAndDoctor": true,
+    "fixtureRegistrationAndProcessMutationSeamsRecordedNoActions": true,
+    "guardDisposedInFinally": true,
+    "subsequentStatusDisabled": true,
+    "actualSupervisorStarted": false,
+    "productionPersistenceChanged": false,
+    "scopeAndForeignPrincipalRefusalsStillCovered": true
+  },
+  "limits": {
+    "selfReviewedSource": true,
+    "independentSourceReview": false,
+    "protectedInstallationChanged": false,
+    "operatorScopeDecisionInvented": false,
+    "qualified56aaCandidateRebuiltOrRelabeled": false,
+    "historicalUnknownDeliveriesReplayed": false,
+    "oldSigningPacketStillHeld": true,
+    "fullWebLifecycleAccepted": false
+  },
+  "nextAction": "Use the accurate existing-owner diagnostics when reconciling supervisor quiescence. Preserve working production and stale bootstrap inputs; complete independent candidate review and original d22 authority without replay."
+}

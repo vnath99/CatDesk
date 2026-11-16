@@ -515,7 +515,7 @@ try {
     Require ($foreignStatus.state -eq 'AUTOSTART_CONFLICT' -and $foreignDisable.state -eq 'AUTOSTART_CONFLICT') 'foreign-principal task is refused'
     Require ($actions.Count -eq 0) 'foreign-principal task is never removed'
     $disabledAgain = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'disable' -Seams $autostart | ConvertFrom-Json
-    Require ($disabledAgain.state -eq 'AUTOSTART_DISABLED' -and $actions -contains 'task-unregister') 'disable removes only exact owned task'
+    Require ($disabledAgain.state -eq 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE' -and ($actions -join ',') -ceq 'task-unregister') 'disable removes only exact owned task and reports the surviving monitor'
     $actions.Clear()
 
     # Standard-user estates may refuse root Task Scheduler registration. The
@@ -578,13 +578,37 @@ try {
     $backendFallbackStatus = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $fallback | ConvertFrom-Json
     Require ($backendFallbackStatus.detail -ceq 'scope=BACKEND_ONLY' -and $actions.Count -eq 0) 'ordinary status recognizes backend-only Run fallback'
     $backendFallbackDisable = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'disable' -Seams $fallback | ConvertFrom-Json
-    Require ($backendFallbackDisable.state -ceq 'AUTOSTART_DISABLED' -and ($actions -join ',') -ceq 'runkey-unregister') 'default disable removes only the exact existing known backend-only Run value'
+    Require ($backendFallbackDisable.state -ceq 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE' -and ($actions -join ',') -ceq 'runkey-unregister') 'default disable removes only the exact existing known backend-only Run value and reports the surviving monitor'
     $actions.Clear()
     foreach ($localOnly in @($false,$true)) {
+        foreach ($readOrDisable in @('status','disable')) {
+            $survivingStatus = Invoke-FixtureFacade -Command 'autostart' -AutostartAction $readOrDisable -Seams $autostart -FixtureBackendOnly:$localOnly | ConvertFrom-Json
+            Require ($survivingStatus.state -ceq 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE' -and $actions.Count -eq 0) 'an unregistered active monitor is not reported disabled and no process or registration is changed'
+        }
         $survivingMonitor = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'enable' -Seams $autostart -FixtureBackendOnly:$localOnly | ConvertFrom-Json
         Require ($survivingMonitor.state -ceq 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE' -and $actions.Count -eq 0) 'an unregistered surviving monitor is never relabeled or reused as a new scope'
         Require ($null -eq $Global:CatDeskAutostartFixtureTask -and $null -eq $Global:CatDeskAutostartRunValue) 'surviving monitor refusal creates no persistence'
     }
+    # Exercise the actual Windows named guard without starting any supervisor
+    # or changing persistence. The monitor seam is removed, not faked true.
+    $realGuardSeams = $autostart.Clone()
+    $realGuardSeams.Remove('AutostartSupervisorRunning')
+    $guard = $null
+    try {
+        $guard = [Threading.Mutex]::new($false, "Local\CatDesk.Autostart.$($normalDefinition.SupervisorWorkspaceId)")
+        foreach ($action in @('status','disable','enable')) {
+            $guarded = Invoke-FixtureFacade -Command 'autostart' -AutostartAction $action -Seams $realGuardSeams | ConvertFrom-Json
+            Require ($guarded.state -ceq 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE' -and $actions.Count -eq 0) 'real surviving kernel guard is reported without starting, removing or killing an owner'
+        }
+        $guardedDoctor = Invoke-FixtureFacade -Command 'doctor' -Seams $realGuardSeams | ConvertFrom-Json
+        $guardedLayer = @($guardedDoctor.layers | Where-Object layer -CEQ 'PERSISTENT_SUPERVISOR')[0]
+        Require ($guardedLayer.code -ceq 'SUPERVISOR_UNREGISTERED_MONITOR_ACTIVE' -and $guardedLayer.status -ceq 'FAIL' -and $guardedLayer.nextDiagnostic -ceq 'RECONCILE_EXISTING_MONITOR_OWNER_BEFORE_MIGRATION_OR_SCOPE_CHANGE') 'doctor observes the same real unregistered guard and requests owner reconciliation rather than restart or recovery readiness'
+        Require ($actions.Count -eq 0) 'real-guard doctor is non-mutating'
+    } finally {
+        if ($null -ne $guard) { $guard.Dispose() }
+    }
+    $afterGuard = Invoke-FixtureFacade -Command 'autostart' -AutostartAction 'status' -Seams $realGuardSeams | ConvertFrom-Json
+    Require ($afterGuard.state -ceq 'AUTOSTART_DISABLED' -and $actions.Count -eq 0) 'disabled is reported only after the real unregistered guard is absent'
     foreach ($command in @('install','status','diagnose','doctor','stop','wake')) {
         $invalidScope = Invoke-FixtureFacade -Command $command -Seams $autostart -FixtureBackendOnly | ConvertFrom-Json
         Require ($invalidScope.state -ceq 'ACTION_REQUIRED' -and $actions.Count -eq 0) 'backend-only switch remains refused outside its explicit lifecycle commands'

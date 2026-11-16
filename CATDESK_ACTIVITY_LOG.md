@@ -422,3 +422,11 @@ Evidence: [docs/verification/READINESS_PATCH_AND_INIT_BINDING_2026_11_16.json](d
 Agent: Codex. Source: 56aa9912fe790bc50084329aa4932b02c0bbfc4e. Outcome: partial. Integrated reviewed readiness correction; built and selected exact updated unprotected candidate. Bounded paused Host, authenticated local MCP and registered read-only browser observation pass. Original d22 remains UNKNOWN. Existing full-stack production supervisor makes the prior STOPPED signing snapshot stale. Next: Preserve stale bootstrap inputs unsigned. Reconcile existing full-stack supervisor quiescence before fresh signing inputs; finish distinct independent candidate coverage and original d22 attribution without replay. Installed Web lifecycle remains OPEN.
 
 Evidence: [docs/verification/UPDATED_RUNTIME_LOCAL_QUALIFICATION_2026_11_16.json](docs/verification/UPDATED_RUNTIME_LOCAL_QUALIFICATION_2026_11_16.json); command: Existing local build/update/paused-Host/authenticated-MCP/read-only browser paths and exact source/state comparisons; no protected installation or USER send; exit 0; SHA-256 1a2f257bada1fea140ba958ab31ecfe399b49bbe7f0edf325a29bd568eb42fbe.
+
+<!-- catdesk-activity:autostart-surviving-monitor-diagnostic-nov16 sha256:46b62cfa4cd0340541b86a97ccb100e74db8ed85c15c307337daf1583cfef521 -->
+
+## 2026-11-16T19:01:23.641991+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 0c28d6135d97c953ff19067c5f44c5486e265b72. Outcome: partial. Corrected false autostart DISABLED reporting when a monitor survives persistence removal. Status/disable reuse the existing active-monitor refusal; doctor identifies the same layer. Lifecycle and doctor regressions pass in both PowerShell editions, including a real Windows guard. Next: Reconcile the existing production supervisor owner before Wake signing or scope changes. Preserve the qualified 56aa development candidate, original f7 PARTIAL and d22 UNKNOWN; complete independent release gates and actual Web lifecycle acceptance.
+
+Evidence: [docs/verification/AUTOSTART_SURVIVING_MONITOR_DIAGNOSTIC_2026_11_16.json](docs/verification/AUTOSTART_SURVIVING_MONITOR_DIAGNOSTIC_2026_11_16.json); command: Existing lifecycle and 213-assertion doctor suites in both PowerShell editions; real named guard without a running test supervisor; git diff --check; exit 0; SHA-256 b728c7995bb0ec7794e86779a4f5955aca2f997d922e3a61a2084d216cb278dc.
