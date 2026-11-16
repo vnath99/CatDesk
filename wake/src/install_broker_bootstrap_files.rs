@@ -1093,6 +1093,51 @@ mod tests {
         std::fs::remove_dir(root).unwrap();
     }
     #[test]
+    fn bootstrap_native_state_pin_blocks_control_writes_and_atomic_replacement() {
+        let temp = std::env::temp_dir();
+        let root = temp.join(format!(
+            "catdesk-bootstrap-state-pin-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let control = root.join("control.json");
+        let replacement = root.join("replacement.json");
+        let moved = root.join("moved.json");
+        let original = br#"{"schemaVersion":1,"desired":"STOPPED"}"#;
+        let changed = br#"{"schemaVersion":1,"desired":"RUNNING"}"#;
+        std::fs::write(&control, original).unwrap();
+        std::fs::write(&replacement, changed).unwrap();
+        let parent = Pin::open_root(&root).unwrap();
+        // Exactly the relative leaf-open path used for signed bootstrap state.
+        let mut pin = parent.child("control.json", false).unwrap().unwrap();
+        assert_eq!(pin.raw(64 * 1024).unwrap(), original);
+        assert!(std::fs::write(&control, changed).is_err());
+        assert!(std::fs::rename(&replacement, &control).is_err());
+        assert!(std::fs::rename(&control, &moved).is_err());
+        assert!(std::fs::remove_file(&control).is_err());
+        assert_eq!(pin.raw(64 * 1024).unwrap(), original);
+        assert_eq!(std::fs::read(&replacement).unwrap(), changed);
+        assert!(!moved.exists());
+        drop(pin);
+        // A successful replacement after release rules out an ACL-only refusal.
+        std::fs::rename(&replacement, &control).unwrap();
+        assert_eq!(std::fs::read(&control).unwrap(), changed);
+        drop(parent);
+        assert!(root.starts_with(&temp));
+        assert!(
+            root.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("catdesk-bootstrap-state-pin-")
+        );
+        std::fs::remove_file(control).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
+    #[test]
     fn bootstrap_native_input_pins_reject_writes_and_unsafe_input_paths() {
         let root = std::env::temp_dir().join(format!(
             "catdesk-bootstrap-input-{}-{}",
