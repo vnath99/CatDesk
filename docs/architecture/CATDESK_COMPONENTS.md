@@ -150,3 +150,7 @@ The operator favors the simple UI from the upstream [Xeift/CatDesk preview](http
 **Architecture adoption timestamp:** `2026-11-14T18:47:56Z` — component boundaries clarified and single-active-project policy specified for MVP. Material future component contract revisions must be appended with timestamp, rationale and related milestone; routine test results belong in the root [activity log](../../CATDESK_ACTIVITY_LOG.md).
 
 **Source pointers:** `src/project_mcp.rs`, `src/project_mcp_task.rs`, `src/operator_web_receipts.rs`, `src/operator_web_rollover.rs`, `src/operator_web_auto.rs`, `src/delegated/autonomy_projects.rs`, `src/delegated/provider_router.rs`, `wake/src/runtime.rs`, `wake/src/protocol.rs`, `scripts/wake_bridge.py`, `wake/adapter.py`; [historical technical index](../orchestrator/ARCHITECTURE_DOCUMENT_INDEX.md). These identify source responsibilities and do **not** assert that the installed release contains every feature.
+
+## 2026-11-16T02:38:42.136005+00:00 — Existing startup owner qualification
+
+The existing immediate workspace-monitor launcher now initializes a Windows PowerShell child with its host-default module path. Its executable, arguments, hidden window, singleton and unrelated environment remain unchanged; the parent environment is untouched. This corrects a reproduced Core-only module shadowing failure without another launcher service. The source fix is not installed. [Installed and source evidence](../verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).

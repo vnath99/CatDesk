@@ -1,5 +1,11 @@
 # CatDesk important commands
 
+## 2026-11-16T02:38:42.136005+00:00 — Startup status and bounded monitor scope
+
+Use `./catdesk.ps1 doctor` for passive layer reporting and `./catdesk.ps1 autostart status` for the existing workspace registration/monitor signal. A running daemon does not prove a live supervisor. Installed status is AUTOSTART_REGISTERED_MONITOR_STOPPED; the existing HKCU Run fallback is full-stack, with no exact scheduled task. The separate protected stable-supervisor root/startup definition is absent. Neither observation authorizes provisioning or enabling recurring automation.
+
+One installed backend-only health cycle passed under a test-only recover-denial guard and exited naturally. This is not an unattended repair or reboot drill. Source `199ff74e5bbe3a181bd18a900197cf0e5c84de81` preserves the existing command, hidden owner and singleton while allowing Windows PowerShell to initialize its own child module path. Both PowerShell 7 and Windows PowerShell lifecycle tests pass. Do not modify installed scripts or registration to apply this development fix outside the existing release procedure. Historical stop causes remain unproven. [Qualification](docs/verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).
+
 ## 2026-11-16T01:38:56.316414+00:00 — Inspect the original approved review context
 
 Qualified development source `8657bd00dca887c7f6911718641f262647a42ac6` supports this local-only operation through the same bounded owner:

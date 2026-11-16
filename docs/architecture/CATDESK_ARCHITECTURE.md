@@ -186,3 +186,7 @@ Do not transpose original dates into claims of present runtime success. Each tra
 - [C0/C1 acceptance](../orchestrator/C0_C1_ACCEPTANCE_2026_11_07.md) — direct Web loop and separation of native work.
 - [Wake semantics](../orchestrator/MCP_WAKE_BRIDGE_SEMANTICS.md), [Wake independence](../orchestrator/WAKE_INDEPENDENCE.md), [three-lane model](../orchestrator/CATDESK_SIMPLIFIED_DEV_RELEASE_WAKE_MODEL.md) — historical/qualified design portions only.
 - [Original worker decision](../orchestrator/ARCHITECTURE_DECISION_WORKER_RUNTIME.md) — original design rationale, not this product's current core loop.
+
+## 2026-11-16T02:38:42.136005+00:00 — Existing startup owner qualification
+
+The workspace autostart monitor and protected stable supervisor are existing distinct owners. Current installed evidence shows a live canonical daemon, a full-stack HKCU Run registration with its monitor stopped, and no provisioned stable-supervisor root. One bounded backend-only installed health cycle is accepted for observation and cleanup only; automatic recovery and reboot behavior remain unverified. [Installed and source evidence](../verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json).

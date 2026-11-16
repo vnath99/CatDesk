@@ -286,3 +286,11 @@ Evidence: [docs/verification/REQUIRED_FORMAT_GATE_2026_11_15.json](docs/verifica
 Agent: Codex. Source: 288ab492f0983ff19337b6da26ad15762a5aa128. Outcome: partial. Retrieved and automatically classified the original completed C1 assistant refusal through one native read, with 18 frozen identity/receipt checks and no operator relay or resend; historical cached-argument refusal kept separate from the newest different error, with no structured tool receipt or installed-reader acceptance claimed. Next: Await the pending draft-only preparation decision; use bounded native readback where already supported, preserve original dispatch and d22 review fences, and continue actual Web editing/checkpoint/self-Wake only through its existing authorization gates.
 
 Evidence: [docs/verification/NATIVE_C1_RESPONSE_READBACK_2026_11_15.json](docs/verification/NATIVE_C1_RESPONSE_READBACK_2026_11_15.json); command: One existing first-party native read with complete bounded history; exact original USER digest and same-turn assistant classification, joined to immutable local task and SENT receipt records; exit 0; SHA-256 2d6391574d58b48c241d29f3e0f3164ab1f67f8dfebd4705130fd4d9ad077df5.
+
+<!-- catdesk-activity:nov15-supervisor-startup-health sha256:ac7680231a39b545475b02ea1e7e5f30bf921d21c96f096f94448c5eaf904dfe -->
+
+## 2026-11-16T02:38:42.136005+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 199ff74e5bbe3a181bd18a900197cf0e5c84de81. Outcome: partial. Installed doctor distinguishes live daemon from stopped registered monitor; one recovery-denied health cycle passes and cleans up; cross-edition child module-path launch defect fixed in source only. Next: Qualify backend-only recovery and monitor stop/cleanup through the existing disposable-state test path before any persistent activation; preserve independent review and migration gates..
+
+Evidence: [docs/verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json](docs/verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json); command: Supported read-only installed status and one bounded backend-only monitor health cycle; lifecycle and doctor regressions; exit 0; SHA-256 a3d007d081be37ee8b5cd834b665003951fd625d90045f7992877ee9cbec3ce1.
