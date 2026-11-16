@@ -1,0 +1,331 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-16T16:32:45.088031+00:00",
+  "scope": "EXACT_EXISTING_RUNTIME_INTAKE_AND_MINIMAL_RETAINED_BASE_SOURCE_BACKPORT_NOT_RELEASE_ADMISSION",
+  "canonicalDocumentationParent": "f920c4a416901b79da0a70aa6d1d0ece150f78f3",
+  "candidateIntake": {
+    "sourceCommit": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+    "sourceTree": "92f4f7f9240d9a058fec5c74505ee623f8c50a42",
+    "developmentPackageId": "1.0.0-dev.85-18885fbba3d6d430290509fc36356b3168c0847dbad1ffbd2477cbca256dbf44",
+    "proposedNativePackageId": "1.0.0-dev.85-4489976970da-0d9568d765de",
+    "runtimeManifestSha256": "3ff3d01ea96c1b19eb2e7902ec468ed7901f759d794fed751fc48fec888ede50",
+    "nativeManifestSha256": "5fa8f60b6eab9e394cba26f5e864b99b3d918cc45d1c92c79fd50071c86c0f49",
+    "artifactReadbacks": [
+      {
+        "name": "CatDeskWakeHost.exe",
+        "byteLength": 5472768,
+        "sha256": "4489976970dae0f9d093843ee6938bd716afcf01df2d4cf993d8f89b3cecf015"
+      },
+      {
+        "name": "CatDeskBinagotchy.exe",
+        "byteLength": 77860864,
+        "sha256": "0d9568d765defa26bd0bf9062ec7ba2019144c1f6096406f2443a3254d7c7620"
+      },
+      {
+        "name": "adapter.py",
+        "byteLength": 75704,
+        "sha256": "d9e1e68a6e48ccb45d132e287d2f13cdbef9c75d252ad64123ef73eb5d0ee118"
+      },
+      {
+        "name": "wake_bridge.py",
+        "byteLength": 313218,
+        "sha256": "eea29aff3cb6518a2c03e97bbb361d3e52357b5e47a81ca63fdaaa69da890f5d"
+      }
+    ],
+    "nativeIdRule": "Existing protected V1 version-host-prefix-gui-prefix rule; unprotected all-component development ID is preserved, not renamed",
+    "sourceInputCount": 257,
+    "changedSourceInputCount": 37,
+    "unchangedFromBaseCount": 220,
+    "inventoryIsOriginalCompilerDepinfo": false,
+    "originalRawCompilerInputBytesCertified": false,
+    "baseFullReviewAutomaticallyInherited": false,
+    "sourceInputChanges": [
+      {
+        "path": "Cargo.toml",
+        "candidateGitBlob": "228016a713d5f10002c26ebb8e7a3f03863970d0",
+        "baseGitBlob": "7ca1a7051e519b01075402936da49a518965cab0",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "scripts/wake_bridge.py",
+        "candidateGitBlob": "8589542c796ef92d351b610ec6282c7fcde28c24",
+        "baseGitBlob": "3da957e100e14b37500171f8d5f79db958857936",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/delegated/autonomous_contract.rs",
+        "candidateGitBlob": "ee05d8dcc206ba8d062f267f495fb9c82cc8ffdb",
+        "baseGitBlob": "a56c41c8d73c670551c03dd1b59fbadb7f48c7db",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/delegated/autonomy_state.rs",
+        "candidateGitBlob": "d7679027f260d973cb93e7744f0ed148b042df03",
+        "baseGitBlob": "0c4ab3f7fe8ac07dc1c31cd11648b5661ea48ecc",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/delegated/autonomy_supervisor.rs",
+        "candidateGitBlob": "d88f530eadea8fd46c865719ff332e1af211b413",
+        "baseGitBlob": "558a14a648cf94aa75ecd288754e17e933f130d6",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/delegated/autonomy_verifier.rs",
+        "candidateGitBlob": "44c7b9d17a413e5c64ff9b8d450bb4d57a2ba94e",
+        "baseGitBlob": "f572e0cedbde76340ea4edbb4798abb80e4dcacc",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/delegated/contracts.rs",
+        "candidateGitBlob": "7b6487eb274a136b9909a2a20cd147441e863ff5",
+        "baseGitBlob": "d8ff4a8591bf13765cbd4da3402e6dfbf33731f1",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/main.rs",
+        "candidateGitBlob": "ebeaf79c835aba4f4f9f9897a2e99dc38c786178",
+        "baseGitBlob": "300e7086325de66aa81793d675be56d66c105f50",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/mcp.rs",
+        "candidateGitBlob": "2c649759f84c0a9168343e18d064ee2dfef9da93",
+        "baseGitBlob": "8884aa3fddbfe549f50d0cda68585bc27aea1c8e",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/operator_facade.rs",
+        "candidateGitBlob": "5cf2842847f6507032ceacd0eb959d2eec41b741",
+        "baseGitBlob": "3784d4cba63ff400f03f0522d20b8875a9de23b6",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/operator_review_observation.rs",
+        "candidateGitBlob": "b26cb409a06a4174c3b740359c8e1a2b8f5d3bc0",
+        "baseGitBlob": null,
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/operator_web_cli.rs",
+        "candidateGitBlob": "909e6ad2bdf66403dd5c634e3dfae42dfba25600",
+        "baseGitBlob": "2a78e8288a1adca3f62ca0731ad3599b304b5f5d",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/operator_web_onboarding.rs",
+        "candidateGitBlob": "c8150893dc3297256f06b59d4fd9ce53fc35e0db",
+        "baseGitBlob": "346163a0dd65e8bd4138d8d61f68eb23c860c5f6",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/operator_web_quarantine.rs",
+        "candidateGitBlob": "a340ebe211979906bcd9666259250bdedc91b9a6",
+        "baseGitBlob": "49b1943fde4d4c7ecbd6589f766e63f4a6dfcfd4",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/operator_web_rollover.rs",
+        "candidateGitBlob": "9476d8ee97d2f59adaf3f0178f4471d1c13aa58d",
+        "baseGitBlob": "27586f6910806b390d48d4e03f7c10a046a68838",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/project_mcp_task.rs",
+        "candidateGitBlob": "2a328c501ca5db451aaae9be18740b2735cda93d",
+        "baseGitBlob": "ec3ecf6a167649af38179e1bff95107e73591b9f",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/project_task_command.rs",
+        "candidateGitBlob": "f887d2b2e9d702cd1d579ebe32f82fe83287b849",
+        "baseGitBlob": "4536a02aa63b9e4fd4efbf627903897824736f41",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/project_task_git.rs",
+        "candidateGitBlob": "434fad84f7b197721f13624e1199d222f9729bd8",
+        "baseGitBlob": "eb9b65aadbecc52b2735b2def834504092e2243d",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/project_task_recovery.rs",
+        "candidateGitBlob": "87b4f8c8eecd9cbf0927af9dd08837b898ab22e5",
+        "baseGitBlob": "defe53964d09ccbd9d177844256280f7d0d6cb7f",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/state.rs",
+        "candidateGitBlob": "91fff33794c3880dcb35e1ba5579753acabfca0e",
+        "baseGitBlob": "110915d55e5f01d04916b505fea353ee93433558",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/web_conversation_context.rs",
+        "candidateGitBlob": "25fda269f2ad6a0e97d067c0c96f9a8ee49dd2ae",
+        "baseGitBlob": "4298bc0ace317b41e54e19046b427f5bbb27c5b5",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/web_rollover_admission.rs",
+        "candidateGitBlob": "a13d23d8530274c0f4ebd86fbb2754100b316e8c",
+        "baseGitBlob": "b5d798e8ad55b502d9833ef9233983157812452f",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/web_work.rs",
+        "candidateGitBlob": "f6e3e92f07a9207993f507b93b5166ca23b85cd6",
+        "baseGitBlob": "bbefc2ab6163aacd4fb1877ce90a730faf066bc6",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "src/web_work_delivery.rs",
+        "candidateGitBlob": "43c69e30c2f035f7f750555afab38bf6720b6c27",
+        "baseGitBlob": "bc4155fa2d4bad90a940ab214b7e35107eaabf59",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "tests/test_wake_bridge.py",
+        "candidateGitBlob": "351183abe5a6da6d14c40ceb1564ea1467dbb931",
+        "baseGitBlob": "92fb3f7c0b7f660b95e1dae6857b9e584b5ee1a2",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/Cargo.toml",
+        "candidateGitBlob": "daeccf3afc91a29275770bfc85755e14e5efd3a9",
+        "baseGitBlob": "4c5c23583647e24238d671d0f6d3b6d2f6a66e0a",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/adapter.py",
+        "candidateGitBlob": "889c6db99ca39e89a51f712d111054c14eecae4d",
+        "baseGitBlob": "fbc50bd2f70517b1cd0c68bdd5b9f8fb1aa19a12",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/src/development_login_recovery.rs",
+        "candidateGitBlob": "89ac774035ca3a7fdacc0163729a2f57cf2dae07",
+        "baseGitBlob": "e159f49fc232e7ab1f2c04e9c897052a07121e0b",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/src/development_root_view.rs",
+        "candidateGitBlob": "8da8364072e68c24a5b20cad84f083ddf3165e33",
+        "baseGitBlob": null,
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/src/development_runtime.rs",
+        "candidateGitBlob": "cb988e00247d3a91cfc4d7ad9dcbd01c53e856b3",
+        "baseGitBlob": "2ea0cb4425b8596b14ccac60836a6bba18c540c8",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/src/readiness_probe.rs",
+        "candidateGitBlob": "df0adc3917f04b0f0c71f08c95edc31940a1ef94",
+        "baseGitBlob": "44eee5c335ddebbaef5093266589e761db8a3ba0",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/src/runtime.rs",
+        "candidateGitBlob": "a07e144e8f773d84473dc2b84f6e385271312da1",
+        "baseGitBlob": "e2443f9c3a4c9fc1897004da3c97219f35b34624",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/src/runtime_adapter_teardown_tests.rs",
+        "candidateGitBlob": "c67f04c752f3a7ca135d0a41a4c081fa49f440f6",
+        "baseGitBlob": null,
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/src/runtime_bootstrap_observation.rs",
+        "candidateGitBlob": "d60a2e620e4ea390d9bf71692d5d23f02b91522a",
+        "baseGitBlob": null,
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/src/store.rs",
+        "candidateGitBlob": "ec479a011d675b9ceb66d79ff48c12b549ed084c",
+        "baseGitBlob": "8bd1480eb02583e6c9ef87d9d5bdae698a2f7248",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/tests/test_new_conversation.py",
+        "candidateGitBlob": "1765f4a2aa737b6e9ad839897abd17c5270f27c5",
+        "baseGitBlob": "d66f76cca4e6c49d871c35fef24177cf185d296d",
+        "sourceChangedFromRetainedReview": true
+      },
+      {
+        "path": "wake/tests/test_project_initialization.py",
+        "candidateGitBlob": "98d789aeabe38af447af3a51121b07ddc34208c5",
+        "baseGitBlob": "2fe8549a7da7e8ee61a2cccc41ea48b722005d0a",
+        "sourceChangedFromRetainedReview": true
+      }
+    ],
+    "localExactSourceReceiptPrepared": true,
+    "localReceiptIsIndependentReview": false,
+    "independentCandidateReviewFileAbsent": true,
+    "nativeAdmissionExecuted": false,
+    "newCandidateComponentsBuilt": 0,
+    "selectedPackageChanged": false
+  },
+  "independentSourceFinding": {
+    "marker": "RETAINED_FALLBACK_EXIT_PROOF_NOV16",
+    "verdict": "SOURCE_FINDING_CONFIRMED",
+    "appliesToBothRetainedSources": true,
+    "retainedRuntimeGitBlob": "e2443f9c3a4c9fc1897004da3c97219f35b34624",
+    "publicReadsReported": 5,
+    "maximumPublicReads": 8,
+    "maximumSecondsRequested": 180,
+    "actualAssistantSeconds": 49.599,
+    "responseCharacters": 7115,
+    "requestedMaximumResponseCharacters": 5000,
+    "responseSizeCompliance": "EXCEEDED_5000_CHARACTER_REQUEST; complete 7115-character response retained, no resend",
+    "responseSizeCapExceeded": true,
+    "actualBrowserOverlapOrDuplicateSendObserved": false,
+    "historicalReceiptsInvalidated": false,
+    "immediateNewFallbackBuildRequiredByReviewer": false,
+    "restrictedRollbackSuitability": "Requires existing policy/approval evaluation; source finding alone does not decide it",
+    "newNativeContractCreated": false,
+    "fullSourceOrArtifactApproval": false
+  },
+  "sourceBackport": {
+    "commit": "86367a52ded4acddd2ceb617012f26a670e653b0",
+    "branch": "codex/wake-fallback-teardown-nov16",
+    "base": "0d6c1074e1fae3cd1fa3fdd8abe2937cd881a99d",
+    "changedPaths": [
+      "wake/src/runtime.rs",
+      "wake/src/runtime_adapter_teardown_tests.rs"
+    ],
+    "sameAddedAndRemovedProductionLinesAsExisting06dCorrection": true,
+    "testModuleGitBlob": "c67f04c752f3a7ca135d0a41a4c081fa49f440f6",
+    "actualWindowsDescendantAndLockTestsPassed": 3,
+    "strictWakeAllTargetsAllFeaturesClippy": "PASS",
+    "formatAndWhitespace": "PASS",
+    "guiOrHostReleaseArtifactBuilds": 0,
+    "selectedOrInstalled": false,
+    "newFullIndependentReleaseReview": false,
+    "historicalPreviousOverwritten": false,
+    "mergedIntoCanonicalApplication": false,
+    "reason": "Prepare the existing correction on the separately retained reviewed base for possible future qualified fallback use; no duplicate implementation in the current application"
+  },
+  "preserved": {
+    "originalF7PartialAndClaim": true,
+    "d22UnknownNoReplay": true,
+    "firstBrokerUnsignedPayloadAndPreimageUnchanged": true,
+    "productionBackendTunnelAndBindingsUnchangedByThisWork": true,
+    "otherProjectSessionsUnchanged": true,
+    "newBrowserOrWakeOperations": 0,
+    "privateKeyReads": 0,
+    "signaturesCreated": 0,
+    "protectedInstallationActions": 0
+  },
+  "next": {
+    "wakeBootstrap": "Await exact operator-purpose signature already requested; no new signing command or packet refreeze",
+    "runtimeCandidate": "Genuine exact-candidate full review, build/provenance assessment and separate V3 selection authority; never synthesize candidate-review.json",
+    "retainedPrevious": "Preserve historical evidence and assess permitted rollback use. Backport is source-only and does not replace it",
+    "backend": "Original d22 outcome/authority remains separate; do not resend",
+    "fullWebLifecycle": "Still OPEN: installed scoped adapter/delivery and Git capabilities plus actual Web edit/verification/checkpoint/self-Wake remain required"
+  }
+}
