@@ -6893,7 +6893,7 @@
         window.addEventListener("message", function (event) {
           if (event.source !== window.parent) return;
           var message = event.data;
-          if (!isPlainObject(message)) return;
+          if (!isPlainObject(message) || uiBridgeState === "closed") return;
           if (message.jsonrpc === "2.0" && message.id === uiInitializeId &&
               uiBridgeState === "initializing" && !message.method) {
             if (!isPlainObject(message.result) || message.error ||
@@ -6914,6 +6914,27 @@
             } catch (_) { uiBridgeUnavailable(); }
             return;
           }
+          if (message.jsonrpc === "2.0" && uiBridgeState === "ready" &&
+              typeof message.method === "string" &&
+              (typeof message.id === "string" ||
+               (typeof message.id === "number" && Number.isFinite(message.id)))) {
+            var reply = { jsonrpc: "2.0", id: message.id };
+            if (message.method === "ping") {
+              reply.result = {};
+            } else if (message.method === "ui/resource-teardown") {
+              uiBridgeState = "closed";
+              if (uiResizeObserver) uiResizeObserver.disconnect();
+              uiResizeObserver = null;
+              stopTokenRollAnimation();
+              stopInstructionMascotAnimation();
+              reply.result = {};
+            } else {
+              reply.error = { code: -32601, message: "Unsupported UI request" };
+            }
+            try { window.parent.postMessage(reply, "*"); }
+            catch (_) { if (uiBridgeState !== "closed") uiBridgeUnavailable(); }
+            return;
+          }
           if (message.method === "ui/notifications/tool-result") {
             if (message.jsonrpc === "2.0" && uiBridgeState === "ready" &&
                 !Object.prototype.hasOwnProperty.call(message, "id")) {
@@ -6932,6 +6953,7 @@
         window.addEventListener(
           "openai:set_globals",
           function (event) {
+            if (uiBridgeState === "closed") return;
             var globals = event && event.detail ? event.detail.globals : null;
             if (globals) {
               var globalsToolResponseMetadata =

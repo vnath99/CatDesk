@@ -134,3 +134,23 @@ test('postMessage failure produces a bounded redacted diagnostic', () => {
   assert.match(f.root.innerHTML, /UI Host Unavailable/);
   assert.doesNotMatch(f.root.innerHTML, /PRIVATE_HOST_ERROR/);
 });
+test('host health ping receives only an empty correlated result', () => {
+  const f = fixture(); f.initialize();
+  f.emit({ jsonrpc: '2.0', id: 42, method: 'ping' });
+  assert.deepEqual(JSON.parse(JSON.stringify(f.sent.at(-1))), { jsonrpc: '2.0', id: 42, result: {} });
+});
+test('unsupported host requests are refused without echoing their arguments', () => {
+  const f = fixture(); f.initialize();
+  f.emit({ jsonrpc: '2.0', id: 'unsupported', method: 'tools/call', params: { private: 'PRIVATE_REQUEST_ARGUMENT' } });
+  const reply = JSON.parse(JSON.stringify(f.sent.at(-1)));
+  assert.equal(reply.error.code, -32601);
+  assert.doesNotMatch(JSON.stringify(reply), /PRIVATE_REQUEST_ARGUMENT/);
+});
+test('teardown acknowledges cleanup and ignores late tool results and legacy globals', () => {
+  const f = fixture(); f.initialize(); f.result();
+  const before = f.root.innerHTML;
+  f.emit({ jsonrpc: '2.0', id: 'teardown', method: 'ui/resource-teardown', params: { reason: 'fixture' } });
+  assert.deepEqual(JSON.parse(JSON.stringify(f.sent.at(-1))), { jsonrpc: '2.0', id: 'teardown', result: {} });
+  f.result(metadata('LATE_RESULT')); f.globals(metadata('LATE_GLOBALS'));
+  assert.equal(f.root.innerHTML, before);
+});

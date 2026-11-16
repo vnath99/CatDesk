@@ -29,18 +29,22 @@ def main():
     host = """<!doctype html><meta charset="utf-8"><title>Local widget host fixture</title>
 <iframe id="standard"></iframe><iframe id="legacy"></iframe><iframe id="refused"></iframe>
 <script>
+const META=__META__;
 const counts={standard:0,legacy:0,refused:0};
+let pong=false,teardown=false;
 window.addEventListener('message', event=>{
  const id=Object.keys(counts).find(id=>document.getElementById(id).contentWindow===event.source);
  if(!id||!event.data||event.data.jsonrpc!=='2.0')return;
  const m=event.data;
+ if(m.id==='fixture-ping'&&m.result)pong=true;
+ if(m.id==='fixture-teardown'&&m.result){teardown=true;event.source.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{_meta:{'catdesk/widgetPayload':{...META['catdesk/widgetPayload'],detail:'LATE_AFTER_TEARDOWN'}}}},'*');}
  if(m.method==='ui/initialize'){
   counts[id]++;
   if(id==='legacy')return;
   event.source.postMessage(id==='refused'?{jsonrpc:'2.0',id:m.id,error:{code:-32601,message:'PRIVATE_FIXTURE_ERROR'}}:
    {jsonrpc:'2.0',id:m.id,result:{protocolVersion:'2026-01-26',hostInfo:{name:'Local fixture',version:'1'},hostCapabilities:{}}},'*');
  }
- if(m.method==='ui/notifications/initialized')event.source.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{_meta:META}},'*');
+ if(m.method==='ui/notifications/initialized'){event.source.postMessage({jsonrpc:'2.0',method:'ui/notifications/tool-result',params:{_meta:META}},'*');if(id==='standard')event.source.postMessage({jsonrpc:'2.0',id:'fixture-ping',method:'ping'},'*');}
  if(m.method==='ui/notifications/size-changed'&&Number.isFinite(m.params?.height))document.getElementById(id).style.height=m.params.height+'px';
 });
 window.fixtureStatus=()=>{
@@ -50,13 +54,13 @@ window.fixtureStatus=()=>{
   refusalVisible:text('refused').includes('UI Host Unavailable'),
   standardHeight:document.getElementById('standard').getBoundingClientRect().height,
   standardFits:document.getElementById('standard').clientHeight>=Math.ceil(document.getElementById('standard').contentDocument.getElementById('root').getBoundingClientRect().height+24),
-  privateErrorVisible:text('refused').includes('PRIVATE_FIXTURE_ERROR'),counts};
+  privateErrorVisible:text('refused').includes('PRIVATE_FIXTURE_ERROR'),pong,teardown,lateResultVisible:text('standard').includes('LATE_AFTER_TEARDOWN'),counts};
 };
 document.getElementById('standard').srcdoc=WIDGET;
 document.getElementById('refused').srcdoc=WIDGET;
 document.getElementById('legacy').srcdoc=LEGACY;
-</script>""".replace("params:{_meta:META}", "params:{_meta:" + encode(meta) + "}")
-    host = host.replace("srcdoc=WIDGET", "srcdoc=" + encode(widget)).replace("srcdoc=LEGACY", "srcdoc=" + encode(legacy))
+</script>"""
+    host = host.replace("__META__", encode(meta)).replace("srcdoc=WIDGET", "srcdoc=" + encode(widget)).replace("srcdoc=LEGACY", "srcdoc=" + encode(legacy))
     fixture = output / "host.html"
     fixture.write_text(host, encoding="utf-8")
     from seleniumbase import sb_cdp
@@ -76,8 +80,13 @@ document.getElementById('legacy').srcdoc=LEGACY;
         # The legacy result must survive the real five-second standard-bridge timeout.
         time.sleep(max(0, 6 - (time.monotonic() - started)))
         state = sb.evaluate("window.fixtureStatus()")
-        if state["privateErrorVisible"] or not state["legacyRendered"] or not state["standardFits"] or any(v != 1 for v in state["counts"].values()):
+        if state["privateErrorVisible"] or not state["legacyRendered"] or not state["standardFits"] or not state["pong"] or any(v != 1 for v in state["counts"].values()):
             raise RuntimeError("LOCAL_WIDGET_BRIDGE_BOUNDARY_FAILED")
+        sb.evaluate("document.getElementById('standard').contentWindow.postMessage({jsonrpc:'2.0',id:'fixture-teardown',method:'ui/resource-teardown',params:{reason:'local fixture complete'}},'*')")
+        time.sleep(0.2)
+        state = sb.evaluate("window.fixtureStatus()")
+        if not state["teardown"] or state["lateResultVisible"]:
+            raise RuntimeError("LOCAL_WIDGET_TEARDOWN_NOT_QUALIFIED")
         sb.save_screenshot(str(output / "fixture.png"))
     finally:
         if sb is not None:
