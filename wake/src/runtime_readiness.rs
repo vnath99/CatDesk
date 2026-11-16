@@ -15,6 +15,18 @@ enum Mode {
     Trace,
 }
 
+#[cfg(windows)]
+fn observe_with_browser_owner(
+    browser: &mut Option<File>,
+    observe: impl FnOnce() -> std::result::Result<(), &'static str>,
+) -> std::result::Result<(), &'static str> {
+    let result = observe();
+    if result == Err("PROBE_CLEANUP_UNVERIFIED") {
+        retain_unproven_browser_lock(browser);
+    }
+    result
+}
+
 /// Passive exact older exchange only. Never applies a timer, sends or retries.
 pub fn inspect_historical_task_response(
     store: &Store,
@@ -546,7 +558,7 @@ fn inspect_readiness(
     } else {
         Some(store.host_lock()?)
     };
-    let _browser = acquire_browser_quiescence(store)?;
+    let mut browser = Some(acquire_browser_quiescence(store)?);
     require_selection(store, project, target)?;
     keep_current()?;
     if let Some(delivery) = delivery {
@@ -677,12 +689,14 @@ fn inspect_readiness(
                 .ok_or("READINESS_WORK_DELIVERY_CHANGED")?,
         )?;
     }
-    let result = crate::readiness_probe::run_bounded_observed_program(
-        &mut command,
-        Duration::from_secs(90),
-        &mut rows,
-        program,
-    );
+    let result = observe_with_browser_owner(&mut browser, || {
+        crate::readiness_probe::run_bounded_observed_program(
+            &mut command,
+            Duration::from_secs(90),
+            &mut rows,
+            program,
+        )
+    });
     // These errors positively follow Job-empty and output-reader exit. Other
     // failures retain their precise native error without claiming cleanup.
     if let Err(reason) = result
@@ -892,6 +906,64 @@ fn inspect_readiness(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn readiness_cleanup_unproved_exit_retains_browser_lane_without_blocking_project_metadata() {
+        use std::os::windows::io::{AsRawHandle, FromRawHandle};
+        for outcome in [Ok(()), Err("PROBE_FAILED"), Err("PROBE_CLEANUP_UNVERIFIED")] {
+            let (store, lease) = super::super::scheduler::tests::fixture("readiness-exit-owner");
+            drop(lease);
+            let root = store.root().parent().unwrap().to_path_buf();
+            let config_before = std::fs::read(store.root().join("config.json")).unwrap();
+            let mut browser = Some(acquire_browser_quiescence(&store).unwrap());
+            let raw = browser.as_ref().unwrap().as_raw_handle();
+            assert_eq!(
+                observe_with_browser_owner(&mut browser, || outcome),
+                outcome
+            );
+            // Reclaim only this disposable fixture's intentionally retained
+            // handle so assertions cannot leak it. Production never does this.
+            let retained = if browser.is_none() {
+                Some(unsafe { File::from_raw_handle(raw) })
+            } else {
+                None
+            };
+            assert_eq!(
+                retained.is_some(),
+                outcome == Err("PROBE_CLEANUP_UNVERIFIED")
+            );
+            drop(browser);
+            let next = acquire_browser_quiescence(&store);
+            assert_eq!(next.is_err(), retained.is_some());
+            drop(next);
+            let event = store
+                .produce(
+                    "independent-beta-work",
+                    "beta",
+                    "review_ready",
+                    "Fixture work",
+                )
+                .unwrap();
+            assert_eq!(event.project_id, "beta");
+            assert_eq!(
+                std::fs::read(store.root().join("config.json")).unwrap(),
+                config_before
+            );
+            drop(retained);
+            drop(acquire_browser_quiescence(&store).unwrap());
+            let resolved = root.canonicalize().unwrap();
+            assert!(resolved.starts_with(std::env::temp_dir().canonicalize().unwrap()));
+            assert!(
+                resolved
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .starts_with("catdesk-cooperative-readiness-exit-owner-")
+            );
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
 
     fn receipt_diagnosis_fixture() -> serde_json::Value {
         serde_json::json!({"status":"BROWSER_OBSERVATION_INCOMPLETE", "ownedTreeExited":true,
