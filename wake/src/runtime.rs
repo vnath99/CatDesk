@@ -1776,11 +1776,37 @@ fn browser_session_lock_guarded(
 }
 
 struct Adapter {
-    _job: crate::process_job::Job,
+    job: crate::process_job::Job,
     child: Child,
     input: ChildStdin,
     output: Receiver<Result<serde_json::Value>>,
-    _browser_session_lock: File,
+    browser_session_lock: Option<File>,
+    exit_proven: bool,
+}
+
+fn retain_unproven_browser_lock(lock: &mut Option<File>) {
+    if let Some(lock) = lock.take() {
+        // Match the existing retained-owner fail-stop policy: a failed exit
+        // proof cannot make this live process advertise a free browser lane.
+        // The OS releases this handle only when the owner process exits.
+        std::mem::forget(lock);
+    }
+}
+
+fn finish_browser_processes(
+    job: &crate::process_job::Job,
+    child: &mut Child,
+    browser_session_lock: &mut Option<File>,
+) -> Result<()> {
+    if let Err(reason) = job.terminate_and_wait_empty(Duration::from_secs(10)) {
+        let _ = child.kill();
+        retain_unproven_browser_lock(browser_session_lock);
+        return Err(reason);
+    }
+    // Zero active processes in the retained Job proves this exact child is
+    // terminal too. Do not do an unbounded child wait on the failure branch.
+    let _ = child.wait();
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -1801,11 +1827,31 @@ fn guarded_browser_receive(
 }
 impl Drop for Adapter {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        if !self.exit_proven && self.browser_session_lock.is_some() {
+            let _ = self.close();
+        }
     }
 }
 impl Adapter {
+    fn close(&mut self) -> Result<()> {
+        if self.exit_proven {
+            return Ok(());
+        }
+        if self.browser_session_lock.is_none() {
+            return Err("BROWSER_JOB_EXIT_UNPROVEN".into());
+        }
+        match finish_browser_processes(&self.job, &mut self.child, &mut self.browser_session_lock) {
+            Ok(()) => {
+                self.exit_proven = true;
+                Ok(())
+            }
+            Err(reason) => {
+                eprintln!("BROWSER_JOB_EXIT_UNPROVEN");
+                Err(reason)
+            }
+        }
+    }
+
     fn spawn_cooperative(root: &Path) -> Result<Self> {
         let executable = std::env::current_exe().map_err(|_| "HOST_EXECUTABLE_UNAVAILABLE")?;
         let installed = executable.parent().ok_or("HOST_INSTALL_UNAVAILABLE")?;
@@ -1883,7 +1929,8 @@ impl Adapter {
         let (adapter_path, _wake_bridge_path) =
             verify_installed_browser_artifacts(root, installed)?;
         phase(AdapterStartPhase::BrowserLock);
-        let browser_session_lock = browser_session_lock_guarded(root, wait, keep_running)?;
+        let mut browser_session_lock =
+            Some(browser_session_lock_guarded(root, wait, keep_running)?);
         let interpreter = root.join("runtime/python.exe");
         if !interpreter.is_file() {
             return Err("BROWSER_RUNTIME_NOT_INSTALLED".into());
@@ -1917,10 +1964,12 @@ impl Adapter {
                 return Err(e);
             }
         };
-        let input = child.stdin.take().ok_or("BROWSER_ADAPTER_PIPE_FAILED")?;
-        let output = child.stdout.take().ok_or("BROWSER_ADAPTER_PIPE_FAILED")?;
+        let (Some(input), Some(output)) = (child.stdin.take(), child.stdout.take()) else {
+            finish_browser_processes(&job, &mut child, &mut browser_session_lock)?;
+            return Err("BROWSER_ADAPTER_PIPE_FAILED".into());
+        };
         let (tx, rx) = mpsc::channel();
-        thread::spawn(move || {
+        let reader = thread::Builder::new().spawn(move || {
             let mut reader = BufReader::new(output);
             loop {
                 let mut bytes = Vec::new();
@@ -1937,12 +1986,17 @@ impl Adapter {
                 }
             }
         });
+        if reader.is_err() {
+            finish_browser_processes(&job, &mut child, &mut browser_session_lock)?;
+            return Err("BROWSER_ADAPTER_PIPE_FAILED".into());
+        }
         let mut adapter = Self {
-            _job: job,
+            job,
             child,
             input,
             output: rx,
-            _browser_session_lock: browser_session_lock,
+            browser_session_lock,
+            exit_proven: false,
         };
         adapter.send(serde_json::json!({"initialize":true}))?;
         phase(AdapterStartPhase::AdapterReadyWait);
@@ -1982,19 +2036,28 @@ impl Adapter {
     }
 }
 
-fn retire_adapter(adapter: &mut Option<Adapter>) -> bool {
+fn retire_adapter(adapter: &mut Option<Adapter>, live: &mut Status) -> Option<bool> {
     let Some(mut current) = adapter.take() else {
-        return true;
+        return Some(true);
     };
     let exited_cleanly = current.allow_graceful_exit(Duration::from_secs(5));
+    if let Err(reason) = current.close() {
+        live.browser = "ATTENTION".into();
+        live.attention = Some(reason);
+        return None;
+    }
     drop(current);
     if exited_cleanly {
         // Give Chrome/profile locks a short bounded settling interval after
         // SeleniumBase completed its own context cleanup.
         thread::sleep(Duration::from_millis(500));
     }
-    exited_cleanly
+    Some(exited_cleanly)
 }
+
+#[cfg(all(test, windows))]
+#[path = "runtime_adapter_teardown_tests.rs"]
+mod adapter_teardown_tests;
 
 const ORDINARY_ADAPTER_RESPONSE_BYTES: usize = 8192;
 const SOURCE_SNAPSHOT_RESPONSE_BYTES: usize = 64 * 1024;
@@ -7620,7 +7683,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                     .insert(event.event_id.clone(), now().saturating_add(60));
                             }
                         }
-                        let _ = retire_adapter(&mut adapter);
+                        let _ = retire_adapter(&mut adapter, &mut live);
                         continue;
                     }
 
@@ -7679,12 +7742,15 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                     &mut live,
                                 ) {
                                     Ok(()) => {
-                                        let graceful = retire_adapter(&mut adapter);
-                                        live.browser = if graceful {
-                                            "CLOSED_AFTER_SUCCESS".into()
-                                        } else {
-                                            "CLOSED_AFTER_SUCCESS_FORCED".into()
-                                        };
+                                        if let Some(graceful) =
+                                            retire_adapter(&mut adapter, &mut live)
+                                        {
+                                            live.browser = if graceful {
+                                                "CLOSED_AFTER_SUCCESS".into()
+                                            } else {
+                                                "CLOSED_AFTER_SUCCESS_FORCED".into()
+                                            };
+                                        }
                                         continue;
                                     }
                                     Err(reason) => {
@@ -7697,7 +7763,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                                 ResponseState::Attention,
                                             );
                                             live.attention = Some(reason);
-                                            let _ = retire_adapter(&mut adapter);
+                                            let _ = retire_adapter(&mut adapter, &mut live);
                                             continue;
                                         }
                                         store
@@ -7705,7 +7771,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                         live.browser = "ATTENTION".into();
                                         live.attention = Some(reason);
                                         live.submission = "SUBMITTING".into();
-                                        let _ = retire_adapter(&mut adapter);
+                                        let _ = retire_adapter(&mut adapter, &mut live);
                                         // This exact delivery remains quarantined as SUBMITTING,
                                         // but it must not block later distinct Wake events.
                                         continue;
@@ -7761,7 +7827,12 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                     browser_session_attempt,
                                 ) {
                                     browser_session_attempt += 1;
-                                    let graceful = retire_adapter(&mut adapter);
+                                    let Some(graceful) = retire_adapter(&mut adapter, &mut live)
+                                    else {
+                                        break Err(live.attention.clone().unwrap_or_else(|| {
+                                            "BROWSER_JOB_EXIT_UNPROVEN".into()
+                                        }));
+                                    };
                                     live.browser = if graceful {
                                         "RETRYING_AFTER_GRACEFUL_EXIT".into()
                                     } else {
@@ -7804,7 +7875,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                 )?;
                                 live.attention = Some(reason);
                                 live.submission = "ATTENTION".into();
-                                let _ = retire_adapter(&mut adapter);
+                                let _ = retire_adapter(&mut adapter, &mut live);
                                 continue;
                             }
                             if phase == Phase::Sent {
@@ -7813,7 +7884,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                     ResponseState::Attention,
                                 );
                                 live.attention = Some(reason);
-                                let _ = retire_adapter(&mut adapter);
+                                let _ = retire_adapter(&mut adapter, &mut live);
                                 continue;
                             }
                             // A Submitting journal is deliberately retained on
@@ -7823,16 +7894,17 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                             store.note_submitting_attention(&event.event_id, &reason)?;
                             live.attention = Some(reason);
                             live.submission = "SUBMITTING".into();
-                            let _ = retire_adapter(&mut adapter);
+                            let _ = retire_adapter(&mut adapter, &mut live);
                             continue;
                         }
                         Ok(()) => {
-                            let graceful = retire_adapter(&mut adapter);
-                            live.browser = if graceful {
-                                "CLOSED_AFTER_SUCCESS".into()
-                            } else {
-                                "CLOSED_AFTER_SUCCESS_FORCED".into()
-                            };
+                            if let Some(graceful) = retire_adapter(&mut adapter, &mut live) {
+                                live.browser = if graceful {
+                                    "CLOSED_AFTER_SUCCESS".into()
+                                } else {
+                                    "CLOSED_AFTER_SUCCESS_FORCED".into()
+                                };
+                            }
                         }
                     }
                 }
