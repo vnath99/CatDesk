@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-16T15:52:31.310230+00:00",
+  "scope": "ACTUAL_CURRENT_SERVING_WAKE_ROOT_CORRELATION_SUPPORTED_STOP_AND_UNSIGNED_EXISTING_BOOTSTRAP_PREPARATION",
+  "developmentParent": "68359f85845c1a07df21f37efb417bb593654753",
+  "newEvidence": "The restored authenticated connector supplied hash-only store provenance, allowing actual serving-root correlation rather than another unchanged path comparison.",
+  "rootReconciliation": {
+    "existingFixedRootObserverReused": true,
+    "nativeHandleMetadataChecksRetained": true,
+    "currentDirectRootMatchesActualBackendObjectHash": true,
+    "currentSelectionAndConfigMatchActualBackendHashes": true,
+    "rootReopenIdentityStable": true,
+    "recordedPackageRootDoesNotMatchServingRoot": true,
+    "recordedPackageRootStillLacksCurrentSelection": true,
+    "oldRootOrMissingCurrentFileModified": false,
+    "actualRemoteAndLocalSamplesAtomic": false,
+    "newCurrentRootIdentityRevalidatedThroughExistingReadOnlyAdapter": true,
+    "oldRetainedIdentityReinterpretedAsCurrentAuthority": false
+  },
+  "liveOwner": {
+    "actualInstalledLegacyHostFound": true,
+    "createdUtc": "2026-11-16T11:02:20.748804Z",
+    "creationCause": "NOT_ESTABLISHED; parent process no longer present. Timing alone does not attribute launch to the backend, tunnel or console.",
+    "statusBefore": "RUNNING",
+    "controlBeforeStopped": false,
+    "supportedStopCalls": 1,
+    "forcedProcessKills": 0,
+    "naturalOwnerExitVerified": true,
+    "statusAfter": "STOPPED",
+    "pidAfter": 0,
+    "backendAndExistingManagedTunnelStillPresent": true,
+    "newWakeOrBrowserStarts": 0,
+    "recurringAutomationEnabled": false,
+    "matchingLegacyHostChildrenOrExactProfileProcessesAfter": 0,
+    "unrelatedNativeAndBrowserProcessesTouched": false
+  },
+  "preservation": {
+    "pinnedFiles": 894,
+    "qualifiedMismatches": 0,
+    "newEventTimerOrDeliveryPaths": 0,
+    "currentConfigPreviousAndSelectionPreserved": true,
+    "registryAndOriginalF7StatePreserved": true,
+    "unknownSubmittingRecordPreserved": true,
+    "queueDeliveryArchiveTimerBytesPreserved": true,
+    "expectedControlAndHostStatusTransition": true,
+    "firstVerifierError": "Two external labels were incorrectly treated as root-relative paths. Corrected path mapping proved both original external files unchanged; initial evidence retained.",
+    "protectedBinaryOrEnrollmentChanges": false,
+    "historicalMessagesReplayed": false
+  },
+  "existingRecoveryPath": {
+    "nativeProcedure": "BootstrapManifestV1.stateRoot and FixedBootstrapFiles::observe, followed by separate existing V3 same-state selection",
+    "bootstrapSource": "0d6c1074e1fae3cd1fa3fdd8abe2937cd881a99d",
+    "bootstrapCoreFilesUnchangedSinceReviewedSource": true,
+    "retainedInstallerBrokerAndIndependentBootstrapReviewVerified": true,
+    "newUnsignedProposalPrepared": true,
+    "newProposalExpiresUtc": "2026-11-17T15:41:38Z",
+    "changedTopLevelFields": [
+      "bootstrapId",
+      "issuedUtcSeconds",
+      "expiresUtcSeconds",
+      "stateRoot"
+    ],
+    "publicIssuerAccountPurposeArtifactReviewAndCapabilitiesUnchanged": true,
+    "rootPathAndLegacyCurrentContentPreserved": true,
+    "exactUnsignedPurposeDomainAndUInt64RoundtripVerified": true,
+    "oldExpiredPayloadPreimageAndSummaryBytesPreserved": true,
+    "existingProductKeyAutomaticallyEnrolledForWake": false,
+    "signaturesCreated": 0,
+    "privateKeyReads": 0,
+    "nativeElevatedBootstrapPerformed": false,
+    "operatorPurposeSignatureStillMandatory": true
+  },
+  "operatorPreparation": {
+    "oneTimeLocalCeremony": "A new frozen one-time operator helper implements the documented T-0215 offline signing pattern for only the exact new Wake bootstrap/preimage and existing product public root. It creates no key, installer or trust domain.",
+    "helperIndependentlyReleaseReviewed": false,
+    "operatorMustReviewExactHelperBeforeUse": true,
+    "readOnlyInputVerification": "PASS",
+    "actualSigningExecutedByCodex": false,
+    "initialPrerequisiteFailure": "The system test interpreter lacked cryptography. The existing default Python interpreter already had cryptography; no packages, interpreter bytes or environments were installed or changed.",
+    "newKeyGenerationOrPrivateKeyExport": false,
+    "nextOperatorAction": "If approving this exact new root/purpose, run the frozen one-time signing ceremony in an operator PowerShell 7 and select the existing original raw Ed25519 key locally. No elevation for signing; no key material in chat.",
+    "afterSignature": "Independently verify the detached signature and canonical envelope, then existing elevated native read-only bootstrap preflight. Protected execution and later candidate selection retain their separate gates."
+  },
+  "remainingTracks": [
+    {
+      "track": "Serving root reconciliation",
+      "state": "ACCEPTED_FOR_CURRENT_SNAPSHOT_ONLY",
+      "next": "Preserve new root/state pins and old incomplete package root. Fresh native admission must revalidate; never merge roots."
+    },
+    {
+      "track": "Wake bootstrap",
+      "state": "BLOCKED_OPERATOR_SIGNATURE",
+      "next": "Genuine exact new purpose-bound signature; no automatic issuer enrollment or protected write."
+    },
+    {
+      "track": "Changed Wake runtime candidate",
+      "state": "BLOCKED_FULL_RELEASE_QUALIFICATION",
+      "next": "Retain original f7 PARTIAL and finding; scoped correction PASS/development health do not qualify full exact-candidate/source/artifact review and working previous for V3."
+    },
+    {
+      "track": "Original d22 review",
+      "state": "BLOCKED_ORIGINAL_EVIDENCE",
+      "next": "Genuine attributable original outcome or an applicable reviewed recovery transition. No resend or substitute authority."
+    },
+    {
+      "track": "Direct Web edit/checkpoint/self-Wake and two-project work",
+      "state": "OPEN_RELEASE_GATED",
+      "next": "Existing required installed scoped adapter/delivery and Git capabilities. Preserve earlier backend/auth/v5 results; no new connection."
+    }
+  ],
+  "fullInstalledOrWebMilestoneAccepted": false,
+  "unchangedCanariesOrSourceTestsRepeated": false
+}
