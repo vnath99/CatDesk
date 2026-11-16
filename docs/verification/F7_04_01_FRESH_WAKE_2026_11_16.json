@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-16T13:47:05.714504+00:00",
+  "scope": "FRESH_UNPROTECTED_DEVELOPMENT_WAKE_AND_AUTOMATIC_RESPONSE_READBACK_AFTER_MATERIAL_NATIVE_TEARDOWN_FIX",
+  "documentationParentSource": "4575177b46c47a5501eac82630e8bb02b679f530",
+  "candidateSource": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+  "candidatePackageId": "1.0.0-dev.85-18885fbba3d6d430290509fc36356b3168c0847dbad1ffbd2477cbca256dbf44",
+  "projectId": "catdesk-wake-turn-canary-nov14",
+  "taskId": "nov16-f70401-native-teardown-wake-1",
+  "reasonForNewTest": "The materially changed selected development package had only read-only browser qualification, no actual Wake delivery health. Prior completed canaries were not replayed.",
+  "newTask": {
+    "requestId": "nov16-f70401-native-teardown-wake-1",
+    "eventId": "web-work-452f1a937dfcb9206532ab9ebcbf1c72b23b78c4ca7744350925a0538d17d1c2",
+    "frozenWireSha256": "cf6cdd2c5f1b9a4ccfcc1128eda1fb0dc39527c276376f25c786faa28340b2ec",
+    "maximumMessages": 1,
+    "taskScope": "Return the fixed harmless acknowledgment only. No tools, edits, commands, delegation, settings, bindings or additional Wake.",
+    "olderCanaryRequestsClosedBeforeNewRequest": true,
+    "knownActiveWorkReplaced": false,
+    "newGrantOrExecutionKeyCreated": false
+  },
+  "actualDelivery": {
+    "startedUtc": "2026-11-16T13:37:29.212814+00:00",
+    "finishedUtc": "2026-11-16T13:38:25.298355+00:00",
+    "invocations": 1,
+    "exitCode": 0,
+    "phase": "SENT",
+    "receipt": "EXACT_USER_MESSAGE_APPENDED",
+    "eventProjectMessageAndTargetIdentityMatch": true,
+    "matchingTimerIdentity": true,
+    "timerResponseState": "COMPLETE",
+    "sharedHostStarted": false,
+    "recurringAutomationEnabled": false,
+    "nativeModelCalls": 0,
+    "testOwnedProfileQuiescentAfter": true
+  },
+  "automaticObservation": {
+    "operatorMessageRelayRequired": false,
+    "route": "Existing registered-project unprotected native inspector plus existing context capture/ledger",
+    "frozenRequestReadback": {
+      "startedUtc": "2026-11-16T13:40:13.992704+00:00",
+      "finishedUtc": "2026-11-16T13:40:48.063911+00:00",
+      "state": "EXACT_READY_IDLE",
+      "matchingLatestUserCount": 1,
+      "turnsAfter": 1,
+      "lastUserMatchesFrozenRequest": true,
+      "generation": "IDLE",
+      "composer": "EMPTY",
+      "responseState": "RESPONSE_COMPLETE",
+      "stable": true,
+      "persistedSentReceiptValidatedBeforeAndUnchangedAfter": true,
+      "browserReadDidNotCreateReceipt": true,
+      "resendAuthorized": false
+    },
+    "acknowledgmentReadback": {
+      "startedUtc": "2026-11-16T13:42:45.121183+00:00",
+      "finishedUtc": "2026-11-16T13:43:22.745617+00:00",
+      "basis": "Qualified complete keyed USER/ASSISTANT browser body hashes in the exact project/conversation/generation context ledger",
+      "expectedUserSha256": "cf6cdd2c5f1b9a4ccfcc1128eda1fb0dc39527c276376f25c786faa28340b2ec",
+      "expectedAssistantSha256": "5fdf66439d1b7e45874fa356c490b0e9e2c07863254585ee128ee55f12e3592d",
+      "expectedBodyAbsentBeforeCapture": true,
+      "matchingUserBodyCount": 1,
+      "matchingAssistantBodyCount": 1,
+      "excerptOnlyMatchesAccepted": false,
+      "rawBodyOrDraftExported": false,
+      "sentReceiptUnchanged": true
+    },
+    "firstPartyHistoryLimitation": "The first-party history reader returned the older completed turn, not this fresh task. It was not treated as proof of failure, permission to resend or evidence of the new answer. Existing authorized browser observation supplied current evidence instead.",
+    "scopeLimit": "Known fixed acknowledgment and completed-turn attribution only. This does not prove general arbitrary-error extraction or the protected installed response-reader upgrade."
+  },
+  "developmentHealth": {
+    "mechanism": "Existing operator web-dev-runtime record-verification",
+    "recordedStatus": "OPERATOR_RECORDED",
+    "sourceCommit": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+    "workingHealthObservedUtc": 1794836602,
+    "evidenceAuthority": "LOCAL_OPERATOR_PROVIDED",
+    "healthRecordScope": "Exact development artifact, scoped independent patch review, native tests, authenticated local MCP, actual single Wake and automatic acknowledgment readback",
+    "healthChecksNotInferredFromRecordingCommand": true,
+    "previousVerifiedSourceRetained": "947aeda5371f738459d5fea9f7830785f778698a",
+    "previousVerifiedPackageRetained": true,
+    "newTestClosedThroughExistingResolve": true,
+    "fullIndependentCandidateReview": false,
+    "protectedProducerOrInstallAuthorityCreated": false
+  },
+  "preservation": {
+    "historicalQueueDeliveryTimerArchiveBytesUnchanged": true,
+    "originalF7NativeStateUnchanged": true,
+    "productionExecutableUnchanged": true,
+    "registryUnchanged": true,
+    "allWakeTargetsUnchanged": true,
+    "originalInitializationUnchanged": true,
+    "developmentControlStopped": true,
+    "priorClosedWorkRecordsUnchanged": true
+  },
+  "boundedOwners": [
+    {
+      "auditSha256": "2389df8551cbe1b849a910ca03b39ae51598693c31aeb70820c97fbd68f4230a",
+      "startedUtc": "2026-11-16T13:37:27.9697951+00:00",
+      "finishedUtc": "2026-11-16T13:38:25.3088338+00:00",
+      "maximumMilliseconds": 240000,
+      "exitCode": 0,
+      "timedOut": false,
+      "terminationFailed": false,
+      "configurationAuthorityUnchanged": true
+    },
+    {
+      "auditSha256": "fd15f0af1bf04614ffdd34acd3b7931ad1cc9be13975907c079c37edc78d7638",
+      "startedUtc": "2026-11-16T13:40:13.8224002+00:00",
+      "finishedUtc": "2026-11-16T13:40:48.0757505+00:00",
+      "maximumMilliseconds": 240000,
+      "exitCode": 0,
+      "timedOut": false,
+      "terminationFailed": false,
+      "configurationAuthorityUnchanged": true
+    },
+    {
+      "auditSha256": "ceb82ed864da6d76b82ff9c67afd58383081b493fb05ab82e3dc4bec0261c6be",
+      "startedUtc": "2026-11-16T13:42:44.9443239+00:00",
+      "finishedUtc": "2026-11-16T13:43:22.7557294+00:00",
+      "maximumMilliseconds": 240000,
+      "exitCode": 0,
+      "timedOut": false,
+      "terminationFailed": false,
+      "configurationAuthorityUnchanged": true
+    },
+    {
+      "auditSha256": "6c4ba14cd9209fd7fdcdffb921afdeff79ddb7f4907ed840d7036617d6638367",
+      "startedUtc": "2026-11-16T13:45:22.7962281+00:00",
+      "finishedUtc": "2026-11-16T13:45:23.6478075+00:00",
+      "maximumMilliseconds": 90000,
+      "exitCode": 0,
+      "timedOut": false,
+      "terminationFailed": false,
+      "configurationAuthorityUnchanged": true
+    }
+  ],
+  "changesNotPerformed": [
+    "Protected installation or rollback selection",
+    "Canonical v5 or Secure MCP reconfiguration",
+    "New tunnel, connection, profile, signer or service",
+    "d22 or historical task replay",
+    "Original f7 claim renewal",
+    "Native project-session interruption",
+    "Additional source build or unchanged regression rerun"
+  ],
+  "protectedRecoverySourceReconciliation": {
+    "bootstrap": "wake/src/install_broker_bootstrap_files.rs requires one existing pinned root and present exact current/control/config before provisioning.",
+    "reconstruction": "wake/src/runtime_install_selection.rs reconstructs over an intact legacy flat selection with exact prestate CAS and qualified separate candidate/fallback. It cannot recreate a missing current.json or combine roots.",
+    "outcome": "No existing supported transition was established for the recorded incomplete root. No protected write or comparison/collector rerun."
+  },
+  "releaseGates": {
+    "originalF7": "PARTIAL preserved; narrow corrected-source PASS is not full exact-candidate/source/artifact review.",
+    "originalD22": "UNKNOWN preserved; original attributable delivery/outcome still missing, no replay.",
+    "protectedWake": "Coherent state-root disposition and current purpose-bound signing/native admission still required."
+  },
+  "acceptance": {
+    "freshDevelopmentWakeDelivery": "ACCEPTED",
+    "automaticFixedAcknowledgmentReadback": "ACCEPTED",
+    "selectedDevelopmentWorkingHealth": "RECORDED_WITH_EXPLICIT_SCOPE",
+    "productionInstalledUpgrade": "NOT_PERFORMED",
+    "webOriginatedEditVerifyGitSelfWake": "OPEN",
+    "twoProjectIndependence": "OPEN",
+    "fixedWebTurnTimerSelfWakeLifecycle": "OPEN"
+  },
+  "next": "Retain the working development candidate and previous fallback. Do not replay this completed request or repeat its tests. Release progression still needs genuine exact-candidate review/producer and coherent protected-state/purpose authority through existing mechanisms; do not invent an executable root repair or new review contract."
+}
