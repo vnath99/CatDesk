@@ -1,5 +1,7 @@
 # CatDesk — System Architecture
 
+**Decision 2026-11-16T01:38:56.316414+00:00:** The existing development observer now also accepts the original approved public-review context through its native claim and frozen consent. No competing approval registry, owner, service, profile, tunnel or Wake binding is created. A successful context preflight is not a successful external review or release proof. [Evidence](../verification/APPROVED_REVIEW_CONTEXT_OBSERVATION_2026_11_15.json).
+
 **Decision 2026-11-16T00:34:15.175115+00:00:** Unknown-send diagnostics reuse the existing registered-project inspector and SeleniumBase primitives. No new owner, scheduler, profile, tunnel or authorization system. A real source-candidate no-send observation found one exact USER and complete response; installed production and full task acceptance remain separate. [Evidence](../verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
 
 **Decision 2026-11-16T00:09:22.940282+00:00:** The authorized resource ACL repair and actual installed-interpreter native version check are accepted. They add no backend, connection, release manager or native model dependency. Continue direct-Web acceptance separately; interpreter launch alone is not task verification. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).

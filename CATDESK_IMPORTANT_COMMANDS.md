@@ -1,5 +1,17 @@
 # CatDesk important commands
 
+## 2026-11-16T01:38:56.316414+00:00 — Inspect the original approved review context
+
+Qualified development source `8657bd00dca887c7f6911718641f262647a42ac6` supports this local-only operation through the same bounded owner:
+
+```powershell
+& $qualifiedController operator web-dev-runtime inspect-review-request --workflow-intent $originalFrozenWorkflow --expected-workflow-sha256 $frozenWorkflowSha256 --turn 1 --preflight
+```
+
+Variables must come from the exact existing approved packet and qualified controller. Preflight verifies the original native contract/claim and frozen consent without opening a browser; it explicitly reports browserOwnerVerified false. Removing only --preflight requests the bounded read-only observation. This is not an installed-production command claim or permission to repeat the completed diagnostic. It uses the existing host/profile locks, production isolation checks, hash-pinned embedded program and original selected primitives; original native state is locked and revalidated before/after. No URL/profile override, approval/claim, send, binding, key, verdict or producer operation exists.
+
+The actual f410 observation is complete: exact destination, loaded history, ambiguous editor, zero semantic and trusted USER matches. Draft emptiness is UNKNOWN. This is visible bounded absence, not proof of failed submission. Original sender metadata has no actual turn handle; preserve UNKNOWN/no replay and hold all conditional followups. Do not repeat this read unchanged or ask for the same existing consent again. Definitive provider outcome or explicit supported recovery disposition is needed for that path. [Evidence](docs/verification/APPROVED_REVIEW_CONTEXT_OBSERVATION_2026_11_15.json).
+
 ## 2026-11-16T00:34:15.175115+00:00 — Observe a frozen request without replay
 
 Development source `8327f8a9e1760c7550bf4ba674d401bd3e0af3fd` extends the existing registered-project inspector:
