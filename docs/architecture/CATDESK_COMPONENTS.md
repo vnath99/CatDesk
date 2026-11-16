@@ -1,5 +1,7 @@
 # CatDesk — Components and Interface Contracts
 
+**Decision 2026-11-16T00:34:15.175115+00:00:** inspect-readiness optionally accepts a frozen request file and exact raw SHA-256. Native pre/post hash checks, hash-pinned embedded probe and existing primitives return only a strict metadata frame. Normal readiness remains compatible. This mode creates no delivery receipt and cannot authorize a resend; no new MCP tool or plugin is added. [Evidence](../verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
+
 **Decision 2026-11-16T00:09:22.940282+00:00:** Existing task metadata/resume now exposes journal-derived toolBudget. Terminal failed calls count; unreadable journals return null recorded/remaining counts. Original immutable admission and contract limits are retained across rollover. Elapsed limits are per serving connection; hidden ChatGPT turn usage is unknown. No new tool or plugin is required; this source change is not installed. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
 
 **Decision 2026-11-15T22:34:51Z:** Native logical filesystem permissions and OS resource ACLs are separate layers. Controlled private fixtures prove read/execute provisioning repairs this failure class and still denies writes; the application command implementation is unchanged. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).

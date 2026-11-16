@@ -1,5 +1,17 @@
 # CatDesk important commands
 
+## 2026-11-16T00:34:15.175115+00:00 — Observe a frozen request without replay
+
+Development source `8327f8a9e1760c7550bf4ba674d401bd3e0af3fd` extends the existing registered-project inspector:
+
+```powershell
+& $qualifiedController operator web-dev-runtime inspect-readiness --project-id $registeredProject --frozen-observation-file $originalFrozenRequest --expected-request-sha256 $frozenRequestSha256
+```
+
+Run from the existing development control workspace with the qualified controller; these are local variables bound by the existing reviewed owner, not literal values to guess. This does not change the selected package or installed production command. The inspector retains project lease/CAS checks, exact paired URL/generation, stopped-host and exclusive browser ownership, bounded embedded-program execution, native output filtering and descendant cleanup. There is no URL/profile override, click, refresh, send, receipt creation or automatic resend. The request is checked before and after observation; the helper independently checks its bytes before browser import. Missing/duplicate/unstable USER or response failures remain explicit; absence is not confirmed failed submission.
+
+Actual controlled observation passed with one matching USER and RESPONSE_COMPLETE, zero submissions and unchanged state. It provides structural classification, not body/error extraction, delivery proof or full Web task acceptance. The separate d22 review destination is unregistered and is not admitted by this command; do not rebind it or fabricate a delivery to use this path. [Evidence](docs/verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
+
 **Verified follow-up 2026-11-16T00:09:22.940282+00:00:** source `1ae346351db6c4659d08f1d0e755a46ddd49b411` adds journal-derived remaining tool-call budget to task metadata/resume. Counts survive close/reopen and conversation rollover, include failed calls, and remain unknown when the journal cannot be read. Elapsed scope is explicitly per serving connection; ChatGPT turn usage is unknown. Four targeted tests, strict workspace Clippy and formatting pass. This is source-only readback; no budget reset, grant change, selected-package rebuild or protected upgrade. The separately authorized actual-runtime RX repair and native version check passed. Full Web edit/checkpoint/self-Wake remains OPEN. [Evidence](docs/verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
 
 **Approved runtime repair 2026-11-15T23:00:48.899963+00:00:** the frozen DACL-only operation applied once under explicit user authorization. The actual installed interpreter now passes its bounded native version check; images are unchanged, write/owner/audit rights were not granted, and both owners exited normally. No original-task replay, package, production release or v5 change. This supersedes the earlier pending runtime-owner decision. [Actual result](docs/verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).

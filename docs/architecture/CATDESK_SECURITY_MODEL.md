@@ -1,5 +1,7 @@
 # CatDesk — Security and Authority Model
 
+**Decision 2026-11-16T00:34:15.175115+00:00:** Frozen-request observation retains the original registered-project lease, exact paired target/generation, stopped host, exclusive browser lock and contained process cleanup. Native filtering rejects private fields and claimed receipt/resend authority. Unregistered d22 destination remains refused; its external review approval does not silently authorize a binding change. [Evidence](../verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
+
 **Decision 2026-11-16T00:09:22.940282+00:00:** The explicit operator decision authorized exactly one DACL-only RX application to the existing runtime readers plus one bounded native version check. Both completed; no write/owner/SACL rights, accounts, credentials, release authority, original task replay or grant change. Budget readback is advisory and cannot refill or authorize work. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
 
 **Decision 2026-11-15T22:34:51Z:** Only new disposable ACLs were changed during testing. Changing the existing interpreter ACL remains a separate exact resource-owner decision. DACL-only access preserves owner/SACL and requests no elevation; it creates no signer, account, grant or replay authority. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).

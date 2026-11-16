@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-16T00:34:15.175115+00:00",
+  "maturity": "CONTROLLED_LIVE",
+  "scope": "DEVELOPMENT_REGISTERED_PROJECT_READONLY_FROZEN_REQUEST_CLASSIFICATION",
+  "sourceCommit": "8327f8a9e1760c7550bf4ba674d401bd3e0af3fd",
+  "candidateSha256": "3bd6b152614eca37525a16c83cc96903ae99dbe6237bbf1ee6ab76d44156ee92",
+  "selectedPackageChanged": false,
+  "productionChanged": false,
+  "canonicalConnectionChanged": false,
+  "sourceChecks": {
+    "probeTestsPassed": 59,
+    "bridgeTestsPassed": 143,
+    "targetedRustTestsPassed": 5,
+    "checks": [
+      {
+        "name": "wake-frozen",
+        "exitCode": 0,
+        "finishedUtc": "2026-11-16T00:27:53.7634927+00:00",
+        "startedUtc": "2026-11-16T00:27:42.2060737+00:00",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "catdesk-wake",
+          "--lib",
+          "frozen_request"
+        ]
+      },
+      {
+        "name": "native-cli",
+        "exitCode": 0,
+        "finishedUtc": "2026-11-16T00:29:02.3266126+00:00",
+        "startedUtc": "2026-11-16T00:27:53.7882347+00:00",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "web_development_inspect_readiness_requires_only_registered_project"
+        ]
+      },
+      {
+        "name": "owner-command",
+        "exitCode": 0,
+        "finishedUtc": "2026-11-16T00:29:02.9435931+00:00",
+        "startedUtc": "2026-11-16T00:29:02.3297056+00:00",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "catdesk-wake",
+          "--lib",
+          "development_readiness_uses_short_loader_for_the_actual_compiled_probe"
+        ]
+      },
+      {
+        "name": "owner-target",
+        "exitCode": 0,
+        "finishedUtc": "2026-11-16T00:29:03.6216811+00:00",
+        "startedUtc": "2026-11-16T00:29:02.9454080+00:00",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "catdesk-wake",
+          "--lib",
+          "login_preflight_requires_exact_target_stopped_host_and_free_browser"
+        ]
+      },
+      {
+        "name": "full-clippy",
+        "exitCode": 0,
+        "finishedUtc": "2026-11-16T00:29:42.2008206+00:00",
+        "startedUtc": "2026-11-16T00:29:03.6231499+00:00",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--workspace",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ]
+      },
+      {
+        "name": "format",
+        "exitCode": 0,
+        "finishedUtc": "2026-11-16T00:29:46.9085348+00:00",
+        "startedUtc": "2026-11-16T00:29:42.2021699+00:00",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ]
+      }
+    ],
+    "strictWorkspaceClippyPassed": true,
+    "formatPassed": true
+  },
+  "live": {
+    "startedUtc": "2026-11-16T00:32:26.153225+00:00",
+    "finishedUtc": "2026-11-16T00:33:02.706959+00:00",
+    "projectId": "catdesk-wake-turn-canary-nov14",
+    "originalRequestId": "nov15-local-recovery-diagnostic-wake",
+    "requestSha256": "74742e3251a774832157b63ffdeca08cd3c997555bd4e79e8f850c24ea93ab82",
+    "submissions": 0,
+    "receiptAuthorityCreated": false,
+    "exitCode": 0,
+    "finalState": "EXACT_READY_IDLE",
+    "frozenObservation": {
+      "basis": "FROZEN_REQUEST_DOM_ONLY_NOT_DELIVERY_RECEIPT",
+      "deliveryReceiptProven": false,
+      "matchingUserCount": 1,
+      "messageDigest": "74742e3251a774832157b63ffdeca08cd3c997555bd4e79e8f850c24ea93ab82",
+      "resendAuthorized": false,
+      "responseState": "RESPONSE_COMPLETE",
+      "stable": true
+    },
+    "browserObservation": {
+      "assistant": "PRESENT",
+      "composer": "EMPTY",
+      "document": "COMPLETE",
+      "editor": "READY",
+      "exchange": "UNATTRIBUTED",
+      "generation": "IDLE",
+      "history": "PRESENT",
+      "recovery": "OBSERVATION_ONLY",
+      "route": "EXACT"
+    },
+    "identityVerified": true,
+    "ownedTreeExited": true,
+    "preservation": {
+      "pinsChecked": 1724,
+      "pinMismatches": 0,
+      "pinSetUnchanged": true,
+      "profileIdentitiesUnchanged": true,
+      "taskInventoryUnchanged": true,
+      "missingSeedPathsUnchanged": true,
+      "passed": true
+    },
+    "loginMarkerPresent": false
+  },
+  "profileProcessesRemaining": 0,
+  "owner": {
+    "terminationFailed": false,
+    "maximumSeconds": 180,
+    "exitCode": 0,
+    "finishedUtc": "2026-11-16T00:33:03.5295221+00:00",
+    "startedUtc": "2026-11-16T00:32:12.8485861+00:00",
+    "schemaVersion": 1,
+    "timedOut": false,
+    "workerSha256": "5bba1947d65eeecb0f0c9e858a275cc9a34e783be411857a92c0899273c8825c",
+    "containment": "KILL_ON_JOB_CLOSE"
+  },
+  "limitations": [
+    "No task response body or draft exported. DOM classification is not a delivery receipt or review verdict.",
+    "No source task, failed verifier, historical send, self-Wake or native call was replayed.",
+    "Original d22 destination is not registered in the current development owner; its contract forbids binding changes. No browser inspection was attempted for that destination. Current native history remains a predating snapshot; original send remains UNKNOWN.",
+    "Production installed adapter and complete Web edit/checkpoint/self-Wake acceptance are separate gates."
+  ]
+}

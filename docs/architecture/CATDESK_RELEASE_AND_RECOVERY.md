@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-16T00:34:15.175115+00:00:** The source-candidate observer was built separately and live-qualified without changing selection, immutable retained packages or protected production. One no-send observation preserved 1,724 pins and cleaned all owned processes. Source/live diagnostic evidence does not supply independent review verdicts, signed installer authority or complete Web coding acceptance. [Evidence](../verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
+
 **Decision 2026-11-16T00:09:22.940282+00:00:** The runtime-access failure was repaired through its approved resource-owner procedure without a CatDesk/Wake promotion. Actual interpreter version execution passed; the selected development package and protected production release remain unchanged. Source budget readback passed four targeted regressions, Clippy and formatting; it is not independently reviewed release authority. [Evidence](../verification/NATIVE_RUNTIME_REPAIR_APPLIED_2026_11_15.json).
 
 **Decision 2026-11-15T22:34:51Z:** No backend or Wake upgrade is needed to address the native interpreter permission dependency. A frozen owner-scoped read/execute repair is preflight-ready, not executed; genuine protected release/review gates still apply to separate missing installed Web capabilities. [Evidence](../verification/NATIVE_RUNTIME_READ_ACCESS_2026_11_15.json).
