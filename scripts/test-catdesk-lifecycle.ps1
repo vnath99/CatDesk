@@ -53,6 +53,41 @@ function New-OwnedTask($Definition) {
     }
 }
 
+# Exercise the real cross-edition child environment without starting a monitor,
+# backend, persistence registration or lifecycle action.
+$launchAst = [Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens, [ref]$errors)
+$launchDefinition = @($launchAst.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'New-AutostartSupervisorProcessStartInfo' }, $true))
+Require ($launchDefinition.Count -eq 1) 'one supervisor launch definition exists'
+Invoke-Expression $launchDefinition[0].Extent.Text
+$parentModulePath = $env:PSModulePath
+$childHost = (Get-Command powershell.exe -CommandType Application -ErrorAction Stop).Path
+$probe = "`$ProgressPreference='SilentlyContinue'; `$cmd=Get-Command Get-FileHash -ErrorAction Stop; @{hashCommandAvailable=(`$null -ne `$cmd);edition=`$PSVersionTable.PSEdition}|ConvertTo-Json -Compress"
+$probeArguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probe))
+$probeInfo = New-AutostartSupervisorProcessStartInfo -Definition ([pscustomobject]@{ Execute = $childHost; MonitorArguments = $probeArguments })
+Require ($probeInfo.FileName -ceq $childHost -and $probeInfo.Arguments -ceq $probeArguments) 'child command identity is unchanged'
+Require (-not $probeInfo.UseShellExecute -and $probeInfo.CreateNoWindow) 'child remains hidden without a shell launcher'
+Require (-not $probeInfo.EnvironmentVariables.ContainsKey('PSModulePath')) 'child initializes its own module path'
+Require ($probeInfo.EnvironmentVariables['PATH'] -ceq $env:PATH) 'unrelated child environment is preserved'
+Require ($env:PSModulePath -ceq $parentModulePath) 'parent module environment is unchanged'
+$probeInfo.RedirectStandardOutput = $true
+$probeInfo.RedirectStandardError = $true
+$probeChild = [Diagnostics.Process]::new()
+$probeChild.StartInfo = $probeInfo
+$probeStarted = $false
+try {
+    $probeStarted = $probeChild.Start()
+    Require $probeStarted 'real Windows PowerShell child starts'
+    Require ($probeChild.WaitForExit(10000)) 'read-only child exits within ten seconds'
+    $probeOutput = $probeChild.StandardOutput.ReadToEnd()
+    $probeErrors = $probeChild.StandardError.ReadToEnd()
+    Require ($probeChild.ExitCode -eq 0 -and $probeErrors.Length -eq 0 -and $probeOutput.Length -lt 1024) "child command lookup succeeds without errors (exit=$($probeChild.ExitCode), stderrBytes=$($probeErrors.Length), stdoutBytes=$($probeOutput.Length))"
+    $probeResult = $probeOutput | ConvertFrom-Json
+    Require ($probeResult.hashCommandAvailable -and $probeResult.edition -ceq 'Desktop') 'Windows PowerShell loads its own hash cmdlet'
+} finally {
+    if ($probeStarted -and -not $probeChild.HasExited) { $probeChild.Kill(); Require ($probeChild.WaitForExit(5000)) 'owned child cleanup completes' }
+    $probeChild.Dispose()
+}
+
 $actions = [Collections.Generic.List[string]]::new()
 $canonical = [pscustomobject]@{ Path = 'C:\fixture\target\release\catdesk.exe'; Sha256 = 'a' * 64 }
 $base = @{

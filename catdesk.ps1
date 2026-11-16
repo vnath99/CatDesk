@@ -535,11 +535,29 @@ function Test-AutostartSupervisorRunning {
     }
 }
 
+function New-AutostartSupervisorProcessStartInfo {
+    param($Definition)
+    $info = [Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = $Definition.Execute
+    $info.Arguments = $Definition.MonitorArguments
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    # The persisted owner is Windows PowerShell. Inheriting PowerShell 7's
+    # module path can select Core-only built-ins and make ordinary commands
+    # unavailable. Let the child initialize its host-appropriate module path;
+    # do not change the parent environment or the registered command identity.
+    $info.EnvironmentVariables.Remove('PSModulePath')
+    return $info
+}
+
 function Start-AutostartSupervisor {
     param($Definition)
     Invoke-LifecycleSeam -Name 'AutostartSupervisorStart' -Arguments @($Definition) -Default {
         param($expected)
-        Start-Process -FilePath $expected.Execute -ArgumentList $expected.MonitorArguments -WindowStyle Hidden -ErrorAction Stop | Out-Null
+        $process = [Diagnostics.Process]::Start((New-AutostartSupervisorProcessStartInfo -Definition $expected))
+        if ($null -eq $process) { throw 'autostart supervisor did not start' }
+        $process.Dispose()
     }
 }
 
