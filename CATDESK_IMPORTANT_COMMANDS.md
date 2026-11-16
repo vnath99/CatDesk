@@ -1,5 +1,9 @@
 # CatDesk important commands
 
+## November 16 — Development integration is separate from installation
+
+PR #26 is merged into `codex/web-rollover-oct17` at `ef145ec74aa8c9a815115ac90605e6f71dbec2ba`; exact remote SHA and equality to the qualified feature tree were verified. This used ordinary GitHub merge controls, no admin override or force. No installed command, signer, broker, profile, binding or uncertain task was changed. Keep the selected exact-source development package and its working-health evidence; a Git merge does not install that package or confer protected producer/release authority. [Actual integration scope](docs/verification/DEVELOPMENT_INTEGRATION_PR26_2026_11_16.json). Other active checkouts were not pulled or reset.
+
 ## November 16 — Development qualification readback
 
 Source `06d1a5ba3326c8f2d591370c3f2d2f4946fc2290` is built and selected in the existing **unprotected development** runtime through `operator web-dev-runtime update-package`. Authenticated local MCP and bounded read-only context/readiness operations passed; their owners exited and the profile was quiescent afterward. Subsequent one-message development Wake, exact receipt/timer, native frozen-request response classification and expected acknowledgment body hashes passed. The new test was closed with existing `operator web work resolve`; existing `operator web-dev-runtime record-verification --input-file <exact-local-evidence>` now records OPERATOR_RECORDED development health. This is local operator-provided scoped evidence, not full independent candidate review or protected release authority. Previous verified fallback retained. Do not repeat the completed task or commands unchanged, or apply them to protected production. [Initial scope](docs/verification/F7_04_01_DEVELOPMENT_RUNTIME_2026_11_16.json); [actual Wake/readback and health record](docs/verification/F7_04_01_FRESH_WAKE_2026_11_16.json).
