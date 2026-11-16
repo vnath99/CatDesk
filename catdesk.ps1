@@ -644,6 +644,9 @@ function Invoke-AutostartLifecycle {
                     else { Write-LifecycleStatus 'AUTOSTART_REGISTERED_MONITOR_STOPPED' $scopeDetail }
                     return
                 }
+                if (Test-AutostartSupervisorRunning -Definition $definition) {
+                    Write-LifecycleStatus 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE'; return
+                }
                 Write-LifecycleStatus 'AUTOSTART_DISABLED'; return
             }
             'enable' {
@@ -684,6 +687,11 @@ function Invoke-AutostartLifecycle {
             'disable' {
                 if ($taskOwned) { Unregister-OwnedAutostartTask -Definition $definition }
                 if ($runOwned) { Unregister-OwnedAutostartRunKey -Definition $definition }
+                # Removing persistence does not stop the live owner or prove
+                # quiescence. Reuse the same warning as enable's refusal.
+                if (Test-AutostartSupervisorRunning -Definition $definition) {
+                    Write-LifecycleStatus 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE'; return
+                }
                 Write-LifecycleStatus 'AUTOSTART_DISABLED'; return
             }
         }
