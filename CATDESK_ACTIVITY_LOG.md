@@ -398,3 +398,11 @@ Evidence: [docs/verification/CURRENT_SERVING_WAKE_ROOT_RECONCILIATION_2026_11_16
 Agent: Codex. Source: f920c4a416901b79da0a70aa6d1d0ece150f78f3. Outcome: partial. Existing 06d artifacts staged for exact review with native-format manifest and local evidence, leaving independent review absent. Retained-base teardown gap confirmed and existing fix backported in source; three Windows tests and strict checks pass. Next: Await original operator signature and genuine candidate review/authority. Preserve historical fallback and all unknowns; no new component build, installation or equivalent review contract.
 
 Evidence: [docs/verification/EXACT_RUNTIME_INTAKE_AND_FALLBACK_SOURCE_2026_11_16.json](docs/verification/EXACT_RUNTIME_INTAKE_AND_FALLBACK_SOURCE_2026_11_16.json); command: Existing artifact and Git identity checks, actual retained-base Windows tests and scoped source review; exit 0; SHA-256 b3671365296dfeb25cbc92f346f38e1a394ea377165989f55a6d7f2e58087525.
+
+<!-- catdesk-activity:readiness-exit-review-correction-nov16 sha256:0b9304fd88befde0fd11f2bba4a9cd37461fcc5f13c2c4df0b4d497cd7c1cd76 -->
+
+## 2026-11-16T17:30:20.320665+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: ba2db7aba0780daa0a52961c673aae710c107f08. Outcome: partial. Six bounded independent source assessments found a readiness cleanup/lock gap. Minimal development correction passes three actual Windows tests, nineteen existing probe regressions and strict root/Wake checks. Retained compiler operands extend the unchanged candidate review index from 257 to 261 paths. Next: Review the exact source correction and complete distinct candidate source/artifact gaps; await existing offline purpose signature independently. Preserve original f7 PARTIAL, d22 UNKNOWN and frozen production. Actual installed Web editing/checkpoint/self-Wake remains open.
+
+Evidence: [docs/verification/READINESS_EXIT_SOURCE_REVIEW_2026_11_16.json](docs/verification/READINESS_EXIT_SOURCE_REVIEW_2026_11_16.json); command: Attributable public source reviews, retained Cargo operands/output checks, actual disposable Windows regression tests and strict checks; exit 0; SHA-256 2ae3278a5b8816d789c913b9ee0084a243d7e6cd04e38605bbad5b91f2e70b4c.
