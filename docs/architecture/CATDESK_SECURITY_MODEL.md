@@ -133,3 +133,7 @@ The actual installed health-cycle qualification denied all recovery calls in its
 ## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
 
 Known full-stack and backend-only commands are compared exactly, including existing principal/settings constraints. A mode flag is not authority to overwrite, widen or remove another scope; mixed records and surviving unregistered monitor signals are refused. This changes no protected release, signing, browser, project or unknown-operation permissions. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
+
+## 2026-11-16T03:27:34.014882+00:00 — Local UI host bridge qualification
+
+Widget bridge messages are restricted to the parent and correlated JSON-RPC identities. The renderer accepts only its known metadata/schema, uses fixed initialization errors, acknowledges teardown and ignores late results. Tests exercise wrong window sources, malformed/duplicate/late messages and refused host requests without exposing raw arguments. No project grant, no-replay or release boundary is weakened. [Exact source and local evidence](../verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json).

@@ -158,3 +158,7 @@ The existing immediate workspace-monitor launcher now initializes a Windows Powe
 ## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
 
 The facade and passive doctor share exact task/Run scope interpretation. Both logon and immediate arguments carry BackendOnly when explicitly selected; ordinary status reads the actual known registration. Mixed scopes and a surviving unregistered monitor fail closed. Registered scope and a mutex signal do not prove live process scope. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
+
+## 2026-11-16T03:27:34.014882+00:00 — Local UI host bridge qualification
+
+C1-UI-002 retains the existing widget/resource identity and appearance. The source bridge adds bounded initialization, validated parent messages, result hydration, size notifications, health ping and teardown. It automatically invokes no server tool, follow-up or retry. The source remains on the existing independent UI feature branch under PR 27. [Exact source and local evidence](../verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json).

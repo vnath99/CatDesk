@@ -156,3 +156,7 @@ The installed passive doctor distinguishes canonical listener health from stoppe
 ## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
 
 Backend-only startup selection is a source capability awaiting the normal release path. Enable cannot convert an existing scope. Disable removes only exact owned persistence and does not terminate its monitor; a surviving unregistered monitor blocks re-registration. Preserve historical C110 recovery/no-replacement evidence instead of repeating it as current installed acceptance. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
+
+## 2026-11-16T03:27:34.014882+00:00 — Local UI host bridge qualification
+
+UI fixture qualification is not release authority. The original source and every intermediate browser result remain recorded; a Windows headless wrapper driver-copy attempt was refused by a retained write guard, and the existing pure-CDP launcher completed without driver changes. Independent source review and the normal release/actual-host checks remain required; no connection refresh or protected upgrade was performed. [Exact source and local evidence](../verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json).

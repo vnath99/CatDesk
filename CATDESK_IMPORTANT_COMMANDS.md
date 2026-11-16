@@ -256,3 +256,7 @@ Rows distinguish no/open/multiple work requests, target mismatch, missing delive
 | HTTP 429 / Session terminated | Connector/upstream/session; diagnose once after serving/auth ready and preserve exact error |
 
 For completed integration, primary edition differences and preservation evidence, read the [final synchronization record](docs/verification/DOC_SYNC_STATE_2026_11_14.json). These are documentation/source checks, not fresh runtime health or installed product acceptance.
+
+## 2026-11-16T03:27:34.014882+00:00 — Existing widget host fixture
+
+On `codex/c1-ui-002-content-fallback`, run `node --test tests/widget_host_bridge.test.js` for the actual inline-widget protocol matrix. The opt-in `<qualified-runtime-python> -I -B tests/widget_host_bridge_browser.py --output-directory <fresh-local-directory>` must run with the existing SeleniumBase runtime through the qualified bounded whole-tree owner; retained qualification uses pure CDP, a driver write guard and a 90-second maximum. It opens only a local fixture with disposable test state, never an authenticated profile or ChatGPT destination. These are local component tests, not installed host acceptance. The existing v5 connection, tool identity, resource identity and server authorization remain unchanged. [Evidence](docs/verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json).

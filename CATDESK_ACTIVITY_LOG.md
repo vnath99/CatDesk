@@ -302,3 +302,11 @@ Evidence: [docs/verification/SUPERVISOR_STARTUP_HEALTH_2026_11_15.json](docs/ver
 Agent: Codex. Source: f016c2919957610f65ac08fc3a1aac8413cca788. Outcome: partial. Source facade supports exact backend-only startup scope with conflict and surviving-monitor refusals; doctor shares ownership interpretation; both Windows shell fixture suites pass; no installed migration or recurring activation. Next: Resume the existing review/producer and installed direct-Web delivery/Git qualification on new authority or definitive original-delivery evidence; do not repeat completed recovery canaries. Keep independently demonstrated source fixes eligible..
 
 Evidence: [docs/verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json](docs/verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json); command: Public lifecycle scope fixtures under both PowerShell editions plus doctor regression tests; persistence effects injected; exit 0; SHA-256 0828ad72ebe937dd413a3ffd98265bce7b1f7976093958877bcae5b850c24123.
+
+<!-- catdesk-activity:nov15-widget-host-bridge sha256:cf6c547cd16e0a52e2fd2317814953c8cfce6c63f083e5413a8b91e70d10eff6 -->
+
+## 2026-11-16T03:27:34.014882+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 21b09707b73c373e48676d49d494bf391c59ce6a. Outcome: partial. Independent UI branch fixes demonstrated MCP Apps handshake and canonical-metadata gaps; 14 host tests and actual bounded local CDP rendering size ping teardown pass; no installed or full-Web claim. Next: Review the existing UI feature change through PR 27; keep original f7 review-start, d22 UNKNOWN delivery and protected migration gates separate before installed direct-Web acceptance. Do not repeat completed canaries or unchanged dependency probes..
+
+Evidence: [docs/verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json](docs/verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json); command: Actual inline HTML host matrix and bounded existing SeleniumBase pure-CDP fixture; no ChatGPT messages or MCP task execution; exit 0; SHA-256 8c54880e8fc4fb41d0e2347fea40e5f327016927e8b70dded3fc8a9a7ded7ecd.

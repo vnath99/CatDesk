@@ -194,3 +194,7 @@ The workspace autostart monitor and protected stable supervisor are existing dis
 ## 2026-11-16T02:51:59.272044+00:00 — Explicit scope on the existing startup owner
 
 The existing public lifecycle now admits explicit backend-only autostart selection at source level. It reuses the same task/Run identity and monitor, with no additional service or scheduler. The currently installed full-stack registration is unchanged; the source feature does not establish unattended recovery. [Source verification](../verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json).
+
+## 2026-11-16T03:27:34.014882+00:00 — Local UI host bridge qualification
+
+The existing UI branch now initializes the standard MCP Apps display bridge and normalizes canonical or legacy metadata into the original renderer. This is a source component improvement, separate from project-execution authority and currently uninstalled. The local real-browser fixture passes; live ChatGPT timeout causality and actual host acceptance remain unproved. [Exact source and local evidence](../verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json).
