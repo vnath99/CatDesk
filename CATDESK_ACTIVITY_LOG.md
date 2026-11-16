@@ -310,3 +310,11 @@ Evidence: [docs/verification/BACKEND_ONLY_AUTOSTART_SCOPE_2026_11_15.json](docs/
 Agent: Codex. Source: 21b09707b73c373e48676d49d494bf391c59ce6a. Outcome: partial. Independent UI branch fixes demonstrated MCP Apps handshake and canonical-metadata gaps; 14 host tests and actual bounded local CDP rendering size ping teardown pass; no installed or full-Web claim. Next: Review the existing UI feature change through PR 27; keep original f7 review-start, d22 UNKNOWN delivery and protected migration gates separate before installed direct-Web acceptance. Do not repeat completed canaries or unchanged dependency probes..
 
 Evidence: [docs/verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json](docs/verification/C1_UI_002_HOST_BRIDGE_2026_11_15.json); command: Actual inline HTML host matrix and bounded existing SeleniumBase pure-CDP fixture; no ChatGPT messages or MCP task execution; exit 0; SHA-256 8c54880e8fc4fb41d0e2347fea40e5f327016927e8b70dded3fc8a9a7ded7ecd.
+
+<!-- catdesk-activity:nov15-operational-goal-blocked sha256:664529c77f48bd46c5db6b83da60540b69cd5d839f23377da7c1ca40205474b0 -->
+
+## 2026-11-16T03:38:42.121767+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 3ffaade82e4c7aa68cdfaff01e16810569c33fcc. Outcome: blocked. Independent source fixes and local browser work are published; architecture PR 8 is already merged; all remaining operational acceptance depends on original exact review admission, UNKNOWN delivery evidence or coherent protected Wake authority. Next: Await the existing f7 exact review-start decision, definitive original d22 evidence or supported operator recovery, and protected Wake state authority; resume original release and Web work only when its prerequisites change. Do not poll unchanged gates or repeat completed tests..
+
+Evidence: [docs/verification/OPERATIONAL_ACCEPTANCE_BLOCKERS_2026_11_15.json](docs/verification/OPERATIONAL_ACCEPTANCE_BLOCKERS_2026_11_15.json); command: Read current native admission state, retained installed-capability evidence and exact PR 8 disposition; no runtime actions; exit 0; SHA-256 ba9687e8d160dd0a73b8ce19f227a6e8d68745262bee770425a787dcf6537b8b.
