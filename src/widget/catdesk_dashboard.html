@@ -6766,17 +6766,30 @@
             "</section>";
         }
 
+        var hasRenderedPayload = false;
+        var uiBridgeState = "idle";
+        var uiBridgeTimer = null;
+        var uiInitializeId = "catdesk-ui-initialize";
+        var uiResizeObserver = null;
+        var uiLastHeight = null;
+
+        function toolResultMetadata(result) {
+          if (!isPlainObject(result)) return null;
+          // Current hosts pass the canonical tool result envelope. Retain
+          // compatibility with legacy globals containing the metadata directly.
+          var metadata = isPlainObject(result._meta) ? result._meta : result;
+          return hasPureMetaPayload(metadata) ? metadata : null;
+        }
+
         function currentToolResponseMetadata() {
           if (!window.openai) return null;
-          return window.openai.toolResponseMetadata || null;
+          return toolResultMetadata(window.openai.toolResponseMetadata);
         }
 
         function hasPureMetaPayload(toolResponseMetadata) {
           return !!(
-            toolResponseMetadata &&
-            typeof toolResponseMetadata === "object" &&
-            toolResponseMetadata[WIDGET_PAYLOAD_META_KEY] &&
-            typeof toolResponseMetadata[WIDGET_PAYLOAD_META_KEY] === "object" &&
+            isPlainObject(toolResponseMetadata) &&
+            isPlainObject(toolResponseMetadata[WIDGET_PAYLOAD_META_KEY]) &&
             toolResponseMetadata[WIDGET_PAYLOAD_META_KEY].schema ===
               "catdesk.review.v1"
           );
@@ -6801,6 +6814,7 @@
             return false;
           }
           var nextView = parsed.value;
+          hasRenderedPayload = true;
           nextView.payloadDiagnostics = diagnostics;
           if (
             nextView.panelMode === "tool_call" &&
@@ -6823,14 +6837,113 @@
           setTokenStatsLayoutSetting(nextView.tokenStatsLayout);
           view = nextView;
           render();
+          notifyUiSize();
           return true;
+        }
+
+        function notifyUiSize() {
+          if (uiBridgeState !== "ready") return;
+          var root = document.getElementById("root");
+          if (!root || !document.body) return;
+          var style = window.getComputedStyle(document.body);
+          var height = Math.ceil(root.getBoundingClientRect().height +
+            (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0));
+          if (!Number.isFinite(height) || height <= 0 || height === uiLastHeight) return;
+          uiLastHeight = height;
+          try {
+            window.parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { height: height } }, "*");
+          } catch (_) { uiBridgeUnavailable(); }
+        }
+
+        function uiBridgeUnavailable() {
+          uiBridgeState = "unavailable";
+          if (uiBridgeTimer !== null) window.clearTimeout(uiBridgeTimer);
+          uiBridgeTimer = null;
+          if (uiResizeObserver) uiResizeObserver.disconnect();
+          uiResizeObserver = null;
+          if (!hasRenderedPayload) {
+            renderPayloadError(
+              "UI Host Unavailable",
+              "MCP Apps initialization did not complete. Tool results remain available outside this component.",
+              null,
+            );
+          }
+        }
+
+        function initializeUiBridge() {
+          if (window.parent === window) return;
+          uiBridgeState = "initializing";
+          uiBridgeTimer = window.setTimeout(uiBridgeUnavailable, 5000);
+          // A sandbox proxy may have an opaque origin. Only the parent window
+          // is accepted on readback; this request contains no project data.
+          try {
+            window.parent.postMessage({
+              jsonrpc: "2.0",
+              id: uiInitializeId,
+              method: "ui/initialize",
+              params: {
+                protocolVersion: "2026-01-26",
+                appInfo: { name: "CatDesk Review", version: "1.0.0" },
+                appCapabilities: {},
+              },
+            }, "*");
+          } catch (_) { uiBridgeUnavailable(); }
         }
 
         window.addEventListener("message", function (event) {
           if (event.source !== window.parent) return;
           var message = event.data;
-          if (!message || typeof message !== "object") return;
+          if (!isPlainObject(message) || uiBridgeState === "closed") return;
+          if (message.jsonrpc === "2.0" && message.id === uiInitializeId &&
+              uiBridgeState === "initializing" && !message.method) {
+            if (!isPlainObject(message.result) || message.error ||
+                message.result.protocolVersion !== "2026-01-26") {
+              uiBridgeUnavailable();
+              return;
+            }
+            window.clearTimeout(uiBridgeTimer);
+            uiBridgeTimer = null;
+            uiBridgeState = "ready";
+            try {
+              window.parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized", params: {} }, "*");
+              if (typeof window.ResizeObserver === "function") {
+                uiResizeObserver = new window.ResizeObserver(notifyUiSize);
+                uiResizeObserver.observe(document.getElementById("root"));
+              }
+              notifyUiSize();
+            } catch (_) { uiBridgeUnavailable(); }
+            return;
+          }
+          if (message.jsonrpc === "2.0" && uiBridgeState === "ready" &&
+              typeof message.method === "string" &&
+              (typeof message.id === "string" ||
+               (typeof message.id === "number" && Number.isFinite(message.id)))) {
+            var reply = { jsonrpc: "2.0", id: message.id };
+            if (message.method === "ping") {
+              reply.result = {};
+            } else if (message.method === "ui/resource-teardown") {
+              uiBridgeState = "closed";
+              if (uiResizeObserver) uiResizeObserver.disconnect();
+              uiResizeObserver = null;
+              stopTokenRollAnimation();
+              stopInstructionMascotAnimation();
+              reply.result = {};
+            } else {
+              reply.error = { code: -32601, message: "Unsupported UI request" };
+            }
+            try { window.parent.postMessage(reply, "*"); }
+            catch (_) { if (uiBridgeState !== "closed") uiBridgeUnavailable(); }
+            return;
+          }
           if (message.method === "ui/notifications/tool-result") {
+            if (message.jsonrpc === "2.0" && uiBridgeState === "ready" &&
+                !Object.prototype.hasOwnProperty.call(message, "id")) {
+              // No tool execution, follow-up message or automatic retry is
+              // initiated by receiving a result. Existing payload validation
+              // and rendering remain authoritative.
+              applyPayload(toolResultMetadata(message.params));
+              return;
+            }
             var toolResponseMetadata = currentToolResponseMetadata();
             if (!hasPureMetaPayload(toolResponseMetadata)) return;
             applyPayload(toolResponseMetadata);
@@ -6840,10 +6953,11 @@
         window.addEventListener(
           "openai:set_globals",
           function (event) {
+            if (uiBridgeState === "closed") return;
             var globals = event && event.detail ? event.detail.globals : null;
             if (globals) {
               var globalsToolResponseMetadata =
-                globals.toolResponseMetadata || null;
+                toolResultMetadata(globals.toolResponseMetadata);
               if (hasPureMetaPayload(globalsToolResponseMetadata)) {
                 applyPayload(globalsToolResponseMetadata);
               }
@@ -6866,6 +6980,7 @@
         if (hasPureMetaPayload(initialToolResponseMetadata)) {
           applyPayload(initialToolResponseMetadata);
         }
+        initializeUiBridge();
       })();
     </script>
   </body>
