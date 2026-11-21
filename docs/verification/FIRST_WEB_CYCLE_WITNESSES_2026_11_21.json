@@ -1,0 +1,53 @@
+{
+  "observedUtc": "2026-11-21T17:17:03.706863+00:00",
+  "status": "READ_ONLY_FIRST_CYCLE_WITNESSES_MATCH",
+  "sourceCommit": "ac112e8c05c29566163dce8f6fb1f77f06a26a51",
+  "retiredTask": false,
+  "exactRegisteredTargetMatched": true,
+  "expectedOldQueuePresent": true,
+  "oldDeliveryRecordAndGrantAbsent": true,
+  "draftAdmissionAbsent": true,
+  "sharedGitCommonDirectory": true,
+  "distinctGitWorktreeDirectory": true,
+  "expectedBranchAndBaseMatched": true,
+  "registeredWorkspaceOverlaps": false,
+  "assignedWorktreeClean": true,
+  "pinnedInputsCompared": 9,
+  "checkpointPaths": [
+    "CATDESK_IMPORTANT_COMMANDS.md"
+  ],
+  "targetGeneration": 1,
+  "sourceValidationScope": "READ_ONLY_PREDICATES_FROM_EXISTING_TASK_ADMISSION",
+  "newGrants": 0,
+  "messagesSent": 0,
+  "browserStarts": 0,
+  "runtimeWrites": 0,
+  "actualAdmissionPerformed": false,
+  "schemaVersion": 1,
+  "developmentSource": "00f3dcd26e73bc39a5f43c6a3a4bd2302192f197",
+  "manualWake": {
+    "requestingTool": "wake.manual_end_turn",
+    "requestEffect": "QUEUE_ONLY_EXACT_COMPLETED_TASK_JOURNAL_INTENT",
+    "sender": "operator web work manual-wake-deliver",
+    "exactSenderWitnesses": [
+      "--project-id",
+      "--request-id",
+      "--call-id",
+      "--event-id"
+    ],
+    "nativeMaximumSeconds": 180,
+    "additionalModelCallsRequiredBySender": 0,
+    "evidence": "EXACT_USER_MESSAGE_APPENDED for the task-issued manual event",
+    "observer": "operator web review read",
+    "observerWitnesses": [
+      "--project-id",
+      "--event-id"
+    ],
+    "observerRequiresExactPairedTargetAndSentReceipt": true,
+    "nextTurnTaskEvidence": "Require actual assistant continuation tied to the delivered manual event and the same scoped checkpoint. Confirm task journal and Git independently before resolving.",
+    "ambiguousSendRecovery": "Retain the original event and observe its delivery state. Do not generate a new call or event ID to resend it.",
+    "timer": "Read the existing event-linked timer identity. Preserve the 18-minute soft checkpoint and 20-minute deadline."
+  },
+  "releaseGatesStillPending": true,
+  "installedWebCycleAccepted": false
+}

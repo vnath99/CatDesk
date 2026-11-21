@@ -462,3 +462,11 @@ Evidence: [docs/verification/EXACT_WAKE_SELECTION_INTAKE_2026_11_21.json](docs/v
 Agent: Codex. Source: 232c2add89f17b3b5acf908f1d8ee177d3f38223. Outcome: partial. The frozen verify-docs command passed with 521 link checks on an edited disposable clone under the existing offline Windows sandbox. Zero model calls and no change to the actual assignment checkout. Exact d22 source supplies scoped checkpoint and manual end-turn entry points, with the checkpoint module identical to 56aa. Next: Carry the local command evidence into the first installed Web turn. After the pending operator bootstrap, run native broker preflight and finish Wake qualification and the separate genuine d22 backend review and producer gate before task delivery.
 
 Evidence: [docs/verification/WEB_FIXED_DOCS_SANDBOX_2026_11_21.json](docs/verification/WEB_FIXED_DOCS_SANDBOX_2026_11_21.json); command: Fixed verify-docs arguments with managed Windows sandbox, network disabled, source-bound disposable clone, bounded process owner and fixture-only process readback; exit 0; SHA-256 40532bc71600914063d323f2373ea7ed099473eed7563e4c77806c6d0e387d01.
+
+<!-- catdesk-activity:first-web-cycle-witnesses-nov21 sha256:67fa09f076152503a489e1855eea8cccb68f9846d18161392253115ee9d09199 -->
+
+## 2026-11-21T17:17:03.706863+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 00f3dcd26e73bc39a5f43c6a3a4bd2302192f197. Outcome: partial. Matched nine read-only inputs for the first installed cycle, including the paired route, untouched old request and clean isolated linked worktree. Identified the existing bounded sender and event-specific reader that connect the task-issued manual Wake intent to the next actual Web turn. Next: After qualified Wake and backend releases, revalidate and admit the prepared scope, deliver once and obtain the actual edit, verify and scoped checkpoint receipts. Use the exact task-issued continuation event in the existing bounded sender and reader. Bootstrap and genuine release review remain pending.
+
+Evidence: [docs/verification/FIRST_WEB_CYCLE_WITNESSES_2026_11_21.json](docs/verification/FIRST_WEB_CYCLE_WITNESSES_2026_11_21.json); command: Read-only nine-input identity and Git witness comparison with existing native CLI source; exit 0; SHA-256 0fa5baa2a66536053f2b0e47f2d57b55bff0e9b7d8f8a213b79aa84659f08db6.
