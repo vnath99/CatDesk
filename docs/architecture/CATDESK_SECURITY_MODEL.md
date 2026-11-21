@@ -1,5 +1,7 @@
 # CatDesk — Security and Authority Model
 
+**Decision November 21, 16:57 UTC:** Standing development authorization does not supply an external private-key signature, elevated operator token or independent review verdict. Keep unknown review/delivery outcomes fenced. A material checkpoint-scope successor remains inert until ordinary admission; it cannot reset uncertain historical work. [Evidence](../verification/INSTALLED_WEB_CYCLE_RELEASE_PREPARATION_2026_11_21.json).
+
 **Decision 2026-11-16T01:38:56.316414+00:00:** The original f410 consent hash matches its historical record; current native approval is read, never created. Cancellation, expiry, changed inputs/claim and another native owner fail closed. Actual reads preserve native version 4 and the entire frozen batch. No key, grant, delivery receipt, verdict or producer authority is generated. Visible absence cannot authorize a resend or be relabeled as confirmed pre-submit failure. [Evidence](../verification/APPROVED_REVIEW_CONTEXT_OBSERVATION_2026_11_15.json).
 
 **Decision 2026-11-16T00:34:15.175115+00:00:** Frozen-request observation retains the original registered-project lease, exact paired target/generation, stopped host, exclusive browser lock and contained process cleanup. Native filtering rejects private fields and claimed receipt/resend authority. Unregistered d22 destination remains refused; its external review approval does not silently authorize a binding change. [Evidence](../verification/FROZEN_REQUEST_OBSERVATION_2026_11_15.json).
