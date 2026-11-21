@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-21T19:15:25.984294+00:00",
+  "scope": "EXACT_SCM_RESIDUE_AND_CORRECTED_ARTIFACT_REVIEW_PREPARATION",
+  "developmentSource": "584bb563809f7ab2119454e3d106eb58144299f1",
+  "correctedCandidate": {
+    "copiedSha256": "95c312ce9432afafae7bcda138e4282be7cf1ed63c1af5b555156318bdedb830",
+    "installerScriptSha256": "fa8e8e643034e268a843e14a930f9e2582d5833cddd0bc5d086884f54829bfe6",
+    "source": "5965face75d42931eaac8d0a7dc995db8bf9a5bf",
+    "tree": "fa881b0b4f9bb0743702981c9731fe4f2fbd5c1b",
+    "byteLength": 3152384,
+    "independentlyReviewed": false,
+    "protectedInvocation": false
+  },
+  "stoppedOriginalResidue": {
+    "observedUtc": "2026-11-21T19:11:07.5384216+00:00",
+    "scope": "STOPPED_EXACT_ORIGINAL_SCM_RESIDUE_READ_ONLY",
+    "creationRecordId": 73168,
+    "registryLastWriteUtc": "2026-11-21T17:50:39.5622310+00:00",
+    "registryConfigurationSha256": "408a7a763b3c344fab3a161a3abf1271bff2e232f7fb8b046ff60e7f8abb83a7",
+    "defaultDescriptorSha256": "0b96b6801d59335d69880bccc57eae5e0ade1de4a875fb41731c9bda6b193a5d",
+    "stoppedNoPid": true,
+    "noLaterScmEventsObserved": true,
+    "protectedPathWin32Errors": [
+      2,
+      2
+    ],
+    "originalPacketMatches": true,
+    "signedWakeStateHashesMatch": true,
+    "scmCreateAccessQuery": 5,
+    "protectedWrites": 0
+  },
+  "unchangedEvidence": {
+    "brokerSha256": "9535a7185341b8683a01a4920eb5c3823f10c9bbcdaaf715e28554692bc46d3c",
+    "previousReviewSha256": "462aca9a1be379d4b9159145a683db1171bab803be2edcb79ce2a6a7a62b2ce1",
+    "oldReviewDoesNotBindChangedInstaller": true,
+    "exactSetterModuleBlobBeforeTestOnlyChanges": "c8e6ca0fcc40d6cf5bd4e07c202c35ec2990dbb2"
+  },
+  "actualQualification": {
+    "wakeTestsPassed": 13,
+    "elevatedFixtureSkipped": 1,
+    "sameNativeSetSecurityInfoPathWithNullServiceHandle": "EXPECTED_ERROR_WITH_NO_OBJECT",
+    "positiveNativeServiceReadOnlyQueryPassed": true,
+    "serviceWriteExercised": false,
+    "currentScmCreateAccessWin32Error": 5,
+    "frozenTestFixture": {
+      "sha256": "53142959c0225e4792c474f54d8519cb43b394324d4991f69d6bd5e8156b8916",
+      "byteLength": 23695360,
+      "exactTest": "install_broker_bootstrap_scm::tests::bootstrap_scm_setter_roundtrips_on_disabled_disposable_service",
+      "scope": "ELEVATED_TEST_ONLY_NO_MAIN_ENTRY",
+      "actualElevatedFixtureRun": false
+    },
+    "exactFixtureNonElevatedAdmission": {
+      "observedUtc": "2026-11-21T19:13:40.0660699+00:00",
+      "elevated": false,
+      "nativeTestExitCode": 101,
+      "expectedPreCreateRefusal": true,
+      "creationCalls": 0,
+      "actualAclWriteQualified": false
+    }
+  },
+  "review": {
+    "ordinaryPr40MergeVerified": true,
+    "independentExactArtifactApprovalAvailable": false,
+    "reviewIntakePrepared": true,
+    "protectedExecutionCommandReady": false
+  },
+  "preparedSequence": [
+    "Exact artifact review and disposable elevated setter proof",
+    "Freeze and locally sign a fresh exact packet with existing issuer",
+    "Revalidate original residue, then exact separately authorized SCM disposition",
+    "Prove service name absent before corrected read-only bootstrap preflight",
+    "One corrected bootstrap and independent stopped-broker readback"
+  ],
+  "currentBlockers": [
+    "Independent review bound to corrected artifact and proposed SCM disposition",
+    "Actual elevated disposable service ACL write and cleanup proof"
+  ],
+  "protectedMutationAttempts": 0,
+  "privateKeyReads": 0,
+  "signaturesCreated": 0,
+  "servicesStarted": 0,
+  "installedWebCycleAccepted": false
+}
