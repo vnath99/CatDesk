@@ -1,3 +1,9 @@
+## November 21, 16:57 UTC — Current first-broker continuation, separate from executable promotion
+
+The November 16 packet described below is expired. The refreshed November 21 unsigned inputs and frozen operator continuation are recorded in [dated evidence](../verification/INSTALLED_WEB_CYCLE_RELEASE_PREPARATION_2026_11_21.json). Procedure SHA-256: `4066361b6b5d735f7114bddb261adba3f657c0cb5c7f9f814db9e936be4c900f`; packet expiry November 22, 16:31:50 UTC. It reuses the independently reviewed 0d6 installer/broker and existing issuer. Operator-only signing and elevated native admission remain required. Input-only checks and inert sequence tests have passed; actual signing/provisioning have not occurred.
+
+Explicit Execute mode runs existing native read-only preflight first, records an attempt before the single provisioning call and retains unknown outcomes without retry. Success leaves the fixed broker STOPPED, without runtime selection. Full exact runtime/previous qualification, backend source-bound review/acknowledgment/snapshot/producer and guarded executable promotion remain separate. Neither original d22 UNKNOWN nor an unavailable review client provides those records. Prior installed backend/auth/restart/v5 evidence is preserved; the first full installed Web work cycle remains OPEN.
+
 ## November 16, 15:56 UTC — Existing bootstrap can bind the current serving root
 
 Native fixed-root metadata was correlated to the already restored backend's root/content hashes. The current direct store is the serving object; the separately retained package-cache root still lacks current.json. A genuine live dev.84 host exited naturally after one supported Stop, with current/config and all 894 historical/registry/review pins preserved. Its launch cause remains unproven. The original unknown submission is retained, not cleared. The backend and existing tunnel remain running.

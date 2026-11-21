@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-21T16:53:25.208211+00:00",
+  "scope": "REFRESHED_RELEASE_PREPARATION_FOR_FIRST_INSTALLED_WEB_WORK_CYCLE_NOT_ACCEPTANCE",
+  "sourceCommit": "5c8ba55bcf08ee0b489a999652c91f8e35eb7a28",
+  "developmentBranch": "codex/web-rollover-oct17",
+  "priority": "One actual canonical-v5 Web edit, successful fixed verification, scoped Git checkpoint, task-issued manual SeleniumBase Wake and next-turn checkpoint continuation, zero Codex model calls; broader goal remains unchanged",
+  "reconciliation": {
+    "developmentCheckoutCleanAndRebasedByNewOwnedBranch": true,
+    "remoteDevelopmentSha": "5c8ba55bcf08ee0b489a999652c91f8e35eb7a28",
+    "installedSource": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "installedBackendSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "servingCanonicalParity": "MATCH",
+    "authenticatedLocalMcp": "BEARER_REQUIRED",
+    "connectorFromThisCodexSession": "CONNECTED_VERIFIED",
+    "currentActualWebCallerNotRetested": true,
+    "existingPortOwnerPredatesResume": true,
+    "installedWake": "1.0.0-dev.84",
+    "wakeHost": "STOPPED",
+    "wakePid": 0,
+    "retainedUnknownSubmission": "SUBMITTING",
+    "retainedBrowserAttentionIsNotFreshLoginFailure": true,
+    "candidateSource": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "candidatePackage": "1.0.0-dev.85-136c27bb0c8ee63f46e832b73f21178fe8f0e43854c0f612ff79b3a005ebf2de",
+    "candidateStopped": true,
+    "candidateHealth": "NOT_RECORDED",
+    "previousVerifiedDevelopmentSource": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+    "historicalBackendRestartAuthWebCallWakeTimerAndReadbackEvidenceRetained": true,
+    "newCanariesOrRebuilds": 0
+  },
+  "bootstrapPreparation": {
+    "oldPacketExpiredAndPreserved": true,
+    "existingSuccessorFoundBeforePreparation": false,
+    "firstRefreshPreflight": "CURRENT_STATE_CHANGED before signing-input creation",
+    "preciseCause": "Same physical serving root and unchanged current/config identities; control leaf identity differs from the old diagnostic snapshot after supported atomic Stop replacement",
+    "newObservationIsDiagnosticNotRootAdoption": true,
+    "currentControlStopped": true,
+    "directRootMatchesCurrentServingProvenance": true,
+    "packageCacheHistoryUntouched": true,
+    "existingPreparerGuardsSerializerArtifactsIssuerAndIndependentBootstrapReviewUnchanged": true,
+    "newPayloadSha256": "43a66dba981288b1ebb123fcf094fe63dac44ff51d4f6e30305fc1b8988d7349",
+    "newPreimageSha256": "8253ee131d0c132692d4d4ee15fce50220d54115cbbc9052774f0f5fde82ecd9",
+    "expiresUtc": "2026-11-22T16:31:50+00:00",
+    "bootstrapSource": "0d6c1074e1fae3cd1fa3fdd8abe2937cd881a99d",
+    "nativeInstallerSha256": "9f60c8cecb9d41e2ebdde1f8655f800c38c142cbd4a8874e5311f41bfa725f1d",
+    "brokerSha256": "9535a7185341b8683a01a4920eb5c3823f10c9bbcdaaf715e28554692bc46d3c",
+    "issuerPublicFingerprint": "25a0e9226e1eb836ee263d16eef7d8995855bb009a4d69309aca6f12841d0beb",
+    "newSignerOrReleaseManager": false,
+    "signaturesCreated": 0,
+    "privateKeyReads": 0,
+    "protectedWrites": 0
+  },
+  "operatorProcedure": {
+    "sha256": "4066361b6b5d735f7114bddb261adba3f657c0cb5c7f9f814db9e936be4c900f",
+    "signerSha256": "93be93fa118210aafcc83bc7259f5286f4b8402eed398ef8ec1697f4055a7064",
+    "publicVerifierSha256": "6e12590b50b4fe5f3cef82083f5a51756ca1b3ee7a88a1bd5084d1c551acec1f",
+    "scope": "Existing-key purpose signing, public verification/canonical envelope, existing elevated native preflight; explicit Execute additionally provisions the existing fixed broker STOPPED only",
+    "inputsOnlyPassed": true,
+    "inertSequenceCases": [
+      {
+        "case": "preflight-only",
+        "nativeFixtureCalls": [
+          "preflight"
+        ],
+        "attemptRetained": false,
+        "resultRetained": false,
+        "expectedError": null,
+        "passed": true
+      },
+      {
+        "case": "success",
+        "nativeFixtureCalls": [
+          "preflight",
+          "execute"
+        ],
+        "attemptRetained": true,
+        "resultRetained": true,
+        "expectedError": null,
+        "passed": true
+      },
+      {
+        "case": "preflight-refused",
+        "nativeFixtureCalls": [
+          "preflight"
+        ],
+        "attemptRetained": false,
+        "resultRetained": false,
+        "expectedError": "NATIVE_PREFLIGHT_NOT_READY_PRESERVE",
+        "passed": true
+      },
+      {
+        "case": "execution-unknown",
+        "nativeFixtureCalls": [
+          "preflight",
+          "execute"
+        ],
+        "attemptRetained": true,
+        "resultRetained": false,
+        "expectedError": "FIXTURE_EXECUTION_UNKNOWN",
+        "passed": true
+      },
+      {
+        "case": "bad-result",
+        "nativeFixtureCalls": [
+          "preflight",
+          "execute"
+        ],
+        "attemptRetained": true,
+        "resultRetained": true,
+        "expectedError": "NATIVE_RESULT_ATTENTION_PRESERVE_NO_RETRY",
+        "passed": true
+      }
+    ],
+    "existingSignerOrchestrationAndAlgorithmReused": true,
+    "oldFourSignerCasesNotRepeated": true,
+    "durableAttemptBeforeSingleNativeMutation": true,
+    "ambiguousOrCompletedAttemptNeverAutomaticallyRepeated": true,
+    "noRuntimeSelectionWakeOrServiceStart": true,
+    "currentCodexProcessElevated": false,
+    "genuineOperatorRequiredBecause": "Existing external private key remains operator-only; native bootstrap requires an approved elevated operator token and available Restore privilege. Broad authorization is not a signature or Windows privilege.",
+    "actualSignatureOrElevatedNativePreflightPerformed": false
+  },
+  "review": {
+    "originalF7": "PARTIAL; original approval consumed; no new approval/claim",
+    "applicablePatchAndInitializationSourceBoundaryEvidenceRetained": true,
+    "remaining": "Distinct native response-consumer, remaining assertion/exclusion coverage and full exact candidate/artifact/previous qualification remain incomplete",
+    "reviewerInitiallyIdleThenSystemErrorAfterOneDistinctNativeBoundaryRequest": true,
+    "newMarker": "NATIVE_RESPONSE_BOUNDARY_56AA_NOV21",
+    "frozenRequestSha256": "a2a7e4775bacad2eb6ee4590de481396ef615d9a903e0d84a1f99a74a87872ad",
+    "outcome": "NO_ATTRIBUTABLE_NEW_USER_OR_TURN_OUTCOME_UNKNOWN",
+    "newReviewRequestNotRetried": true,
+    "earlierUnattributedFollowupAlsoPreserved": true,
+    "clientUnavailableIsNotMissingUserAuthorization": true,
+    "originalD22": "UNKNOWN; latest observed provider history predates original submission; no resend",
+    "d22NativeAndWorkflowExpiry": "2026-11-21T15:25:57Z",
+    "d22RenewalAllowed": false,
+    "d22ExpiryDoesNotProveSubmissionFailed": true,
+    "affectedReleaseOperation": "Existing reviewed-build prepare --review-record-id requires a genuine source-bound review/acknowledgment/snapshot record; original d22 currently supplies none",
+    "supportedDisposition": "Existing source-bound autonomy_session_cancel is a CAS/idempotent nonqualifying cancellation, not a delivery reconciliation or producer approval. No cancellation, expiry rewrite, renewed claim or substitute contract was performed.",
+    "independentCandidateSourceAssessmentsCreateNoProducerAuthority": true
+  },
+  "acceptanceTask": {
+    "projectId": "catdesk-web-direct-mvp-nov15",
+    "originalTask": "nov15-direct-web-docs-1",
+    "originalAssignmentSha256": "48560c4279e433ecd51eb18b17f20a6312e0c4651c557d33e518f7aa8733785b",
+    "originalAssignmentExplicitlyPartialAndCheckpointPathsAbsent": true,
+    "originalRequestOpenQueuePresentDeliveryAbsentAndGrantAbsent": true,
+    "originalTaskPreserved": true,
+    "scopeSuccessorDraft": "nov21-direct-web-full-cycle-1",
+    "sameProjectConversationAndWorkspace": true,
+    "purposeOfDifferentTask": "Material scope change adds required checkpoint and full next-turn work acceptance; not evasion of a failed/unknown operation",
+    "oldKnownPreSubmitRetirementInputPreparedNotExecuted": true,
+    "newAssignmentDraftHasSingleApprovedCheckpointPath": true,
+    "newAdmissionAssociationGrantOrDelivery": false,
+    "requiredPostReleaseFlags": [
+      "allow-git-checkpoint",
+      "allow-manual-wake"
+    ],
+    "gitSyncNotPermitted": true,
+    "verification": "Existing fixed verify-docs interpreter/profile; prior RX repair retained, actual Web verification remains NOT_RUN",
+    "timer": "Use the original event-linked TurnTimer; no duplicate start. Preserve 18-minute soft checkpoint and 20-minute deadline.",
+    "nativeCodexModelDelegationNotRequired": true
+  },
+  "dependencies": [
+    {
+      "component": "Installed scoped delivery adapter and response reader",
+      "state": "BLOCKED_FOR_INSTALLED_ACCEPTANCE",
+      "next": "Existing bootstrap admission, then exact runtime/rollback qualification and existing V3 selection; retain source/local evidence without claiming installation"
+    },
+    {
+      "component": "Verification",
+      "state": "PREPARED_NOT_WEB_EXECUTED",
+      "next": "Fixed verify-docs through the actual authorized task after qualified delivery; require successful native receipt and cleanup"
+    },
+    {
+      "component": "Scoped Git checkpoint and backend",
+      "state": "RELEASE_GATED",
+      "next": "Genuine backend review/source snapshot/acknowledgment, existing reviewed-build producer and guarded promotion behind unchanged v5; no global Git fallback"
+    },
+    {
+      "component": "First complete Web cycle",
+      "state": "OPEN",
+      "next": "After releases, supported known-pre-submit disposition of old partial scope, admit full-cycle assignment/grants, deliver once and prove edit/verify/checkpoint/self-Wake/continuation"
+    }
+  ],
+  "changesNotPerformed": [
+    "Protected installation or runtime selection",
+    "New tunnel/plugin/connection/profile",
+    "Private key read or signing",
+    "Native model turn",
+    "Old unknown replay",
+    "Task retirement/admission/permission",
+    "Production source overwrite",
+    "Completed regression/canary reruns"
+  ],
+  "fullInstalledWebCycleAccepted": false,
+  "overallGoalComplete": false
+}
