@@ -486,3 +486,11 @@ Evidence: [docs/verification/WAKE_BOOTSTRAP_PARTIAL_SCM_CREATE_2026_11_21.json](
 Agent: Codex. Source: 584bb563809f7ab2119454e3d106eb58144299f1. Outcome: partial. Verified the frozen corrected installer and unchanged broker, and tied the stopped residue to the exact SCM event and matching registry last-write time. The correct native setter returned the expected error without a handle. Compiled the opt-in elevated disposable positive test and proved the present token refuses before service creation. Next: Obtain exact independent artifact and disposition review, then use one qualified operator handoff for the disposable service security test and gated recovery. Preserve the original packet and stopped residue; no protected execution until the remaining gates pass.
 
 Evidence: [docs/verification/WAKE_SCM_RECOVERY_QUALIFICATION_PREPARATION_2026_11_21.json](docs/verification/WAKE_SCM_RECOVERY_QUALIFICATION_PREPARATION_2026_11_21.json); command: Exact artifact hashes, read-only SCM registry and filesystem checks, 13 Wake bootstrap tests and exact fixture admission test; exit 0; SHA-256 304f3656040ccb1e5a6ad0d9491face4a7a0ecf0b644a8e05196c6a8ce3c8ff3.
+
+<!-- catdesk-activity:wake-recovery-independent-review-and-handoff-nov21 sha256:f8e7e3696068d78941246823bf833f9945d51a9c78dbb4f4b25090d8ef4c1427 -->
+
+## 2026-11-21T20:11:44.932668+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 1ca64c3ed4bfc2a70ae4cfb410462040fefde165. Outcome: partial. The assigned independent reviewer passed the exact corrected installer and final coordinated operator wrapper. Thirteen inert tests passed. The original SCM entry is unchanged, but the installed Wake host started and control now reads RUNNING. Next: Run the exact elevated disposable ACL fixture and obtain an intentional supported STOPPED window with no installed Wake owner. Then perform the reviewed signed-before-removal ceremony once and verify the stopped broker. No pending administrator authorization has been fabricated.
+
+Evidence: [docs/verification/WAKE_RECOVERY_REVIEWED_OPERATOR_HANDOFF_2026_11_21.json](docs/verification/WAKE_RECOVERY_REVIEWED_OPERATOR_HANDOFF_2026_11_21.json); command: Independent exact artifact and wrapper checks, live read-only witnesses and thirteen inert recovery tests; exit 0; SHA-256 9aa976af2f14b1ced3b3fe6057e52aa660b040d4e3d399b3282245c50e8572ef.
