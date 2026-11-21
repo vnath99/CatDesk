@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 21 update.** Review intake for the current Wake candidate and retained 06d fallback now resolves their exact source and artifact identities. The installed legacy package ID differs from 06d and the historical reviewed fallback. To use 06d for the first protected selection, the existing broker requires signed reviewed-source reconstruction and exact old selection escrow. Scoped prior review coverage and 06d development working evidence are available for the independent reviewer. Full candidate and fallback reviews and the qualified previous working receipt remain open. [Dated evidence](docs/verification/EXACT_WAKE_SELECTION_INTAKE_2026_11_21.json).
+
 ## November 21, 16:57 UTC — ACTIVE: first installed Web work cycle; release preparation complete
 
 First prove one actual canonical-v5 Web edit → fixed verification → scoped Git checkpoint → task-issued SeleniumBase self-Wake → next-turn checkpoint continuation, with zero Codex model calls. Then two projects in one serialized active lane, followed by recovery/context rollover; broader acceptance remains OPEN. Carry forward completed installed backend/auth/restart/v5 and local Wake/timer/readback evidence without repeating it. [Dated reconciliation and preparation](docs/verification/INSTALLED_WEB_CYCLE_RELEASE_PREPARATION_2026_11_21.json).
@@ -282,5 +284,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"ORIGINAL_D22_PLATFORM_DELIVERY_UNKNOWN_AND_SEPARATE_PROTECTED_RELEASE_GATES","next_action":"One genuine elevated operator existing-key signing/bootstrap procedure, then native readback and separate qualified runtime/backend release chains. Preserve all unknown reviews, old tasks and rollback; admit full-cycle work only after release and normal task gates"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"ORIGINAL_D22_PLATFORM_DELIVERY_UNKNOWN_AND_SEPARATE_PROTECTED_RELEASE_GATES","next_action":"After first-broker provisioning, run native read-only broker preflight. Finish exact candidate and fallback review plus signed reconstruction against the pinned old selection before activation. The separate backend producer gate and installed Web work cycle remain open"}
 ```

@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**After first-broker provisioning.** The exact reviewed Host can run `install-broker preflight` for read-only broker, policy and same-state readback. An initial selection that uses the 06d fallback requires the existing signed `install-broker submit --approval-file <signed V3 approval>` path. Wait for exact qualifying candidate, previous-working and reconstruction receipts and the approved service owner before submitting. The existing `submit-local` command refuses reconstruction. The current first-broker command remains valid within its existing scope and expiry. [Dated evidence](docs/verification/EXACT_WAKE_SELECTION_INTAKE_2026_11_21.json).
+
 ## November 21, 16:57 UTC — Current operator procedure; older packets are expired
 
 The November 16 signing instructions below are historical and **must not be executed**. Use only the prepared November 21 procedure whose SHA-256 is `4066361b6b5d735f7114bddb261adba3f657c0cb5c7f9f814db9e936be4c900f`; its private absolute path is supplied directly to the operator. Packet expires November 22, 16:31:50 UTC. [Inputs, focused tests and limits](docs/verification/INSTALLED_WEB_CYCLE_RELEASE_PREPARATION_2026_11_21.json).

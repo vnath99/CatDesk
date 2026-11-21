@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-21T17:05:14.091656+00:00",
+  "developmentSource": "925e5bb3fc96221ef8bf2e3be66455110f42a218",
+  "scope": "EXACT_WAKE_REVIEW_INPUTS_ONLY_NO_RELEASE_AUTHORITY",
+  "candidate": {
+    "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "nativePackageId": "1.0.0-dev.85-5dcbc92ce367-eeacab849df8",
+    "nativeManifestSha256": "b0937273a9e2e706ca0c6a998a66c48fb254977e5dda137ef7b3ced3f6cfff61",
+    "runtimeManifestSha256": "9ffa6ccaa12478c0e96efea3c11cfdb5d1c721d82c709ef1f5b04e2185b383d2",
+    "artifacts": {
+      "CatDeskWakeHost.exe": "5dcbc92ce367771acaba0f550717c3778e96e6b663355a988b352479cfa10d78",
+      "CatDeskBinagotchy.exe": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+      "adapter.py": "d9e1e68a6e48ccb45d132e287d2f13cdbef9c75d252ad64123ef73eb5d0ee118",
+      "wake_bridge.py": "eea29aff3cb6518a2c03e97bbb361d3e52357b5e47a81ca63fdaaa69da890f5d"
+    }
+  },
+  "fallback": {
+    "sourceCommit": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+    "nativePackageId": "1.0.0-dev.85-4489976970da-0d9568d765de",
+    "nativeManifestSha256": "5fa8f60b6eab9e394cba26f5e864b99b3d918cc45d1c92c79fd50071c86c0f49",
+    "runtimeManifestSha256": "3ff3d01ea96c1b19eb2e7902ec468ed7901f759d794fed751fc48fec888ede50",
+    "artifacts": {
+      "CatDeskWakeHost.exe": "4489976970dae0f9d093843ee6938bd716afcf01df2d4cf993d8f89b3cecf015",
+      "CatDeskBinagotchy.exe": "0d9568d765defa26bd0bf9062ec7ba2019144c1f6096406f2443a3254d7c7620",
+      "adapter.py": "d9e1e68a6e48ccb45d132e287d2f13cdbef9c75d252ad64123ef73eb5d0ee118",
+      "wake_bridge.py": "eea29aff3cb6518a2c03e97bbb361d3e52357b5e47a81ca63fdaaa69da890f5d"
+    }
+  },
+  "artifactReadbacks": 8,
+  "sourceReconciliation": {
+    "gitSourceSnapshotsMatched": 262,
+    "retainedCompilerOperands": 221,
+    "sameBlobAsRetainedBase": 220,
+    "differentBlobFromRetainedBase": 42,
+    "changedPathsFrom06d": [
+      "src/ngrok.rs",
+      "src/openai_tunnel.rs",
+      "src/openai_tunnel_runtime_auth_tests.rs",
+      "wake/src/readiness_probe.rs",
+      "wake/src/runtime_readiness.rs"
+    ],
+    "compilerReadBytesIndependentlyCertified": false,
+    "reproducibleRebuildClaimed": false,
+    "developmentLocalEvidenceReused": true,
+    "buildsOrCanariesRerun": 0,
+    "compatibleExistingScopedReviews": [
+      "readinessCorrection",
+      "initializationBoundary"
+    ],
+    "scopeExpanded": false
+  },
+  "nativeRoute": {
+    "installedLegacySelection": "1.0.0-dev.84-02431feba5ed-1c6bcdfcedf0",
+    "otherRetainedHistoricalPrevious": "1.0.0-dev.85-2a432a302444-bcf2f2dc6507",
+    "verifiedWorkingPreviousMismatch": "WAKE_SELECTION_PREDECESSOR_MISMATCH",
+    "directIdMatch": false,
+    "intendedExistingRoute": "REVIEWED_SOURCE_RECONSTRUCTION",
+    "preparedUnsignedBootstrapAllowsReviewedReconstruction": true,
+    "nativeAdmissionPerformed": false,
+    "nativeGateSource": "wake/src/install_broker_same_state_approval.rs",
+    "exactOldRawSelectionEscrowRequired": true,
+    "localSubmitRejectsReconstruction": true,
+    "missing": [
+      "candidate exact-source and artifact independent review",
+      "fallback exact-source and artifact independent review",
+      "fallback qualifying owner, startup and normal-stop working receipt",
+      "reviewed reconstruction receipt and signed V3 approval"
+    ],
+    "nextAfterProvisioning": "install-broker preflight",
+    "qualifiedSubmission": "install-broker submit --approval-file <signed V3 approval>"
+  },
+  "retainedEvidence": {
+    "originalF7": "PARTIAL",
+    "originalD22": "UNKNOWN",
+    "bootstrapSignedOrInstalled": false,
+    "taskOrReviewDeliveries": 0
+  },
+  "newReviewReceipts": 0,
+  "signatures": 0,
+  "protectedWrites": 0,
+  "installedWebCycleAccepted": false
+}
