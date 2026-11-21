@@ -470,3 +470,11 @@ Evidence: [docs/verification/WEB_FIXED_DOCS_SANDBOX_2026_11_21.json](docs/verifi
 Agent: Codex. Source: 00f3dcd26e73bc39a5f43c6a3a4bd2302192f197. Outcome: partial. Matched nine read-only inputs for the first installed cycle, including the paired route, untouched old request and clean isolated linked worktree. Identified the existing bounded sender and event-specific reader that connect the task-issued manual Wake intent to the next actual Web turn. Next: After qualified Wake and backend releases, revalidate and admit the prepared scope, deliver once and obtain the actual edit, verify and scoped checkpoint receipts. Use the exact task-issued continuation event in the existing bounded sender and reader. Bootstrap and genuine release review remain pending.
 
 Evidence: [docs/verification/FIRST_WEB_CYCLE_WITNESSES_2026_11_21.json](docs/verification/FIRST_WEB_CYCLE_WITNESSES_2026_11_21.json); command: Read-only nine-input identity and Git witness comparison with existing native CLI source; exit 0; SHA-256 0fa5baa2a66536053f2b0e47f2d57b55bff0e9b7d8f8a213b79aa84659f08db6.
+
+<!-- catdesk-activity:wake-bootstrap-partial-scm-create-nov21 sha256:03fb3ef8e3da1e5cae7f2bde5bf7ed1937782921958ad77f813b41387427005c -->
+
+## 2026-11-21T17:59:42.837115+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 5c6842a7d011a899fd99d9d6891b94644c3005e0. Outcome: partial. Original signed Wake bootstrap made a partial SCM write and the installer crashed with Windows exception 0xC0000005. Corrected the wrong Windows security object type and retained native diagnostic frame handling in development. The incomplete service remains stopped and its protected image and policy are unavailable. Next: Review supported disposition of the exact partial SCM object and independently qualify a corrected bootstrap. Preserve the signed envelope and attempt. No replay, manual ACL completion or service start. Backend producer and first installed Web work cycle remain open.
+
+Evidence: [docs/verification/WAKE_BOOTSTRAP_PARTIAL_SCM_CREATE_2026_11_21.json](docs/verification/WAKE_BOOTSTRAP_PARTIAL_SCM_CREATE_2026_11_21.json); command: SCM and Windows crash event readback, existing native read-only preflight, targeted Wake and PowerShell regression tests; exit 0; SHA-256 5a41079fc7baf0d95f4a36da7698dfc8dc65d0f8452d187b922c6b79eb039917.
