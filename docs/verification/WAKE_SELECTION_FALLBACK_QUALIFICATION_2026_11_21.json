@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-21T23:50:30.2355893Z",
+  "scope": "EXACT_WAKE_FALLBACK_BUILD_AND_WORKING_EVIDENCE_WITH_REVIEW_GATES_OPEN",
+  "candidate": {
+    "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "nativeManifestSha256": "b0937273a9e2e706ca0c6a998a66c48fb254977e5dda137ef7b3ced3f6cfff61",
+    "independentReview": "PARTIAL",
+    "residualReviewAdvanced": ["development root isolation", "bootstrap attribution hint", "scoped pre-submit recovery", "companion and guarded rollover caller boundary"],
+    "fullReviewReceiptCreated": false
+  },
+  "retainedFallbackExcluded": {
+    "sourceCommit": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+    "finding": "Registered readiness releases its browser lock on PROBE_CLEANUP_UNVERIFIED before descendant exit is proved",
+    "retainedOneShotDevelopmentWakeAndHealthEvidencePreserved": true,
+    "previousReleaseFilesReplaced": false,
+    "independentAssessmentSha256": "e909f78550a3eecf84678c25d4b56a3603f24d4543ee2b1ebc52b14d27724048"
+  },
+  "correctedFallback": {
+    "sourceCommit": "5a939df267719322758df0598fd46532f07b8126",
+    "sourceTree": "c3403f19511ad8c6fcfa194b7dfc22abe33efd66",
+    "sourceBackportFrom": "ba2db7ab",
+    "sameWakeTreeAsCandidate": "d5c766d1b21af28881b23f196ea79df3288423ab",
+    "nativePackageId": "1.0.0-dev.85-ccc8e62fcf69-6efc11e337e6",
+    "nativeManifestSha256": "ac62635aa756aafd3340888ac6197c8b430e603dc02bebd773c3c2cae292f4d1",
+    "testedRuntimeManifestSha256": "91e7bfd36667bf8fac7c90146c1ea602ffcba2614506a3ffba8b66045bc69d3a",
+    "artifacts": {
+      "CatDeskWakeHost.exe": "ccc8e62fcf69fdd36bdbb1a5276dca0625d822a0d3166893559ec672047ce6e9",
+      "CatDeskBinagotchy.exe": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+      "adapter.py": "d9e1e68a6e48ccb45d132e287d2f13cdbef9c75d252ad64123ef73eb5d0ee118",
+      "wake_bridge.py": "eea29aff3cb6518a2c03e97bbb361d3e52357b5e47a81ca63fdaaa69da890f5d"
+    },
+    "offlineLockedBuildPassed": true,
+    "sourceSnapshotsMatchedBeforeAndAfter": 245,
+    "retainedCompilerOperandPathsMatchedCommittedGit": 221,
+    "reproducibleBuildClaimed": false,
+    "exactIsolatedWakeHost": {
+      "observedUtc": "2026-11-21T23:49:09.9931832Z",
+      "scope": "ISOLATED_DEVELOPMENT_WAKE_RUNTIME",
+      "initialFixtureHadNoTargetAndProducedNoHostObservation": true,
+      "firstTargetFixturePreparationError": "STATE_UNAVAILABLE",
+      "startupWithInitializedSyntheticTarget": "PAUSED",
+      "ownerAndBinaryVerified": true,
+      "positiveOwnerSamples": 2,
+      "normalStopVerified": true,
+      "ownedTreeExited": true,
+      "remainingTestOwners": 0,
+      "messagesSent": 0,
+      "workingReceiptSha256": "5ac9fdeed4f663ddf33950515653d0602ad13fc88ea0adfbc80d80f507241275"
+    }
+  },
+  "v3Inputs": {
+    "candidateLocalSha256": "23b3d62197d46f8639db0de9e424eac32055b33ac84b02b22a13b49f43e19fec",
+    "previousLocalSha256": "69efc700a215fdeedb2c81bf30b12b0f180bd2d0ffcbfec969f49f58ac28680b",
+    "exactOldSelectionEscrowMatchesInstalled": true,
+    "fullIndependentCandidateOrFallbackReceiptCreated": false,
+    "reconstructionReviewReceiptCreated": false,
+    "signingInputsOrReleaseAuthorityCreated": false,
+    "protectedSelectionAttempted": false
+  },
+  "preservation": {
+    "brokerStopped": true,
+    "brokerServicePid": 0,
+    "installedWakeStopped": true,
+    "all894StatePinsStillMatch": true,
+    "sameBackendAndTunnelOwners": true,
+    "protectedWrites": 0
+  },
+  "backend": {
+    "sourceCommit": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+    "independentScope": "SCOPED_CHECKPOINT_MANUAL_WAKE_AND_UNPROVED_GIT_CLEANUP",
+    "materialFindingsInScopedPaths": 0,
+    "fullBackendReviewCompleted": false,
+    "historicalDelivery": "UNKNOWN_EXPIRED_PRESERVED",
+    "newDeliveryOrProducerStarted": false,
+    "requiredOrder": ["Attributable verified report on exact approved frozen source", "Native finalization and immutable source snapshot", "Inactive COMPLETED_VERIFIED and exact review inbox acknowledgment", "Reviewed-build prepare, confirm and BUILD_ATTESTED result", "Guarded promotion"],
+    "manualWakeQueuedOnlyIsDeliveryProof": false
+  },
+  "remaining": "Complete full independent exact candidate and fallback review and reconstruction disposition. Backend d22 UNKNOWN still requires a genuine attributable review completion and producer before promotion. First installed Web edit, verification, checkpoint, and self-Wake remain open."
+}

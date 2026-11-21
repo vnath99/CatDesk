@@ -518,3 +518,11 @@ Evidence: [docs/verification/WAKE_BROKER_NATIVE_DACL_RECOVERY_2026_11_21.json](d
 Agent: CatDesk development. Source: c27b9a7b02300a5689f874ee16572fc5d8843592. Outcome: partial. The corrected Wake broker was provisioned once and independently verified STOPPED with an exact image and policy. All 894 retained state pins matched. Next: Finish qualified Wake candidate and working fallback evidence for separate V3 submission. The independent backend producer and first installed Web work cycle remain open.
 
 Evidence: [docs/verification/WAKE_BROKER_RECOVERY_INSTALLED_2026_11_21.json](docs/verification/WAKE_BROKER_RECOVERY_INSTALLED_2026_11_21.json); command: Native broker preflight, read-only SCM and artifact checks, and 894 state hashes; exit 0; SHA-256 084d4a6269353afeb9545f27d8100ba51df814699f9ff33a82dbba1f2bb1d90a.
+
+<!-- catdesk-activity:wake-fallback-working-nov21 sha256:fa49a7e83907f215e67a3e2c3943bfed0ec055ae3fc7e967e18f1c322fe4f63e -->
+
+## 2026-11-21T23:50:30Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 36ed9d433d218878573d69feae828b5376c7c482. Outcome: partial. The exact corrected fallback built and its isolated paused WakeHost passed native startup and normal stop with zero test owners left. Local V3 receipts and old selection escrow are prepared. Next: Complete full independent Wake and reconstruction review and genuine backend producer authority before signing and installing either release. Preserve the expired d22 UNKNOWN delivery.
+
+Evidence: [docs/verification/WAKE_SELECTION_FALLBACK_QUALIFICATION_2026_11_21.json](docs/verification/WAKE_SELECTION_FALLBACK_QUALIFICATION_2026_11_21.json); command: Locked offline fallback build, dependency readback, observed Windows owner lifecycle and native state checks; exit 0; SHA-256 08635963883437db12157c49134df686321d64d4f6d77c251e9dd277ac5a03b5.
