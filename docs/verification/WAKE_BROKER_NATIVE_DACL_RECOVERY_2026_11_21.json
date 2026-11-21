@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-21T23:29:38.2728724Z",
+  "scope": "ELEVATED_REPRODUCTION_AND_REVIEWED_CORRECTION_OF_READ_ONLY_SCM_GATE",
+  "elevatedOperatorEvidence": {
+    "observedUtc": "2026-11-21T23:26:02.3345090Z",
+    "state": "RECORDED_DACL_MATCHES_CLI_REPRESENTATION_DIFFERS",
+    "powerShellVersion": "7.7.0",
+    "scExitCode": 0,
+    "scIncludesAuditAcl": true,
+    "legacyExactStringMatches": false,
+    "nativeAndScDaclMatchRecorded": true,
+    "currentNativeOwnerAndGroup": "LocalSystem",
+    "daclSddlBaselineSha256": "0b96b6801d59335d69880bccc57eae5e0ade1de4a875fb41731c9bda6b193a5d",
+    "currentAndRecordedDaclBinarySha256": "cb6c9cb1063c42692f8cf9a2ab347b8b791ad108784c8032fd424a0a8695ed02",
+    "scDaclAndAuditAclSddlSha256": "166190d90f650ce7cc0bcd3dfd407bb94d4bde79d55468ffc0b7052f62ec33a1",
+    "protectedWrites": 0
+  },
+  "correction": {
+    "originalWrapperSha256": "517ed1c77fc788483da4d84ea15cbbe1701bb53de0de2aaddbf89950658896c2",
+    "revisedWrapperSha256": "cca746f77fffa756a6f4895953ff2a1c60e853e89c75e3439ecaf5c20d2dea12",
+    "revisedObserverSha256": "f7aaa63b7668106e26a822562ff6011c32259d9806132eed632944b805fa7920",
+    "reviewedInstallerSha256": "95c312ce9432afafae7bcda138e4282be7cf1ed63c1af5b555156318bdedb830",
+    "wrapperChangesOnlyObserverPathAndPin": true,
+    "originalBaselineAndOtherPinsPreserved": true,
+    "query": "QueryServiceObjectSecurity with READ_CONTROL for owner, group, and DACL",
+    "gate": "Exact observed LocalSystem owner and group, non-null DACL, matching DACL control flags and matching ordered ACL bytes",
+    "nativeTypeNameChangedToCoexistWithOriginalInSameShell": true
+  },
+  "qualification": {
+    "newInertRegressionCasesPassed": 12,
+    "regressionScriptSha256": "6767d188ce1dd4fd6cdceb85bfbb896de651cd67d82db1b2fb88ce32301f9208",
+    "verifiedAgainstActualStoppedBrokerWithOriginalTypeAlreadyLoaded": true,
+    "verifyInputsOnlyState": "RECOVERY_INPUTS_VERIFIED",
+    "wakeDesired": "STOPPED",
+    "wakeOwnerCount": 0,
+    "independentReviewOwner": "wake_bootstrap_reviewer",
+    "independentReviewVerdict": "PASS",
+    "independentReviewScope": "EXACT_HASH_PINNED_OBSERVER_INCREMENT_AND_UNCHANGED_WRAPPER_SEQUENCE",
+    "disposableElevatedFixtureRun": false,
+    "correctedRecoveryPacketExists": false,
+    "protectedWrites": 0
+  },
+  "next": "Run the hash-checked revised combined wrapper once in Administrator PowerShell 7. Verify its final stopped-broker readback before separate release qualification.",
+  "installedWebCycleAccepted": false
+}

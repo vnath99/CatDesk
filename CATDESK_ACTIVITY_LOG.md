@@ -502,3 +502,11 @@ Evidence: [docs/verification/WAKE_RECOVERY_REVIEWED_OPERATOR_HANDOFF_2026_11_21.
 Agent: CatDesk development. Source: 2215247976a78def333075b007313bb04f1c658e. Outcome: partial. Intentional Wake Stop preserved serving and state. Recovery refused at the first SCM descriptor gate. Native DACL matches the retained baseline and no later recovery phase ran.. Next: Capture the read-only SCM and system sc.exe comparison in the same elevated PowerShell session. Keep the original sequence and baseline frozen pending diagnosis..
 
 Evidence: [docs/verification/WAKE_PARTIAL_BROKER_DESCRIPTOR_REFUSAL_2026_11_21.json](docs/verification/WAKE_PARTIAL_BROKER_DESCRIPTOR_REFUSAL_2026_11_21.json); command: Read-only native SCM comparison with eleven inert regressions; exit 0; SHA-256 c8e45ac2b8347d6a3c44491f93d2fe3fba200a2e584f8abe5ffeda32912a2f1b.
+
+<!-- catdesk-activity:wake-native-dacl-recovery-ready-nov21 sha256:391e0e11ad1c4f72c8f06c679f674c34f0f32e3b49729708626ef5d5aaf515df -->
+
+## 2026-11-21T23:29:38Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 2ddbacc8f12a18ba2c7c5b3d6784a95c9566bf72. Outcome: partial. Elevated SCM output reproduced the audit ACL formatting mismatch. The exact native DACL correction passed independent review, twelve new regression cases and real read-only preflight. Next: Run the revised hash-checked combined workflow once in Administrator PowerShell 7 and verify the stopped broker before separate release qualification.
+
+Evidence: [docs/verification/WAKE_BROKER_NATIVE_DACL_RECOVERY_2026_11_21.json](docs/verification/WAKE_BROKER_NATIVE_DACL_RECOVERY_2026_11_21.json); command: Elevated diagnostic evidence, exact-hash review, native DACL regressions and read-only wrapper preflight; exit 0; SHA-256 443fd835a85e27dd379f416facc7ef52227fb0384420701fadcd262d7902cd4a.
