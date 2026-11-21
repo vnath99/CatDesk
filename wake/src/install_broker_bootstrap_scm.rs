@@ -31,7 +31,8 @@ const ERROR_SERVICE_DOES_NOT_EXIST: u32 = 1060;
 const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
 const SECURITY_INFORMATION: u32 = 7;
 const PROTECTED_DACL_SECURITY_INFORMATION: u32 = 0x8000_0000;
-const SE_SERVICE: u32 = 5;
+// SE_OBJECT_TYPE in accctrl.h: 2 identifies an SCM service; 5 is SE_LMSHARE.
+const SE_SERVICE: u32 = 2;
 const MAX_SECURITY: usize = 16 * 1024;
 const MAX_CONFIG: usize = 64 * 1024;
 

@@ -16,6 +16,36 @@ $ErrorActionPreference = 'Stop'
 # security checks. This wrapper neither creates trust nor edits protected data.
 # Without -Execute it invokes only the bounded, read-only native preflight.
 if ($Bootstrap) {
+    function New-CatDeskWakeBootstrapNativeFailure {
+        param([string]$Stdout, [string]$Stderr, [int]$ExitCode, [string]$Action)
+
+        $stdoutCode = $null
+        $stderrCode = $null
+        if ($Stdout.Trim() -cmatch '^\{\s*"error"\s*:\s*"([A-Z][A-Z0-9_]{1,127})"\s*\}$') {
+            $stdoutCode = $Matches[1]
+        }
+        if ($Stderr.Trim() -cmatch '^[A-Z][A-Z0-9_]{1,127}$') {
+            $stderrCode = $Stderr.Trim()
+        }
+        $code = 'WAKE_BOOTSTRAP_NATIVE_REFUSED_NO_RETRY'
+        if ($stdoutCode -and (!$stderrCode -or $stderrCode -ceq $stdoutCode)) {
+            $code = $stdoutCode
+        } elseif (!$stdoutCode -and $stderrCode -and !$Stdout.Trim()) {
+            $code = $stderrCode
+        }
+        $exitHex = ('0x{0:X8}' -f $ExitCode)
+        $message = if ($code -ceq 'WAKE_BOOTSTRAP_NATIVE_REFUSED_NO_RETRY') {
+            "$code ($Action exit $ExitCode / $exitHex)"
+        } else {
+            $code
+        }
+        $failure = [InvalidOperationException]::new($message)
+        $failure.Data['NativeAction'] = $Action
+        $failure.Data['NativeExitCode'] = $ExitCode
+        $failure.Data['NativeExitHex'] = $exitHex
+        return $failure
+    }
+
     if ($BuildOnly -or $RebuildGui -or $PSVersionTable.PSVersion.Major -lt 7) {
         throw 'WAKE_BOOTSTRAP_POWERSHELL_7_AND_EXCLUSIVE_MODE_REQUIRED'
     }
@@ -219,8 +249,7 @@ public static class CatDeskWakeBootstrapBoundedOutputV1 {
             throw 'WAKE_BOOTSTRAP_READBACK_INVALID_NO_RETRY'
         }
         if ($native.ExitCode -ne 0) {
-            if ($errorOutput.Trim() -cmatch '^[A-Z][A-Z0-9_]{1,127}$') { throw $errorOutput.Trim() }
-            throw 'WAKE_BOOTSTRAP_NATIVE_REFUSED_NO_RETRY'
+            throw (New-CatDeskWakeBootstrapNativeFailure -Stdout $output -Stderr $errorOutput -ExitCode $native.ExitCode -Action $action)
         }
         $result = $output | ConvertFrom-Json -ErrorAction Stop
         if ($null -eq $result) { throw 'WAKE_BOOTSTRAP_READBACK_INVALID_NO_RETRY' }
