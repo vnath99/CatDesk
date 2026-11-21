@@ -510,6 +510,123 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bootstrap_scm_setter_returns_error_without_a_service_handle() {
+        let expected = canonical_broker_service_security(None).unwrap();
+        assert_eq!(
+            set_security(&ServiceHandle(ptr::null_mut()), &expected).unwrap_err(),
+            "WAKE_BOOTSTRAP_SCM_SECURITY_QUARANTINED"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires an approved elevated operator and creates then removes one disabled disposable service"]
+    fn bootstrap_scm_setter_roundtrips_on_disabled_disposable_service() {
+        use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+        const DELETE: u32 = 0x0001_0000;
+        const SERVICE_DISABLED: u32 = 4;
+        #[link(name = "advapi32")]
+        unsafe extern "system" {
+            fn DeleteService(service: *mut c_void) -> i32;
+        }
+        assert_eq!(
+            std::env::var("CATDESK_TEST_DISPOSABLE_SCM_FIXTURE").as_deref(),
+            Ok("1"),
+            "WAKE_SCM_FIXTURE_EXPLICIT_OPT_IN_REQUIRED"
+        );
+        let operator_sid = std::env::var("CATDESK_TEST_DISPOSABLE_SCM_OPERATOR_SID")
+            .expect("WAKE_SCM_FIXTURE_EXPECTED_OPERATOR_REQUIRED");
+        let _operator = crate::install_broker_operator::admit_bootstrap_operator(&operator_sid)
+            .expect("WAKE_SCM_FIXTURE_ELEVATED_OPERATOR_REQUIRED");
+        let initial = canonical_broker_service_security(None).unwrap();
+        let final_security = canonical_broker_service_security(Some(&operator_sid)).unwrap();
+        let _restore = crate::install_broker_bootstrap_files::RestorePrivilege::acquire().unwrap();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let name = format!("CatDeskWakeScmFixture-{}-{unique}", std::process::id());
+        let path = std::path::PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+            .join("System32")
+            .join(format!("{name}.exe"));
+        assert!(matches!(path.try_exists(), Ok(false)));
+        let binary = wide(&format!("\"{}\"", path.to_str().unwrap()));
+        let name = wide(&name);
+        let manager = ServiceHandle(unsafe {
+            OpenSCManagerW(
+                ptr::null(),
+                ptr::null(),
+                SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE,
+            )
+        });
+        assert!(!manager.0.is_null(), "WAKE_SCM_FIXTURE_SCM_ACCESS_REQUIRED");
+        let service = ServiceHandle(unsafe {
+            CreateServiceW(
+                manager.0,
+                name.as_ptr(),
+                name.as_ptr(),
+                SERVICE_QUERY_STATUS
+                    | SERVICE_CHANGE_CONFIG
+                    | READ_CONTROL
+                    | WRITE_DAC
+                    | WRITE_OWNER
+                    | DELETE,
+                SERVICE_WIN32_OWN_PROCESS,
+                SERVICE_DISABLED,
+                SERVICE_ERROR_NORMAL,
+                binary.as_ptr(),
+                ptr::null(),
+                ptr::null_mut(),
+                ptr::null(),
+                wide("LocalSystem").as_ptr(),
+                ptr::null(),
+            )
+        });
+        assert!(!service.0.is_null(), "WAKE_SCM_FIXTURE_CREATE_REFUSED");
+        // The fixture has no binary and never gets START access. Use the same
+        // setter and readback as bootstrap, with cleanup through this exact handle.
+        let exercised = std::panic::catch_unwind(|| {
+            set_security(&service, &initial).expect("WAKE_SCM_FIXTURE_INITIAL_SECURITY_FAILED");
+            let mut sid_type = SERVICE_SID_TYPE_RESTRICTED;
+            assert_ne!(
+                unsafe {
+                    ChangeServiceConfig2W(
+                        service.0,
+                        SERVICE_CONFIG_SERVICE_SID_INFO,
+                        (&mut sid_type as *mut u32).cast(),
+                    )
+                },
+                0,
+                "WAKE_SCM_FIXTURE_RESTRICTED_SID_FAILED"
+            );
+            set_security(&service, &final_security)
+                .expect("WAKE_SCM_FIXTURE_FINAL_SECURITY_FAILED");
+            let mut status = ServiceStatus::default();
+            assert_ne!(unsafe { QueryServiceStatus(service.0, &mut status) }, 0);
+            assert_eq!(status.state, SERVICE_STOPPED);
+        });
+        let deleted = unsafe { DeleteService(service.0) };
+        drop(service);
+        assert_ne!(deleted, 0, "WAKE_SCM_FIXTURE_EXACT_CLEANUP_REFUSED");
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            let observed = ServiceHandle(unsafe {
+                OpenServiceW(manager.0, name.as_ptr(), SERVICE_QUERY_STATUS)
+            });
+            if observed.0.is_null() && unsafe { GetLastError() } == ERROR_SERVICE_DOES_NOT_EXIST {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "WAKE_SCM_FIXTURE_ABSENCE_UNPROVEN"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        if let Err(error) = exercised {
+            std::panic::resume_unwind(error);
+        }
+    }
+
+    #[test]
     fn bootstrap_scm_configuration_strings_are_bounded_to_returned_buffer() {
         let mut buffer = aligned(64);
         let bytes = buffer.as_mut_ptr().cast::<u16>();
