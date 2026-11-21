@@ -494,3 +494,11 @@ Evidence: [docs/verification/WAKE_SCM_RECOVERY_QUALIFICATION_PREPARATION_2026_11
 Agent: Codex. Source: 1ca64c3ed4bfc2a70ae4cfb410462040fefde165. Outcome: partial. The assigned independent reviewer passed the exact corrected installer and final coordinated operator wrapper. Thirteen inert tests passed. The original SCM entry is unchanged, but the installed Wake host started and control now reads RUNNING. Next: Run the exact elevated disposable ACL fixture and obtain an intentional supported STOPPED window with no installed Wake owner. Then perform the reviewed signed-before-removal ceremony once and verify the stopped broker. No pending administrator authorization has been fabricated.
 
 Evidence: [docs/verification/WAKE_RECOVERY_REVIEWED_OPERATOR_HANDOFF_2026_11_21.json](docs/verification/WAKE_RECOVERY_REVIEWED_OPERATOR_HANDOFF_2026_11_21.json); command: Independent exact artifact and wrapper checks, live read-only witnesses and thirteen inert recovery tests; exit 0; SHA-256 9aa976af2f14b1ced3b3fe6057e52aa660b040d4e3d399b3282245c50e8572ef.
+
+<!-- catdesk-activity:wake-scm-descriptor-refusal-nov21 sha256:1e97c8c77a26756d3964bd7f3f3076ba4ae4d5b3efc29be0afda5dc8c98847ad -->
+
+## 2026-11-21T23:20:14Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 2215247976a78def333075b007313bb04f1c658e. Outcome: partial. Intentional Wake Stop preserved serving and state. Recovery refused at the first SCM descriptor gate. Native DACL matches the retained baseline and no later recovery phase ran.. Next: Capture the read-only SCM and system sc.exe comparison in the same elevated PowerShell session. Keep the original sequence and baseline frozen pending diagnosis..
+
+Evidence: [docs/verification/WAKE_PARTIAL_BROKER_DESCRIPTOR_REFUSAL_2026_11_21.json](docs/verification/WAKE_PARTIAL_BROKER_DESCRIPTOR_REFUSAL_2026_11_21.json); command: Read-only native SCM comparison with eleven inert regressions; exit 0; SHA-256 c8e45ac2b8347d6a3c44491f93d2fe3fba200a2e584f8abe5ffeda32912a2f1b.

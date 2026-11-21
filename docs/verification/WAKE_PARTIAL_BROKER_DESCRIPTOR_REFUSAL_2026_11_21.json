@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-21T23:20:14.6048423Z",
+  "scope": "READ_ONLY_RECONCILIATION_AFTER_OPERATOR_SCM_DESCRIPTOR_REFUSAL",
+  "operatorReported": {
+    "error": "PARTIAL_SERVICE_DESCRIPTOR_CHANGED",
+    "elevatedPowerShell": true,
+    "wrapperSha256": "517ed1c77fc788483da4d84ea15cbbe1701bb53de0de2aaddbf89950658896c2",
+    "nativeScExitAndOutputRetained": false
+  },
+  "stageEvidence": {
+    "firstObserverGatePrecedesFixtureSignerRemovalAndBootstrap": true,
+    "fixtureAttemptExists": false,
+    "fixtureResultExists": false,
+    "correctedRecoveryPacketExists": false,
+    "fixtureReached": false,
+    "newSignatureReached": false,
+    "serviceRemovalReached": false,
+    "correctedBootstrapReached": false,
+    "originalSignedPacketMatches": true
+  },
+  "nativeServiceRead": {
+    "api": "QueryServiceObjectSecurity",
+    "scope": "OWNER_GROUP_DACL",
+    "originalCreationRecord": 73168,
+    "originalRegistryConfigurationAndLastWriteMatch": true,
+    "laterMatchingScmEventsObserved": false,
+    "serviceStopped": true,
+    "servicePid": 0,
+    "brokerImageAndPolicyNamespacesAbsent": true,
+    "currentOwner": "LocalSystem",
+    "currentGroup": "LocalSystem",
+    "historicalOwnerAndGroupRecorded": false,
+    "historicalSaclRecordedOrNowQueriedNatively": false,
+    "historicalSddlProjection": "DACL_ONLY",
+    "historicalAndCurrentDaclSddlSha256": "0b96b6801d59335d69880bccc57eae5e0ade1de4a875fb41731c9bda6b193a5d",
+    "historicalAndCurrentDaclBinarySha256": "cb6c9cb1063c42692f8cf9a2ab347b8b791ad108784c8032fd424a0a8695ed02",
+    "currentOwnerGroupDaclSddlSha256": "c93d1edae481e6b99d7bcc0e823e50655d1c52ba240acaf8d646e857b757dba3",
+    "currentOwnerGroupDaclBinarySha256": "0a4680c61c45e8d4d8cb19da3c778819386999825378784c42326b38b185b514"
+  },
+  "comparison": {
+    "nonElevatedPowerShellVersions": ["7.6.9", "7.7.0"],
+    "fixedSystemScExitCode": 0,
+    "fixedSystemScDaclTextMatchesRecorded": true,
+    "originalOperatorFailureReproduced": false,
+    "legacyTextGateCanRefuseEquivalentDacl": true,
+    "pureDiagnosticCasesPassed": 11,
+    "actualServiceOperationsDuringPureTests": 0,
+    "diagnosticSha256": "729a6ecaa0828408e04d561c555a2a1790548f7d3c0702fbb2c6fd2b51f45dca",
+    "wrapperAndBaselineUnchanged": true
+  },
+  "runtime": {
+    "intentionalWakeStopReceipt": "stop/STOPPED",
+    "originalWakeOwnerNaturalExit": true,
+    "originalWakeOwnerExitCode": 0,
+    "postStopPreservationChecksPassed": 894,
+    "currentInstalledWakeOwnerCount": 0,
+    "sameBackendStillListening": true,
+    "sameTunnelProcessPresent": true,
+    "freshWebConnectorAcceptance": false
+  },
+  "conclusion": "No current DACL drift. The original observer combines CLI failure, output shape and literal text mismatch in one code. The exact elevated cause is unresolved. Capture the independent native DACL and fixed-system CLI projection in the same elevated shell before changing or rerunning the reviewed recovery route.",
+  "protectedWrites": 0,
+  "installedWebCycleAccepted": false
+}
