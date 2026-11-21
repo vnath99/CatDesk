@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-21T23:37:14.3581189Z",
+  "scope": "OPERATOR_PROVISION_AND_INDEPENDENT_INSTALLED_BROKER_AND_WAKE_READBACK",
+  "originalAttempt": {
+    "dateUtc": "2026-11-21",
+    "scmCreationRecord": 73168,
+    "nativeExitCodeHex": "0xC0000005",
+    "wrapperError": "WAKE_BOOTSTRAP_NATIVE_REFUSED_NO_RETRY",
+    "rootCause": "Initial SCM service security used SE_LMSHARE in SetSecurityInfo where the handle required SE_SERVICE",
+    "protectedImageAndPolicyWereAbsent": true,
+    "originalSignedEnvelopeAndAttemptPreserved": true,
+    "evidence": "WAKE_BOOTSTRAP_PARTIAL_SCM_CREATE_2026_11_21.json"
+  },
+  "recoveryObserverRefusal": {
+    "state": "PARTIAL_SERVICE_DESCRIPTOR_CHANGED",
+    "noFixtureSignatureRemovalOrBootstrapReached": true,
+    "elevatedReproductionUtc": "2026-11-21T23:26:02.3345090Z",
+    "rootCause": "Elevated sc.exe included the separate audit ACL in its text output. The recorded DACL bytes and flags matched",
+    "correction": "Query native owner, group and DACL and compare them separately against their verified expectations",
+    "evidence": "WAKE_BROKER_NATIVE_DACL_RECOVERY_2026_11_21.json"
+  },
+  "operatorExecution": {
+    "sourceCommit": "5965face75d42931eaac8d0a7dc995db8bf9a5bf",
+    "correctedInstallerSha256": "95c312ce9432afafae7bcda138e4282be7cf1ed63c1af5b555156318bdedb830",
+    "operatorWrapperSha256": "cca746f77fffa756a6f4895953ff2a1c60e853e89c75e3439ecaf5c20d2dea12",
+    "observerSha256": "f7aaa63b7668106e26a822562ff6011c32259d9806132eed632944b805fa7920",
+    "independentReviewer": "wake_bootstrap_reviewer",
+    "installerReviewSha256": "21dd30045d1704aac8156a0dde71230faf91c461c4930a0a0267233b9a3c195e",
+    "wrapperAndObserverIncrementIndependentlyReviewed": true,
+    "elevatedFixtureSha256": "53142959c0225e4792c474f54d8519cb43b394324d4991f69d6bd5e8156b8916",
+    "fixturePassedUtc": "2026-11-21T23:32:03.7248768Z",
+    "fixtureStatus": "SCM_FIXTURE_ACL_AND_ABSENCE_VERIFIED",
+    "fixtureCleanupVerified": true,
+    "exactPartialServiceAbsentBeforeBootstrap": true,
+    "scmAbsenceWin32Code": 1060,
+    "fixedScmCreationRecord": 73751,
+    "fixedScmCreatedUtc": "2026-11-21T23:33:28.2782254Z",
+    "fixedBootstrapExecutions": 1,
+    "state": "FIXED_BROKER_PROVISIONED_STOPPED_START_ONCE_AVAILABLE",
+    "currentArtifactSha256": "9535a7185341b8683a01a4920eb5c3823f10c9bbcdaaf715e28554692bc46d3c",
+    "policySha256": "6508ffc30ade16dddf0de652d56c9fbb6d9ff3d3cbef492c8caa733560517dc9",
+    "purposeEnvelopeSha256": "c69056a34e4dc4bb56bc0ec8ee966802d68aeda1fbe1beb7ffca64b704bc867b",
+    "approvedPublicIssuerSha256": "25a0e9226e1eb836ee263d16eef7d8995855bb009a4d69309aca6f12841d0beb",
+    "oneTimeProcedureConsumed": true
+  },
+  "independentReadback": {
+    "hostCommand": "install-broker preflight",
+    "nativeIdentityAndPinnedPolicyAccepted": true,
+    "serviceAccount": "LocalSystem",
+    "serviceStopped": true,
+    "servicePid": 0,
+    "serviceImageAndPolicyBytesMatchOperatorReceipt": true,
+    "originalAttemptEnvelopeAndSignatureMatch": true,
+    "signedCurrentControlConfigMatch": true,
+    "wakeDesired": "STOPPED",
+    "wakeOwnerCount": 0,
+    "unchangedStatePins": 894,
+    "changedOrAdditionalStatePins": 0,
+    "originalBackendStillListening": true,
+    "originalTunnelOwnerStillPresent": true,
+    "productionOrWakeStarts": 0,
+    "protectedWritesDuringReadback": 0
+  },
+  "remaining": {
+    "workingWakeRuntimeOrSelectionQualifiedByBootstrap": false,
+    "backendPromotedByBootstrap": false,
+    "installedWebCycleAccepted": false,
+    "next": "Finish exact Wake candidate and fallback review and working evidence, prepare only eligible signed V3 reconstruction, and separately continue genuine backend review and promotion evidence"
+  }
+}

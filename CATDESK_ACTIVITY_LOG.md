@@ -510,3 +510,11 @@ Evidence: [docs/verification/WAKE_PARTIAL_BROKER_DESCRIPTOR_REFUSAL_2026_11_21.j
 Agent: CatDesk development. Source: 2ddbacc8f12a18ba2c7c5b3d6784a95c9566bf72. Outcome: partial. Elevated SCM output reproduced the audit ACL formatting mismatch. The exact native DACL correction passed independent review, twelve new regression cases and real read-only preflight. Next: Run the revised hash-checked combined workflow once in Administrator PowerShell 7 and verify the stopped broker before separate release qualification.
 
 Evidence: [docs/verification/WAKE_BROKER_NATIVE_DACL_RECOVERY_2026_11_21.json](docs/verification/WAKE_BROKER_NATIVE_DACL_RECOVERY_2026_11_21.json); command: Elevated diagnostic evidence, exact-hash review, native DACL regressions and read-only wrapper preflight; exit 0; SHA-256 443fd835a85e27dd379f416facc7ef52227fb0384420701fadcd262d7902cd4a.
+
+<!-- catdesk-activity:wake-broker-installed-nov21 sha256:83446eb3bcd97086e9a9d1bbb6809cde0923b1b6a543d8033be2bacad62df28d -->
+
+## 2026-11-21T23:37:14Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: c27b9a7b02300a5689f874ee16572fc5d8843592. Outcome: partial. The corrected Wake broker was provisioned once and independently verified STOPPED with an exact image and policy. All 894 retained state pins matched. Next: Finish qualified Wake candidate and working fallback evidence for separate V3 submission. The independent backend producer and first installed Web work cycle remain open.
+
+Evidence: [docs/verification/WAKE_BROKER_RECOVERY_INSTALLED_2026_11_21.json](docs/verification/WAKE_BROKER_RECOVERY_INSTALLED_2026_11_21.json); command: Native broker preflight, read-only SCM and artifact checks, and 894 state hashes; exit 0; SHA-256 084d4a6269353afeb9545f27d8100ba51df814699f9ff33a82dbba1f2bb1d90a.
