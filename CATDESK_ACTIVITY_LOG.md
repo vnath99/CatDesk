@@ -454,3 +454,11 @@ Evidence: [docs/verification/INSTALLED_WEB_CYCLE_RELEASE_PREPARATION_2026_11_21.
 Agent: Codex. Source: 925e5bb3fc96221ef8bf2e3be66455110f42a218. Outcome: partial. Verified the exact 56aa Wake candidate and retained 06d fallback artifacts, both manifest forms and 262 candidate source snapshots. The active legacy pointer differs from both retained fallback packages, so 06d requires the existing signed reconstruction path and its own review and working evidence. Next: After first-broker provisioning, run native read-only broker preflight. Finish exact candidate and fallback review plus signed reconstruction against the pinned old selection before activation. The separate backend producer gate and installed Web work cycle remain open.
 
 Evidence: [docs/verification/EXACT_WAKE_SELECTION_INTAKE_2026_11_21.json](docs/verification/EXACT_WAKE_SELECTION_INTAKE_2026_11_21.json); command: Read-only artifact, manifest, Git blob, source snapshot and native rollback-predicate checks; exit 0; SHA-256 90af6da30651d4b2d88676ff11e8b420f92221ca542efd85e75173dba5a86d1a.
+
+<!-- catdesk-activity:web-fixed-docs-sandbox-nov21 sha256:b4ff0521447350767eb0ad0274a1656fe77f49afa85bb7645426786f20f785ee -->
+
+## 2026-11-21T17:11:52.709500+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 232c2add89f17b3b5acf908f1d8ee177d3f38223. Outcome: partial. The frozen verify-docs command passed with 521 link checks on an edited disposable clone under the existing offline Windows sandbox. Zero model calls and no change to the actual assignment checkout. Exact d22 source supplies scoped checkpoint and manual end-turn entry points, with the checkpoint module identical to 56aa. Next: Carry the local command evidence into the first installed Web turn. After the pending operator bootstrap, run native broker preflight and finish Wake qualification and the separate genuine d22 backend review and producer gate before task delivery.
+
+Evidence: [docs/verification/WEB_FIXED_DOCS_SANDBOX_2026_11_21.json](docs/verification/WEB_FIXED_DOCS_SANDBOX_2026_11_21.json); command: Fixed verify-docs arguments with managed Windows sandbox, network disabled, source-bound disposable clone, bounded process owner and fixture-only process readback; exit 0; SHA-256 40532bc71600914063d323f2373ea7ed099473eed7563e4c77806c6d0e387d01.
