@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T02:42:56.426388+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_SOURCE_CONTINUITY_AND_CONTEXT_CAPTURE",
+  "frozenReviewSourceCommit": "6d737c9a0f6f34496fc88b9fec02433bd1599117",
+  "qualifiedExecutableSourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "continuity": {
+    "priorPartialObservationsRestored": 13,
+    "semanticArtifactsActuallyRead": 5,
+    "explicitContextSourceRangesActuallyRead": 4,
+    "declaredGitCallsCorroborated": 10,
+    "exactReceiptAndCompletedResponse": true,
+    "sourceResponseSha256": "0d24d1592c0e78b4b445d74454f14a58b2d3542899929617e5913c2f1a45d2ce",
+    "partialObservationsPromotedToApproval": false,
+    "artifactReferencesRetainedForHandoff": true
+  },
+  "dependencyReviews": [
+    {
+      "batch": 3,
+      "checkpoint": 16,
+      "verdict": "REVIEWED_PARTIAL",
+      "gitCallsCorroborated": 8,
+      "responseSha256": "70995eb336d4aa2ff79a722b22c21fc23fd905c68effc5def37d7efe07e84e82",
+      "exactReceiptAndCompletedResponse": true
+    },
+    {
+      "batch": 4,
+      "checkpoint": 17,
+      "verdict": "REVIEWED_PARTIAL",
+      "gitCallsCorroborated": 8,
+      "responseSha256": "3387305aabd2aec7ac7802493a97625fe1d4d43706b564e9074a8e43bcc61382",
+      "exactReceiptAndCompletedResponse": true
+    }
+  ],
+  "newGitCallsCorroborated": 26,
+  "totalGitCallsCorroborated": 125,
+  "context": {
+    "generation": 3,
+    "beforeReadOnlyCaptureProxy": 66364,
+    "afterReadOnlyCaptureProxy": 67984,
+    "toolArgumentTokens": 3568,
+    "toolResultTokens": 59108,
+    "repeatToolImportByteIdempotent": true,
+    "captureSeconds": 97.672,
+    "captureCoverage": "RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY",
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "rawTextPersisted": false,
+    "unexpectedContextFiles": 0,
+    "historicalAndSiblingLedgersPreserved": true,
+    "observedTriggerTokens": 72000,
+    "triggerCrossed": false,
+    "thresholdOrPolicyChanges": 0,
+    "newRolloverRequested": false
+  },
+  "currentSourceReviewScopePrepared": {
+    "codePaths": 90,
+    "acceptedUnchangedBaselineBlobs": 72,
+    "blobsIdenticalToEarlierInspectedSource": 88,
+    "changedDependenciesRequiringNewInspection": [
+      "src/operator_web_review.rs",
+      "wake/src/runtime_review_reconcile.rs"
+    ],
+    "boundedDeltaInputBatches": 2,
+    "currentCumulativeApproval": false
+  },
+  "claimLifecycle": {
+    "originalExpirationPreserved": true,
+    "oldClaimCancelledOrRenewed": false,
+    "newNativeClaimCreated": false,
+    "qualifiedExpiredQuiescentCancellationGuardPreserved": true
+  },
+  "remainingMinimalFollowups": [
+    "scripts/wake_bridge.py:3741-3795",
+    "src/mcp.rs:4161-4185"
+  ],
+  "conditionalFollowups": [
+    "scripts/wake_bridge.py:436-470 only if needed for authorization identity",
+    "src/control_plane_supervisor.rs:510-546 only if needed for fixed-root authority"
+  ],
+  "cleanup": {
+    "observedUtc": "2026-11-03T02:42:24.1861377Z",
+    "testOwnedProcesses": 0,
+    "existingTrustedBackendAndTunnelPreserved": true,
+    "sharedWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "processActions": 0
+  },
+  "cumulativeSourceAccepted": false,
+  "producerAuthority": false,
+  "productionPromotionPerformed": false,
+  "installedTwoWebCodingAcceptance": false,
+  "unattendedAcceptance": false,
+  "operatorActionRequired": false
+}

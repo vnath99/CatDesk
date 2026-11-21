@@ -35,6 +35,7 @@ enum SupervisorLifecycleReasonV1 {
     PrincipalPolicyUnproven,
     RuntimeOwnershipUnproven,
     RootUnavailable,
+    ProtectedInitializationRequired,
     StateInvalid,
     ReceiptOrImageInvalid,
     StartupAuthorityUnavailable,
@@ -53,6 +54,7 @@ impl SupervisorLifecycleReasonV1 {
             Self::PrincipalPolicyUnproven => "SUPERVISOR_PRINCIPAL_POLICY_UNPROVEN",
             Self::RuntimeOwnershipUnproven => "SUPERVISOR_RUNTIME_OWNERSHIP_UNPROVEN",
             Self::RootUnavailable => "SUPERVISOR_ROOT_UNAVAILABLE",
+            Self::ProtectedInitializationRequired => "SUPERVISOR_PROTECTED_INITIALIZATION_REQUIRED",
             Self::StateInvalid => "SUPERVISOR_STATE_INVALID",
             Self::ReceiptOrImageInvalid => "SUPERVISOR_RECEIPT_OR_IMAGE_INVALID",
             Self::StartupAuthorityUnavailable => "SUPERVISOR_STARTUP_AUTHORITY_UNAVAILABLE",
@@ -184,7 +186,16 @@ fn preflight_with(
         }
         FixedStartupAuthorityV1::AvailableForTestOnly => {}
     }
-    readiness_reason(readiness)
+    match readiness {
+        // Preflight is nonmutating and reports install eligibility separately
+        // from runtime readiness. This is not proof that an unavailable root
+        // is safe; activation must validate/create it through the fixed store.
+        SupervisorActivationReadinessV1::RootUnavailable
+        | SupervisorActivationReadinessV1::CurrentReceiptMissing => {
+            SupervisorLifecycleReasonV1::ProtectedInitializationRequired
+        }
+        other => readiness_reason(other),
+    }
 }
 
 fn production_preflight() -> SupervisorLifecycleReasonV1 {
@@ -303,6 +314,34 @@ fn fixed_state_precondition() -> SupervisorLifecycleReasonV1 {
     SupervisorLifecycleReasonV1::Ready
 }
 
+fn state_for_installation(
+    observed: SupervisorLifecycleReasonV1,
+    initialize: impl FnOnce() -> SupervisorLifecycleReasonV1,
+) -> SupervisorLifecycleReasonV1 {
+    if observed == SupervisorLifecycleReasonV1::RootUnavailable {
+        initialize()
+    } else {
+        observed
+    }
+}
+
+fn initialize_fixed_state() -> SupervisorLifecycleReasonV1 {
+    // The existing constructor validates pinned ancestors, fixed children and
+    // protected directory policy. Never replace invalid state with defaults.
+    match ControlPlaneSupervisorStoreV1::fixed_installation() {
+        Ok(store) if store.load().is_ok() => SupervisorLifecycleReasonV1::Ready,
+        Ok(_) => SupervisorLifecycleReasonV1::StateInvalid,
+        Err(_) => SupervisorLifecycleReasonV1::RootUnavailable,
+    }
+}
+
+fn valid_reviewed_payload(image: &ReviewedSupervisorImageV1) -> bool {
+    use sha2::Digest;
+    !image.bytes.is_empty()
+        && image.bytes.len() <= 256 * 1024 * 1024
+        && image.sha256 == format!("{:x}", sha2::Sha256::digest(&image.bytes))
+}
+
 fn fixed_startup_definition_status(
     startup: &FixedStartupAuthorityV1,
     reviewed_manifest_sha256: &str,
@@ -380,10 +419,13 @@ fn activate_fixed_authority(
         SupervisorLifecycleReasonV1::Ready => {}
         reason => return reason,
     }
-    if state_precondition != SupervisorLifecycleReasonV1::Ready {
+    if !matches!(
+        state_precondition,
+        SupervisorLifecycleReasonV1::Ready | SupervisorLifecycleReasonV1::RootUnavailable
+    ) {
         return state_precondition;
     }
-    if image.bytes.is_empty() || image.bytes.len() > 256 * 1024 * 1024 || image.sha256.len() != 64 {
+    if !valid_reviewed_payload(&image) {
         return SupervisorLifecycleReasonV1::ReviewedSupervisorImageUnavailable;
     }
     // Every scheduler observation is complete before the first protected
@@ -420,6 +462,13 @@ fn activate_fixed_authority(
         FixedStartupAuthorityV1::AvailableForTestOnly => None,
         _ => return startup_reason(&startup),
     };
+    // All image/principal/runtime/startup checks precede this first possible
+    // protected mutation. A denied or unsafe root still fails in the existing
+    // fixed constructor; only a validated state can reach receipt staging.
+    let state = state_for_installation(state_precondition, initialize_fixed_state);
+    if state != SupervisorLifecycleReasonV1::Ready {
+        return state;
+    }
     // Capture both independently validated protected receipts before any
     // mutation. The fixed-purpose snapshot records each receipt as an exact
     // present object or a positively established handle-relative absence.
@@ -566,10 +615,16 @@ fn activate_test_seam(
         SupervisorLifecycleReasonV1::Ready => {}
         reason => return reason,
     }
-    if image.bytes.is_empty() || image.bytes.len() > 256 * 1024 * 1024 || image.sha256.len() != 64 {
+    if !valid_reviewed_payload(&image) {
         return SupervisorLifecycleReasonV1::ReviewedSupervisorImageUnavailable;
     }
-    let state_precondition = test_state_precondition(&root);
+    let state_precondition = state_for_installation(test_state_precondition(&root), || {
+        match ControlPlaneSupervisorStoreV1::open_test_seam(root.clone()) {
+            Ok(store) if store.load().is_ok() => SupervisorLifecycleReasonV1::Ready,
+            Ok(_) => SupervisorLifecycleReasonV1::StateInvalid,
+            Err(_) => SupervisorLifecycleReasonV1::RootUnavailable,
+        }
+    });
     if state_precondition != SupervisorLifecycleReasonV1::Ready {
         return state_precondition;
     }
@@ -608,6 +663,88 @@ mod tests {
             "catdesk-supervisor-lifecycle-{label}-{}",
             Uuid::new_v4()
         ))
+    }
+
+    #[test]
+    fn first_install_initializes_only_after_authorities_and_keeps_repeat_state() {
+        let root = fixture_root("first-install");
+        let image = test_reviewed_supervisor_image(b"reviewed first installation");
+        assert!(!root.exists());
+        assert_eq!(
+            activate_test_seam(
+                root.clone(),
+                Ok(image.clone()),
+                FixedStartupAuthorityV1::AvailableForTestOnly,
+                Ok(())
+            ),
+            SupervisorLifecycleReasonV1::Ready
+        );
+        let current = fs::read(root.join("supervisor-current.json")).unwrap();
+        assert_eq!(
+            activate_test_seam(
+                root.clone(),
+                Ok(image),
+                FixedStartupAuthorityV1::AvailableForTestOnly,
+                Ok(())
+            ),
+            SupervisorLifecycleReasonV1::Ready
+        );
+        assert_eq!(
+            fs::read(root.join("supervisor-current.json")).unwrap(),
+            current
+        );
+    }
+
+    #[test]
+    fn initialization_never_replaces_invalid_state_or_trusts_wrong_payload_digest() {
+        for reason in [
+            SupervisorLifecycleReasonV1::Ready,
+            SupervisorLifecycleReasonV1::StateInvalid,
+        ] {
+            assert_eq!(
+                state_for_installation(reason, || panic!(
+                    "existing state cannot be initialized around"
+                )),
+                reason
+            );
+        }
+        assert_eq!(
+            state_for_installation(SupervisorLifecycleReasonV1::RootUnavailable, || {
+                SupervisorLifecycleReasonV1::RootUnavailable
+            }),
+            SupervisorLifecycleReasonV1::RootUnavailable
+        );
+        let root = fixture_root("bad-full-digest");
+        let mut image = test_reviewed_supervisor_image(b"reviewed fixture");
+        image.sha256 = "0".repeat(64);
+        assert_eq!(
+            activate_test_seam(
+                root.clone(),
+                Ok(image),
+                FixedStartupAuthorityV1::AvailableForTestOnly,
+                Ok(())
+            ),
+            SupervisorLifecycleReasonV1::ReviewedSupervisorImageUnavailable
+        );
+        assert!(!root.exists());
+    }
+
+    #[test]
+    fn first_install_preflight_is_not_a_runtime_ready_or_mutation_claim() {
+        for state in [
+            SupervisorActivationReadinessV1::RootUnavailable,
+            SupervisorActivationReadinessV1::CurrentReceiptMissing,
+        ] {
+            assert_eq!(
+                preflight_with(
+                    Ok(test_reviewed_supervisor_image(b"reviewed")),
+                    FixedStartupAuthorityV1::AvailableForTestOnly,
+                    state,
+                    Ok(())
+                ),
+                SupervisorLifecycleReasonV1::ProtectedInitializationRequired
+            );
+        }
     }
 
     #[test]
@@ -849,9 +986,12 @@ mod tests {
                 FixedStartupAuthorityV1::AvailableForTestOnly,
                 Ok(()),
             ),
-            SupervisorLifecycleReasonV1::RootUnavailable
+            SupervisorLifecycleReasonV1::Ready
         );
-        assert!(!root.exists(), "missing state may not be installed around");
+        assert!(
+            root.join("supervisor-current.json").exists(),
+            "only fully authorized initialization may install"
+        );
     }
 
     #[test]

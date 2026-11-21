@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "dateUtc": "2026-11-04",
+  "baseCommit": "8c9b36483f7173aafa9f6ecef13d136f2fc1fca6",
+  "classification": "PURE_SOURCE_PREPARATION_ONLY",
+  "sourceSha256": {
+    "scripts/catdesk-dev-local-target-owner.ps1": "2f83c635a0984f55140d0b44f0becd63a1b2545a05307865521e30ef43fb9208",
+    "scripts/test-catdesk-dev-local-target-owner.ps1": "a8083aa0d978237cf0f495c603911a7c3f77bcfcebda7327ef2ccdadf627f0c5"
+  },
+  "initialPureTests": {
+    "preflightUtc": "2026-11-04T07:18:40.9018381+00:00",
+    "finishedUtc": "2026-11-04T07:18:41.1980800+00:00",
+    "host": "PowerShell Core 7.6.5",
+    "command": "scripts/test-catdesk-dev-local-target-owner.ps1",
+    "passed": 43,
+    "protectedPinsMatchedBeforeAndAfter": 6,
+    "nativeCompilations": 0,
+    "nativeChildFixtures": 0,
+    "ownerSha256": "5e6c5b44330354824387d22aeae3f2163015a92a10114710a721a82d88dcc511",
+    "testSha256": "4e353cadbdd1cbea0d99e02e8f482ebfe1784b30f951d2df93dc49f6acaf3057",
+    "scope": "Earlier variant; peer later found cumulative environment budget checked after collecting entries. Not final-source qualification."
+  },
+  "earlyRejectionRegression": {
+    "startedUtc": "2026-11-04T07:27:49.0791902+00:00",
+    "finishedUtc": "2026-11-04T07:27:49.2360959+00:00",
+    "expectedFailureReproduced": true,
+    "case": "environment_overflow_stops_before_later_getter",
+    "scope": "New regression against original owner bytes; later sentinel was visited instead of immediate overflow refusal."
+  },
+  "finalPureTests": {
+    "preflightUtc": "2026-11-04T07:29:14.3854158+00:00",
+    "finishedUtc": "2026-11-04T07:29:15.0404260+00:00",
+    "coreVersion": "7.6.5",
+    "corePassed": 47,
+    "desktopVersion": "5.1.26100.9711",
+    "desktopPassed": 47,
+    "protectedPinsMatchedBeforeAndAfter": 6,
+    "nativeCompilations": 0,
+    "nativeChildFixtures": 0,
+    "additionalPureDesktopTestHosts": 1,
+    "scope": "Exact final sourceSha256 above; cumulative UTF16 budget includes each name/value/equals/NUL plus reserved final NUL before dictionary insertion."
+  },
+  "testedScope": [
+    "define-only helper top level",
+    "Windows argument quoting and bounds",
+    "explicit sorted Unicode environment block and double NUL",
+    "duplicate or malformed environment refusal",
+    "exact single and multiple entry environment size boundaries",
+    "one character over limit refused",
+    "overflow refuses before later sentinel getter is visited",
+    "fixed future build/clippy/test/fmt argument preparation",
+    "offline/locked/explicit target/single-job input policy",
+    "incremental disabled in prepared environment overrides",
+    "invalid target input and arbitrary operation refusal",
+    "explicit unavailable-owner contract"
+  ],
+  "blocker": "OWNER_OVERLAPPED_DRAIN_NOT_IMPLEMENTED",
+  "rejectedDesign": "Synchronous PeekNamedPipe/ReadFile polling cannot establish bounded drainage in this multithreaded host; anonymous pipes do not support overlapped I/O.",
+  "officialReferences": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-peeknamedpipe",
+    "https://learn.microsoft.com/en-us/windows/win32/ipc/anonymous-pipe-operations",
+    "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-readfile",
+    "https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-getoverlappedresult",
+    "https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex"
+  ],
+  "overlappedAlternative": {
+    "state": "DESIGN_AND_CONTRACT_PENDING_INDEPENDENT_REVIEW",
+    "nativeImplementationPresent": false,
+    "streams": 2,
+    "pendingReadsPerStream": 1,
+    "cancelRequestIsCompletion": false,
+    "successfulZeroByteReadIsEof": false,
+    "cancelNotFoundIsCompletion": false,
+    "pendingStorageMayBeFreed": false,
+    "strongRootMustPrecedeIo": true,
+    "runspaceFinalizerOrVersionReloadMayBypassHold": false,
+    "unresolvedIoDisposition": "BOUNDED_STRONG_ROOT_ATTENTION_HOLD_AND_DENY_NEW_OPERATIONS",
+    "cleanupLatencyGuaranteed": false,
+    "absoluteKernelDeadlineGuaranteed": false,
+    "backgroundRecoveryAllowed": false
+  },
+  "possibleAdditionalScope": "A dedicated one-shot worker would require a separately reviewed process/ownership protocol and possibly one worker entry script. No such scope is implemented or authorized here; unconfirmed exit cannot admit replacement workers.",
+  "nextNativeFixturePrerequisites": [
+    "independently reviewed complete overlapped lifetime and native owner source",
+    "exact qualified resident executable and hash",
+    "frozen tiny test-owned helper and argument/environment contract",
+    "finite parent harness controlling only its own Job",
+    "fresh explicit coordinator admission and resource/financial window",
+    "pre-resume membership and restricted-handle tests",
+    "descendants/root-exit/held-pipe/saturation/exit-code tests",
+    "fault/cancel/completion/quarantine/timeout/cleanup tests"
+  ],
+  "nativeEntryPointAvailable": false,
+  "executionQualified": false,
+  "targetReuseAuthorized": false,
+  "targetLeaseOrLifecycleImplemented": false,
+  "realCargoRuns": 0,
+  "externalTargetsCreatedOrAdopted": 0,
+  "productionOrWakeActions": 0,
+  "generalGoalResumed": false
+}

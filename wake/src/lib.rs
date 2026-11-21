@@ -4,6 +4,12 @@ pub mod development_runtime;
 pub mod install_authority;
 pub mod install_broker_approval;
 #[cfg(windows)]
+pub mod install_broker_bootstrap;
+#[cfg(windows)]
+pub(crate) mod install_broker_bootstrap_files;
+#[cfg(windows)]
+pub(crate) mod install_broker_bootstrap_scm;
+#[cfg(windows)]
 pub mod install_broker_candidate_stage;
 #[cfg(windows)]
 pub(crate) mod install_broker_ci_fetch;
@@ -20,6 +26,10 @@ pub mod install_broker_endpoint;
 pub mod install_broker_ledger;
 #[cfg(windows)]
 pub mod install_broker_legacy_owner;
+#[cfg(windows)]
+pub mod install_broker_lifecycle;
+#[cfg(windows)]
+pub(crate) mod install_broker_local_access;
 #[cfg(windows)]
 pub mod install_broker_offline_pins;
 pub mod install_broker_offline_v2;
@@ -44,6 +54,7 @@ pub(crate) mod install_broker_source;
 #[cfg(windows)]
 pub mod install_broker_stage_writer;
 pub mod process_job;
+pub mod readiness_probe;
 #[cfg(not(windows))]
 pub mod development_runtime {
     use crate::Result;
@@ -51,6 +62,9 @@ pub mod development_runtime {
     use std::path::{Path, PathBuf};
 
     pub fn prepare(_: &Path, _: &Path, _: &Path) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn update_package(_: &Path, _: &Path) -> Result<Value> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }
     pub fn root_for_workspace(_: &Path) -> Result<Option<PathBuf>> {
@@ -66,6 +80,15 @@ pub mod development_runtime {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }
     pub fn run_foreground(_: &Path) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn run_foreground_bounded(_: &Path, _: u64) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn run_foreground_paused_bounded(_: &Path, _: u64) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn run_foreground_host(_: &Path) -> Result<()> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }
     pub fn login(_: &Path, _: &str) -> Result<Value> {

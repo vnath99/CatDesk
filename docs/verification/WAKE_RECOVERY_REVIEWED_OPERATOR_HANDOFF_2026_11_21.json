@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-21T20:11:44.932668+00:00",
+  "developmentSource": "1ca64c3ed4bfc2a70ae4cfb410462040fefde165",
+  "scope": "INDEPENDENT_BOOTSTRAP_INPUT_AND_OPERATOR_WRAPPER_REVIEW_WITH_PENDING_LIVE_GATES",
+  "independentReview": {
+    "owner": "wake_bootstrap_reviewer",
+    "process": "Independent delegated peer review",
+    "initialState": "UNASSIGNED",
+    "finalState": "COMPLETED",
+    "artifactReview": {
+      "schemaVersion": 1,
+      "kind": "INDEPENDENT_BOOTSTRAP_REVIEW",
+      "scope": "FIRST_FIXED_BROKER_PROVISION_ONLY",
+      "sourceCommit": "5965face75d42931eaac8d0a7dc995db8bf9a5bf",
+      "installerSha256": "95c312ce9432afafae7bcda138e4282be7cf1ed63c1af5b555156318bdedb830",
+      "brokerArtifactSha256": "9535a7185341b8683a01a4920eb5c3823f10c9bbcdaaf715e28554692bc46d3c",
+      "reviewerIdentity": "wake_bootstrap_reviewer",
+      "independent": true,
+      "fullBootstrapSourceReviewed": true,
+      "verdict": "PASS",
+      "findingsCount": 0,
+      "neededReadsCount": 0,
+      "evidenceSha256": [
+        "462aca9a1be379d4b9159145a683db1171bab803be2edcb79ce2a6a7a62b2ce1",
+        "25fbe1f4e2b42c3b518bbc11c75d396458a0ef0f43fcbeb5f95d278652d73fb9",
+        "c0beda14e468045eb250ee7535119921f9a7feebbee8c9ed0df5891a4134c59e",
+        "304f3656040ccb1e5a6ad0d9491face4a7a0ecf0b644a8e05196c6a8ce3c8ff3",
+        "e6eacb631687579e546ea39f823b81bbb134c8fdd4781cefd66fe95221278c6e",
+        "5a41079fc7baf0d95f4a36da7698dfc8dc65d0f8452d187b922c6b79eb039917"
+      ]
+    },
+    "receiptSha256": "21dd30045d1704aac8156a0dde71230faf91c461c4930a0a0267233b9a3c195e",
+    "wrapperVerdict": "PASS_FOR_EXACT_SCRIPT_WITH_OPERATIONAL_GATES",
+    "wrapperSha256": "517ed1c77fc788483da4d84ea15cbbe1701bb53de0de2aaddbf89950658896c2",
+    "newReviewerIdentityDisclosedBeforePurposeSignature": true,
+    "reusedOldReceiptForChangedImage": false
+  },
+  "tests": {
+    "signingFrameCases": 3,
+    "nativeBeforeRemovalCases": 3,
+    "dispositionCases": 7,
+    "correctedWrapperReadOnlyCheckPassed": true,
+    "signerTwoFrameAndTypedBooleansChecked": true,
+    "nativeNestedSerdeFieldOrderChecked": true,
+    "noActualSignerOrServiceMutationInvoked": true
+  },
+  "fixture": {
+    "operatorRunnerSha256": "96e15a8bf899c3fe367d9331c888b6f673a51caa44c6e87f398ae526d894326e",
+    "liveTestPassed": false,
+    "administratorTokenRequired": true,
+    "existingNonElevatedOwnerCannotCreateService": true,
+    "success": "SCM_FIXTURE_ACL_AND_ABSENCE_VERIFIED",
+    "failure": "Preserve attempt log and reconcile only the one unique disabled fixture if it exists; never start it or proceed with broker recovery"
+  },
+  "currentState": {
+    "scmCreationRecord": 73168,
+    "scmOriginalIdentityStillMatches": true,
+    "protectedImageAndPolicyAbsent": true,
+    "controlChangedUtc": "2026-11-21T19:59:25.5109823Z",
+    "desired": "RUNNING",
+    "installedWakeOwnerCount": 1,
+    "initialReadOnlyOwnerPid": 46200,
+    "ownerStartCorrelatedWithControlChange": true,
+    "initiatingParentUnavailable": true,
+    "priorCurrentAndConfigHashesStillMatch": true,
+    "laterQuiescenceMustBeObserved": true,
+    "preexistingWakeOwnerStoppedByThisWork": false
+  },
+  "readyOnlyAfter": [
+    "Successful real elevated fixture and proven absence of its disposable service",
+    "Intentional supported stopped state and confirmed absence of installed WakeHost"
+  ],
+  "protectedSequence": [
+    "Freeze exact fresh STOPPED packet after gates",
+    "Locally sign it using existing issuer",
+    "Verify public signature and native read-only admission expecting exact service-already-exists",
+    "Confirm exact partial entry removal as operator, acquire and recheck held SCM handle, then call DeleteService once",
+    "Prove ERROR_SERVICE_DOES_NOT_EXIST before corrected native read-only bootstrap preflight",
+    "Run corrected native bootstrap once and verify stopped broker, matching installed image, policy, and unchanged Wake state"
+  ],
+  "protectedWrites": 0,
+  "privateKeyReads": 0,
+  "automaticReplays": 0,
+  "installedWebCycleAccepted": false
+}

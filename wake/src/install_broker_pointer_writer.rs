@@ -42,6 +42,12 @@ const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
 const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
 const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
 
+#[path = "install_broker_pointer_writer_v2.rs"]
+mod offline_v2;
+pub use offline_v2::create_first_protected_pointer_v2;
+#[cfg(test)]
+pub(crate) use offline_v2::create_offline_pointer_fixture;
+
 #[repr(C)]
 struct UnicodeString {
     length: u16,
@@ -247,9 +253,13 @@ fn create_temp(root: &OwnedHandle, generation: u64, service_sid: Option<&str>) -
 }
 
 fn replace_current(temp: &File, root: &OwnedHandle) -> Result<()> {
+    rename_current(temp, root, true)
+}
+
+fn rename_current(temp: &File, root: &OwnedHandle, replace_if_exists: bool) -> Result<()> {
     let units = "current.json".encode_utf16().collect::<Vec<_>>();
     let mut rename = RenameInformation {
-        replace_if_exists: 1,
+        replace_if_exists: u8::from(replace_if_exists),
         reserved: [0; 7],
         root_directory: root.as_raw_handle(),
         file_name_length: u32::try_from(units.len() * 2)
@@ -421,6 +431,50 @@ mod tests {
         drop(published);
         drop(lease);
         fixture.cleanup();
+    }
+
+    #[test]
+    fn offline_first_pointer_native_rename_uses_retained_root_writer_without_replacement() {
+        use crate::{
+            install_broker_durability::RetainedDirectoryWriterV2,
+            install_broker_offline_pins::full_identity_of_handle,
+            install_broker_offline_v2::OfflineObjectIdentityV2,
+        };
+        let fixture = TransactionFixture::new();
+        let expected = OfflineObjectIdentityV2 {
+            legacy: fixture.approval().payload().target_protected_root.clone(),
+            full: full_identity_of_handle(fixture.root().as_raw_handle()).unwrap(),
+        };
+        let writer = RetainedDirectoryWriterV2::acquire(fixture.root(), &expected).unwrap();
+        let writer_root = OwnedHandle::from(writer.duplicate_role_file().unwrap());
+        let mut temp = create_temp(&writer_root, 1, None).unwrap();
+        temp.write_all(b"kernel probe only; not a canonical pointer")
+            .unwrap();
+        temp.sync_all().unwrap();
+        let expected_id = identity(temp.as_raw_handle()).unwrap();
+        assert_eq!(
+            rename_current(&temp, &writer_root, false).unwrap_err(),
+            "WAKE_BROKER_POINTER_REPLACE_FAILED"
+        );
+        drop(writer_root);
+        writer
+            .prepare_namespace_write(fixture.root(), &expected)
+            .unwrap();
+        let writer_root = OwnedHandle::from(writer.duplicate_role_file().unwrap());
+        let result = rename_current(&temp, &writer_root, false);
+        if result.is_ok() {
+            assert_eq!(identity(temp.as_raw_handle()).unwrap(), expected_id);
+        }
+        drop(temp);
+        drop(writer_root);
+        drop(writer);
+        let current = std::fs::read(fixture.root_path().join("current.json"));
+        fixture.cleanup();
+        assert!(result.is_ok(), "retained writer native rename: {result:?}");
+        assert_eq!(
+            current.unwrap(),
+            b"kernel probe only; not a canonical pointer"
+        );
     }
 
     fn marker(fixture: &TransactionFixture) -> std::path::PathBuf {

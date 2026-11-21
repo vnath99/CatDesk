@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-21T17:59:42.837115+00:00",
+  "scope": "ORIGINAL_FIRST_BOOTSTRAP_PARTIAL_PROVISION_DIAGNOSIS_AND_DEVELOPMENT_FIX",
+  "developmentParent": "5c6842a7d011a899fd99d9d6891b94644c3005e0",
+  "originalAttempt": {
+    "sourceCommit": "0d6c1074e1fae3cd1fa3fdd8abe2937cd881a99d",
+    "timeUtc": "2026-11-21T17:50:39.4984043Z",
+    "nativeExecutable": "CatDeskWakeHost.exe",
+    "nativeImageSha256": "9f60c8cecb9d41e2ebdde1f8655f800c38c142cbd4a8874e5311f41bfa725f1d",
+    "signedEnvelopeSha256": "0aeae976f04319202060f2bf8e5bb2bb51ad0806dcf717273e2f1a3545442d7a",
+    "detachedSignatureSha256": "3b52981f15de430b4c6a3ede33dbf743a198fc1fd2511fddd986dec6cd12d657",
+    "retainedAttemptSha256": "1eb6214ddd46d3c8962491cfcd98c7ad3c50e82420dcc0228300cb79b47f640f",
+    "command": "install-broker bootstrap --approval-file <signed-envelope> --expected-approval-sha256 <sha256> --expected-public-key-sha256 <issuer>",
+    "firstReadOnlyPreflightPassed": true,
+    "executeAttemptMarkerPresent": true,
+    "nativeSuccessResultAbsent": true,
+    "actualStdoutStderrAndProcessExitNotRetained": true,
+    "automaticRetryAllowed": false
+  },
+  "recoveredEvidence": {
+    "serviceCreation": {
+      "log": "System",
+      "provider": "Service Control Manager",
+      "id": 7045,
+      "record": 73168,
+      "utc": "2026-11-21T17:50:39.562231Z"
+    },
+    "crash": {
+      "log": "Application",
+      "provider": "Application Error",
+      "id": 1000,
+      "record": 154481,
+      "utc": "2026-11-21T17:50:39.7241932Z",
+      "windowsExceptionCode": "0xC0000005",
+      "artifactPathMatched": true
+    },
+    "windowsErrorReporting": {
+      "id": 1001,
+      "record": 154482,
+      "utc": "2026-11-21T17:50:41.5575499Z",
+      "signature": "BEX64",
+      "reportDirectoryReadDeniedInCurrentToken": true
+    },
+    "service": {
+      "present": true,
+      "registryKeyPresent": true,
+      "state": "STOPPED",
+      "pid": 0,
+      "startup": "DEMAND",
+      "serviceAccount": "LocalSystem",
+      "serviceSidType": "NONE",
+      "windowsServiceStatusExit": 1077,
+      "currentDescriptorStillDefault": true,
+      "note": "SCM service status exit is distinct from the crashed installer process"
+    },
+    "observedProtectedImageAndPolicyDirectoriesPresent": false,
+    "previousRuntimeSelectionAndWakeControlHashesMatch": true,
+    "existingIndependentNativePreflight": {
+      "command": "install-broker preflight",
+      "exitCode": 1,
+      "error": "WAKE_BROKER_OBJECT_UNAVAILABLE"
+    }
+  },
+  "diagnosis": {
+    "phase": "SCM_CREATE_COMPLETED_BEFORE_INITIAL_SERVICE_SECURITY_COMPLETED",
+    "cause": "The frozen SCM setter passed SE_LMSHARE (5) to SetSecurityInfo with a service handle. Win32 requires SE_SERVICE (2). The default descriptor and absent restricted SID match a failure before file creation.",
+    "sourceAndObservedStateInference": true,
+    "crashInstructionOrNativeStderrRecovered": false,
+    "microsoftObjectTypeReference": "https://learn.microsoft.com/en-us/windows/win32/api/accctrl/ne-accctrl-se_object_type",
+    "fixedWindowsReadOnlyGetSecurityInfoReturn": 0,
+    "initialWrongTypeReadOnlyProbeAbnormallyExited": true,
+    "probeWrongTypeExit": "0xC0000409",
+    "neitherProbeRequestedServiceWriteAccess": true,
+    "wrapperGap": "Native command errors are one JSON frame on stdout. Old wrapper accepted only a raw uppercase stderr token and omitted native exit details for crashes."
+  },
+  "developmentValidation": {
+    "correctedObjectType": 2,
+    "diagnosticRegressionCasesPassed": 6,
+    "rustBootstrapTestsPassed": 12,
+    "formattingPassed": true,
+    "freshProtectedBootstrapOrRepairPerformed": false
+  },
+  "recovery": {
+    "originalSignatureEnvelopeAndAttemptRetained": true,
+    "existingFirstBootstrapIsCreateOnly": true,
+    "serviceAlreadyExistsRefusal": "WAKE_BOOTSTRAP_SERVICE_ALREADY_EXISTS",
+    "existingProductResumeForEarlyPartialServiceFound": false,
+    "next": "Review a disposition for the exact stopped partial SCM object, then independently qualify the corrected installer and new exact signed inputs. Verify physical absence or a supported recovered layout before any mutation. No start, deletion, SID or ACL edit was performed.",
+    "operatorActionRequestedNow": false
+  },
+  "protectedWritesByDiagnosis": 0,
+  "automaticRetries": 0,
+  "workingReleaseSelected": false,
+  "installedWebCycleAccepted": false
+}

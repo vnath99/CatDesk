@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C208_ATTESTED_CANDIDATE_AND_PROMOTION_PREFLIGHT",
+  "recordedDate": "2026-10-25",
+  "status": "BUILD_ATTESTED_CANDIDATE_QUALIFIED_PROMOTION_PENDING",
+  "source": {
+    "branch": "codex/web-rollover-oct17",
+    "reviewedCandidateSnapshotCommit": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+    "reviewedImplementationCommit": "061051fe9e6e4493ab0ccf24c58b41cbe81b74a6",
+    "controllerSourceCommit": "83a2d98c3119b2030bcef8fc6603f9fe4803cebe",
+    "candidateDoesNotContainNewerControllerSource": true
+  },
+  "reviewedBuild": {
+    "state": "BUILD_ATTESTED",
+    "authoritativeProductResult": "PASS",
+    "authoritativeResultSha256": "6770ef2b5346b636aad76e62daf372225dd98511b427ed2e696bdd13852e58ce",
+    "candidateSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+    "candidateBytes": 35364864,
+    "attestationDigest": "63799ca89e6de6b5e2de22e2479b3ae4b0341c34048c2530e3282c835c8cc156",
+    "reconciledAtUtc": "2026-10-25T16:58:57.9422652+00:00",
+    "reconciliationResultSha256": "156ef46f171192ad522840a6168f9dbe46563e6180f03de392b416979ca1e95f",
+    "remainingOwnedProcesses": 0,
+    "authorityGateBypassed": false,
+    "unattendedProducerQualified": false
+  },
+  "helperCleanup": {
+    "scope": "ONE_EXACT_ORPHANED_MSVC_VCTIP_HELPER",
+    "atUtc": "2026-10-25T16:57:12.5930307+00:00",
+    "microsoftSignatureValid": true,
+    "cargoAndRustcAlreadyExited": true,
+    "exactHelperExited": true,
+    "targetedManualHelperCleanupRequired": true,
+    "firstUtcComparisonGuardRefusedBeforeAction": true,
+    "authorityWrites": false,
+    "productOwnerThenAttestedNaturally": true,
+    "evidenceSha256": "0eafa4e4469f34033ccc910ecfc65222f9c0ac1791ce5046b2a690ebe865feb1"
+  },
+  "monitorReconciliation": {
+    "issue": "STALE_NUMERIC_PID_SET_ATTRIBUTED_UNRELATED_PROCESSES",
+    "atUtc": "2026-10-25T16:58:05.0150787+00:00",
+    "exactMonitorStoppedAfterProductVerification": true,
+    "originalMonitorOutcome": "EXIT_MINUS_ONE_AFTER_EXACT_MONITOR_STOP",
+    "unrelatedProcessesStopped": 0,
+    "producerControlUnchanged": true,
+    "authorityWrites": false,
+    "evidenceSha256": "649a3c3615be2c8f7632a27c832485f3f14b4428556f3229f26f04b90c86ac92"
+  },
+  "candidateQualification": {
+    "scope": "GENUINE_ATTESTED_ARTIFACT_NOT_INSTALLED_ACCEPTANCE",
+    "startedUtc": "2026-10-25T16:59:12.2849798+00:00",
+    "finishedUtc": "2026-10-25T16:59:39.5240373+00:00",
+    "runs": 2,
+    "eachRuntimeLimitSeconds": 12,
+    "absentAuthenticationHttpStatus": 401,
+    "incorrectAuthenticationHttpStatus": 401,
+    "validAuthenticationHttpStatus": 200,
+    "advertisedTools": 10,
+    "bothNaturalExits": true,
+    "bothListenersGone": true,
+    "existingStateFilesExact": 461,
+    "authorityFilesExact": 5,
+    "browserWakeStarts": 0,
+    "externalRuntimeActions": 0,
+    "evidenceSha256": "8038fac4cc554286d142e6b641be3b06a530c06c62b090fccce98ef7658e6ed5"
+  },
+  "promotion": {
+    "state": "OPERATOR_SCRIPT_READY_PRODUCT_PREFLIGHT_NOT_EXECUTED",
+    "mechanism": "EXISTING_RELEASE_PAIR_PREPARE_CONFIRM_RESULT",
+    "ownerMustBeOutsideWindowsJob": true,
+    "currentToolHostContained": true,
+    "manualOperatorLaunchPending": true,
+    "operatorLaunchBarrierFinalConfirmation": "CONFIRMED_NORMAL_AND_PTY_TOOL_HOSTS_INSIDE_WINDOWS_JOB",
+    "computerUseConstraint": "UI_TERMINAL_AUTOMATION_NOT_PERMITTED",
+    "operatorAction": "RUN_CHECKED_COMMAND_ONCE_FROM_NORMAL_POWERSHELL_7_OUTSIDE_WINDOWS_JOB",
+    "operatorCommandRequested": true,
+    "operatorInvocationObserved": false,
+    "promotionPreflightExecuted": false,
+    "preparedOperatorScriptSha256": "aedf037cf8354d1087f05be4e66db4429ac863a355c0c9e2948c47a7a4306640",
+    "outsideJobGuardRequiresElevation": false,
+    "otherPrivilegeRequirements": "UNVERIFIED_UNTIL_PRODUCT_PREFLIGHT",
+    "childEnvironmentOmissions": ["CONTROL_PLANE_API_KEY", "CATDESK_OPENAI_TUNNEL_ID"],
+    "credentialValuesExposed": false,
+    "globalOrStoredCredentialsChanged": false,
+    "fullStackRecoveryInvoked": false,
+    "jobBreakawayUsed": false,
+    "replacementTunnelCreated": false
+  },
+  "automationLimits": {
+    "canonicalAutonomyPolicy": "MANUAL_OFF",
+    "independentWakeDesired": "STOPPED",
+    "canonicalWebContextPresent": false,
+    "directDaemonLaunchDoesNotStartWakeHost": true,
+    "webCoordinationTimer": "IDLE_OWNER_NOT_PROJECT_BROWSER_ENABLEMENT",
+    "externalConnectBlockedByChildCredentialOmission": true,
+    "readOnlyExternalStatusMonitoringMayContinue": true,
+    "unattendedOperationQualified": false
+  },
+  "acceptance": {
+    "productionPromoted": false,
+    "installedIdentityAndStartup": "OPEN",
+    "intendedSecureIngress": "OPEN",
+    "trustedRollback": "OPEN",
+    "twoIndependentWebCodingConversations": "OPEN",
+    "completedCanariesReplayed": false,
+    "existingNativeSessionsChanged": false
+  },
+  "publication": {
+    "status": "PENDING_PARENT_REVIEW_AND_COMMIT",
+    "remoteShaReadback": "REQUIRED_AFTER_PUBLICATION"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T14:12:47.069263+00:00",
+  "classification": "TESTED_SOURCE_DURABLE_QUEUE_AND_WINDOWS_THREADS_NOT_BROWSER_OR_INSTALLED_ACCEPTANCE",
+  "sourceBaseCommit": "ee2a86e4796b2443344e7a80931f3187cbbd0403",
+  "branch": "codex/web-rollover-oct17",
+  "requirement": "CD-P4_FIVE_SIMULTANEOUS_PROJECT_INTENTS_AND_BLOCKED_PEER_RESTART_RECOVERY",
+  "implementationChange": "TEST_ONLY_EXISTING_THREE_PROJECT_FIXTURE_REUSED_BY_PARAMETERIZED_HELPER",
+  "productionAlgorithmChanged": false,
+  "newTest": "runtime::scheduler::tests::five_project_concurrent_intents_and_mixed_holds_survive_restart",
+  "scenario": {
+    "projects": 5,
+    "barrierSynchronizedProducerThreads": 5,
+    "eventsBeforeMixedHolds": 15,
+    "sameProjectFifoAndRoundRotationVerified": true,
+    "alpha": "LATER_SUBMITTING_WITHOUT_ACCEPTANCE_TIMER_RESERVES_EXACT_EVENT",
+    "beta": "SENT_RESPONSE_OBSERVATION_DEFERRED_UNTIL_ITS_DEADLINE",
+    "gamma": "CLAIMED_PRE_SUBMIT_WITNESS_PRESERVED_NO_ACCEPTANCE_TIMER",
+    "delta": "NEW_TARGET_GENERATION_EXCLUDES_OLD_UNCLAIMED_EVENTS",
+    "epsilon": "INDEPENDENT_EXISTING_RECEIPT_AND_COMPLETED_RESPONSE_THEN_NEXT_EVENT",
+    "coldStoreReopenAndNewHostLease": true,
+    "heldDeliveryFilesByteIdentical": 3,
+    "concurrentQueueIntentFilesByteIdentical": 5,
+    "draftWitnessBytesUnchanged": true,
+    "browserSubmissionOrComposerBehaviorExercised": false
+  },
+  "checks": {
+    "schedulerTestsPassed": 10,
+    "failed": 0,
+    "ignored": 0,
+    "schedulerExecutionSeconds": 0.46,
+    "strictWakeAllTargetsClippy": "PASS",
+    "wakeFormatting": "PASS",
+    "rootFormatting": "PASS",
+    "gitDiffWhitespace": "PASS",
+    "initialWrongExactNamespaceAndFormattingDiagnosticRetained": true,
+    "zeroMatchInvocationCountedAsAcceptance": false,
+    "focusedEarlierTestCountNotAddedToFinalSuite": true,
+    "testLogSha256": "de75685268d6489a66117f42091227cefc9853f1d287e8b11e9c7f998931dc52",
+    "clippyLogSha256": "2c4b22527549614fe4a69396435b54be50666746712ba04f5e9b4403fd46f76f"
+  },
+  "preservation": {
+    "protectedFilePinsUnchanged": 131,
+    "projectBindingChanges": 0,
+    "productionOrDevelopmentSelectionChanged": false,
+    "nativeProjectTasks": 0,
+    "browserWakeTunnelStarts": 0,
+    "connectorCalls": 0,
+    "providerMessages": 0,
+    "newRecurringAutomation": false,
+    "scopedFixtureRootRemovedAfterSuccess": true,
+    "nativeChildProcessesCreatedByThisTest": 0
+  },
+  "acceptance": {
+    "sourceFiveProjectMatrix": "PASS",
+    "twoGenuineWebCodingConversations": "OPEN",
+    "currentInstalledOrUnattendedMultiProjectWake": "OPEN",
+    "existingCompletedRolloverCanariesReplayed": false
+  },
+  "goal": "ACTIVE"
+}

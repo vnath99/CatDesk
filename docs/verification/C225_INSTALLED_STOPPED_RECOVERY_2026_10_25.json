@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C225",
+  "status": "CANONICAL_PAIR_RESTORED_QUALIFIED_STOPPED",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "aa5aab69d76dc7419b2f63f9179a27ed8c2b1cfd",
+  "operation": {
+    "startedUtc": "2026-10-26T00:28:29.4672808+00:00",
+    "finishedUtc": "2026-10-26T00:29:59.8706612+00:00",
+    "mode": "QUALIFIED_STOPPED",
+    "profile": "HEADLESS_LOCAL",
+    "prepares": 1,
+    "confirmations": 1,
+    "confirmationLimitSeconds": 240,
+    "retries": 0,
+    "legacyServingGuardChanged": false
+  },
+  "artifacts": {
+    "candidateSourceCommit": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+    "installedSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+    "installedBytes": 35364864,
+    "installedFingerprintMatches": true,
+    "controllerSha256": "03cd47615ab2c796eada0a81d2a381d5d75ac2d24e0219f1cf7e786d68590c9c",
+    "controllerSourceCommit": "aa5aab69d76dc7419b2f63f9179a27ed8c2b1cfd",
+    "controllerIsProductionCandidate": false
+  },
+  "qualification": {
+    "evidenceType": "ACTUAL_INSTALLED_IMAGE_BOUNDED_LOOPBACK_MCP",
+    "unauthorizedStatus": 401,
+    "authorizedStatus": 200,
+    "initializeVerified": true,
+    "toolsListVerified": true,
+    "toolCount": 102,
+    "exactImageProcessListenerVerified": true,
+    "wholeOwnedTreeExitVerified": true,
+    "externalSecureMcp": false,
+    "twoWebCodingConversations": false
+  },
+  "release": {
+    "slot": "slot-b",
+    "generation": 2,
+    "source": "reviewed_qualified_stopped",
+    "journal": "COMPLETED",
+    "existingTrustReader": "PASS",
+    "receiptChain": "PASS",
+    "independentReadback": "PASS",
+    "trustedPreviousDifferentVersion": false,
+    "sameVersionRestoreAuthority": true,
+    "originalDivergentTupleEscrowPreserved": true,
+    "slotABytesPreserved": true
+  },
+  "preservation": {
+    "baselinePaths": 486,
+    "unchangedBaselinePaths": 483,
+    "intendedChangedPaths": [
+      "target/release/catdesk.exe",
+      "target/release/catdesk.exe.sha256",
+      ".catdesk/release-recovery/current.json"
+    ],
+    "untrackedFilesPreserved": 11,
+    "producerAuthorityFilesPreserved": 5,
+    "projectBindingsAndHistoriesPreserved": true,
+    "nativeSessionActions": 0,
+    "browserWakeOrRecurringStarts": 0,
+    "externalRuntimeActions": 0
+  },
+  "cleanup": {
+    "observedAsPartOfCompletedOperation": true,
+    "canonicalListeners": 0,
+    "canonicalAndTransactionOwners": 0,
+    "transactionJobsAbsent": 3,
+    "cleanupFailures": 0
+  },
+  "sourceAndHelperEvidence": {
+    "sourceDistinctRustCases": 36,
+    "sourcePowerShellInvocations": 5,
+    "sourceIndependentStaticReviews": 2,
+    "canonicalHelperInvocations": 5,
+    "canonicalNewInvocationsInContinuation": 4,
+    "canonicalReusedPassingInvocation": 1,
+    "canonicalCleanupAndPins": "PASS",
+    "retainedRunnerRefusals": [
+      "Source migration exact fingerprint literal used lowercase instead of the unchanged uppercase bytes; refused before merge. Corrected literal only, raw hash guard retained.",
+      "Canonical PS7 fixture exited zero; runner expected an outdated success phrase. Original failed wrapper evidence retained, verified passing row reused; only four remaining invocations executed."
+    ]
+  },
+  "proofSha256": {
+    "operatorResult": "bccd7dcc2efad49acdbf1e4a2203baa356e57099952074eec29cb8012d1f8e0a",
+    "verifiedStoppedRelease": "7127dc20c52cad891576e847489ee8ab0c3febda1597654b0aefe50dd2b7922d",
+    "finalInventory": "25653ef338062d0c0a1e3fe31cc60cc0e1ba29e7e687c100c8c05ab7eb5405ca",
+    "receipt": "ed3ab469198966db3eb6febc8b2bade59227935586698efb5af324c10171ea34",
+    "qualification": "a00cdded3230ee98eaafc3ffbe263931b5d62d33981a71468f223483bba7ae9c",
+    "quiescence": "cd2e324cb23cb8e4a65c3166f66ef51da7a468ede67725b252f047dc9a63ef0e",
+    "canonicalHelperResult": "88c30f692353904098e4e317cf139a7abd60932e19d79532c77a42310d3cacf8",
+    "canonicalHelperOuter": "f5a53d4d009c8ccae240b5bef0a92c99d797ce8fe35bd55abec561d876292964",
+    "sourceOnlyMigration": "6a17fd670d0778eb822f975f549c504dbb702fff8a3a634f53a719577d539f17",
+    "connector": "97c3f539c7e8ae3ef50e7c1268cb608859c0b7e7c5c2c862cb6af0aa68daedb7"
+  },
+  "connector": {
+    "postRecoveryReadOnlyProbe": "HTTP_429",
+    "message": "MCP SSE probe returned 429 from openai.org",
+    "independentDependency": true,
+    "retries": 0,
+    "ownershipOrAuthenticationChanged": false
+  },
+  "github": {
+    "remote": "https://github.com/vnath99/CatDesk",
+    "sourceRemoteShaVerified": "aa5aab69d76dc7419b2f63f9179a27ed8c2b1cfd",
+    "exactSourceActionsRunsObserved": 0,
+    "remoteCiAcceptance": false
+  },
+  "remaining": [
+    "Bounded installed-image restart and public lifecycle readiness qualification.",
+    "Persistent backend ownership and ordinary native startup; this older candidate does not support the newer backend-only native mode.",
+    "Trusted previous different-version rollback and a supported controlled failed-current exercise.",
+    "Official Secure MCP dependency and genuine two-conversation Web coding acceptance."
+  ],
+  "completionClaim": false
+}

@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "purpose": "PARTIAL_SOURCE_REVIEW_ONLY_NOT_RELEASE_AUTHORITY",
+  "batchId": "b006",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "patchBytes": 45111,
+  "sourcePaths": [
+    "src/project_task_context.rs",
+    "catdesk.ps1",
+    "scripts/catdesk-autostart-supervisor.ps1"
+  ],
+  "units": [
+    {
+      "unitId": "u062",
+      "path": "src/project_task_context.rs",
+      "skipLines": 515,
+      "takeLines": 523,
+      "bytes": 19954,
+      "sha256": "de0dabcf1b190e30bebc3dbb86509ad1abfb012dd03519f9da52ce9c0bf34923",
+      "baseBlob": null,
+      "targetBlob": "626daeac5ae116cc6eb42c6d702e850347a56089"
+    },
+    {
+      "unitId": "u063",
+      "path": "src/project_task_context.rs",
+      "skipLines": 1038,
+      "takeLines": 338,
+      "bytes": 13355,
+      "sha256": "3538d2a7c7cae87f175a91a9f07c7035efc2f8a9f421a22846de7b4dcc74565f",
+      "baseBlob": null,
+      "targetBlob": "626daeac5ae116cc6eb42c6d702e850347a56089"
+    },
+    {
+      "unitId": "u001",
+      "path": "catdesk.ps1",
+      "skipLines": 0,
+      "takeLines": 66,
+      "bytes": 3469,
+      "sha256": "8a51688295d6432b0fe3ca8181fead73b96c78da5f3c6c7838c4c175bcd99a0d",
+      "baseBlob": "d15cc95d2cfe04612670bb18ec2015d0e8618600",
+      "targetBlob": "c557d9ef6c6077c2f740275fc2c9dc88ab69e184"
+    },
+    {
+      "unitId": "u002",
+      "path": "scripts/catdesk-autostart-supervisor.ps1",
+      "skipLines": 0,
+      "takeLines": 118,
+      "bytes": 8333,
+      "sha256": "8ad7fb30f46728c9fba8fa9f1c26493170a973f2a35124a95b64fe58eb837f57",
+      "baseBlob": "956be46a1a7236d6e1353622050442b36d4a2f0d",
+      "targetBlob": "6c81c79cb1e8380212ae1ad0877cf3f45fd88b20"
+    }
+  ],
+  "cumulativeSourceAccepted": false,
+  "requiredReplyMarker": "NOV01_GIT_SOURCE_BATCH_ONLY",
+  "requiredReplyFields": [
+    "marker",
+    "sourceCommit",
+    "batchId",
+    "verdict",
+    "findings",
+    "inspectedUnitIds",
+    "inspectedPaths",
+    "limitations",
+    "cumulativeSourceAccepted"
+  ],
+  "permittedVerdicts": [
+    "REVIEWED_BATCH",
+    "FAIL",
+    "INCONCLUSIVE"
+  ]
+}

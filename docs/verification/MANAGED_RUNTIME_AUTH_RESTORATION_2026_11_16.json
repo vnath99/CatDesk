@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-16T15:14:03.240359+00:00",
+  "scope": "EXISTING_OWNER_AUTH_RESTORATION_AND_DEVELOPMENT_SOURCE_PATCH_ONLY",
+  "sourceCommit": "e2d28eb5de852afe83574cd2ce39c297951139c9",
+  "comparisonBase": "eec3da0ca556d2a6765e3548f397337be1a77b59",
+  "failure": {
+    "code": "UNAUTHORIZED",
+    "httpStatus": 401,
+    "source": "target_http",
+    "upstreamResponseReceived": true,
+    "classification": "Local MCP rejected the existing tunnel request; distinct from historical HTTP 429 and terminated-session failures.",
+    "privateCorrelationRetained": true
+  },
+  "localEvidence": {
+    "anonymousInitializeStatus": 401,
+    "configuredBearerInitializeStatus": 200,
+    "canonicalPairMatches": true,
+    "sameCanonicalOwner": true,
+    "configuredProcessAndUserCredentialsEqual": true,
+    "credentialsExportedOrChanged": false
+  },
+  "rootCauseScope": {
+    "demonstrated": "The automatic Rust managed-runtime connect path omitted configured local MCP bearer forwarding, including initial connect, reattach and bounded recovery. The explicit attested PowerShell helper already implements the child-only header bridge.",
+    "limits": "The previous live runtime environment was not extracted. Its exact missing, stale or incorrect credential state is not independently established; the source omission is not proof of the precise historical launch cause. No binary tampering or credential change is inferred.",
+    "corroboration": "A single same-profile existing-owner reconnect with configured bearer restored structured v5 responses, preserving exact profile and configuration bytes."
+  },
+  "actualRecovery": {
+    "startedUtc": "2026-11-16T14:49:17.9921074+00:00",
+    "finishedUtc": "2026-11-16T14:49:19.7852448+00:00",
+    "mechanism": "Existing qualified native runtimes stop/status/connect through the installed attested Secure MCP helper",
+    "stopAttempts": 1,
+    "connectAttempts": 1,
+    "sameAliasProfileTunnelAndTarget": true,
+    "profileBytesPreserved": true,
+    "configBytesPreserved": true,
+    "backendRestarts": 0,
+    "newTunnelPluginProfileOrCredential": false,
+    "wakeOrBrowserActions": 0,
+    "historicalTasksReplayed": 0,
+    "ownerResult": "Existing managed serving owner READY; intentionally remains running, not a test orphan."
+  },
+  "codexV5Verification": {
+    "actualFreshTool": "catdesk_transport_status",
+    "isError": false,
+    "localMcpAuth": "BEARER_REQUIRED",
+    "servingCanonicalParity": "MATCH",
+    "transportHealth": "CONNECTED_VERIFIED",
+    "localMcp": "READY"
+  },
+  "chatgptWebVerification": {
+    "oneCallReported": true,
+    "tool": "catdesk_transport_status",
+    "report": "Returned without a surfaced transport exception, but structured status fields and tool call identity were unavailable in the first-party retained response.",
+    "success": null,
+    "authAndParityVerified": false,
+    "retryPerformed": false,
+    "acceptance": "INCONCLUSIVE_FOR_THIS_FRESH_WEB_CHECK; earlier independent Web success remains retained"
+  },
+  "sourceFix": {
+    "paths": [
+      "src/openai_tunnel.rs",
+      "src/ngrok.rs",
+      "src/openai_tunnel_runtime_auth_tests.rs"
+    ],
+    "behavior": "Use the existing child-only credential bridge only for a single validated loopback runtimes/connect target. Reject invalid tokens and conflicting inherited header policies. Redact raw and JSON-escaped bearer echoes from stdout/stderr. Preserve no-token legacy behavior and existing ownership gates.",
+    "newServiceFrameworkCatalogOrWireContract": false,
+    "installed": false,
+    "newCandidateBuilt": false
+  },
+  "verification": {
+    "focusedTests": {
+      "passed": 5,
+      "failed": 0,
+      "actualWindowsChildIncluded": true
+    },
+    "existingConnectContractRegression": {
+      "passed": 1,
+      "failed": 0
+    },
+    "rootAllTargetsAllFeaturesClippyWarningsDenied": "PASS",
+    "formatAndWhitespace": "PASS",
+    "retainedLogs": [
+      {
+        "name": "nov16-runtime-mcp-auth-targeted-final.private.log",
+        "sha256": "f9ebed34ac742280fe5ed9c384562c1bbe29e4353edd65d9042718748aad65a8"
+      },
+      {
+        "name": "nov16-runtime-connect-contract.private.log",
+        "sha256": "9d75763600c8661b39615e1ca3c090787ebeda49409b2d930b6f24df2d147c2c"
+      },
+      {
+        "name": "nov16-runtime-mcp-auth-clippy-final.private.log",
+        "sha256": "317d599bc336846c3cc5ceb0ed1a84017876d2da00881eae56b2935f52dc4730"
+      }
+    ]
+  },
+  "independentReview": {
+    "key": "AUTH_BRIDGE_E2D28EB5",
+    "verdict": "PASS",
+    "scope": "DEVELOPMENT_SOURCE_PATCH_ONLY",
+    "attributableCompletedAssistantResponse": true,
+    "actualTurnDurationSeconds": 106.624,
+    "requestedSeconds": 180,
+    "messagesSent": 1,
+    "reportedPublicSourceCalls": 10,
+    "maximumPublicSourceCalls": 12,
+    "reportedV5StatusCalls": 1,
+    "inspectedPaths": [
+      "src/openai_tunnel.rs",
+      "src/ngrok.rs",
+      "src/openai_tunnel_runtime_auth_tests.rs"
+    ],
+    "findings": [],
+    "testsIndependentlyExecuted": false,
+    "providerToolReceiptsAvailableInRetainedExtraction": false,
+    "nativeContractCreated": false,
+    "fullArtifactOrProducerAuthority": false,
+    "originalF7VerdictChanged": false
+  },
+  "preservation": {
+    "primaryRegistryHashMatchesPreReview": true,
+    "primaryWorkLedgerAbsentPreserved": true,
+    "originalF7StateHashMatchesPreReview": true,
+    "productionExecutableReplaced": false,
+    "selectedDevelopmentPackageChanged": false,
+    "projectWakeBindingsChanged": false,
+    "rootCollectorSigningOrInstallationPerformed": false
+  },
+  "remainingTracks": [
+    {
+      "track": "Managed runtime auth patch",
+      "state": "ACTIVE",
+      "next": "Integrate reviewed development source normally; exact future installed candidate still needs existing build/review/producer/promotion gates. Current live restoration used already installed helper, not this patch."
+    },
+    {
+      "track": "Original f7 full release review",
+      "state": "BLOCKED_FOR_RELEASE",
+      "next": "Retain PARTIAL and F7-04-01. Narrow patch reviews do not complete original coverage or qualify a changed artifact."
+    },
+    {
+      "track": "Original d22 review",
+      "state": "BLOCKED",
+      "next": "Genuine original delivery/turn/report evidence or a reviewed applicable recovery transition; no resend or substitute review."
+    },
+    {
+      "track": "Protected Wake migration",
+      "state": "BLOCKED",
+      "next": "Reviewed coherent physical root/current/control/config disposition and STOPPED state, then fresh purpose-bound signing and existing elevated broker admission. Expired proposals stay unsigned."
+    },
+    {
+      "track": "Installed Web edit/verification/Git/self-Wake",
+      "state": "OPEN_RELEASE_GATED",
+      "next": "Existing required installed scoped delivery/adapter and Git capability chains; no new connector or tunnel."
+    }
+  ],
+  "operatorActionNow": "None requested. Do not retry login, collector, expired proposal, signing, unknown delivery or old task.",
+  "fullMilestoneAccepted": false
+}

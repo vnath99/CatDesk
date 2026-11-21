@@ -1,0 +1,271 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T22:46:07.070522+00:00",
+  "classification": "TESTED_SOURCE_AND_HISTORICAL_LIVE_COMPARISON_NEW_OBSERVER_NOT_INSTALLED",
+  "sourceBaseCommit": "b90c64c127b642072a020ceef4435dbcc081ac67",
+  "sourceFilesSha256": {
+    "scripts/catdesk-doctor.ps1": "855a95986a1f2ce429d0990a12e2e19db8c7754429da6539060c63cf65d446dc",
+    "scripts/test-catdesk-doctor.ps1": "46b36fedb6ad0191a28bcc4a347d298fe3bfea845fb2765f44bf719c2748e1b3",
+    "scripts/wake_bridge.py": "07ff08aebdf493b284e1ec4ddf5451fa3d008d710631fc33bfa958b602446272",
+    "scripts/wake_readiness_visual_probe.py": "e6a48921e3393246d6afc034a1797d2f6b16672da61b01cf299354b932fbb222",
+    "tests/test_wake_bridge.py": "4f04fbbf05c601575665d6298c685ec9f13871e5a43d6263fea6d409b7ba9591",
+    "tests/test_wake_bridge_current_dom.py": "db8b450b38ff470a71b00c39a118b67fdc71c8c56d4edbdd2fb293170b0b065c",
+    "tests/test_wake_readiness_probe.py": "0168edcc1772f564afbf344827d6e2dbea921314c3085a555683bd98dd164e67",
+    "wake/src/development_runtime.rs": "5be3969b47c17d8771241f98cb4fc82c4b4082ba41f94571b6b888ec8651491b",
+    "wake/src/readiness_probe.rs": "57016bcad2b5e7a2f31d5443f8ee2b374d4d26d7d30c52684718f925cf054be4",
+    "wake/src/runtime_reobserve.rs": "0fa4831ebcda15c4c0266c94fd339ebe0c333f29483ac5cc3b0f3955072d42b3",
+    "wake/src/runtime_snapshot.rs": "b2f0c513841ce5a560c0c7a381baea2ff6a2bfe636b9dbad410140e47d8c55b2",
+    "wake/tests/test_adapter.py": "27508c0750b23c5dc605fcd5c42336ba0129d3bc20e98b747ce091dfbb99790f"
+  },
+  "tests": {
+    "bridge": {
+      "passed": 126,
+      "logSha256": "0779ac4020a8117f4d3e893c7c9295e0135dd33ba0cc9b06d2decb3c783da681"
+    },
+    "currentDom": {
+      "passed": 41,
+      "logSha256": "57af4c51a55cef5324e3144c8043fe56a21a73198fe7e92b91030ab5a1dcff92"
+    },
+    "adapter": {
+      "passed": 32,
+      "logSha256": "9faca8d9039d40b514c4a2ae82a9b0ff732688ef61e7ad14b2c535ba7a1ffcdf"
+    },
+    "readiness": {
+      "passed": 21,
+      "logSha256": "9f88a68ce6b559ffc6646bf8b869bd097f7800d09fed8822e99f3d2b561114d3"
+    },
+    "nativeDevelopment": {
+      "passed": 37,
+      "logSha256": "c31dc63cc0fee1a22f20246d542b2761a101f2e25d7e9e313e0b7f5990a5232e"
+    },
+    "nativeReobserve": {
+      "passed": 11,
+      "logSha256": "1f24b0f28b60299a4417b395dc758f00f389b3256d4bc2003be01bd894383aef"
+    },
+    "nativeResponse": {
+      "passed": 3,
+      "logSha256": "4d47ff4c4262cdc21c4e2f82f5a2b6fe47fbba2bc6b857c4b38c37cf646c500e"
+    },
+    "nativeScheduler": {
+      "passed": 10,
+      "logSha256": "6156706541a16e96132e809342796a0a1eec409f86834d6b62d7b9bb20b88cff"
+    },
+    "nativeSnapshot": {
+      "passed": 8,
+      "logSha256": "9bad947c9a04d2196baf4bffa2ab66c13993ff5fe69c3db7f1edb64f3537fc48"
+    },
+    "nativeProtocol": {
+      "passed": 2,
+      "logSha256": "90e7e1980b824907f019b0145349dd716f7e5b53c73fb439d7e819b8b28c1a58"
+    },
+    "root-clippy-final": {
+      "passed": true,
+      "allTargets": true,
+      "warningsDenied": true,
+      "logSha256": "b2ea4a561835d17008d7cbc47770de34ff1a7781b5cc32549b5c9397d22070cd"
+    },
+    "wake-clippy-final": {
+      "passed": true,
+      "allTargets": true,
+      "warningsDenied": true,
+      "logSha256": "a64e1617d534d8418202aec8287135997ad21553dcca6f125946b0565f958efb"
+    }
+  },
+  "distinctPassingTests": 291,
+  "implementation": {
+    "existingSeleniumBaseCdpOwnerReused": true,
+    "newBrowserOwnerOrScheduler": false,
+    "readOnlyClosedMetadata": [
+      "route",
+      "document",
+      "history",
+      "editor",
+      "composer",
+      "generation",
+      "assistant",
+      "exchange",
+      "recovery"
+    ],
+    "rawConversationDraftCredentialExport": false,
+    "registeredTargetDigestAndGenerationPinned": true,
+    "equivalentPlainAndProjectConversationRoutesPreserved": true,
+    "observationIsDeliveryOrAuthenticationAuthority": false,
+    "unattributedHistoryDoesNotAuthorizeRecovery": true,
+    "currentResponseLoadErrorReason": "RESPONSE_LOAD_ERROR",
+    "userResendOnAssistantFailure": false,
+    "assistantRetry": "EXISTING_UNIQUE_EXACT_EXCHANGE_DELIVERY_TIMEOUT_RETRY_ONLY",
+    "genericLoadErrorRetry": "UNSUPPORTED_NO_UNIQUE_TASK_BOUND_RETRY_AUTHORITY",
+    "regenerateReloadOrUnrestrictedClick": false,
+    "draftActiveGenerationRouteDriftForeignRetryRefused": true,
+    "unknownObservationCannotBeReportedReady": true,
+    "timeoutResponseSurfaceState": "EXACT_READY_RESPONSE_TIMEOUT"
+  },
+  "matrix": {
+    "networkHomeMissingEditorAuthGenerationTimeoutTargetDrift": "PASS_SOURCE",
+    "loadFailureHistoricalVsCurrentAndUsefulAnswerMentioningError": "PASS_SOURCE",
+    "unknownAndDuplicateSubmission": "PASS_SOURCE_NO_REPLAY",
+    "failedProjectReceiptTimerBytesPreservedSiblingClaimable": "PASS_NATIVE_FIXTURE",
+    "fiveSimultaneousProjectIntentsAndColdRestart": "PASS_NATIVE_FIXTURE"
+  },
+  "chat51Comparison": {
+    "originalRecordsInspected": 2,
+    "successfulHistoricalManualWake": {
+      "delivery": "SENT",
+      "receipt": "EXACT_USER_MESSAGE_APPENDED",
+      "turn": "COMPLETE",
+      "generation": 32
+    },
+    "separateHistoricalUnknownWake": {
+      "delivery": "SUBMITTING",
+      "reason": "RESPONSE_SEQUENCE_DRIFT",
+      "receipt": null,
+      "turn": "ATTENTION"
+    },
+    "transientSubmissionAccepted": "STILL_IMPLEMENTED_AND_SOURCE_TESTED_ORIGINAL_TRANSIENT_RECORD_NOT_LOCATED",
+    "historicalSourceComparisonCommit": "94fe507588458f9cd1466899d6401a913434973f",
+    "thatCommitProvenAsExactHistoricalServicingArtifact": false,
+    "retainedBehavior": [
+      "exact USER receipt",
+      "SENT and COMPLETE journal",
+      "unknown submission fence",
+      "assistant timeout Retry"
+    ],
+    "correctedGaps": [
+      "coarse observation omitted response failure",
+      "load error collapsed to generic completion failure",
+      "Retry boundary and draft/generation/document gates"
+    ],
+    "oldSystemUniversallyReliable": false,
+    "historicalEventsReplayed": false
+  },
+  "attendedExistingProfileObservation": {
+    "browserOpenedCorrectRegisteredConversation": "OPERATOR_OBSERVED",
+    "historyAndEditorVisible": "OPERATOR_OBSERVED",
+    "noVisibleUnsentDraft": "OPERATOR_OBSERVED_NOT_NEW_MACHINE_RECEIPT",
+    "assistantLoadError": "OPERATOR_OBSERVED_EXISTING_UNATTRIBUTED_EXCHANGE",
+    "screenshotTreatedAsInstructions": false,
+    "newUserMessageSent": false,
+    "newObserverMachineQualification": "NOT_PERFORMED",
+    "consoleWaitMilliseconds": 150000,
+    "ownerElapsedMilliseconds": 151079,
+    "ownerExitCode": 1,
+    "consoleWaitResult": 258,
+    "exactTimeoutCause": "UNPROVEN",
+    "normalClosureProved": false,
+    "scopedCleanupRemainingCount": 0,
+    "stickyMarkerPreserved": true,
+    "privateEvidenceSha256": {
+      "cleanup-inventory.private.json": "b78fca447766a07b74ca36258570db8714f52787bcec319ebb9c35e80e136499",
+      "console-result.private.json": "0ec54cf9a2eb229d3cfa0c520dacc150dcf7c662a21694c13fffb8bdda14e003",
+      "containment.private.json": "fd87bb039cbce7a4455e0496932d612c46b303f41b7023b6d073241316732d09",
+      "inspection-ready.private.json": "9e37f4792d0e8c62402c4bb0b027eaada2862491fc7161bf7f032f197ff9d0f4",
+      "intent.private.json": "245672a08101510422543f5052fd240c54f3d71e4cd1db1e3a863e87500e69e6",
+      "parent-result.private.json": "04bbf8bac885de57e5df700337c1086aa8cf2afc0aa284b28c8c6a151b3c8577",
+      "worker-result.private.json": "b757be86c4e8e11b4797dc9b807fa51515743f773ad259257f711755f6986a03"
+    }
+  },
+  "failuresRetained": [
+    "Initial bridge taxonomy assertion updated for precise failure reasons",
+    "Initial DOM fixture parent relationship corrected",
+    "New route-equivalence test initially used nonexistent fixture profile; fixed without weakening profile guard",
+    "Attended console deadline expired; cause not established; original evidence and marker retained"
+  ],
+  "preservation": {
+    "protectedPinsUnchanged": 131,
+    "bindingChanges": false,
+    "unknownSubmissionReplay": false,
+    "productionPromotion": false,
+    "newPackageSelection": false,
+    "recurringAutomationStarted": false
+  },
+  "acceptance": {
+    "source": "PASS",
+    "isolatedBrowserCanary": "NOT_RUN",
+    "installedNewObserver": "OPEN",
+    "realIndependentWebCoding": "OPEN",
+    "unattendedOperation": "OPEN"
+  },
+  "blocker": "EXISTING_ATTRIBUTED_INTERRUPTED_LOGIN_MARKER_REQUIRES_SUPPORTED_RECONCILIATION_BEFORE_PROFILE_REUSE_OR_PACKAGE_SELECTION",
+  "nextExecutableTask": "QUALIFY_NARROW_EXISTING_OWNER_RECOVERY_AND_BOUNDED_LOGIN_CLEANUP_THEN_COMMIT_PINNED_DEVELOPMENT_OBSERVATION",
+  "operatorActionRequiredNow": false,
+  "connector": "LATEST_OCT30_SINGLE_TRANSPORT_CALL_SUCCEEDED_SEPARATE_FROM_WEB_TASK_AUTHORITY_NO_NEW_PROBE",
+  "goal": "ACTIVE",
+  "finalRouteRegression": {
+    "passed": 1,
+    "includedInDistinctTotal": true,
+    "logSha256": "f8735d94e2821c02eb7424c37f7f1d475b3ab69d3d113215ca27a2525c3c081b"
+  },
+  "doctor": {
+    "ps7": {
+      "assertionsPassed": 97,
+      "logSha256": "c41e71e16d4533e3c9f148dda606590ff4bc132e17801aa1dc762951f24a3aed"
+    },
+    "ps5": {
+      "assertionsPassed": 97,
+      "logSha256": "c41e71e16d4533e3c9f148dda606590ff4bc132e17801aa1dc762951f24a3aed"
+    },
+    "coarseFailureDoesNotRequestManualClassification": true,
+    "responseFailureDoesNotRequestLoginOrUserResend": true
+  },
+  "finalizedUtc": "2026-10-30T22:49:13.515395+00:00",
+  "exactUserRecoveryFollowup": {
+    "observedUtc": "2026-10-31T05:44:37.627608+00:00",
+    "sourceBaseCommit": "63822f47b366aabe19d709b9829a2d4fed775a9e",
+    "classification": "TESTED_SOURCE_NOT_INSTALLED_ACTION_QUALIFICATION",
+    "sourceFilesSha256": {
+      "scripts/wake_bridge.py": "7f51e0d74ad10af4a1756747d610f1a7b3a15e78b80ea4e52da56f17a6c0c814",
+      "tests/test_wake_bridge_current_dom.py": "0209cfb2bb326b43ec3c3d1531fb9206044ed5a173377b4679a8190649e83c19",
+      "wake/tests/test_adapter.py": "a6651b65e3483ecb5059e66f7d5cee9f81c033390de7ea7f82f76565bf8e74c5"
+    },
+    "defect": "Response snapshot and final timeout Retry still matched substrings in whole turn containers after the trusted receipt anchor had moved to canonical whole USER bodies.",
+    "correction": "Both share a canonical USER body matcher; detached controls are excluded, paragraph boundaries retained, empty/partial/control/assistant matches and duplicate sibling USER nodes refused.",
+    "redRegression": {
+      "tests": 3,
+      "failingSubcases": 7,
+      "errorSubcases": 2
+    },
+    "passingTests": 52,
+    "proofs": [
+      {
+        "kind": "focused",
+        "passed": 7,
+        "logSha256": "f09a72daab9d7d8b0cf989fbb6676af70c3769d1e0a225707168a374b1becc2c"
+      },
+      {
+        "kind": "adapter-final",
+        "passed": 38,
+        "logSha256": "bfcb92f0c873dcf3aef9ca084aa5dc85331f065c811c464125f24de39f617d4e"
+      },
+      {
+        "kind": "lifecycle",
+        "passed": 6,
+        "logSha256": "43e5310abb666dad1b0ed0d2f1621496bf2a8fc5cd8255c10ff2b081cb6d5212"
+      },
+      {
+        "kind": "nativeFiveProjectMixedHoldsRestart",
+        "passed": 1,
+        "logSha256": "eec21ee70fbf80aa8a24567a0ed009664d115f566a34c3207ba2eeca65023453"
+      }
+    ],
+    "olderControlsOnlyFixtureNowModelsActualUserProvenance": true,
+    "broaderOfflineAttempt": {
+      "completed": false,
+      "passingQualificationClaimed": false,
+      "stoppedAtSeconds": 200.3,
+      "ownedChildrenAtStop": 0,
+      "invalidExtraDiscoverModuleArgument": true,
+      "unchangedFullRunRepeated": false
+    },
+    "browserWakeOrExternalOwnerStarts": 0,
+    "messagesSent": 0,
+    "productionOrBindingChanges": false,
+    "newRetryCategory": false,
+    "genericLoadErrorRecovery": "OBSERVE_ONLY_NO_UNIQUE_QUALIFIED_TASK_BOUND_RETRY",
+    "installedActionQualification": "OPEN_NO_SAFE_CURRENT_TIMEOUT_CARD_EXERCISED",
+    "newOperatorActionRequired": false,
+    "historicalAndLiveReferences": [
+      "BROWSER_OBSERVATION_INSTALLED_2026_10_31.json",
+      "CANONICAL_TURN_ANCHOR_2026_10_31.json"
+    ]
+  }
+}

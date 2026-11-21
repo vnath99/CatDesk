@@ -1,0 +1,111 @@
+{
+  "observedUtc": "2026-11-14T18:21:50.654059+00:00",
+  "scope": "DOCUMENTATION_CONSOLIDATION_INTEGRATION_AND_LOCAL_SYNC_ONLY",
+  "status": "COMPLETED_VERIFIED",
+  "maturity": "SOURCE_TESTED",
+  "pr5": {
+    "state": "MERGED",
+    "merge": "23e26e9afdb560cfe447cd8f6454cc952b4e3702",
+    "url": "https://github.com/vnath99/CatDesk/pull/5"
+  },
+  "followupPr6": {
+    "state": "MERGED",
+    "merge": "78b6c98c6fdc84b98a019c3ea254e196a278d564",
+    "url": "https://github.com/vnath99/CatDesk/pull/6"
+  },
+  "qualifiedDevelopment": {
+    "branch": "codex/web-rollover-oct17",
+    "head": "78b6c98c6fdc84b98a019c3ea254e196a278d564",
+    "directory": "CatDesk-web-rollover-oct17",
+    "localMatchedRemote": true,
+    "allFiveRootDocuments": true,
+    "testsPassed": 23,
+    "internalLinksChecked": 475
+  },
+  "qualifiedPrimary": {
+    "branch": "orchestrator/chatgpt-codex-autonomous-loop",
+    "head": "0fbdccbc25edda9bdb5ca31840270e48b25f57e6",
+    "publicationBranch": "codex/docs-primary-sync-nov14",
+    "directory": "CatDesk-codex-loop",
+    "localMatchedPublication": true,
+    "allFiveRootDocuments": true,
+    "applicationBaseline": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+    "testsPassed": 23,
+    "internalLinksChecked": 475,
+    "developerFacade": "Original retained; manual documentation checking",
+    "originalNamedRemote": "Not advanced or retracked"
+  },
+  "currentHeadRule": "These are dated qualified checkpoints; resolve subsequent documentation-only publication heads from Git refs. Final exact heads are also recorded in PR metadata and the private publication audit.",
+  "editionDifferences": [
+    "Primary source/branch identity and predecessor archive",
+    "Primary manual checking and retained-facade test; development automatic hook",
+    "Local edition activity and operating instructions"
+  ],
+  "preservation": {
+    "pinnedObjectsChecked": 1685,
+    "pinMismatches": 0,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "untrackedFilesPreserved": 23,
+    "allUntrackedHashesMatch": true,
+    "applicationSourceAndFacadeUnchangedInPrimary": true
+  },
+  "cleanGithubRecovery": {
+    "startedUtc": "2026-11-14T18:16:59.050070+00:00",
+    "connectorUsed": false,
+    "localObjectCacheUsed": false,
+    "runtimeActions": 0,
+    "failure": null,
+    "source": "78b6c98c6fdc84b98a019c3ea254e196a278d564",
+    "testsPassed": 23,
+    "check": {
+      "errors": [],
+      "internalLinksChecked": 475,
+      "milestones": 4,
+      "passed": true,
+      "primaryDocuments": 5,
+      "scope": "FIVE_PRIMARY_AND_NEW_SUPPORTING_DOCS; LEGACY_LINKS_GRANDFATHERED_NOT_SILENTLY_FIXED",
+      "tickets": 441
+    },
+    "clean": true,
+    "passed": true,
+    "finishedUtc": "2026-11-14T18:17:22.791509+00:00"
+  },
+  "freshAIExercises": {
+    "localCleanClone": {
+      "source": "78b6c98c6fdc84b98a019c3ea254e196a278d564",
+      "tenQuestionsAnswered": true,
+      "result": "PASS"
+    },
+    "githubOnly": {
+      "source": "78b6c98c6fdc84b98a019c3ea254e196a278d564",
+      "tenQuestionsAnswered": true,
+      "result": "PASS",
+      "localProjectFilesUsed": false,
+      "connectorUsed": false
+    },
+    "wordingCorrections": [
+      "Reconciliation timestamp and checkpoint labels",
+      "Duplicate development remote ref replaced by primary publication",
+      "Historical reconciliation branch direction explicitly superseded",
+      "Primary/global documentation roles distinguished",
+      "Historical activity next-actions explicitly non-authoritative"
+    ]
+  },
+  "maintenance": {
+    "existingHelperReused": true,
+    "malformedTypeRefusalTested": true,
+    "idempotentCurrentAndPostCommitRepeatTested": true,
+    "changedIdAndIncompleteUpdatesRefused": true,
+    "unverifiedAcceptanceEscalationRefused": true,
+    "privateUntrackedFixtureInputsExcluded": true,
+    "installedRuntimeHookClaimed": false
+  },
+  "hostedCI": "No hosted checks reported; local verification used. No CI or settings bypass.",
+  "mainUnchanged": "db6cef4d4ea50c02b5bf6959bdd96c1c58210ec8",
+  "productionDeployment": false,
+  "protectedRuntimeActions": 0,
+  "architectureSemanticReview": "NOT_STARTED_EXCLUDED",
+  "nextTask": "Separate architecture documentation review under a new task; no architecture/UI/Wake/native-dispatch work performed here",
+  "remainingDocumentationBlockers": []
+}

@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T21:01:12Z",
+  "maturity": "SOURCE_TESTED",
+  "productionChanged": false,
+  "canonicalConnectionChanged": false,
+  "selectedDevelopmentPackageChanged": false,
+  "originalTaskRetried": false,
+  "retainedReceiptsRewritten": false,
+  "diagnostic": {
+    "layer": "NATIVE_SANDBOX",
+    "reason": "SPAWN_ACCESS_DENIED_REPORTED",
+    "basis": "REPORTED_PROCESS_OUTPUT",
+    "targetExecution": "UNVERIFIED",
+    "retryAuthorized": false
+  },
+  "scope": "Optional annotation in future command receipts before their existing hash and persistence; no new tool, owner, release manager or recovery authority. Successful receipts unchanged.",
+  "nativeEnvironment": {
+    "receiptCliVersion": "0.163.0",
+    "existingAppServerVersion": "0.169.0",
+    "cliSelectionChanged": false,
+    "readiness": "UNVERIFIED",
+    "readOnlyProxyAttempts": 2,
+    "proxyAttemptsCleanedUp": true,
+    "setupAttempted": false,
+    "rootCause": "Native process output reports access denied; exact Windows restriction not established. A retained sandbox-log profile-hiding warning is not proven causal.",
+    "unsupportedCommandNotPrescribed": "sandbox setup"
+  },
+  "acceptance": "Full Web edit/verification/checkpoint/self-Wake remains OPEN; previous installed results and diagnostic Wake/body readback evidence preserved.",
+  "sourceCommit": "7b4e1d6dd59bfa7f18a1038c4cd7bcfb066d10f6",
+  "sourceChecks": [
+    {
+      "startedUtc": "2026-11-15T20:59:30.9665349+00:00",
+      "exitCode": 0,
+      "arguments": [
+        "test",
+        "--locked",
+        "--offline",
+        "--bin",
+        "catdesk",
+        "project_task_command::"
+      ],
+      "finishedUtc": "2026-11-15T21:01:07.6329915+00:00",
+      "name": "command-module"
+    },
+    {
+      "startedUtc": "2026-11-15T21:01:07.6533324+00:00",
+      "exitCode": 0,
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "finishedUtc": "2026-11-15T21:01:53.7520316+00:00",
+      "name": "full-clippy"
+    },
+    {
+      "startedUtc": "2026-11-15T21:01:53.7567150+00:00",
+      "exitCode": 0,
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "finishedUtc": "2026-11-15T21:01:58.6728961+00:00",
+      "name": "format"
+    }
+  ],
+  "commandTestsPassed": 5,
+  "documentationFixtureTestsPassed": 23,
+  "documentationLinksChecked": 553,
+  "owner": {
+    "finishedUtc": "2026-11-15T21:01:58.7058880+00:00",
+    "timedOut": false,
+    "maximumSeconds": 600,
+    "exitCode": 0,
+    "containment": "KILL_ON_JOB_CLOSE",
+    "terminationFailed": false,
+    "workerSha256": "93dc7f0dd68ace645ea463afbefd7d544b1411f191503a436253f157c164682c",
+    "schemaVersion": 1,
+    "startedUtc": "2026-11-15T20:59:30.7011779+00:00"
+  }
+}

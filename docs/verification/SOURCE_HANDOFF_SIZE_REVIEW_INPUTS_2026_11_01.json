@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "previousFrozenSource": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "reviewScope": "INDEPENDENT_ASSESSMENT_OF_REAL_HANDOFF_SIZE_COLLECTOR_CORRECTION",
+  "declaredFullReleasePaths": 84,
+  "unchangedCodeBlobs": 83,
+  "changedCodePaths": [
+    "src/operator_web_rollover.rs"
+  ],
+  "inputs": [
+    {
+      "command": "git --no-optional-locks --no-pager diff --no-ext-diff --no-textconv --unified=3 6e97db1fdaaf91f9d6393997e930023a387f0403 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_web_rollover.rs",
+      "bytes": 5407,
+      "sha256": "ee2080f007f37c98deaef31810ddcf0279647d4b25586ca669a7981e9d4d0d9b"
+    },
+    {
+      "command": "git --no-optional-locks --no-pager blame -L 80,165 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_web_rollover.rs",
+      "bytes": 7203,
+      "sha256": "7cdf3c9ccc329cea76b0e2a336375ff226a1952b6a1dc0ae95892f4dd78ac61a"
+    },
+    {
+      "command": "git --no-optional-locks --no-pager blame -L 2400,2490 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_web_rollover.rs",
+      "bytes": 7850,
+      "sha256": "d4eaa7a21c31c37586b4fe8df5120379ddd1e441c557cee085e78093d71489b6"
+    },
+    {
+      "command": "git --no-optional-locks --no-pager blame -L 7805,7890 9ea9e7beedf986db95cd5bea7b750544e452caa8 -- src/operator_web_rollover.rs",
+      "bytes": 7684,
+      "sha256": "6c1af87ce8b4de049bb27a7ba9fbb10396688e5f7881d5609144cb5daed3bfc7"
+    }
+  ],
+  "maxCombinedCodeBytes": 28144,
+  "qualification": "docs/verification/SOURCE_HANDOFF_SIZE_RECOVERY_2026_11_01.json",
+  "questions": [
+    "Does sharing the existing 10 KiB format bound preserve bounded parsing and complete source context?",
+    "Do exact receipt, revision, task, app selection and native ownership checks remain?",
+    "Do regressions test actual old refusal, oversize/padding and identity/native-path rejection?",
+    "Report any actionable defect or exact needed read. Source-patch suitability is separate from cumulative release approval and installed acceptance."
+  ],
+  "priorEvidence": "All prior partial source reports retain their scope and limits; unchanged blobs are carry-forward evidence, not inherited acceptance.",
+  "executionAuthority": "READ_ONLY_PUBLIC_SOURCE_ONLY_NO_NATIVE_WORK_OR_PRODUCTION_CHANGES"
+}

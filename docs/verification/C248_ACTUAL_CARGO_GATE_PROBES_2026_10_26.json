@@ -1,0 +1,83 @@
+{
+  "checkpoint": "C248",
+  "date": "2026-10-26",
+  "classification": "ACTUAL_ISOLATED_CARGO_DIAGNOSTIC_NOT_RELEASE_QUALIFICATION",
+  "precedingSourceCommit": "98248023c8cd359476e5943d991c960354c5e168",
+  "nativeProducerFailure": "REVIEWED_BUILD_TIMEOUT",
+  "originalFullBuildTimeoutCause": "UNPROVEN",
+  "actualCases": [
+    {
+      "case": "version-inherit-console",
+      "versionQuery": true,
+      "tinyCompile": false,
+      "noWindow": false,
+      "elapsedMillis": 207,
+      "rootExitCode": 0,
+      "naturalGateReached": true,
+      "stderrFinished": true,
+      "jobActiveAfter": 0,
+      "cleanupProven": true,
+      "helperCheckPerformed": false,
+      "releaseAuthorityCreated": false
+    },
+    {
+      "case": "version-no-window",
+      "versionQuery": true,
+      "tinyCompile": false,
+      "noWindow": true,
+      "elapsedMillis": 206,
+      "rootExitCode": 0,
+      "naturalGateReached": true,
+      "stderrFinished": true,
+      "jobActiveAfter": 0,
+      "cleanupProven": true,
+      "helperCheckPerformed": false,
+      "releaseAuthorityCreated": false
+    },
+    {
+      "case": "tiny-inherit-console",
+      "versionQuery": false,
+      "tinyCompile": true,
+      "noWindow": false,
+      "elapsedMillis": 406,
+      "rootExitCode": 0,
+      "naturalGateReached": true,
+      "stderrFinished": true,
+      "jobActiveAfter": 0,
+      "cleanupProven": true,
+      "helperCheckPerformed": false,
+      "releaseAuthorityCreated": false
+    },
+    {
+      "case": "tiny-no-window",
+      "versionQuery": false,
+      "tinyCompile": true,
+      "noWindow": true,
+      "elapsedMillis": 405,
+      "rootExitCode": 0,
+      "naturalGateReached": true,
+      "stderrFinished": true,
+      "jobActiveAfter": 0,
+      "cleanupProven": true,
+      "helperCheckPerformed": false,
+      "releaseAuthorityCreated": false
+    }
+  ],
+  "summarySha256": "1f56af9e619f446d02484c69f1340cdc75ac4f35d5ed3197e4a07136d0a34e23",
+  "allFourNaturalExitZero": true,
+  "allFourElapsedUnder500Milliseconds": true,
+  "fullBuildTimeoutReproduced": false,
+  "causeEstablished": false,
+  "diagnosticOverlayRemovedBeforeC249": true,
+  "originalReviewedBuildSourceRestoredBeforeC249": "f9ef1a541438a4b4c08195e7ee36db9e8909eb892864b229c065b1cb14fb48b2",
+  "productionSourceAtC249IsRecordedSeparately": true,
+  "releaseAuthorityCreated": false,
+  "candidateAcceptanceClaimed": false,
+  "productionPromotion": false,
+  "limitations": [
+    "Version queries and tiny builds are narrower than the full reviewed-source build.",
+    "All four cases passed, so these probes do not establish the cause of the retained full-build timeout.",
+    "Temporary diagnostic fixtures and successful compilation grant no build attestation or promotion authority."
+  ],
+  "milestoneComplete": false
+}

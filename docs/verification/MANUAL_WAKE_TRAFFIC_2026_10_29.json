@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T22:18:33.226260+00:00",
+  "classification": "TESTED_SOURCE_AND_LOOPBACK_FIXTURES",
+  "sourceCommit": "fb6d4977676c4345a9db9e5da0437840826def41",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "files": {
+    "src/project_mcp.rs": "4ef907370054233b234d21590fc104ffabe7159c8436c5fe6ad374ad770001d0",
+    "src/web_task_dispatch.rs": "ad5a95ac2964e3be56b037e2a321d56640238dbf740362e6e74269fc287688a0"
+  },
+  "testResults": {
+    "dispatch": 12,
+    "observer": 7,
+    "distinctPassed": 19,
+    "focusedIncludedInDispatch": true,
+    "strictAllTargetClippy": "PASS",
+    "rustfmt": "PASS"
+  },
+  "logSha256": {
+    "oct29-manual-traffic-focused.log": "0235de6ef134a0c53d0465579e1f76da7c9da7b7c54754bbe439331d7d29e574",
+    "oct29-manual-traffic-focused-fixed.log": "fbe8fc72b6ebd992ff9ad3fd514cbfb37da00fef3bad1e3eba071022be14c7de",
+    "oct29-manual-traffic-dispatch.log": "de93342bd323ed17f69b35c977401c6c297299a5653e68bb93666778e3fa4574",
+    "oct29-manual-traffic-observer-regressions.log": "e94fcb2ac101e2c4f8f2e1ea32132ff09dd42414839b19c2d67122c5b87da078",
+    "oct29-manual-traffic-clippy.log": "dd5caac5810ef3703b9fe467644f531a1013cc706adfbf306f02f637e1e7a923"
+  },
+  "failureHistory": "Initial test compilation used nonexistent ContextPressure type; corrected to existing PressureStatus; failed log retained",
+  "behavior": [
+    "Exact task/key admission precedes observation; foreign keys cannot mutate conversation ledgers",
+    "Existing target-bound observer reused without native writer or new registry",
+    "Execution key/authentication envelope excluded from observed arguments; only counts/hashes persisted",
+    "Each invocation counts, even when journal suppresses repeated effect; sibling estimate unchanged",
+    "Owned async task retains effect and accounting drain after HTTP awaiter cancellation"
+  ],
+  "limitations": [
+    "Provider conversation origin and exact hidden context remain unverified; coverage stays unknown",
+    "Requests failing project/key admission cannot safely be attributed and remain outside project counters",
+    "Raw auth material is excluded from the estimate; safety margin remains necessary",
+    "Real Web/installed runtime acceptance and real-project admission latency remain open",
+    "Dedicated manual-path cancellation injection was not run; existing normal-dispatch cancellation test passed"
+  ],
+  "externalConnectorProbes": 0,
+  "browserOrWakeStarts": 0,
+  "installedReleaseChanged": false,
+  "CI": "UNVERIFIED_ZERO_VISIBLE_EXACT_COMMIT_RUNS",
+  "protectedBaselineBytes": {
+    "filesChecked": 5858,
+    "changedFiles": 0,
+    "topologyOrProcessInventoryRepeated": false
+  }
+}

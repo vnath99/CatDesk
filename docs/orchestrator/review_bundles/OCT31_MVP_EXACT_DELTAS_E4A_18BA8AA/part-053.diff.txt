@@ -1,0 +1,194 @@
++            snapshot_authority_digest: "5".repeat(64),
++            snapshot_manifest_digest: "6".repeat(64),
++            build_policy_sha256: "7".repeat(64),
++            cargo_sha256: "8".repeat(64),
++            rustc_sha256: "9".repeat(64),
++            snapshot_expected: ReviewedSourceSnapshotExpectedV1 {
++                session_id: "fixture-review".into(),
++                project_id: "catdesk".into(),
++                approved_contract_hash: "a".repeat(64),
++                logical_task_id: "fixture-task".into(),
++                completion_artifact_ids: vec![],
++                current_outputs: vec![],
++                baseline_observations: vec![],
++            },
++            local_backend_only: true,
++        };
++        let preflight = ReviewedPromotionPreflightV1 {
++            schema_version: 1,
++            confirmation_token: "a".repeat(32),
++            expires_at_unix: 1,
++            authorization: auth.clone(),
++        };
++        let claim = ReviewedPromotionClaimV1 {
++            schema_version: 1,
++            authorization_id: auth.authorization_id.clone(),
++            claim_id: auth.claim_id.clone(),
++            transaction_id: auth.transaction_id.clone(),
++            candidate_relative_path: auth.candidate_relative_path.clone(),
++            state: "CLAIMED_PENDING".into(),
++        };
++        let result = ReviewedPromotionResultV1 {
++            schema_version: 1,
++            state: "PROMOTION_FAILED_OR_AMBIGUOUS".into(),
++            authorization_generation: 1,
++            candidate_sha256: auth.candidate_sha256.clone(),
++            transaction_id: auth.transaction_id.clone(),
++            serving_state: None,
++        };
++        (auth, preflight, claim, result)
++    }
++
++    #[test]
++    fn only_exact_expired_local_terminal_binding_is_eligible_for_further_checks() {
++        let (auth, preflight, claim, result) = terminal_fixture();
++        let id = auth.transaction_id.clone();
++        validate_terminal_binding(&auth, &preflight, &claim, &result, id.as_bytes(), &id).unwrap();
++        for scenario in [
++            "live-lease",
++            "serving-mode",
++            "changed-authority",
++            "claim",
++            "result",
++            "generation",
++            "candidate",
++            "serving-claim",
++            "owner",
++            "preflight-expiry",
++        ] {
++            let (mut a, mut p, mut c, mut r) = terminal_fixture();
++            let mut owner = id.as_bytes().to_vec();
++            match scenario {
++                "live-lease" => {
++                    a.expires_at_unix = u64::MAX;
++                    p.expires_at_unix = u64::MAX;
++                    p.authorization = a.clone()
++                }
++                "serving-mode" => {
++                    a.local_backend_only = false;
++                    p.authorization = a.clone()
++                }
++                "changed-authority" => p.authorization.review_record_sha256 = "0".repeat(64),
++                "claim" => c.transaction_id = "9".repeat(32),
++                "result" => r.state = "PROMOTION_COMPLETED".into(),
++                "generation" => r.authorization_generation = 2,
++                "candidate" => r.candidate_sha256 = "f".repeat(64),
++                "serving-claim" => r.serving_state = Some("STOPPED_AFTER_BOUNDED_OWNER".into()),
++                "owner" => owner.clear(),
++                _ => p.expires_at_unix = 2,
++            }
++            assert!(
++                validate_terminal_binding(&a, &p, &c, &r, &owner, &id).is_err(),
++                "{scenario}"
++            );
++        }
++    }
++
++    fn fixture() -> (PathBuf, Journal) {
++        let root =
++            std::env::temp_dir().join(format!("CatDesk-Retirement-Fixture-{}", Uuid::new_v4()));
++        fs::create_dir_all(root.join(".catdesk/promotion-control")).unwrap();
++        fs::create_dir_all(root.join(".catdesk/restart-handoff")).unwrap();
++        let mut records = BTreeMap::new();
++        for name in RECORDS {
++            let raw = format!("disposable fixture {name}");
++            fs::write(root.join(".catdesk/promotion-control").join(name), &raw).unwrap();
++            records.insert(name.into(), digest(raw.as_bytes()));
++        }
++        let receipt = b"disposable historical receipt";
++        fs::write(root.join(".catdesk/restart-handoff/latest.json"), receipt).unwrap();
++        let plan = Plan {
++            schema_version: 1,
++            transaction_id: "a".repeat(32),
++            prior_sha256: "b".repeat(64),
++            candidate_sha256: "c".repeat(64),
++            records,
++            historical_handoff_sha256: Some(digest(receipt)),
++            trusted_release_evidence_sha256: digest(b"DISPOSABLE_FIXTURE_NOT_RELEASE_AUTHORITY"),
++        };
++        let journal = Journal {
++            schema_version: 1,
++            phase: "PREPARED".into(),
++            evidence_sha256: digest(&bytes(&plan).unwrap()),
++            plan,
++        };
++        let parent = metadata(&root).unwrap();
++        update_journal(&parent, &journal).unwrap();
++        drop(parent);
++        (root, journal)
++    }
++
++    #[test]
++    fn archive_preserves_bytes_and_completed_history_is_idempotent() {
++        let (root, mut value) = fixture();
++        let parent = metadata(&root).unwrap();
++        assert!(ensure_ready(&root).is_err());
++        archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
++        assert_eq!(value.phase, "COMPLETED");
++        ensure_ready(&root).unwrap();
++        archive_locked(&parent, &mut value, |_| {
++            panic!("completed history must not execute another move")
++        })
++        .unwrap();
++        assert!(!root.join(".catdesk/promotion-control").exists());
++        assert!(!root.join(".catdesk/restart-handoff/latest.json").exists());
++        drop(parent);
++        cleanup_fixture(root);
++    }
++
++    #[test]
++    fn five_core_records_are_valid_but_a_missing_authority_is_not() {
++        let (root, mut value) = fixture();
++        let receipt = b"\xef\xbb\xbf{\"fixture\":\"byte-preserved PowerShell receipt\"}";
++        fs::write(root.join(".catdesk/restart-handoff/latest.json"), receipt).unwrap();
++        value.plan.historical_handoff_sha256 = Some(digest(receipt));
++        fs::remove_file(root.join(".catdesk/promotion-control/reviewed-build-attestation.json"))
++            .unwrap();
++        let parent = metadata(&root).unwrap();
++        let control = child(&parent, "promotion-control").unwrap();
++        value.plan.records = record_hashes(&control).unwrap();
++        assert_eq!(value.plan.records.len(), 5);
++        drop(control);
++        value.evidence_sha256 = digest(&bytes(&value.plan).unwrap());
++        update_journal(&parent, &value).unwrap();
++        archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
++        ensure_ready(&root).unwrap();
++        assert_eq!(
++            fs::read(
++                root.join(".catdesk/restart-handoff")
++                    .join(format!("retired-{}.json", digest(receipt)))
++            )
++            .unwrap(),
++            receipt
++        );
++        drop(parent);
++        cleanup_fixture(root);
++
++        let (root, _) = fixture();
++        fs::remove_file(root.join(".catdesk/promotion-control/authorization.json")).unwrap();
++        let parent = metadata(&root).unwrap();
++        let control = child(&parent, "promotion-control").unwrap();
++        assert!(record_hashes(&control).is_err());
++        drop(control);
++        drop(parent);
++        cleanup_fixture(root);
++    }
++
++    #[test]
++    fn receipt_decoder_accepts_one_utf8_bom_and_refuses_unknown_encoding() {
++        for raw in [
++            b"{\"schemaVersion\":4}".as_slice(),
++            b"\xef\xbb\xbf{\"schemaVersion\":4}".as_slice(),
++        ] {
++            assert_eq!(receipt_json(raw).unwrap()["schemaVersion"], 4);
++        }
++        for raw in [
++            b"\xff\xfe{\0}".as_slice(),
++            b"\xef\xbb\xbf\xef\xbb\xbf{}".as_slice(),
++            b"unknown receipt".as_slice(),
++        ] {
++            assert!(receipt_json(raw).is_err());
++        }
++    }
++
++    #[test]

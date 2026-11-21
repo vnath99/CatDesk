@@ -1,0 +1,203 @@
++        .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
++    let control = prepared.scope().control_workspace.clone();
++    let lease = crate::operator_facade::acquire_web_work_lease(&control, &request.project_id)?;
++    let record =
++        with_native_dispatch_record(&prepared, &request, key, task_id, &lease, |record, _| {
++            Ok(record.clone())
++        })?;
++    // No shared registry/Wake lock spans Git/worktree inspection. This project's
++    // lease remains held; the second transaction rechecks authority before any
++    // continuation mutation or EXECUTING journal record.
++    let inspected = inspect(prepared.scope(), &record, key, task_id)?;
++    let call = with_native_dispatch_record(
++        &prepared,
++        &request,
++        key,
++        task_id,
++        &lease,
++        |record, current| inspected.commit(&prepared, record, key, call_id, &lease, current),
++    )?;
++    Ok(NativeDispatchAdmission {
++        _lease: lease,
++        control,
++        project_id: request.project_id,
++        call,
++    })
++}
++
++fn with_native_dispatch_record<T>(
++    prepared: &PreparedProjectScopeV1,
++    request: &AssignmentRequest,
++    key: &str,
++    task_id: &str,
++    lease: &crate::operator_facade::WebWorkLease,
++    operation: impl FnOnce(&crate::web_work_state::WorkRecord, &protocol::Target) -> Result<T, String>,
++) -> Result<T, String> {
++    mcp::with_current_project_web_target(
++        &prepared.scope().control_workspace,
++        &request.project_id,
++        request.expected_target_generation,
++        &request.expected_target_sha256,
++        |workspace, paired| {
++            let current = protocol::Target::new(paired.generation, paired.url.clone())?;
++            prepared
++                .revalidate_registration()
++                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
++            let scope = prepared.scope();
++            let record = WorkLedger::open(workspace, &request.project_id)?
++                .record(&request.request_id)?
++                .ok_or("WEB_WORK_REQUEST_MISSING")?;
++            if record.phase != "OPEN"
++                || record.event_id != request.source_event_id
++                || record.task_assignment.as_ref().is_none_or(|link| {
++                    link.task_id != task_id || link.assignment_sha256 != request.assignment_sha256
++                })
++            {
++                return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
++            }
++            lease.check_source_task(&record.target, &current, &record.event_id)?;
++            require_assignment_source(
++                workspace,
++                &request.project_id,
++                &record,
++                record.target == current,
++            )?;
++            crate::project_mcp_task::native_status_selection(scope, &record, key)?;
++            operation(&record, &current)
++        },
++    )
++}
++
++pub(crate) struct NativeStatusAdmission {
++    prepared: PreparedProjectScopeV1,
++    request: AssignmentRequest,
++    key: String,
++    task_id: String,
++    selection: crate::operator_codex_cli::NativeQueueSelection,
++}
++
++impl NativeStatusAdmission {
++    /// Slow Git/queue inspection occurs only after the shared admission locks
++    /// end. This remains a snapshot, not a writer/lease/liveness assertion.
++    pub(crate) fn snapshot(self) -> Result<Value, String> {
++        let result = crate::operator_codex_cli::native_queue_selection_status(
++            &self.prepared.scope().control_workspace,
++            &self.request.project_id,
++            &self.selection,
++        );
++        // An in-flight read is not durable permission: recheck bounded exact
++        // metadata before releasing data if authority changed during lookup.
++        let current =
++            authorize_native_status(&self.prepared, &self.request, &self.key, &self.task_id)?;
++        if current != self.selection {
++            return Err("WEB_TASK_NATIVE_REQUEST_CHANGED".into());
++        }
++        result
++    }
++}
++
++/// Authorize bounded metadata while retaining the paired target. Status takes
++/// no project writer/lease and changes no task journal. Queue inspection is a
++/// separate read, so a slow/missing queue cannot hold sibling admission locks.
++pub(crate) fn native_status(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++) -> Result<NativeStatusAdmission, String> {
++    native_status_with_preparation(workspace, pins, key, task_id, |root, project| {
++        PreparedProjectScopeV1::resolve(root, project)
++            .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE".into())
++    })
++}
++
++pub(crate) fn native_status_with_preparation(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++    prepare: impl FnOnce(&Path, &str) -> Result<PreparedProjectScopeV1, String>,
++) -> Result<NativeStatusAdmission, String> {
++    let request = AssignmentRequest::parse(pins)?;
++    let prepared = prepare(workspace, &request.project_id)?;
++    let selection = authorize_native_status(&prepared, &request, key, task_id)?;
++    Ok(NativeStatusAdmission {
++        prepared,
++        request,
++        key: key.into(),
++        task_id: task_id.into(),
++        selection,
++    })
++}
++
++fn authorize_native_status(
++    prepared: &PreparedProjectScopeV1,
++    request: &AssignmentRequest,
++    key: &str,
++    task_id: &str,
++) -> Result<crate::operator_codex_cli::NativeQueueSelection, String> {
++    mcp::with_current_project_web_target(
++        &prepared.scope().control_workspace,
++        &request.project_id,
++        request.expected_target_generation,
++        &request.expected_target_sha256,
++        |workspace, paired| {
++            prepared
++                .revalidate_registration()
++                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
++            let scope = prepared.scope();
++            let record = WorkLedger::open(workspace, &request.project_id)?
++                .record(&request.request_id)?
++                .ok_or("WEB_WORK_REQUEST_MISSING")?;
++            if record.phase != "OPEN"
++                || record.event_id != request.source_event_id
++                || record.task_assignment.as_ref().is_none_or(|link| {
++                    link.task_id != task_id || link.assignment_sha256 != request.assignment_sha256
++                })
++            {
++                return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
++            }
++            let current = protocol::Target::new(paired.generation, paired.url.clone())?;
++            require_assignment_source(
++                workspace,
++                &request.project_id,
++                &record,
++                record.target == current,
++            )?;
++            crate::project_mcp_task::native_status_selection(scope, &record, key)
++        },
++    )
+ }
+ 
+ pub(crate) fn authorized_assignment(
+@@ -100,11 +349,183 @@ pub(crate) fn authorized_assignment(
+     }
+ }
+ 
++/// Explicit granted manual continuation. Uses the publication lock order from
++/// request(), not with_current_project_web_target (which holds Wake's lock).
++/// No new work record, browser, endpoint or native writer is created here.
++pub(crate) fn manual_wake(
++    workspace: &Path,
++    pins: Value,
++    key: &str,
++    task_id: &str,
++    call_id: &str,
++    arguments: Value,
++) -> Result<Value, String> {
++    let request = AssignmentRequest::parse(pins)?;
++    let intent = crate::project_mcp_task::ManualWakeRequest::parse(arguments)?;
++    let workspace = workspace
++        .canonicalize()
++        .map_err(|_| "WEB_WORK_CONTROL_UNAVAILABLE")?;
++    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
++    loop {
++        let result = manual_wake_once(&workspace, &request, &intent, key, task_id, call_id);
++        // Only pre-effect admission contention is retryable. Journaled,
++        // submitted, unknown and arbitrary publisher errors never enter here.
++        if matches!(
++            result.as_ref().map_err(String::as_str),
++            Err("WEB_TASK_MANUAL_WAKE_ADMISSION_BUSY")
++        ) && std::time::Instant::now() < deadline
++        {
++            std::thread::sleep(std::time::Duration::from_millis(10));

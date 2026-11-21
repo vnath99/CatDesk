@@ -1,0 +1,1361 @@
+# CatDesk exact public-source review input. No approval or execution authority.
+# Base e4a99a8b6913c3db689a216f4ae4e0a7f6fff612
+# Target b25119e8c47cfe261aae06b461c3697e3841cdb6
+
+diff --git a/scripts/catdesk-doctor.ps1 b/scripts/catdesk-doctor.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ad8c770546b504e5359fb2482543d344071f660
+--- /dev/null
++++ b/scripts/catdesk-doctor.ps1
+@@ -0,0 +1,254 @@
++# Additive passive diagnostic library for catdesk.ps1. No startup, repair,
++# authentication command, MCP POST, browser inspection or report-file writer.
++
++function Get-DoctorProperty($Value, [string]$Name, $Default = $null) {
++    if ($null -eq $Value) { return $Default }
++    if ($Value -is [Collections.IDictionary]) {
++        if ($Value.Contains($Name)) { return $Value[$Name] }
++    } elseif ($Value.PSObject.Properties[$Name]) { return $Value.$Name }
++    return $Default
++}
++
++function Assert-DoctorLocalPath([string]$Path) {
++    if($Path -notmatch '\A[A-Za-z]:[\\/]' -or $Path.Length -gt 4096){throw 'DOCTOR_LOCAL_PATH_REQUIRED'}
++    $full=[IO.Path]::GetFullPath($Path);$volume=[IO.Path]::GetPathRoot($full)
++    if($full.Substring($volume.Length).Contains(':') -or ([IO.DriveInfo]::new($volume)).DriveType -notin @([IO.DriveType]::Fixed,[IO.DriveType]::Removable)){throw 'DOCTOR_LOCAL_PATH_REQUIRED'}
++    # Check ancestors before touching descendants so a junction cannot turn a
++    # local metadata read into a remote share/authentication request.
++    $cursor=$volume
++    foreach($component in ($full.Substring($volume.Length) -split '[\\/]')){
++        if(-not $component){continue};$cursor=Join-Path $cursor $component
++        try{$entry=Get-Item -LiteralPath $cursor -Force -ErrorAction Stop}
++        catch [System.Management.Automation.ItemNotFoundException]{break}
++        if(($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'DOCTOR_LOCAL_PATH_REQUIRED'}
++    }
++}
++
++function Test-DoctorWorkspaceSpelling($Path) {
++    # Rust canonicalize persists local Windows workspaces with a verbatim drive
++    # prefix. Inspect spelling only: do not open another project's directory or
++    # interpret a registry row as current filesystem/ownership authority.
++    if($Path -isnot [string] -or $Path.Length -gt 4096){return $false}
++    $ordinary=$Path
++    if($ordinary.StartsWith('\\?\',[StringComparison]::Ordinal)){$ordinary=$ordinary.Substring(4)}
++    if($ordinary -notmatch '\A[A-Za-z]:[\\/]' -or $ordinary -match '(?:\A|[\\/])\.\.?(?:[\\/]|\z)'){return $false}
++    if($ordinary.IndexOfAny([IO.Path]::GetInvalidPathChars()) -ge 0 -or $ordinary.Substring(2).Contains(':')){return $false}
++    try{return [string]::Equals([IO.Path]::GetFullPath($ordinary),$ordinary.Replace('/','\'),[StringComparison]::OrdinalIgnoreCase)}catch{return $false}
++}
++
++function Read-DoctorJson([string]$Path, [int]$MaximumBytes = 1048576) {
++    Assert-DoctorLocalPath $Path
++    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
++    if ($item -isnot [IO.FileInfo] -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -gt $MaximumBytes) { throw 'DOCTOR_METADATA_UNAVAILABLE' }
++    $stream=[IO.File]::Open($item.FullName,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
++    try{
++        $bytes=New-Object byte[] ($MaximumBytes+1);$count=0
++        while($count -le $MaximumBytes){$read=$stream.Read($bytes,$count,$bytes.Length-$count);if($read -eq 0){break};$count+=$read}
++        if($count -gt $MaximumBytes){throw 'DOCTOR_METADATA_UNAVAILABLE'}
++        $text=[Text.UTF8Encoding]::new($false,$true).GetString($bytes,0,$count).TrimStart([char]0xfeff)
++    }finally{$stream.Dispose()}
++    return (ConvertFrom-CatDeskLiteralJson $text)
++}
++
++function Get-DoctorDefinitions {
++    @(
++        @('PROCESS_OWNER','CURRENT_OPERATOR','CURRENT_PROCESS','RUN_SUPPORTED_OWNER_DIAGNOSTIC',@('OWNER_NOT_QUALIFIED','OWNER_QUALIFIED')),
++        @('RELEASE_PAIR','CANONICAL_RELEASE','target/release/catdesk.exe.sha256','catdesk.ps1 diagnose',@('RELEASE_PAIR_VERIFIED','CANONICAL_BINARY_MISSING','CANONICAL_FINGERPRINT_MISSING','CANONICAL_FINGERPRINT_INVALID','CANONICAL_HASH_MISMATCH','CANONICAL_WORKSPACE_RESOLVE','CANONICAL_IDENTITY_INTERNAL','CANONICAL_IDENTITY')),
++        @('RECOVERY_AUTHORITY','RELEASE_MANAGER','.catdesk/release-recovery/current.json','catdesk.ps1 diagnose',@('RECOVERY_AUTHORITY_AVAILABLE','LKG_AUTHORITY_MISSING','LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED','RECOVERY_RELEASE_AUTHORITY_REQUIRED','RECOVERY_AUTHORITY_UNVERIFIED')),
++        @('LOCAL_CONFIG','LOCAL_OPERATOR','CONFIGURED_LOCAL_MCP','catdesk.ps1 diagnose',@('LOCAL_CONFIG_READABLE','LOCAL_CONFIG_UNAVAILABLE')),
++        @('LOCAL_DAEMON','CANONICAL_DAEMON','BOUNDED_WINDOWS_LISTENER_INVENTORY','catdesk.ps1 diagnose',@('CANONICAL_LISTENER_PRESENT','LOCAL_MCP_LISTENER_MISSING','LOCAL_MCP_LISTENER_IDENTITY_MISMATCH','LOCAL_OWNER_UNVERIFIED')),
++        @('LOCAL_HEALTH','CANONICAL_DAEMON','LOCAL_HEALTH_ENDPOINTS','RUN_BOUNDED_LOCAL_HEALTH_TEST',@('LOCAL_HEALTH_NOT_PROBED','LOCAL_HEALTH_READY','LOCAL_HEALTH_FAILED')),
++        @('LOCAL_MCP','CANONICAL_DAEMON','LOCAL_MCP_INITIALIZE_AND_CATALOG','catdesk.ps1 diagnose',@('LOCAL_MCP_NOT_PROBED','LOCAL_MCP_READY','LOCAL_MCP_AUTH_REJECTED','LOCAL_MCP_PROTOCOL_UNREADY')),
++        @('OFFICIAL_RUNTIME','EXISTING_OFFICIAL_OWNER','CONFIGURED_NATIVE_RUNTIME_PROFILE','RUN_EXISTING_OWNER_READONLY_STATUS',@('RUNTIME_CLIENT_UNAVAILABLE','RUNTIME_OWNER_UNVERIFIED','RUNTIME_OWNER_ABSENT','RUNTIME_PROFILE_ROUTE_MISMATCH','RUNTIME_LOCAL_READY')),
++        @('UPSTREAM_CONTROL_PLANE','EXTERNAL_SERVICE','OFFICIAL_OWNER_POLL_OBSERVATION','WAIT_FOR_CHANGED_UPSTREAM_EVIDENCE',@('UPSTREAM_NOT_PROBED','UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE','UPSTREAM_READY','UPSTREAM_UNAVAILABLE')),
++        @('CONNECTOR','CHATGPT_CONNECTOR','CONNECTOR_RESPONSE_OBSERVATION','WAIT_FOR_CHANGED_CONNECTOR_EVIDENCE',@('CONNECTOR_NOT_PROBED','UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE','CONNECTOR_TRANSPORT_NO_HTTP_STATUS','CONNECTOR_RESPONSE_VERIFIED')),
++        @('BROWSER','EXISTING_BROWSER_OWNER','APPROVED_PROFILE_READINESS_OBSERVATION','operator web-dev-runtime inspect-readiness --project-id <registered-project>',@('BROWSER_NOT_INSPECTED','HOME_EDITOR_MISSING','BROWSER_DRAFT_UNKNOWN','BROWSER_TARGET_MISSING','BROWSER_EXACT_READY','BROWSER_RESPONSE_LOAD_ERROR','BROWSER_AUTH_REQUIRED','BROWSER_OWNER_CLEANUP_UNVERIFIED')),
++        @('PROJECT_REGISTRY','PROJECT_REGISTRY','.catdesk/projects/projects.json','operator web projects',@('REGISTRY_METADATA_PAIRED','PROJECT_WAKE_TARGET_MISMATCH','REGISTRY_UNAVAILABLE','REGISTRY_INVALID','WAKE_CONFIG_INVALID')),
++        @('WAKE_QUEUE','EXISTING_WAKE_OWNER','WAKE_CONFIG_CONTROL_AND_DELIVERIES','operator web projects',@('WAKE_METADATA_OBSERVED','WAKE_METADATA_UNAVAILABLE','WAKE_METADATA_PARTIAL','WAKE_UNKNOWN_OUTCOME')),
++        @('CODEX_CLI','CURRENT_USER_CODEX','TRUSTED_CODEX_COMMAND_DISCOVERY','operator codex diagnose --project-id <registered-project>',@('CODEX_PRESENT_AUTH_UNVERIFIED','CODEX_CLI_UNAVAILABLE')),
++        @('NATIVE_SESSION','EXISTING_NATIVE_PROJECT_OWNER','PROJECT_OWNER_LEASE_OBSERVATION','operator codex diagnose --project-id <registered-project>',@('WORKER_OWNER_NOT_PROBED','WORKER_GONE','WORKER_OWNER_VERIFIED')),
++        @('LOCAL_PROVIDER','LOCAL_MODEL_OWNER','LOCAL_OLLAMA_EXECUTABLE_DISCOVERY','RUN_BOUNDED_LOCAL_PROVIDER_STATUS',@('LOCAL_PROVIDER_NOT_PROBED','LOCAL_PROVIDER_UNAVAILABLE','LOCAL_PROVIDER_READY')),
++        @('OBSERVATIONS','CALLER','IMPORTED_ADVISORY_DOCUMENT','SUPPLY_VALID_REDACTED_OBSERVATIONS',@('OBSERVATIONS_NOT_SUPPLIED','OBSERVATIONS_IMPORTED_ADVISORY','OBSERVATIONS_INVALID'))
++    )
++}
++
++function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWorkspace = '', [string]$WakeRoot = '', [switch]$Human) {
++    if (-not $ProjectWorkspace) { $ProjectWorkspace = $Workspace }
++    if (-not $WakeRoot) { $WakeRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'CatDeskWake' }
++    foreach($localPath in @($Workspace,$ProjectWorkspace,$WakeRoot,$ConfigPath,$BuildFingerprintPath)){Assert-DoctorLocalPath $localPath}
++    $observedUtc = [DateTimeOffset]::UtcNow.ToString('o')
++    $definitions = Get-DoctorDefinitions
++    $layers = [ordered]@{}
++    foreach ($definition in $definitions) {
++        $layers[$definition[0]] = [pscustomobject][ordered]@{
++            layer=$definition[0]; status='NOT_RUN'; code=$definition[4][0]; observedUtc=$observedUtc;
++            provenance='NOT_RUN'; owner=$definition[1]; evidenceRef=$definition[2]; nextDiagnostic=$definition[3]; facts=[ordered]@{}; retained=@()
++        }
++    }
++    function Set-DoctorLayer([string]$Id,[string]$State,[string]$Code,$Facts = $null) {
++        $definition = @($definitions | Where-Object { $_[0] -ceq $Id })[0]
++        if ($State -cnotin @('PASS','FAIL','UNVERIFIED','NOT_RUN') -or $Code -cnotin $definition[4]) { throw 'DOCTOR_CODE_INVALID' }
++        $layers[$Id].status=$State; $layers[$Id].code=$Code
++        $layers[$Id].provenance=if($State -ceq 'NOT_RUN'){'NOT_RUN'}else{'CURRENT_PASSIVE_METADATA'}
++        if ($null -ne $Facts) { $layers[$Id].facts=$Facts }
++    }
++    Set-DoctorLayer 'PROCESS_OWNER' 'UNVERIFIED' 'OWNER_NOT_QUALIFIED'
++    Set-DoctorLayer 'LOCAL_HEALTH' 'NOT_RUN' 'LOCAL_HEALTH_NOT_PROBED'
++    Set-DoctorLayer 'LOCAL_MCP' 'NOT_RUN' 'LOCAL_MCP_NOT_PROBED'
++    Set-DoctorLayer 'UPSTREAM_CONTROL_PLANE' 'NOT_RUN' 'UPSTREAM_NOT_PROBED'
++    Set-DoctorLayer 'CONNECTOR' 'NOT_RUN' 'CONNECTOR_NOT_PROBED'
++    Set-DoctorLayer 'BROWSER' 'NOT_RUN' 'BROWSER_NOT_INSPECTED'
++    Set-DoctorLayer 'NATIVE_SESSION' 'NOT_RUN' 'WORKER_OWNER_NOT_PROBED'
++    $identity=$null;$local=$null
++    try {
++        $identity=Get-LifecycleCanonicalIdentity
++        if ((Get-DoctorProperty $identity 'Path') -isnot [string] -or (Get-DoctorProperty $identity 'Sha256') -cnotmatch '\A[a-fA-F0-9]{64}\z') { throw 'CATDESK_CANONICAL_IDENTITY_INTERNAL' }
++        Set-DoctorLayer 'RELEASE_PAIR' 'PASS' 'RELEASE_PAIR_VERIFIED'
++    }
++    catch { $identity=$null; Set-DoctorLayer 'RELEASE_PAIR' 'FAIL' (Get-LifecycleCanonicalFailureGate $_.Exception.Message) }
++    try {
++        $authority=Invoke-LifecycleSeam -Name 'DoctorAuthority' -Arguments @($Workspace,$ExpectedBuildSha256) -Default {param($root,$hash) Get-CanonicalReleaseRecoveryAssessment -Root $root -ExpectedHash $hash}
++        $code=[string](Get-DoctorProperty $authority 'State')
++        if($code -ceq 'RECOVERY_READY'){Set-DoctorLayer 'RECOVERY_AUTHORITY' 'PASS' 'RECOVERY_AUTHORITY_AVAILABLE'}
++        elseif($code -cin @('LKG_AUTHORITY_MISSING','LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED','RECOVERY_RELEASE_AUTHORITY_REQUIRED')){Set-DoctorLayer 'RECOVERY_AUTHORITY' 'FAIL' $code}
++        else{Set-DoctorLayer 'RECOVERY_AUTHORITY' 'UNVERIFIED' 'RECOVERY_AUTHORITY_UNVERIFIED'}
++    } catch { Set-DoctorLayer 'RECOVERY_AUTHORITY' 'UNVERIFIED' 'RECOVERY_AUTHORITY_UNVERIFIED' }
++    try { $local=Get-LifecycleLocalMcp; Set-DoctorLayer 'LOCAL_CONFIG' 'PASS' 'LOCAL_CONFIG_READABLE' }
++    catch { Set-DoctorLayer 'LOCAL_CONFIG' 'FAIL' 'LOCAL_CONFIG_UNAVAILABLE' }
++    if($identity -and $local){
++        try {
++            $listener=Get-LifecycleListener -LocalMcp $local -Canonical $identity
++            if($null -eq $listener){Set-DoctorLayer 'LOCAL_DAEMON' 'FAIL' 'LOCAL_MCP_LISTENER_MISSING'}
++            elseif((Get-DoctorProperty $listener 'MatchesCanonical') -is [bool] -and (Get-DoctorProperty $listener 'MatchesCanonical')){Set-DoctorLayer 'LOCAL_DAEMON' 'PASS' 'CANONICAL_LISTENER_PRESENT'}
++            else{Set-DoctorLayer 'LOCAL_DAEMON' 'FAIL' 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'}
++        }catch{Set-DoctorLayer 'LOCAL_DAEMON' 'UNVERIFIED' 'LOCAL_OWNER_UNVERIFIED'}
++    }else{Set-DoctorLayer 'LOCAL_DAEMON' 'NOT_RUN' 'LOCAL_OWNER_UNVERIFIED'}
++    try {
++        $client=Invoke-LifecycleSeam -Name 'DoctorRuntimeClient' -Arguments @() -Default {Find-TunnelClient -ExplicitPath ''}
++        if($client){Set-DoctorLayer 'OFFICIAL_RUNTIME' 'UNVERIFIED' 'RUNTIME_OWNER_UNVERIFIED'}
++        else{Set-DoctorLayer 'OFFICIAL_RUNTIME' 'FAIL' 'RUNTIME_CLIENT_UNAVAILABLE'}
++    }catch{Set-DoctorLayer 'OFFICIAL_RUNTIME' 'UNVERIFIED' 'RUNTIME_OWNER_UNVERIFIED'}
++    try{
++        $registry=Read-DoctorJson (Join-Path $ProjectWorkspace '.catdesk/projects/projects.json')
++        $version=Get-DoctorProperty $registry 'schemaVersion'
++        if(($version -isnot [int] -and $version -isnot [long]) -or $version -notin @(1,2)){throw 'REGISTRY_INVALID'}
++        if(-not $registry.PSObject.Properties['projects'] -or $registry.projects -isnot [array]){throw 'REGISTRY_INVALID'}
++        $projects=$registry.projects;$seen=@{};$web=0;$paired=0;$native=0
++        $wake=$null;$invalidWake=$false
++        try{
++            $wake=Read-DoctorJson (Join-Path $WakeRoot 'config.json');$wakeVersion=Get-DoctorProperty $wake 'schemaVersion'
++            $retired=Get-DoctorProperty $wake 'retiredTargets';$retiredCount=0
++            if($null -ne $retired){
++                if($retired -isnot [pscustomobject]){throw 'WAKE_CONFIG_INVALID'}
++                $retiredCount=@($retired.PSObject.Properties).Count
++            }
++            if(($wakeVersion -isnot [int] -and $wakeVersion -isnot [long]) -or $wakeVersion -notin @(1,2) -or
++                ($wakeVersion -eq 1 -and $retiredCount -ne 0) -or ($wakeVersion -eq 2 -and $retiredCount -eq 0) -or $retiredCount -gt 256){$wake=$null;$invalidWake=$true}
++        }catch{if($_.Exception.Message -ceq 'WAKE_CONFIG_INVALID'){$wake=$null;$invalidWake=$true}}
++        foreach($project in $projects){
++            $id=Get-DoctorProperty $project 'projectId'
++            if($id -isnot [string] -or $id -cnotmatch '\A[A-Za-z0-9_-]{1,200}\z' -or $seen.ContainsKey($id)){throw 'REGISTRY_INVALID'}
++            $projectPath=Get-DoctorProperty $project 'workspace'
++            if(-not (Test-DoctorWorkspaceSpelling $projectPath)){throw 'REGISTRY_INVALID'}
++            $seen[$id]=$true
++            if(Get-DoctorProperty $project 'codexThreadId'){$native++}
++            $url=Get-DoctorProperty $project 'chatgptTargetUrl'
++            if(-not $url){continue};$web++
++            $digest=Get-DoctorProperty $project 'chatgptTargetSha256'
++            $target=Get-DoctorProperty (Get-DoctorProperty $wake 'targets') $id
++            $generation=Get-DoctorProperty $target 'generation' 0
++            if($url -is [string] -and $url.Length -le 512 -and $url -cmatch '\Ahttps://(?:chatgpt\.com|chat\.openai\.com)/(?:c/(?:WEB:)?[A-Za-z0-9_-]{1,200}|g/[A-Za-z0-9_-]{1,200}/c/(?:WEB:)?[A-Za-z0-9_-]{1,200})\z' -and
++                $digest -is [string] -and $digest -cmatch '\A[a-f0-9]{64}\z' -and $digest -ceq (Get-LifecycleSha256Hex $url) -and
++                (Get-DoctorProperty $target 'url') -ceq $url -and (Get-DoctorProperty $target 'digest') -ceq $digest -and ($generation -is [int] -or $generation -is [long]) -and $generation -gt 0){$paired++}
++        }
++        $facts=@{registeredProjects=$projects.Count;webBindings=$web;pairedWakeTargets=$paired;nativeOwnerRegistrations=$native;metadataOnly=$true;nativeOwnerLivenessVerified=$false}
++        if($invalidWake -and $web -gt 0){Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'WAKE_CONFIG_INVALID' $facts}
++        elseif($paired -eq $web){Set-DoctorLayer 'PROJECT_REGISTRY' 'PASS' 'REGISTRY_METADATA_PAIRED' $facts}
++        else{Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'PROJECT_WAKE_TARGET_MISMATCH' $facts}
++    }catch{
++        if($_.Exception.Message -ceq 'REGISTRY_INVALID'){Set-DoctorLayer 'PROJECT_REGISTRY' 'FAIL' 'REGISTRY_INVALID'}
++        else{Set-DoctorLayer 'PROJECT_REGISTRY' 'UNVERIFIED' 'REGISTRY_UNAVAILABLE'}
++    }
++    try{
++        $control=Read-DoctorJson (Join-Path $WakeRoot 'control.json') 4096
++        $desired=Get-DoctorProperty $control 'desired';if($desired -cnotin @('RUNNING','STOPPED','PAUSED')){throw 'WAKE_INVALID'}
++        $queued=0;$unknown=0;$sampled=0
++        $queue=Join-Path $WakeRoot 'queue';if(Test-Path -LiteralPath $queue){foreach($file in [IO.Directory]::EnumerateFiles($queue,'*.json')){$queued++;if($queued -ge 4096){break}}}
++        $deliveries=Join-Path $WakeRoot 'deliveries';if(Test-Path -LiteralPath $deliveries){foreach($file in [IO.Directory]::EnumerateFiles($deliveries,'*.json')){
++            if($sampled -ge 64){break};$sampled++;$delivery=Read-DoctorJson $file 65536
++            if((Get-DoctorProperty $delivery 'phase') -ceq 'SUBMITTING'){$unknown++}
++        }}
++        $facts=@{desired=$desired;queuedObserved=$queued;queueCountCapped=($queued -ge 4096);deliverySamples=$sampled;submittingSamples=$unknown;recordedOwnerIsNotLivenessProof=$true}
++        $code=if($unknown){'WAKE_UNKNOWN_OUTCOME'}elseif($sampled -ge 64 -or $queued -ge 4096){'WAKE_METADATA_PARTIAL'}else{'WAKE_METADATA_OBSERVED'}
++        Set-DoctorLayer 'WAKE_QUEUE' 'UNVERIFIED' $code $facts
++    }catch{Set-DoctorLayer 'WAKE_QUEUE' 'UNVERIFIED' 'WAKE_METADATA_UNAVAILABLE'}
++    try{
++        $codex=Invoke-LifecycleSeam -Name 'DoctorCodexCommand' -Arguments @() -Default {Resolve-TrustedCurrentUserCodexCommand}
++        if($codex){Set-DoctorLayer 'CODEX_CLI' 'UNVERIFIED' 'CODEX_PRESENT_AUTH_UNVERIFIED'}else{Set-DoctorLayer 'CODEX_CLI' 'FAIL' 'CODEX_CLI_UNAVAILABLE'}
++    }catch{Set-DoctorLayer 'CODEX_CLI' 'FAIL' 'CODEX_CLI_UNAVAILABLE'}
++    $ollama=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs/Ollama/ollama.exe'
++    if(Test-Path -LiteralPath $ollama -PathType Leaf){Set-DoctorLayer 'LOCAL_PROVIDER' 'UNVERIFIED' 'LOCAL_PROVIDER_NOT_PROBED'}else{Set-DoctorLayer 'LOCAL_PROVIDER' 'UNVERIFIED' 'LOCAL_PROVIDER_UNAVAILABLE'}
++    if($ObservationFile){
++        try{
++            $document=Read-DoctorJson $ObservationFile 16384
++            $names=@($document.PSObject.Properties.Name|Sort-Object)
++            if(($names -join ',') -cne 'observations,observedUtc,schemaVersion,source' -or ($document.schemaVersion -isnot [int] -and $document.schemaVersion -isnot [long]) -or $document.schemaVersion -ne 1 -or $document.source -cnotin @('OPERATOR_REPORTED','RETAINED_REPORT')){throw 'INVALID_OBSERVATION'}
++            $stamp=$document.observedUtc;$instant=[DateTimeOffset]::MinValue
++            if($stamp -isnot [string] -or $stamp.Length -gt 40 -or $stamp -cnotmatch '\A\d{4}-\d{2}-\d{2}(?:T[0-9:.]+(?:Z|[+-][0-9:]+))?\z' -or
++                -not [DateTimeOffset]::TryParse($stamp,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal,[ref]$instant) -or $instant -gt [DateTimeOffset]::UtcNow.AddMinutes(5)){throw 'INVALID_OBSERVATION'}
++            if($document.observations -isnot [array]){throw 'INVALID_OBSERVATION'}
++            $observations=$document.observations;if($observations.Count -gt 32){throw 'INVALID_OBSERVATION'};$imported=@{};$pending=@()
++            foreach($observation in $observations){
++                if((@($observation.PSObject.Properties.Name|Sort-Object) -join ',') -cne 'code,layer'){throw 'INVALID_OBSERVATION'}
++                $id=$observation.layer;$code=$observation.code
++                if($id -isnot [string] -or $code -isnot [string] -or -not $layers.Contains($id) -or $id -ceq 'OBSERVATIONS' -or $imported.ContainsKey($id)){throw 'INVALID_OBSERVATION'}
++                $definition=@($definitions|Where-Object{$_[0] -ceq $id})[0];if($code -cnotin $definition[4]){throw 'INVALID_OBSERVATION'}
++                $imported[$id]=$true;$pending+=@{layer=$id;code=$code}
++            }
++            # Validate the whole document before importing any item. Retained
++            # evidence can explain an unprobed layer, never supersede live facts.
++            foreach($observation in $pending){
++                $layer=$layers[$observation.layer];$layer.retained=@([pscustomobject]@{code=$observation.code;observedUtc=$stamp;source=$document.source})
++                if($layer.provenance -ceq 'NOT_RUN'){$layer.status='UNVERIFIED';$layer.code=$observation.code;$layer.observedUtc=$stamp;$layer.provenance='IMPORTED_ADVISORY'}
++            }
++            Set-DoctorLayer 'OBSERVATIONS' 'UNVERIFIED' 'OBSERVATIONS_IMPORTED_ADVISORY'
++        }catch{Set-DoctorLayer 'OBSERVATIONS' 'FAIL' 'OBSERVATIONS_INVALID'}
++    }else{Set-DoctorLayer 'OBSERVATIONS' 'NOT_RUN' 'OBSERVATIONS_NOT_SUPPLIED'}
++    # Coarse historical refusals cannot prove authentication or justify asking
++    # for a screenshot/login. Reconcile the owner and qualify the content-free
++    # observer before any new bounded inspection; this advice performs no action.
++    if($layers['BROWSER'].code -cin @('HOME_EDITOR_MISSING','BROWSER_TARGET_MISSING','BROWSER_DRAFT_UNKNOWN')){
++        $layers['BROWSER'].nextDiagnostic='QUALIFIED_READONLY_PROFILE_OBSERVATION_AFTER_OWNER_RECONCILIATION'
++    }
++    if($layers['BROWSER'].code -ceq 'BROWSER_AUTH_REQUIRED'){
++        $layers['BROWSER'].nextDiagnostic='operator web-dev-runtime login --project-id <registered-project>'
++    }
++    if($layers['BROWSER'].code -ceq 'BROWSER_OWNER_CLEANUP_UNVERIFIED'){
++        $layers['BROWSER'].nextDiagnostic='RECONCILE_EXISTING_BROWSER_OWNER_WITHOUT_MARKER_CLEAR_OR_RELAUNCH'
++    }
++    if($layers['BROWSER'].code -ceq 'BROWSER_RESPONSE_LOAD_ERROR'){
++        $layers['BROWSER'].nextDiagnostic='ATTRIBUTE_EXACT_WAKE_RESPONSE_WITHOUT_USER_RESEND'
++        $layers['BROWSER'].facts=[ordered]@{
++            conversationReadiness='SEPARATE_FROM_RESPONSE_FAILURE'; exchange='UNATTRIBUTED';
++            userResendAllowed=$false; genericLoadErrorRetryQualified=$false;
++            independentProjectsMayContinue=$true
++        }
++    }
++    if($layers['CONNECTOR'].code -ceq 'CONNECTOR_RESPONSE_VERIFIED'){
++        # A retained transport response is neither current availability nor an
++        # authenticated project grant. Do not suggest more connector polling
++        # when the next distinct prerequisite is project-task authorization.
++        $layers['CONNECTOR'].nextDiagnostic='VERIFY_AUTHENTICATED_PROJECT_TASK_SCOPE'
++        $layers['CONNECTOR'].facts=[ordered]@{
++            projectTaskAccess='UNVERIFIED'; providerConversationIdentity='UNVERIFIED';
++            taskGrantRequired=$true; bearerAndExecutionModeRequired=$true
++        }
++    }
++    $report=[pscustomobject][ordered]@{
++        schemaVersion=1;command='doctor';readOnly=$true;observedUtc=$observedUtc;networkRequests=0;runtimeStarts=0;repairs=0;
++        projectScope=if($ProjectWorkspace -ceq $Workspace){'RELEASE_WORKSPACE'}else{'EXPLICIT_OBSERVATION_WORKSPACE'};
++        installedWebAcceptance='UNVERIFIED';layers=@($layers.Values)
++    }
++    if($Human){foreach($layer in $report.layers){'{0}: {1} {2}; next={3}' -f $layer.layer,$layer.status,$layer.code,$layer.nextDiagnostic}}
++    else{$report|ConvertTo-Json -Depth 12 -Compress}
++}
+
+diff --git a/scripts/promote-reviewed-catdesk-build.ps1 b/scripts/promote-reviewed-catdesk-build.ps1
+index beec5e3d460ebdbe413a4e40feab470f1c3471a6..38b312b85a81957852e5e48e7b5c87cb130f3db6 100644
+--- a/scripts/promote-reviewed-catdesk-build.ps1
++++ b/scripts/promote-reviewed-catdesk-build.ps1
+@@ -473,8 +473,15 @@ function Invoke-PromotionHandoff([string]$Root, $From, [string]$TargetPath, [str
+         $helper = Join-Path $PSScriptRoot 'restart_catdesk_daemon.ps1'
+         if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { return $false }
+         $before = [DateTime]::UtcNow
+-        $raw = @(& $helper -OldPid ([int]$source.Pid) -ExpectedOldProcessStartedAtUtc ([string]$source.ProcessStartedAtUtc) -ExpectedOldProcessPath ([string]$source.BuildPath) -ExpectedOldProcessSha256 ([string]$source.BuildHash) -BuildPath $target -Workspace $workspaceRoot -McpPort $port -ReadyTimeoutSeconds $timeoutSeconds -BackendOnly:$localOnly -Execute 2>$null)
+-        if ($LASTEXITCODE -ne 0 -or $raw.Count -eq 0) { return $false }
++        # This is a PowerShell script call, not a native executable. A normal
++        # successful return need not set LASTEXITCODE. Capture its own status
++        # inside the array expression (Windows PowerShell resets $? outside).
++        $handoffScriptSucceeded = $false
++        $raw = @(
++            & $helper -OldPid ([int]$source.Pid) -ExpectedOldProcessStartedAtUtc ([string]$source.ProcessStartedAtUtc) -ExpectedOldProcessPath ([string]$source.BuildPath) -ExpectedOldProcessSha256 ([string]$source.BuildHash) -BuildPath $target -Workspace $workspaceRoot -McpPort $port -ReadyTimeoutSeconds $timeoutSeconds -BackendOnly:$localOnly -Execute 2>$null
++            $handoffScriptSucceeded = $?
++        )
++        if (-not $handoffScriptSucceeded -or $raw.Count -eq 0) { return $false }
+         $statePath = Join-Path $workspaceRoot '.catdesk\restart-handoff\latest.json'
+         $deadline = [DateTime]::UtcNow.AddSeconds($timeoutSeconds)
+         do {
+
+diff --git a/scripts/setup-secure-mcp.ps1 b/scripts/setup-secure-mcp.ps1
+index de0c6fdeaf2285aae46fce6a0eb6e4c3f0754ee9..a30cfcdfe7e3a16d2abc2967eb1add07953d3f06 100644
+--- a/scripts/setup-secure-mcp.ps1
++++ b/scripts/setup-secure-mcp.ps1
+@@ -14,6 +14,7 @@ param(
+     [switch]$PreserveExistingMigrationBackup,
+     [switch]$StopRuntime,
+     [switch]$RollbackClient,
++    [switch]$ForwardLocalMcpBearer,
+     [string]$TunnelClientPath = "",
+     [string]$ProfileName = "catdesk-local",
+     [string]$RuntimeAlias = "catdesk-local",
+@@ -99,7 +100,15 @@ namespace CatDesk {
+             return new BoundedCapture { Text = text.ToString(), Overflow = overflow };
+         }
+         public static BoundedNativeResult Run(string fileName, string arguments, int timeoutMilliseconds, int maximumOutputBytes) {
++            return Run(fileName, arguments, timeoutMilliseconds, maximumOutputBytes, null);
++        }
++        public static BoundedNativeResult Run(string fileName, string arguments, int timeoutMilliseconds, int maximumOutputBytes, string mcpAuthorization) {
+             var start = new ProcessStartInfo(fileName, arguments) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
++            if (mcpAuthorization != null) {
++                start.EnvironmentVariables["CATDESK_TUNNEL_MCP_AUTHORIZATION"] = mcpAuthorization;
++                start.EnvironmentVariables["MCP_EXTRA_HEADERS"] = "Authorization: env:CATDESK_TUNNEL_MCP_AUTHORIZATION";
++                start.EnvironmentVariables["MCP_DISCOVERY_EXTRA_HEADERS"] = "Authorization: env:CATDESK_TUNNEL_MCP_AUTHORIZATION";
++            }
+             using (var process = Process.Start(start)) {
+                 if (process == null) throw new InvalidOperationException("tunnel-client command did not start");
+                 process.StandardInput.Close();
+@@ -131,14 +140,18 @@ namespace CatDesk {
+ }
+ 
+ function Invoke-BoundedTunnelClient {
+-    param([string]$Path, [string[]]$CommandArgs, [int]$TimeoutSeconds, [int]$MaxOutputBytes = 65536)
++    param([string]$Path, [string[]]$CommandArgs, [int]$TimeoutSeconds, [int]$MaxOutputBytes = 65536, [string]$McpAuthorization = '')
+     if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "tunnel-client is not installed" }
+     if ($TimeoutSeconds -lt 1 -or $TimeoutSeconds -gt 30 -or $MaxOutputBytes -lt 1 -or $MaxOutputBytes -gt 65536) {
+         throw "bounded tunnel-client invocation is invalid"
+     }
+     Initialize-BoundedNativeProcessType
+     $commandLine = [string]::Join(" ", @($CommandArgs | ForEach-Object { ConvertTo-NativeCommandLineArgument -Value $_ }))
+-    $result = [CatDesk.BoundedNativeProcess]::Run($Path, $commandLine, $TimeoutSeconds * 1000, $MaxOutputBytes)
++    $result = if ([string]::IsNullOrEmpty($McpAuthorization)) {
++        [CatDesk.BoundedNativeProcess]::Run($Path, $commandLine, $TimeoutSeconds * 1000, $MaxOutputBytes)
++    } else {
++        [CatDesk.BoundedNativeProcess]::Run($Path, $commandLine, $TimeoutSeconds * 1000, $MaxOutputBytes, $McpAuthorization)
++    }
+     if ($result.TimedOut) {
+         if ($result.TerminationFailed) { throw "tunnel-client command exceeded bounded timeout and did not terminate" }
+         throw "tunnel-client command exceeded bounded timeout and was killed"
+@@ -362,16 +375,37 @@ function Invoke-InstallScript {
+     & powershell -NoProfile -ExecutionPolicy Bypass -File $script "-$InstallMode" | ConvertFrom-Json
+ }
+ 
++function Get-LocalMcpRuntimeAuthorization {
++    param([bool]$ForwardBearer)
++    if (-not $ForwardBearer) { return '' }
++    $token = [Environment]::GetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN', 'Process')
++    if ($null -eq $token -or $token -cnotmatch '\A[\x21-\x7E]{24,}\z') {
++        throw 'LOCAL_MCP_AUTH_TOKEN_INVALID'
++    }
++    $reference = 'Authorization: env:CATDESK_TUNNEL_MCP_AUTHORIZATION'
++    foreach ($name in @('MCP_EXTRA_HEADERS', 'MCP_DISCOVERY_EXTRA_HEADERS')) {
++        $existing = [Environment]::GetEnvironmentVariable($name, 'Process')
++        if (-not [string]::IsNullOrEmpty($existing) -and $existing -cne $reference) {
++            throw 'LOCAL_MCP_AUTH_HEADER_CONFLICT'
++        }
++    }
++    # Only the owned native command receives this value. CatDesk does not write
++    # it to a profile, command argument, parent environment or presentation.
++    # The external managed-runtime handoff still needs its own qualification.
++    return 'Bearer ' + $token
++}
++
+ function Connect-Runtime {
+     param([string]$ClientPath, $McpConfig)
+     # Validate the target before checking any runtime inputs or invoking the
+     # tunnel client.  This keeps redacted presentation values fail-closed.
+     $localMcpUrl = Get-LocalMcpRuntimeUrl -McpConfig $McpConfig
++    $mcpAuthorization = Get-LocalMcpRuntimeAuthorization -ForwardBearer ([bool]$ForwardLocalMcpBearer)
+     if (-not $TunnelId) { throw "TunnelId is required for runtime connect" }
+     if (-not [Environment]::GetEnvironmentVariable("CONTROL_PLANE_API_KEY")) {
+         throw "CONTROL_PLANE_API_KEY must be present in the process environment for runtime connect"
+     }
+-    Invoke-BoundedTunnelClient -Path $ClientPath -CommandArgs @("runtimes", "connect", "--alias", $RuntimeAlias, "--tunnel-id", $TunnelId, "--runtime-api-key", "env:CONTROL_PLANE_API_KEY", "--mcp-server-url", $localMcpUrl) -TimeoutSeconds $RuntimeCommandTimeoutSeconds | Out-Null
++    Invoke-BoundedTunnelClient -Path $ClientPath -CommandArgs @("runtimes", "connect", "--alias", $RuntimeAlias, "--tunnel-id", $TunnelId, "--runtime-api-key", "env:CONTROL_PLANE_API_KEY", "--mcp-server-url", $localMcpUrl) -TimeoutSeconds $RuntimeCommandTimeoutSeconds -McpAuthorization $mcpAuthorization | Out-Null
+     return "connect invoked"
+ }
+ 
+@@ -450,6 +484,7 @@ if ($clientPath -and $Mode -in @("status", "repair", "start_all", "connect")) {
+     RuntimeAlias = @{ Supplied = -not [string]::IsNullOrWhiteSpace($RuntimeAlias); Value = Redacted-String $RuntimeAlias }
+     TunnelId = @{ Supplied = -not [string]::IsNullOrWhiteSpace($TunnelId); Value = Redacted-String $TunnelId }
+     RuntimeCredential = @{ Name = "CONTROL_PLANE_API_KEY"; Present = [bool][Environment]::GetEnvironmentVariable("CONTROL_PLANE_API_KEY"); Value = "<redacted>" }
++    LocalMcpBearerForwarding = @{ Requested = [bool]$ForwardLocalMcpBearer; Value = '<redacted>'; Scope = 'OWNED_CONNECT_CHILD_ONLY' }
+     LocalMcp = @{ ConfigFound = if ($null -eq $mcpConfig) { $null } else { $mcpConfig.Found }; Endpoint = "<redacted-local-mcp-url>" }
+     RuntimeStatus = switch ($statusOutcome.State) {
+         "AVAILABLE" { "<redacted-status-output-present>" }
+
+diff --git a/scripts/start-catdesk-stack.ps1 b/scripts/start-catdesk-stack.ps1
+index 8f4e08f978c2e4ed96989da7993bfd3a87f0debd..49172c945d3c6148a7c6e238335aecfe41d66466 100644
+--- a/scripts/start-catdesk-stack.ps1
++++ b/scripts/start-catdesk-stack.ps1
+@@ -873,9 +873,23 @@ function Get-LocalMcpReadiness {
+             $content=[string]$response.Content
+             if($content.Length -gt $script:MaxMcpReplyBytes){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
+             try{$parsed=$content|ConvertFrom-Json -ErrorAction Stop}catch{return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
+-            if($parsed.error){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+-            if($request.method -eq "initialize" -and $null -eq $parsed.result.serverInfo){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
+-            if($request.method -eq "tools/list"){$names=@($parsed.result.tools|ForEach-Object{$_.name});if($names -notcontains "catdesk_instruction" -or $names -notcontains "delegated_run_list"){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}}
++            # Successful JSON-RPC responses normally omit error. Inspect the
++            # member before reading it so caller strict mode cannot turn a
++            # healthy installed backend into a redacted ACTION_REQUIRED.
++            if($parsed -isnot [System.Management.Automation.PSCustomObject]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_INVALID'}
++            if($parsed.PSObject.Properties['error'] -and $parsed.error){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++            if(-not $parsed.PSObject.Properties['result'] -or $parsed.result -isnot [System.Management.Automation.PSCustomObject]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++            $rpcResult=$parsed.result
++            if($request.method -eq "initialize" -and (-not $rpcResult.PSObject.Properties['serverInfo'] -or $rpcResult.serverInfo -isnot [System.Management.Automation.PSCustomObject])){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++            if($request.method -eq "tools/list"){
++                if(-not $rpcResult.PSObject.Properties['tools']){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++                $names=@()
++                foreach($tool in @($rpcResult.tools)){
++                    if($tool -isnot [System.Management.Automation.PSCustomObject] -or -not $tool.PSObject.Properties['name'] -or $tool.name -isnot [string]){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++                    $names+=$tool.name
++                }
++                if($names -notcontains "catdesk_instruction" -or $names -notcontains "delegated_run_list"){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
++            }
+         }
+         return New-LocalMcpReadinessResult -Ready $true -Gate 'READY'
+     }
+@@ -1105,7 +1119,7 @@ function Test-BackendOnlySupport {
+     param($Canonical, [int]$TimeoutMilliseconds = 5000)
+     $raw = Invoke-BootstrapSeam -Name 'BackendOnlySupport' -Arguments @($Canonical, $TimeoutMilliseconds) -Default {
+         param($identity, $timeout)
+-        (Invoke-BoundedRecoveryHelper -FileName $identity.Path -Arguments @('--catdesk-daemon', '--backend-only', '--check-support') -TimeoutMilliseconds $timeout -FailureMessage 'backend-only support is unavailable').Output
++        (Invoke-BoundedRecoveryHelper -FileName $identity.Path -Arguments @('--catdesk-daemon', '--backend-only', '--check-support') -TimeoutMilliseconds $timeout -FailureMessage 'backend-only support is unavailable').Stdout
+     }
+     $text = [string]$raw
+     if ($text.Length -gt 1024) { return $false }
+
+diff --git a/scripts/test-backend-only-native-capability.ps1 b/scripts/test-backend-only-native-capability.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ba610bc295c71e989351ee5c8790ed4e7ac329a
+--- /dev/null
++++ b/scripts/test-backend-only-native-capability.ps1
+@@ -0,0 +1,23 @@
++# Exercises the real bounded helper, not the BackendOnlySupport fixture seam.
++# The closed capability invocation creates no application state or services.
++[CmdletBinding()]
++param(
++    [Parameter(Mandatory=$true)][string]$Executable,
++    [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$ExpectedSha256
++)
++$ErrorActionPreference='Stop'
++Set-StrictMode -Version Latest
++$resolved=(Resolve-Path -LiteralPath $Executable -ErrorAction Stop).Path
++if ((Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ExpectedSha256) {
++    throw 'capability test executable identity differs'
++}
++. (Join-Path $PSScriptRoot 'start-catdesk-stack.ps1')
++$canonical=[pscustomobject]@{Path=$resolved;Sha256=$ExpectedSha256}
++if (-not (Test-BackendOnlySupport -Canonical $canonical -TimeoutMilliseconds 5000)) {
++    throw 'native capability output was not accepted through the real bounded helper'
++}
++if ($script:BootstrapSeams.Count -ne 0) { throw 'native capability test unexpectedly installed fixture seams' }
++[pscustomobject]@{
++    state='NATIVE_CAPABILITY_VERIFIED';powerShellVersion=$PSVersionTable.PSVersion.ToString()
++    executableSha256=$ExpectedSha256;nativeCapabilityQueries=1;daemonStarts=0;runtimeWrites=0
++} | ConvertTo-Json -Compress
+
+diff --git a/scripts/test-catdesk-doctor.ps1 b/scripts/test-catdesk-doctor.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..39c12cd0332ef2a4e4aabd9b3a8930ac902c4e20
+--- /dev/null
++++ b/scripts/test-catdesk-doctor.ps1
+@@ -0,0 +1,145 @@
++$ErrorActionPreference='Stop'
++Set-StrictMode -Version Latest
++$facade=Join-Path $PSScriptRoot '../catdesk.ps1'
++$tempParent=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
++$testRoot=Join-Path $tempParent ('catdesk-doctor-test-'+[Guid]::NewGuid().ToString('N'))
++$projectRoot=Join-Path $testRoot 'project';$wakeRoot=Join-Path $testRoot 'wake';$observation=Join-Path $testRoot 'observation.json'
++$script:forbidden=0;$checks=0
++function Require([bool]$Condition,[string]$Why){if(!$Condition){throw $Why};$script:checks++}
++function Save([string]$Path,$Value){[IO.File]::WriteAllText($Path,($Value|ConvertTo-Json -Depth 15 -Compress),[Text.UTF8Encoding]::new($false))}
++function Digest([string]$Text){$sha=[Security.Cryptography.SHA256]::Create();try{([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text))).Replace('-','')).ToLowerInvariant()}finally{$sha.Dispose()}}
++$seams=@{
++ CanonicalIdentity={param($root,$hash,$fingerprint) if($fingerprint -cne (Join-Path $root 'target/release/catdesk.exe.sha256')){throw 'wrong doctor fingerprint root'};[pscustomobject]@{Path=(Join-Path $root 'target/release/catdesk.exe');Sha256=('a'*64)}}
++ DoctorAuthority={[pscustomobject]@{State='RECOVERY_READY'}}
++ LocalMcp={[pscustomobject]@{Port=3200}}
++ Listener={[pscustomobject]@{MatchesCanonical=$true}}
++ DoctorRuntimeClient={'fixture-client'}
++ DoctorCodexCommand={'fixture-command'}
++}
++$forbid={ $script:forbidden++;throw 'DOCTOR_FORBIDDEN_OPERATION' }
++foreach($name in @('Recovery','RecoveryReadiness','LocalMcpReadiness','RuntimeStatus','CodexStatus','StopProcess','WakeRepair','WakeRuntime','WakeMcp','AutostartTasks')){$seams[$name]=$forbid}
++function Invoke-Doctor([hashtable]$Overrides=@{},[switch]$Import){
++ $parameters=@{Workspace=$testRoot;ProjectWorkspace=$projectRoot;WakeRoot=$wakeRoot;TestSeams=$seams.Clone()}
++ foreach($key in $Overrides.Keys){$parameters.TestSeams[$key]=$Overrides[$key]}
++ if($Import){$parameters.ObservationFile=$observation}
++ $text=@(& $facade doctor @parameters) -join "`n"
++ Require ($text -notmatch 'PRIVATE_MARKER|chatgpt\.com/c/|C:\\|fixture-client|fixture-command') 'private data leaked'
++ return ($text|ConvertFrom-Json)
++}
++function Layer($Report,[string]$Name){@($Report.layers|Where-Object{$_.layer -ceq $Name})[0]}
++try{
++ [void][IO.Directory]::CreateDirectory((Join-Path $projectRoot '.catdesk/projects'))
++ [void][IO.Directory]::CreateDirectory((Join-Path $wakeRoot 'queue'))
++ [void][IO.Directory]::CreateDirectory((Join-Path $wakeRoot 'deliveries'))
++ $url='https://chatgpt.com/c/doctor-fixture';$digest=Digest $url
++ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=$projectRoot;chatgptTargetUrl=$url;chatgptTargetSha256=$digest;codexThreadId='PRIVATE_MARKER'})}
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
++ Save (Join-Path $wakeRoot 'control.json') @{schemaVersion=1;desired='STOPPED'}
++ Save (Join-Path $wakeRoot 'deliveries/unknown.json') @{phase='SUBMITTING';message='PRIVATE_MARKER'}
++ $before=@{};foreach($path in [IO.Directory]::EnumerateFiles($testRoot,'*',[IO.SearchOption]::AllDirectories)){$before[$path]=[IO.File]::ReadAllText($path)}
++ $report=Invoke-Doctor
++ Require ($report.command -ceq 'doctor' -and $report.readOnly -and $report.networkRequests -eq 0 -and $report.repairs -eq 0) 'doctor contract invalid'
++ Require ($report.layers.Count -eq 17) 'doctor omitted a layer'
++ Require ((Layer $report 'RELEASE_PAIR').status -ceq 'PASS') 'valid release not observed'
++ Require ((Layer $report 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1) 'paired metadata not observed'
++ Require ((Layer $report 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME') 'unknown send was hidden'
++ Require ((Layer $report 'LOCAL_MCP').status -ceq 'NOT_RUN' -and (Layer $report 'CONNECTOR').status -ceq 'NOT_RUN') 'unexecuted probes claimed success'
++ $dead=Invoke-Doctor @{Listener={$null}}
++ Require ((Layer $dead 'LOCAL_DAEMON').code -ceq 'LOCAL_MCP_LISTENER_MISSING') 'dead backend classification'
++ $wrong=Invoke-Doctor @{Listener={[pscustomobject]@{MatchesCanonical=$false}}}
++ Require ((Layer $wrong 'LOCAL_DAEMON').code -ceq 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH') 'wrong owner classification'
++ $wrongType=Invoke-Doctor @{Listener={[pscustomobject]@{MatchesCanonical='True'}}}
++ Require ((Layer $wrongType 'LOCAL_DAEMON').status -ceq 'FAIL') 'truthy owner proof was accepted'
++ $broken=Invoke-Doctor @{CanonicalIdentity={throw 'CATDESK_CANONICAL_HASH_MISMATCH'};DoctorAuthority={[pscustomobject]@{State='LKG_AUTHORITY_MISSING'}}}
++ Require ((Layer $broken 'RELEASE_PAIR').code -ceq 'CANONICAL_HASH_MISMATCH') 'hash mismatch classification'
++ Require ((Layer $broken 'RECOVERY_AUTHORITY').code -ceq 'LKG_AUTHORITY_MISSING') 'authority classification'
++ Require ((Layer $broken 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1 -and (Layer $broken 'CODEX_CLI').status -ceq 'UNVERIFIED') 'release failure stalled independent layers'
++ $import=@{schemaVersion=1;source='RETAINED_REPORT';observedUtc='2020-01-01T00:00:00Z';observations=@(
++  @{layer='CONNECTOR';code='UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE'},@{layer='BROWSER';code='HOME_EDITOR_MISSING'},
++  @{layer='LOCAL_MCP';code='LOCAL_MCP_AUTH_REJECTED'},@{layer='NATIVE_SESSION';code='WORKER_GONE'},
++  @{layer='LOCAL_PROVIDER';code='LOCAL_PROVIDER_UNAVAILABLE'},@{layer='LOCAL_HEALTH';code='LOCAL_HEALTH_READY'},
++  @{layer='WAKE_QUEUE';code='WAKE_METADATA_OBSERVED'},@{layer='CODEX_CLI';code='CODEX_CLI_UNAVAILABLE'})}
++ Save $observation $import;$recorded=Invoke-Doctor -Import
++ Require ((Layer $recorded 'CONNECTOR').code -ceq 'UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE' -and (Layer $recorded 'CONNECTOR').provenance -ceq 'IMPORTED_ADVISORY') '429 conflated with backend failure'
++ Require ((Layer $recorded 'LOCAL_HEALTH').status -ceq 'UNVERIFIED') 'retained health became current PASS'
++ Require ((Layer $recorded 'BROWSER').code -ceq 'HOME_EDITOR_MISSING' -and (Layer $recorded 'NATIVE_SESSION').code -ceq 'WORKER_GONE') 'independent retained gates lost'
++ Require ((Layer $recorded 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME' -and (Layer $recorded 'WAKE_QUEUE').provenance -ceq 'CURRENT_PASSIVE_METADATA' -and (Layer $recorded 'WAKE_QUEUE').observedUtc -ceq $recorded.observedUtc) 'retained positive hid a current unknown send'
++ Require ((Layer $recorded 'CODEX_CLI').code -ceq 'CODEX_PRESENT_AUTH_UNVERIFIED') 'retained absence hid current command discovery'
++ Require ((Layer $report 'BROWSER').nextDiagnostic -ceq 'operator web-dev-runtime inspect-readiness --project-id <registered-project>') 'uninspected browser lost its first diagnostic'
++ foreach($browserCode in @('HOME_EDITOR_MISSING','BROWSER_TARGET_MISSING','BROWSER_DRAFT_UNKNOWN')){
++  $import.observations=@(@{layer='BROWSER';code=$browserCode});Save $observation $import
++  $browserReport=Invoke-Doctor -Import;$browserLayer=Layer $browserReport 'BROWSER'
++  Require ($browserLayer.nextDiagnostic -ceq 'QUALIFIED_READONLY_PROFILE_OBSERVATION_AFTER_OWNER_RECONCILIATION') 'coarse browser refusal requested human classification or repeated automation'
++  Require ($browserLayer.code -ceq $browserCode -and $browserLayer.status -ceq 'UNVERIFIED' -and $browserLayer.provenance -ceq 'IMPORTED_ADVISORY' -and $browserReport.runtimeStarts -eq 0 -and $browserReport.networkRequests -eq 0 -and $browserReport.repairs -eq 0) 'operator advice changed evidence or performed an action'
++ }
++ $import.observations=@(@{layer='BROWSER';code='BROWSER_EXACT_READY'});Save $observation $import
++ Require ((Layer (Invoke-Doctor -Import) 'BROWSER').nextDiagnostic -cne 'operator web-dev-runtime login --project-id <registered-project>') 'retained readiness unnecessarily requested operator login'
++ foreach($case in @(
++  @{code='BROWSER_AUTH_REQUIRED';next='operator web-dev-runtime login --project-id <registered-project>'},
++  @{code='BROWSER_OWNER_CLEANUP_UNVERIFIED';next='RECONCILE_EXISTING_BROWSER_OWNER_WITHOUT_MARKER_CLEAR_OR_RELAUNCH'},
++  @{code='BROWSER_RESPONSE_LOAD_ERROR';next='ATTRIBUTE_EXACT_WAKE_RESPONSE_WITHOUT_USER_RESEND'})){
++  $import.observations=@(@{layer='BROWSER';code=$case.code});Save $observation $import
++  $browserReport=Invoke-Doctor -Import;$browserLayer=Layer $browserReport 'BROWSER'
++  Require ($browserLayer.nextDiagnostic -ceq $case.next -and $browserLayer.code -ceq $case.code) 'browser failure layers conflated'
++  Require ($browserLayer.status -ceq 'UNVERIFIED' -and $browserLayer.provenance -ceq 'IMPORTED_ADVISORY' -and $browserReport.runtimeStarts -eq 0 -and $browserReport.networkRequests -eq 0 -and $browserReport.repairs -eq 0) 'retained browser failure gained authority or performed an action'
++ }
++ Require ($browserLayer.facts.exchange -ceq 'UNATTRIBUTED' -and -not $browserLayer.facts.userResendAllowed -and -not $browserLayer.facts.genericLoadErrorRetryQualified -and $browserLayer.facts.independentProjectsMayContinue) 'assistant failure authorized USER resend or globally blocked projects'
++ $import.observations=@(@{layer='CONNECTOR';code='CONNECTOR_TRANSPORT_NO_HTTP_STATUS'});Save $observation $import
++ Require ((Layer (Invoke-Doctor -Import) 'CONNECTOR').code -ceq 'CONNECTOR_TRANSPORT_NO_HTTP_STATUS') 'no-status failure relabeled 429'
++ $import.observations=@(@{layer='CONNECTOR';code='CONNECTOR_RESPONSE_VERIFIED'});Save $observation $import
++ $connectedReport=Invoke-Doctor -Import;$connected=Layer $connectedReport 'CONNECTOR'
++ Require ($connected.status -ceq 'UNVERIFIED' -and $connected.provenance -ceq 'IMPORTED_ADVISORY' -and $connected.nextDiagnostic -ceq 'VERIFY_AUTHENTICATED_PROJECT_TASK_SCOPE') 'retained connector response requested polling or claimed current availability'
++ Require ($connected.facts.projectTaskAccess -ceq 'UNVERIFIED' -and $connected.facts.providerConversationIdentity -ceq 'UNVERIFIED' -and $connected.facts.taskGrantRequired -and $connected.facts.bearerAndExecutionModeRequired -and (Layer $connectedReport 'LOCAL_MCP').status -ceq 'NOT_RUN' -and (Layer $connectedReport 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME') 'connector success implied task authority or hid independent gates'
++ foreach($invalid in @('PRIVATE_MARKER',('x'*16385),'{"schemaVersion":true}',('{"schemaVersion":1,"source":"RETAINED_REPORT","observedUtc":"2999-01-01","observations":[]}'))){
++  [IO.File]::WriteAllText($observation,$invalid)
++  Require ((Layer (Invoke-Doctor -Import) 'OBSERVATIONS').code -ceq 'OBSERVATIONS_INVALID') 'invalid imported evidence accepted'
++ }
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=('b'*64);generation=1}}}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'PROJECT_WAKE_TARGET_MISMATCH') 'stale pair not observed'
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=999;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'WAKE_CONFIG_INVALID') 'unknown Wake schema was accepted as paired'
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=2;targets=@{alpha=@{url=$url;digest=$digest;generation=1}};retiredTargets=@{retired=@{retirementId='retired-fixture';lastTarget=$null;retiredUtc=1}}}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1) 'supported retired-target schema refused'
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=2;targets=@{alpha=@{url=$url;digest=$digest;generation=1}};retiredTargets=@{}}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'WAKE_CONFIG_INVALID') 'schema2 without retirement accepted'
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}};retiredTargets=@{retired=@{}}}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'WAKE_CONFIG_INVALID') 'retirement allowed in legacy schema'
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
++ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'REGISTRY_INVALID') 'missing workspace was accepted as paired'
++ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='invalid.id';workspace=$projectRoot;chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').code -ceq 'REGISTRY_INVALID') 'invalid Wake project ID was accepted'
++ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=(Join-Path $projectRoot '../elsewhere');chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').status -cne 'PASS') 'noncanonical workspace was accepted'
++ [IO.File]::WriteAllText((Join-Path $projectRoot '.catdesk/projects/projects.json'),$before[(Join-Path $projectRoot '.catdesk/projects/projects.json')])
++ foreach($path in $before.Keys){Require ([IO.File]::ReadAllText($path) -ceq $before[$path]) 'doctor mutated protected fixture data'}
++ Require ($script:forbidden -eq 0) 'doctor performed a forbidden probe or mutation'
++ . (Join-Path $PSScriptRoot 'catdesk-doctor.ps1')
++ foreach($local in @($projectRoot,('\\?\'+$projectRoot),$projectRoot.Replace('\','/'))){
++  Require (Test-DoctorWorkspaceSpelling $local) 'canonical local workspace spelling refused'
++ }
++ foreach($invalidPath in @('relative','\\server\share','\\?\UNC\server\share','\\.\C:\project','C:\project\..\outside','\\?\C:\project\..\outside','C:\project:stream')){
++  Require (-not (Test-DoctorWorkspaceSpelling $invalidPath)) 'unsupported workspace spelling accepted'
++ }
++ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=('\\?\'+$projectRoot);chatgptTargetUrl=$url;chatgptTargetSha256=$digest})}
++ Require ((Layer (Invoke-Doctor) 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1) 'Rust canonical registry workspace refused'
++ [IO.File]::WriteAllText((Join-Path $projectRoot '.catdesk/projects/projects.json'),$before[(Join-Path $projectRoot '.catdesk/projects/projects.json')])
++ foreach($nonlocal in @('relative.json','\\server\share\observation.json','https://invalid.example/report')){
++  $refused=$false;try{Assert-DoctorLocalPath $nonlocal}catch{$refused=$_.Exception.Message -ceq 'DOCTOR_LOCAL_PATH_REQUIRED'}
++  Require $refused 'nonlocal metadata path was not refused before filesystem access'
++ }
++ $link=Join-Path $testRoot 'linked-observations'
++ [void](New-Item -ItemType Junction -Path $link -Target $wakeRoot)
++ try{$refused=$false;try{Assert-DoctorLocalPath (Join-Path $link 'control.json')}catch{$refused=$true};Require $refused 'redirected metadata ancestor accepted'}finally{[IO.Directory]::Delete($link)}
++ $human=@(& $facade doctor -Workspace $testRoot -ProjectWorkspace $projectRoot -WakeRoot $wakeRoot -Human -TestSeams $seams)
++ Require ($human.Count -eq 17 -and ($human -join "`n") -notmatch 'PRIVATE_MARKER|C:\\|https://') 'human summary not safe'
++ $source=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'catdesk-doctor.ps1'))
++ Require ($source -notmatch '(?im)^\s*(Start-Process|Stop-Process|Set-Content|Add-Content|Remove-Item|Invoke-WebRequest|Invoke-RestMethod)\b|\.WriteAll|Store::open\(') 'doctor gained active operations'
++ "doctor tests passed: $checks assertions"
++}finally{
++ $resolved=[IO.Path]::GetFullPath($testRoot)
++ if(-not $resolved.StartsWith($tempParent+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($resolved) -notmatch '^catdesk-doctor-test-[a-f0-9]{32}$'){throw 'fixture cleanup path refused'}
++ if(Test-Path -LiteralPath (Join-Path $resolved 'linked-observations')){[IO.Directory]::Delete((Join-Path $resolved 'linked-observations'))}
++ if(Test-Path -LiteralPath $resolved){Remove-Item -LiteralPath $resolved -Recurse -Force}
++}
+
+diff --git a/scripts/test-catdesk-lifecycle.ps1 b/scripts/test-catdesk-lifecycle.ps1
+index 6a5b994b82cf72b7b2723def27a6479b3e049711..ee0fe3b4b954f79ebe4b65b0fdf2d1fda6a3fc90 100644
+--- a/scripts/test-catdesk-lifecycle.ps1
++++ b/scripts/test-catdesk-lifecycle.ps1
+@@ -76,7 +76,7 @@ $realCanonicalRoot = $null
+ 
+ try {
+     Require ($source -match [regex]::Escape('$PSScriptRoot')) 'facade resolves all internal paths from its own root'
+-    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'recover', 'stop', 'autostart', 'wake'\)") 'exact public command vocabulary is present'
++    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake'\)") 'exact public command vocabulary is present'
+     Require ($source -notmatch '(?i)provision-catdesk-release|cargo\s+(build|run|test)|tunnel-client.*(stop|remove)|runtimes\s+(stop|rm)') 'facade contains no compile/provision or tunnel stop/remove route'
+     Require ($source -notmatch 'Stop-Process\s+-Id\s+\$processId') 'public stop never reacquires destructive authority by PID alone'
+     Require ($source -match 'Stop-CatDeskListenerProcessForRecovery\s+-LocalMcp\s+\$endpoint\s+-Canonical\s+\$identity\s+-Candidate\s+\$candidate') 'public stop reuses the exact pinned listener process-instance mutation boundary'
+
+diff --git a/scripts/test-local-mcp-readiness-strict.ps1 b/scripts/test-local-mcp-readiness-strict.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..29539a9ec65bf77c42df3a49a99285f5069d1505
+--- /dev/null
++++ b/scripts/test-local-mcp-readiness-strict.ps1
+@@ -0,0 +1,41 @@
++# Regression for callers that enable strict mode before using public startup.
++# No process, network, credential, workspace or installed-state operations.
++$ErrorActionPreference='Stop'
++Set-StrictMode -Version Latest
++$tokens=$null;$errors=$null
++$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'start-catdesk-stack.ps1'),[ref]$tokens,[ref]$errors)
++if($errors.Count){throw 'startup script parse failed'}
++foreach($name in @('Invoke-BootstrapSeam','New-LocalMcpReadinessResult','Get-LocalMcpReadiness')){
++    $nodes=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true))
++    if($nodes.Count -ne 1){throw 'readiness function is missing or ambiguous'}
++    . ([scriptblock]::Create($nodes[0].Extent.Text))
++}
++$script:BootstrapSeams=@{}
++$script:MaxMcpReplyBytes=1048576
++function Get-LocalMcpProbeHeaders { param($LocalMcp) @{} }
++function Get-LoopbackCatDeskListener { param($Port,$Canonical) [pscustomobject]@{MatchesCanonical=$true} }
++$endpoint=[pscustomobject]@{Uri='http://127.0.0.1:1/fixture/mcp';Port=1}
++$script:initializeBody='{"result":{"serverInfo":{}}}'
++$script:toolsBody='{"result":{"tools":[{"name":"catdesk_instruction"},{"name":"delegated_run_list"}]}}'
++$script:BootstrapSeams['LocalMcpHttp']={param($uri,$body)
++    [pscustomobject]@{StatusCode=200;Content=$(if($body -match 'initialize'){$script:initializeBody}else{$script:toolsBody})}
++}
++$goodInitialize=$script:initializeBody;$goodTools=$script:toolsBody;$cases=0
++function Check-Readiness([bool]$Expected,[string]$Gate){
++    $r=Get-LocalMcpReadiness -LocalMcp $endpoint -Canonical ([pscustomobject]@{})
++    if($r.Ready -ne $Expected -or $r.Gate -cne $Gate){throw "strict readiness case $script:cases expected $Expected/$Gate, observed $($r.Ready)/$($r.Gate)"}
++    $script:cases++
++}
++Check-Readiness $true 'READY'
++foreach($bad in @('{"error":{"code":-32000}}','{}','{"result":null}','{"result":{}}','{"result":{"serverInfo":null}}','{"result":{"serverInfo":"invalid"}}')){
++    $script:initializeBody=$bad;Check-Readiness $false 'LOCAL_MCP_PROTOCOL_UNREADY'
++}
++foreach($bad in @('null','[]','true','broken json')){
++    $script:initializeBody=$bad;Check-Readiness $false 'LOCAL_MCP_RESPONSE_INVALID'
++}
++$script:initializeBody=$goodInitialize
++foreach($bad in @('{}','{"result":{}}','{"result":{"tools":[{}]}}','{"result":{"tools":[null]}}','{"result":{"tools":[{"name":false}]}}','{"result":{"tools":[{"name":"catdesk_instruction"}]}}')){
++    $script:toolsBody=$bad;Check-Readiness $false 'LOCAL_MCP_PROTOCOL_UNREADY'
++}
++$script:toolsBody=$goodTools;Check-Readiness $true 'READY'
++[pscustomobject]@{state='STRICT_READINESS_REGRESSIONS_PASS';cases=$cases;powerShellVersion=$PSVersionTable.PSVersion.ToString();processStarts=0;networkCalls=0;runtimeWrites=0}|ConvertTo-Json -Compress
+
+diff --git a/scripts/test-promotion-handoff-script-status.ps1 b/scripts/test-promotion-handoff-script-status.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..2f23d169596226fc98d354f18b65099cff920ed1
+--- /dev/null
++++ b/scripts/test-promotion-handoff-script-status.ps1
+@@ -0,0 +1,62 @@
++[CmdletBinding()]
++param()
++$ErrorActionPreference='Stop'
++$source=Join-Path $PSScriptRoot 'promote-reviewed-catdesk-build.ps1'
++$tokens=$null;$errors=$null
++$ast=[Management.Automation.Language.Parser]::ParseFile($source,[ref]$tokens,[ref]$errors)
++if($errors.Count){throw 'promoter parse failed'}
++$functions=@(foreach($name in @('Invoke-PromotionSeam','Invoke-PromotionHandoff')){
++ $found=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true))
++ if($found.Count -ne 1){throw 'handoff function is ambiguous'}
++ $found[0].Extent.Text
++}) -join "`n"
++$temp=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
++$root=Join-Path $temp ('CatDesk-HandoffStatus-'+[guid]::NewGuid().ToString('N'))
++$null=New-Item -ItemType Directory -Path $root
++try{
++ $helper=@'
++param($OldPid,$ExpectedOldProcessStartedAtUtc,$ExpectedOldProcessPath,$ExpectedOldProcessSha256,$BuildPath,$Workspace,$McpPort,$ReadyTimeoutSeconds,[switch]$BackendOnly,[switch]$Execute)
++$mode=[IO.File]::ReadAllText((Join-Path $Workspace 'mode.txt'))
++if($mode -eq 'throw'){throw 'controlled fixture launcher failure'}
++if($mode -eq 'empty'){return}
++if($mode -eq 'exit'){exit 9}
++$dir=Join-Path $Workspace '.catdesk/restart-handoff';$null=New-Item -ItemType Directory -Path $dir -Force
++@{schemaVersion=4;profile='LOCAL_BACKEND_ONLY';mcpAuthenticated=$true;status='RECOVERED_PENDING_TRANSPORT_CHECK';completedAtUtc=[DateTime]::UtcNow.ToString('o');buildSha256=('a'*64)}|ConvertTo-Json -Compress|Set-Content -LiteralPath (Join-Path $dir 'latest.json') -Encoding UTF8
++'HANDOFF_DETACHED fixture only; no process launched'
++'@
++ $runner=@'
++param([string]$Workspace,[string]$Seed)
++$ErrorActionPreference='Stop'
++$BackendOnly=$true;$script:PromotionSeams=@{};$script:PromotionMcpPort=3200;$script:PromotionTimeoutSeconds=1
++function ConvertFrom-CatDeskLiteralJson([string]$Text){$Text|ConvertFrom-Json}
++'@
++ $runner+="`n"+$functions+"`n"+@'
++if($Seed -eq 'unset'){Remove-Variable LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue}else{$global:LASTEXITCODE=7}
++$from=[pscustomobject]@{Pid=42;ProcessStartedAtUtc='2026-10-28T00:00:00.0000000Z';BuildPath=(Join-Path $Workspace 'old.exe');BuildHash=('b'*64)}
++$threw=$false;$result=$false
++try{$result=Invoke-PromotionHandoff $Workspace $from (Join-Path $Workspace 'candidate.exe') ('a'*64)}catch{$threw=$true}
++@{result=$result;threw=$threw}|ConvertTo-Json -Compress
++'@
++ [IO.File]::WriteAllText((Join-Path $root 'restart_catdesk_daemon.ps1'),$helper)
++ $runnerPath=Join-Path $root 'runner.ps1';[IO.File]::WriteAllText($runnerPath,$runner)
++ $engine=Join-Path $PSHOME $(if($PSEdition -eq 'Core'){'pwsh.exe'}else{'powershell.exe'})
++ foreach($case in @(@{mode='success';seed='unset';expected=$true},@{mode='success';seed='stale';expected=$true},@{mode='empty';seed='unset';expected=$false},@{mode='throw';seed='unset';expected=$false},@{mode='exit';seed='unset';expected=$false})){
++  $workspace=Join-Path $root ($case.mode+'-'+$case.seed);$null=New-Item -ItemType Directory -Path $workspace
++  [IO.File]::WriteAllText((Join-Path $workspace 'mode.txt'),$case.mode)
++  $info=[Diagnostics.ProcessStartInfo]::new();$info.FileName=$engine;$info.Arguments='-NoProfile -NonInteractive -File "'+$runnerPath+'" -Workspace "'+$workspace+'" -Seed '+$case.seed
++  $info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true;$info.EnvironmentVariables.Remove('PSModulePath')
++  $process=[Diagnostics.Process]::Start($info);$null=$process.Handle
++  try{
++   $output=$process.StandardOutput.ReadToEndAsync();$err=$process.StandardError.ReadToEndAsync()
++   if(!$process.WaitForExit(15000)){throw 'fixture engine timeout'}
++   if(!$output.Wait(1000) -or !$err.Wait(1000) -or $process.ExitCode -ne 0 -or $err.Result.Length -or $output.Result.Length -gt 4096){throw 'fixture engine failed'}
++   $reply=$output.Result|ConvertFrom-Json
++   if([bool]$reply.result -ne $case.expected -or ($case.expected -and $reply.threw)){throw ('handoff script status failed: '+$case.mode+'/'+$case.seed)}
++   Write-Output ('PASS '+$case.mode+'/'+$case.seed)
++  }finally{if(!$process.HasExited){$process.Kill();[void]$process.WaitForExit(5000)};$process.Dispose()}
++ }
++}finally{
++ $resolved=[IO.Path]::GetFullPath($root)
++ if([IO.Path]::GetDirectoryName($resolved) -cne $temp -or [IO.Path]::GetFileName($resolved) -cnotmatch '^CatDesk-HandoffStatus-[0-9a-f]{32}$'){throw 'fixture cleanup scope refused'}
++ Remove-Item -LiteralPath $resolved -Recurse -Force
++}
+
+diff --git a/scripts/test-release-worker-command-line.ps1 b/scripts/test-release-worker-command-line.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..a01631140011d25edd9be3af4aef4fd0f3a5e69d
+--- /dev/null
++++ b/scripts/test-release-worker-command-line.ps1
+@@ -0,0 +1,26 @@
++[CmdletBinding()]
++param()
++$ErrorActionPreference='Stop'
++$source=[IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src/promotion_retirement.rs'))
++$marker='const INSPECTION: &str = r#"';$start=$source.IndexOf($marker,[StringComparison]::Ordinal)
++if($start -lt 0){throw 'inspection source not found'}
++$start+=$marker.Length;$end=$source.IndexOf('"#;',$start,[StringComparison]::Ordinal)
++$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseInput($source.Substring($start,$end-$start),[ref]$tokens,[ref]$errors)
++if($errors.Count){throw 'inspection source parse failed'}
++$function=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Test-CatDeskReleaseWorkerCommandLine'},$true))
++if($function.Count -ne 1){throw 'worker classifier ambiguous'}
++Invoke-Expression $function[0].Extent.Text
++$root='C:\fixture root'
++$worker=Join-Path $root 'scripts/restart_catdesk_daemon_worker.ps1'
++$promoter=Join-Path $root 'scripts/promote-reviewed-catdesk-build.ps1'
++$cases=@(
++ @{line=('powershell.exe -NoProfile -File "'+$worker+'" -OldPid 42');expected=$true},
++ @{line=('"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$promoter+'" -Execute');expected=$true},
++ @{line=('pwsh.exe -Command "Write-Output ''-File '+$worker+'''"');expected=$false},
++ @{line=('pwsh.exe -Command "Get-Content '''+$promoter+'''"');expected=$false},
++ @{line=('pwsh.exe -EncodedCommand Zml4dHVyZQ==');expected=$false},
++ @{line='powershell.exe -NoProfile -File C:\other\scripts\restart_catdesk_daemon_worker.ps1';expected=$false},
++ @{line=('powershell.exe -NoProfile -File "'+$worker+'.unrelated"');expected=$false}
++)
++foreach($case in $cases){if((Test-CatDeskReleaseWorkerCommandLine $case.line $root) -ne $case.expected){throw 'worker classifier result differs'}}
++'PASS seven actual-file versus command-text classifier cases'
+
+diff --git a/scripts/test-secure-mcp-bearer-forwarding.ps1 b/scripts/test-secure-mcp-bearer-forwarding.ps1
+new file mode 100644
+index 0000000000000000000000000000000000000000..328f2474dcac4fe7d67807ed2ebcd7647becf140
+--- /dev/null
++++ b/scripts/test-secure-mcp-bearer-forwarding.ps1
+@@ -0,0 +1,85 @@
++$ErrorActionPreference='Stop'
++Set-StrictMode -Version Latest
++# Extract helpers only. Never enter a setup mode or touch a real profile/runtime.
++$setup=Join-Path $PSScriptRoot 'setup-secure-mcp.ps1'
++$tokens=$null;$errors=$null
++$ast=[Management.Automation.Language.Parser]::ParseFile($setup,[ref]$tokens,[ref]$errors)
++if($errors.Count){throw 'SETUP_PARSE_FAILED'}
++foreach($name in @('ConvertTo-NativeCommandLineArgument','Initialize-BoundedNativeProcessType','Invoke-BoundedTunnelClient','Get-LocalMcpRuntimeAuthorization','Get-LocalMcpRuntimeUrl','Test-SafeRuntimeRoute','Connect-Runtime')){
++    $nodes=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true))
++    if($nodes.Count -ne 1){throw 'HELPER_IDENTITY_INVALID'}
++    . ([scriptblock]::Create($nodes[0].Extent.Text))
++}
++function Need([bool]$condition,[string]$reason){if(!$condition){throw $reason}}
++function Refuses([scriptblock]$action,[string]$reason){
++    try{$null=& $action;throw 'EXPECTED_REFUSAL_MISSING'}catch{if($_.Exception.Message -cne $reason){throw ('WRONG_REFUSAL case='+$checks+' expected='+$reason+' actual='+$_.Exception.Message)}}
++}
++$names=@('CATDESK_MCP_AUTH_TOKEN','CATDESK_TUNNEL_MCP_AUTHORIZATION','MCP_EXTRA_HEADERS','MCP_DISCOVERY_EXTRA_HEADERS','CONTROL_PLANE_API_KEY')
++$before=@{};foreach($name in $names){$before[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
++$root=Join-Path ([IO.Path]::GetTempPath()) ('catdesk-mcp-bearer-'+[Guid]::NewGuid().ToString('N'))
++$null=[IO.Directory]::CreateDirectory($root)
++$child=Join-Path $root 'verify-owned-child.ps1'
++$token='synthetic-native-child-auth-0123456789'
++$reference='Authorization: env:CATDESK_TUNNEL_MCP_AUTHORIZATION'
++$checks=0
++try{
++    foreach($name in $names){[Environment]::SetEnvironmentVariable($name,$null,'Process')}
++    Need ((Get-LocalMcpRuntimeAuthorization -ForwardBearer $false) -ceq '') 'DEFAULT_CHANGED';$checks++
++    Refuses {Get-LocalMcpRuntimeAuthorization -ForwardBearer $true} 'LOCAL_MCP_AUTH_TOKEN_INVALID';$checks++
++    foreach($invalid in @('short',(('x'*24)+"`r`n"),(('x'*24)+' '),(([string][char]233)*24))){
++        [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$invalid,'Process')
++        Refuses {Get-LocalMcpRuntimeAuthorization -ForwardBearer $true} 'LOCAL_MCP_AUTH_TOKEN_INVALID';$checks++
++    }
++    [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$token,'Process')
++    foreach($headerName in @('MCP_EXTRA_HEADERS','MCP_DISCOVERY_EXTRA_HEADERS')){
++        [Environment]::SetEnvironmentVariable($headerName,'X-Existing-Policy: preserve','Process')
++        Refuses {Get-LocalMcpRuntimeAuthorization -ForwardBearer $true} 'LOCAL_MCP_AUTH_HEADER_CONFLICT';$checks++
++        [Environment]::SetEnvironmentVariable($headerName,$null,'Process')
++    }
++    $authorization=Get-LocalMcpRuntimeAuthorization -ForwardBearer $true
++    Need ($authorization -ceq ('Bearer '+$token)) 'AUTHORIZATION_INVALID';$checks++
++    $childText=@'
++$ErrorActionPreference='Stop'
++$expected='Bearer synthetic-native-child-auth-0123456789'
++$reference='Authorization: env:CATDESK_TUNNEL_MCP_AUTHORIZATION'
++$valid=$env:CATDESK_TUNNEL_MCP_AUTHORIZATION -ceq $expected -and $env:MCP_EXTRA_HEADERS -ceq $reference -and $env:MCP_DISCOVERY_EXTRA_HEADERS -ceq $reference
++@{childAuthorizationValid=$valid;secretPrinted=$false}|ConvertTo-Json -Compress
++if(!$valid){exit 1}
++'@
++    [IO.File]::WriteAllText($child,$childText,[Text.UTF8Encoding]::new($false))
++    $hostImage=(Get-Process -Id $PID).Path
++    $r=Invoke-BoundedTunnelClient -Path $hostImage -CommandArgs @('-NoProfile','-File',$child) -TimeoutSeconds 10 -McpAuthorization $authorization
++    $facts=$r.Stdout|ConvertFrom-Json
++    Need ($facts.childAuthorizationValid -and !$facts.secretPrinted -and !$r.Stdout.Contains($token) -and !$r.Stderr.Contains($token)) 'NATIVE_CHILD_AUTH_FAILED';$checks++
++    foreach($name in @('CATDESK_TUNNEL_MCP_AUTHORIZATION','MCP_EXTRA_HEADERS','MCP_DISCOVERY_EXTRA_HEADERS')){
++        Need ([string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($name,'Process'))) 'PARENT_ENVIRONMENT_CHANGED';$checks++
++    }
++    # Exercise Connect-Runtime's real validation and closed command shape, but
++    # replace only the native connect leaf so this test cannot start a runtime.
++    $script:connectCalls=0;$script:expectedAuthorization=''
++    function Invoke-BoundedTunnelClient {
++        param($Path,$CommandArgs,$TimeoutSeconds,$McpAuthorization)
++        Need ($McpAuthorization -ceq $script:expectedAuthorization) 'CONNECT_AUTH_SCOPE_WRONG'
++        Need (($CommandArgs -join ' ') -notmatch [regex]::Escape($token)) 'SECRET_IN_ARGUMENTS'
++        Need ($CommandArgs[0] -ceq 'runtimes' -and $CommandArgs[1] -ceq 'connect') 'UNEXPECTED_COMMAND'
++        $script:connectCalls++
++    }
++    $TunnelId='tunnel_synthetic_existing';$RuntimeAlias='synthetic-existing';$RuntimeCommandTimeoutSeconds=10
++    [Environment]::SetEnvironmentVariable('CONTROL_PLANE_API_KEY','synthetic-existing-runtime-key','Process')
++    $config=[pscustomobject]@{Found=$true;BindHost='127.0.0.1';Port=3200;Route='abcdefghijklmnopqrstuvwxyz012345'}
++    $ForwardLocalMcpBearer=$false;$null=Connect-Runtime -ClientPath $hostImage -McpConfig $config;$checks++
++    $ForwardLocalMcpBearer=$true;$script:expectedAuthorization=$authorization;$null=Connect-Runtime -ClientPath $hostImage -McpConfig $config;$checks++
++    Need ($script:connectCalls -eq 2) 'CONNECT_COUNT_WRONG'
++    [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN','invalid','Process')
++    Refuses {Connect-Runtime -ClientPath $hostImage -McpConfig $config} 'LOCAL_MCP_AUTH_TOKEN_INVALID'
++    Need ($script:connectCalls -eq 2) 'INVALID_AUTH_STARTED_RUNTIME';$checks++
++    [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$token,'Process')
++    $config.BindHost='example.com'
++    try{$null=Connect-Runtime -ClientPath $hostImage -McpConfig $config;throw 'REMOTE_TARGET_ACCEPTED'}catch{Need ($_.Exception.Message -ne 'REMOTE_TARGET_ACCEPTED') 'REMOTE_TARGET_ACCEPTED'}
++    Need ($script:connectCalls -eq 2) 'REMOTE_TARGET_STARTED_RUNTIME';$checks++
++    @{state='PASS';checks=$checks;actualOwnedChild=$true;officialRuntimeStarts=0;operatorProfileReads=0;productionAuthChanges=0;parentEnvironmentPreserved=$true}|ConvertTo-Json -Compress
++}finally{
++    foreach($name in $names){[Environment]::SetEnvironmentVariable($name,$before[$name],'Process')}
++    if(Test-Path -LiteralPath $child){Remove-Item -LiteralPath $child -Force}
++    Remove-Item -LiteralPath $root -Force
++}
+
+diff --git a/scripts/test-start-catdesk-stack.ps1 b/scripts/test-start-catdesk-stack.ps1
+index ddfaad3c85b1268164e41a5632efd0e7af0698ad..3f9f635b91eb5d149bb0cd2f690bfebf56952b99 100644
+--- a/scripts/test-start-catdesk-stack.ps1
++++ b/scripts/test-start-catdesk-stack.ps1
+@@ -180,6 +180,10 @@ try {
+     if(($authorized|ConvertTo-Json -Compress) -match [regex]::Escape($fixtureToken)){throw 'native auth leaked into readiness output'}
+     foreach($invalid in @('', 'short',(('x'*24)+"`n"),(('x'*24)+' '),('é'*24))){
+       [Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$invalid,'Process')
++      # .NET Framework removes a variable when assigned an empty string.
++      # That host cannot exercise present-but-empty environment state; do not
++      # confuse the documented absent-token path with invalid configured auth.
++      if($invalid -ceq '' -and -not [Environment]::GetEnvironmentVariables('Process').Contains('CATDESK_MCP_AUTH_TOKEN')){continue}
+       $refused=Get-LocalMcpReadiness -LocalMcp $authLocal -Canonical ([pscustomobject]@{})
+       if($refused.Ready -or $refused.Gate -cne 'LOCAL_MCP_AUTH_TOKEN_INVALID' -or $script:authRequests.Count -ne 2){throw 'invalid native auth reached HTTP or downgraded'}
+     }
+
+diff --git a/scripts/wake_bridge.py b/scripts/wake_bridge.py
+index d4fa11e7f1e3aeedcea245169b4c21e7ac7a83a2..94b7a97f0002e634e9ad4d465d141249e6b804d5 100644
+--- a/scripts/wake_bridge.py
++++ b/scripts/wake_bridge.py
+@@ -86,6 +86,35 @@ RESPONSE_RETRY_START_WINDOW_SECONDS = 15.0
+ RESPONSE_GENERATION_WINDOW_SECONDS = 35.0 * 60.0
+ RESPONSE_TOTAL_WINDOW_SECONDS = 90.0 * 60.0
+ RESPONSE_MAX_RETRIES = 3
++RESPONSE_LOAD_ERROR_DETECTOR = """
++const assistantLoadError = element => {
++    if (!element || typeof element.cloneNode !== 'function') return false;
++    const clean = node => {
++        const copy = node.cloneNode(true);
++        copy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"], h4[data-conversation-role]')
++            .forEach(control => control.remove());
++        return String(copy.textContent || '').replace(/[‘’]/g, "'").replace(/\\s+/g, ' ').trim().toLowerCase().replace(/\\.$/, '');
++    };
++    const marker = "this response couldn't load";
++    const bodySelector = '[data-message-content], .markdown, [class~="prose"], [data-markdown-text-style="assistant-message"]';
++    const body = element.matches(bodySelector) ? element : element.querySelector(bodySelector);
++    // A normal answer discussing the error is not the UI error placeholder.
++    if (body && clean(body) && clean(body) !== marker) return false;
++    return [element, ...element.querySelectorAll('div, p, span')]
++        .some(node => visible(node) && clean(node) === marker);
++};
++"""
++# Shared by observation and the sole qualified assistant Retry action. Never
++# climb out of the wake's assistant/exchange boundary or borrow USER controls.
++RESPONSE_ASSISTANT_SCOPE = """
++const userNodeSelector = "[data-message-author-role='user'], [data-turn='user'], " +
++    "[data-user-message-bubble], [class~='group/user-message']";
++const responseBoundary = latestUser.matches('[data-content-search-turn-key]')
++    ? latestUser : (turnsAfterWake.length === 1 ? turnsAfterWake[0] : null);
++const assistantResponseNode = element => Boolean(element && responseBoundary &&
++    inWakeExchange(element) && responseBoundary.contains(element) &&
++    !element.closest(userNodeSelector));
++"""
+ POST_SUBMIT_DIAGNOSTICS = frozenset({
+     "SUBMIT_CLICK_UNKNOWN",
+     "SUBMIT_ENTER_UNKNOWN",
+@@ -125,6 +154,10 @@ POST_SUBMIT_DIAGNOSTICS = frozenset({
+     "RESPONSE_NETWORK_ERROR",
+     "RESPONSE_GENERATION_TIMEOUT",
+     "RESPONSE_COMPLETION_UNPROVEN",
++    "RESPONSE_LOAD_ERROR",
++    "RESPONSE_RETRY_BLOCKED_DRAFT",
++    "RESPONSE_RETRY_BLOCKED_GENERATION",
++    "RESPONSE_RETRY_EDITOR_UNAVAILABLE",
+     "RESPONSE_TIMEOUT_RETRY_AMBIGUOUS",
+     "RESPONSE_RETRY_EXHAUSTED",
+     "RESPONSE_TIMEOUT_STATE_LOST",
+@@ -469,6 +502,85 @@ class CdpSink:
+     def visible(cdp: Any, selector: str) -> bool:
+         try: return bool(cdp.is_element_visible(selector))
+         except Exception: return False
++    def browser_surface_observation(self, cdp: Any) -> dict[str, str]:
++        """Metadata only, with the route checked inside the same DOM read.
++
++        This is not a wake receipt or caller identity. An assistant failure on
++        an unbound inspection is unattributed; it never authorizes Retry/send.
++        Draft text and conversation bodies never cross the CDP return boundary.
++        """
++        vocab = {
++            "route": {"EXACT", "HOME", "AUTH_REQUIRED", "SECURITY_CHECK", "NETWORK_ERROR", "TARGET_DRIFT", "UNKNOWN"},
++            "document": {"COMPLETE", "LOADING", "UNKNOWN"},
++            "history": {"PRESENT", "ABSENT", "UNKNOWN"},
++            "editor": {"READY", "MISSING", "AMBIGUOUS", "UNKNOWN"},
++            "composer": {"EMPTY", "DRAFT_PRESENT", "UNKNOWN"},
++            "generation": {"ACTIVE", "IDLE", "UNKNOWN"},
++            "assistant": {"LOAD_ERROR", "DELIVERY_TIMEOUT", "PRESENT", "ABSENT", "UNKNOWN"},
++        }
++        script = f"""(() => {{
++            const result = {{route:'UNKNOWN',document:'UNKNOWN',history:'UNKNOWN',editor:'UNKNOWN',
++                composer:'UNKNOWN',generation:'UNKNOWN',assistant:'UNKNOWN'}};
++            const visible = node => {{
++                const style = node && window.getComputedStyle(node);
++                return Boolean(node && node.getClientRects().length &&
++                    style.visibility !== 'hidden' && style.display !== 'none');
++            }};
++            const any = selectors => selectors.some(s => Array.from(document.querySelectorAll(s)).some(visible));
++            {RESPONSE_LOAD_ERROR_DETECTOR}
++            let actual, expected;
++            try {{actual = new URL(location.href); expected = new URL({json.dumps(self.url)});}}
++            catch (_) {{return result;}}
++            if (actual.protocol === 'chrome-error:') {{result.route='NETWORK_ERROR';return result;}}
++            if (actual.protocol !== 'https:' || !['chatgpt.com','chat.openai.com'].includes(actual.hostname) ||
++                    actual.port || actual.username || actual.password || actual.search || actual.hash) {{
++                result.route='TARGET_DRIFT';return result;
++            }}
++            if (actual.pathname.startsWith('/auth/') || any({json.dumps(LOGIN)})) {{
++                result.route='AUTH_REQUIRED';return result;
++            }}
++            if (any({json.dumps(CAPTCHA)})) {{result.route='SECURITY_CHECK';return result;}}
++            if ({json.dumps(NETWORK)}.every(s => any([s]))) {{result.route='NETWORK_ERROR';return result;}}
++            const route = actual.pathname.match(new RegExp('^/(?:c/([A-Za-z0-9_-]{{1,200}})|g/[A-Za-z0-9_-]{{1,200}}/c/([A-Za-z0-9_-]{{1,200}}))$'));
++            result.route = route && (route[1] || route[2]) === expected.pathname.split('/').pop()
++                ? 'EXACT' : (['','/'].includes(actual.pathname) ? 'HOME' : 'TARGET_DRIFT');
++            if (!['EXACT','HOME'].includes(result.route)) return result;
++            result.document = document.readyState === 'complete' ? 'COMPLETE' :
++                (['loading','interactive'].includes(document.readyState) ? 'LOADING' : 'UNKNOWN');
++            const editors = Array.from(document.querySelectorAll({json.dumps(', '.join(EDITOR_SELECTORS))})).filter(visible);
++            result.editor = editors.length === 1 ? 'READY' : (editors.length ? 'AMBIGUOUS' : 'MISSING');
++            if (editors.length === 1) {{
++                const e = editors[0];
++                const text = typeof e.value === 'string' ? e.value : (e.textContent || '');
++                const media = e.querySelector('img,video,audio,input,[data-file-id]') ||
++                    document.querySelector('[data-testid*="attachment" i], [data-testid*="file-thumbnail" i]');
++                result.composer = text !== '' || media ? 'DRAFT_PRESENT' : 'EMPTY';
++            }}
++            result.generation = any({json.dumps(STOP)}) ? 'ACTIVE' : 'IDLE';
++            const roles = document.querySelectorAll('[data-message-author-role], [data-content-search-turn-key], [data-testid^="conversation-turn-"], article[data-turn]');
++            result.history = roles.length ? 'PRESENT' : 'ABSENT';
++            const raw = Array.from(document.querySelectorAll(
++                "[data-message-author-role='assistant'], [data-turn='assistant'], [data-content-search-unit-key]"
++            )).filter(node => visible(node) && (node.matches("[data-message-author-role='assistant'], [data-turn='assistant']") ||
++                node.querySelector('h4[data-conversation-role="assistant"]')));
++            const assistants = raw.filter(node => !raw.some(other => other !== node && other.contains(node)));
++            if (assistants.length > 128) return result;
++            if (!assistants.length) {{result.assistant='ABSENT';return result;}}
++            const text = String(assistants[assistants.length - 1].textContent || '');
++            const limited = text.slice(0, 16384).replace(/[‘’]/g, "'").toLowerCase();
++            result.assistant = assistantLoadError(assistants[assistants.length - 1]) ? 'LOAD_ERROR' :
++                (limited.includes('message delivery timed out. please try again.') ? 'DELIVERY_TIMEOUT' :
++                 (text.length > 16384 ? 'UNKNOWN' : 'PRESENT'));
++            return result;
++        }})()"""
++        try:
++            value = self.cdp_value(cdp.evaluate(script))
++        except Exception as error:
++            raise Attention("BROWSER_OBSERVATION_UNAVAILABLE") from error
++        if (not isinstance(value, dict) or set(value) != set(vocab) or
++                any(not isinstance(value[k], str) or value[k] not in allowed for k, allowed in vocab.items())):
++            raise Attention("BROWSER_OBSERVATION_INVALID")
++        return dict(value, exchange="UNATTRIBUTED", recovery="OBSERVATION_ONLY")
+     def error(self, cdp: Any, current: str | None = None) -> bool:
+         if current is None:
+             try:
+@@ -1139,8 +1251,9 @@ class CdpSink:
+             const turnsAfterWake = turnContainers.filter(turn => followsLatestUser(turn));
+             if (turnsAfterWake.length > 1)
+                 return ['invalid', 0, 0, false, false];
++            {RESPONSE_ASSISTANT_SCOPE}
+             const rawTimeouts = Array.from(document.querySelectorAll('div, span, p'))
+-                .filter(element => visible(element) && inWakeExchange(element) &&
++                .filter(element => visible(element) && assistantResponseNode(element) &&
+                     normalize(element.innerText || element.textContent) === timeoutText);
+             const timeouts = rawTimeouts.filter(element =>
+                 !Array.from(element.children).some(child =>
+@@ -1148,9 +1261,9 @@ class CdpSink:
+             const retryButtons = [];
+             for (const timeout of timeouts) {{
+                 let scope = timeout;
+-                for (let depth = 0; depth < 7 && scope; depth += 1, scope = scope.parentElement) {{
++                for (let depth = 0; depth < 7 && scope && responseBoundary && responseBoundary.contains(scope); depth += 1, scope = scope.parentElement) {{
+                     const candidates = Array.from(scope.querySelectorAll('button')).filter(button =>
+-                        visible(button) &&
++                        visible(button) && assistantResponseNode(button) &&
+                         (normalize(button.innerText || button.textContent) === retryLabel ||
+                          normalize(button.getAttribute('aria-label')) === retryLabel));
+                     if (candidates.length) {{
+@@ -1203,7 +1316,8 @@ class CdpSink:
+             // ChatGPT can render an old assistant as a load-error placeholder
+             // while retaining Copy/Regenerate controls. Those controls alone
+             // are not evidence of a usable completed response.
+-            if (assistantRawText.toLowerCase().includes("this response couldn't load"))
++            {RESPONSE_LOAD_ERROR_DETECTOR}
++            if (assistantLoadError(latestAssistant))
+                 return ['load-error', 0, 0, true, false];
+             const latestAssistantTurn = latestAssistant
+                 ? (latestAssistant.closest("[data-content-search-turn-key]") ||
+@@ -1222,8 +1336,6 @@ class CdpSink:
+             // cooperative completion, climb only inside an assistant-only
+             // subtree; never treat a whole-turn control or a mounted message
+             // selection id as proof that the assistant finished.
+-            const userNodeSelector = "[data-message-author-role='user'], article[data-turn='user'], " +
+-                "[data-user-message-bubble], [class~='group/user-message']";
+             let assistantCompletionAction = null;
+             for (let scope = latestAssistant; scope && scope !== latestUser; scope = scope.parentElement) {{
+                 if (scope.querySelector(userNodeSelector)) break;
+@@ -1283,7 +1395,7 @@ class CdpSink:
+                 not isinstance(value[4], bool)):
+             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+         if value[0] == "load-error":
+-            raise PostSubmitUnknown("RESPONSE_COMPLETION_UNPROVEN")
++            raise PostSubmitUnknown("RESPONSE_LOAD_ERROR")
+         if value[0] != "ready":
+             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+         return value[1], value[2], value[3], value[4]
+@@ -1339,6 +1451,8 @@ class CdpSink:
+                 cdp, message, require_usable_body=True
+             )
+         except PostSubmitUnknown as error:
++            if str(error) == "RESPONSE_LOAD_ERROR":
++                raise Attention("RESPONSE_LOAD_ERROR") from error
+             raise Attention("RESPONSE_STATE_UNPROVEN") from error
+         if timeout_count:
+             raise Attention("RESPONSE_TIMEOUT_RETRY_REQUIRED")
+@@ -1346,7 +1460,14 @@ class CdpSink:
+ 
+     def click_response_timeout_retry(self, cdp: Any, message: str) -> None:
+         """Click exactly one Retry control tied to the exact Wake turn."""
++        try:
++            document_url = str(cdp.get_current_url())
++        except Exception as error:
++            raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
++        if not self.exact(document_url):
++            raise PostSubmitUnknown("RESPONSE_TARGET_DRIFT")
+         script = f"""(() => {{
++            if (location.href !== {json.dumps(document_url)}) return 'target-drift';
+             const timeoutText = {json.dumps("Message delivery timed out. Please try again.")};
+             const retryLabel = {json.dumps("Retry")};
+             const expectedWake = {json.dumps(normalize_message(message))};
+@@ -1357,6 +1478,14 @@ class CdpSink:
+                 return element.getClientRects().length > 0 &&
+                     style.visibility !== 'hidden' && style.display !== 'none';
+             }};
++            const any = selectors => selectors.some(s => Array.from(document.querySelectorAll(s)).some(visible));
++            if (any({json.dumps(STOP)})) return 'generation-active';
++            const editors = Array.from(document.querySelectorAll({json.dumps(', '.join(EDITOR_SELECTORS))})).filter(visible);
++            if (editors.length !== 1) return 'editor-unavailable';
++            const editor = editors[0];
++            const draft = typeof editor.value === 'string' ? editor.value : (editor.textContent || '');
++            if (draft !== '' || editor.querySelector('img,video,audio,input,[data-file-id]') ||
++                    document.querySelector('[data-testid*="attachment" i], [data-testid*="file-thumbnail" i]')) return 'draft-present';
+             const turnCandidates = Array.from(document.querySelectorAll(
+                 "[data-content-search-turn-key], " +
+                 "[data-testid^='conversation-turn-'], article[id^='conversation-turn-'], " +
+@@ -1383,9 +1512,11 @@ class CdpSink:
+                 Boolean(latestUser.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
+             const inWakeExchange = element =>
+                 Boolean(element && (latestUser.contains(element) || followsLatestUser(element)));
+-            if (turnContainers.filter(turn => followsLatestUser(turn)).length > 1) return 'ambiguous-user';
++            const turnsAfterWake = turnContainers.filter(turn => followsLatestUser(turn));
++            if (turnsAfterWake.length > 1) return 'ambiguous-user';
++            {RESPONSE_ASSISTANT_SCOPE}
+             const rawTimeouts = Array.from(document.querySelectorAll('div, span, p'))
+-                .filter(element => visible(element) && inWakeExchange(element) &&
++                .filter(element => visible(element) && assistantResponseNode(element) &&
+                     normalize(element.innerText || element.textContent) === timeoutText);
+             const timeouts = rawTimeouts.filter(element =>
+                 !Array.from(element.children).some(child =>
+@@ -1393,9 +1524,9 @@ class CdpSink:
+             if (timeouts.length !== 1) return timeouts.length ? 'ambiguous-timeout' : 'missing-timeout';
+             const retryButtons = [];
+             let scope = timeouts[0];
+-            for (let depth = 0; depth < 7 && scope; depth += 1, scope = scope.parentElement) {{
++            for (let depth = 0; depth < 7 && scope && responseBoundary && responseBoundary.contains(scope); depth += 1, scope = scope.parentElement) {{
+                 const candidates = Array.from(scope.querySelectorAll('button')).filter(button =>
+-                    visible(button) &&
++                    visible(button) && assistantResponseNode(button) &&
+                     (normalize(button.innerText || button.textContent) === retryLabel ||
+                      normalize(button.getAttribute('aria-label')) === retryLabel));
+                 if (candidates.length) {{
+@@ -1415,7 +1546,12 @@ class CdpSink:
+         except Exception as error:
+             raise PostSubmitUnknown("RESPONSE_RETRY_CLICK_FAILED") from error
+         if value != "clicked":
+-            raise PostSubmitUnknown("RESPONSE_RETRY_CONTROL_AMBIGUOUS")
++            raise PostSubmitUnknown({
++                "target-drift": "RESPONSE_TARGET_DRIFT",
++                "generation-active": "RESPONSE_RETRY_BLOCKED_GENERATION",
++                "editor-unavailable": "RESPONSE_RETRY_EDITOR_UNAVAILABLE",
++                "draft-present": "RESPONSE_RETRY_BLOCKED_DRAFT",
++            }.get(value if isinstance(value, str) else "", "RESPONSE_RETRY_CONTROL_AMBIGUOUS"))
+ 
+     def reopen_submit_receipt_target(
+         self,
+@@ -2856,7 +2992,7 @@ class NewConversationSink(CdpSink):
+         if not messages or messages[-1]["role"] != "ASSISTANT":
+             raise error_type(unavailable)
+         body = normalize_message(messages[-1]["text"]).replace("’", "'").replace("‘", "'")
+-        if "this response couldn't load" in body.lower():
++        if body.lower().rstrip(".") == "this response couldn't load":
+             raise error_type(load_error)
+         if not body or not messages[-1]["textComplete"] or not messages[-1]["revisionComplete"]:
+             raise error_type(unavailable)
+
+diff --git a/scripts/wake_profile_quiescence.py b/scripts/wake_profile_quiescence.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..67370ea65a1021915e38255676832c074e13a2a7
+--- /dev/null
++++ b/scripts/wake_profile_quiescence.py
+@@ -0,0 +1,198 @@
++"""Bounded native process metadata only; never open or read a browser/profile.
++
++The existing Rust Job owner runs this helper after START. Command lines remain
++local, used only to attribute the selected profile. No PID/path/content leaves
++the helper. Quiescence now does not establish any historical submission outcome.
++"""
++from __future__ import annotations
++
++import ctypes
++from ctypes import wintypes as w
++import os
++from pathlib import Path
++import sys
++
++BROWSERS = {"chrome.exe", "chromium.exe"}
++DRIVERS = {"chromedriver.exe", "uc_driver.exe", "selenium-manager.exe"}
++PYTHONS = {"python.exe", "pythonw.exe"}
++
++
++def option(args, name):
++    values = []
++    for index, arg in enumerate(args[1:], 1):
++        if arg == name:
++            if index + 1 >= len(args) or args[index + 1].startswith("--"):
++                raise ValueError("incomplete option")
++            values.append(args[index + 1])
++        elif arg.startswith(name + "="):
++            values.append(arg[len(name) + 1:])
++    if len(values) > 1 or any(not value for value in values):
++        raise ValueError("ambiguous option")
++    return values[0] if values else None
++
++
++def classify(records, profile, python, samefile=os.path.samefile):
++    """Every browser child must reach a live, independently attributed root."""
++    by_pid = {row["pid"]: row for row in records}
++    if len(by_pid) != len(records):
++        raise ValueError("duplicate process")
++    other_python = set()
++    for row in records:
++        if row["name"] in PYTHONS:
++            if samefile(row["image"], python):
++                return "PROFILE_HELPER_ACTIVE"
++            other_python.add(row["pid"])
++    roots = set()
++    for row in records:
++        if row["name"] not in BROWSERS:
++            continue
++        directory = option(row["args"], "--user-data-dir")
++        if directory is not None and samefile(directory, profile):
++            return "PROFILE_BROWSER_ACTIVE"
++        if option(row["args"], "--type") is None:
++            # The qualified login helper always supplies user_data_dir. A
++            # default-profile root cannot own that separate explicit profile.
++            roots.add(row["pid"])
++    for row in records:
++        if row["name"] not in BROWSERS | DRIVERS:
++            continue
++        seen = set()
++        current = row
++        while current["pid"] not in roots | other_python:
++            if current["pid"] in seen:
++                raise ValueError("ancestry cycle")
++            seen.add(current["pid"])
++            parent = by_pid.get(current["parent"])
++            if parent is None or parent["created"] > current["created"]:
++                return "PROFILE_OWNER_UNATTRIBUTED"
++            current = parent
++    return "PROFILE_QUIESCENT"
++
++
++def snapshot(profile, python):
++    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
++    shell = ctypes.WinDLL("shell32", use_last_error=True)
++    ntdll = ctypes.WinDLL("ntdll")
++    handle = w.HANDLE
++    kernel.OpenProcess.argtypes = [w.DWORD, w.BOOL, w.DWORD]
++    kernel.OpenProcess.restype = handle
++    kernel.CloseHandle.argtypes = [handle]
++    kernel.CloseHandle.restype = w.BOOL
++    kernel.CreateToolhelp32Snapshot.argtypes = [w.DWORD, w.DWORD]
++    kernel.CreateToolhelp32Snapshot.restype = handle
++
++    class Entry(ctypes.Structure):
++        _fields_ = [("size", w.DWORD), ("usage", w.DWORD), ("pid", w.DWORD),
++                    ("heap", ctypes.c_size_t), ("module", w.DWORD), ("threads", w.DWORD),
++                    ("parent", w.DWORD), ("priority", w.LONG), ("flags", w.DWORD),
++                    ("name", w.WCHAR * 260)]
++
++    for name in ["Process32FirstW", "Process32NextW"]:
++        call = getattr(kernel, name)
++        call.argtypes = [handle, ctypes.POINTER(Entry)]
++        call.restype = w.BOOL
++    kernel.QueryFullProcessImageNameW.argtypes = [handle, w.DWORD, w.LPWSTR, ctypes.POINTER(w.DWORD)]
++    kernel.QueryFullProcessImageNameW.restype = w.BOOL
++    kernel.GetProcessTimes.argtypes = [handle] + [ctypes.POINTER(w.FILETIME)] * 4
++    kernel.GetProcessTimes.restype = w.BOOL
++    kernel.WaitForSingleObject.argtypes = [handle, w.DWORD]
++    kernel.WaitForSingleObject.restype = w.DWORD
++    ntdll.NtQueryInformationProcess.argtypes = [handle, w.ULONG, ctypes.c_void_p, w.ULONG, ctypes.POINTER(w.ULONG)]
++    ntdll.NtQueryInformationProcess.restype = w.LONG
++    shell.CommandLineToArgvW.argtypes = [w.LPCWSTR, ctypes.POINTER(ctypes.c_int)]
++    shell.CommandLineToArgvW.restype = ctypes.POINTER(w.LPWSTR)
++    kernel.LocalFree.argtypes = [ctypes.c_void_p]
++    kernel.LocalFree.restype = ctypes.c_void_p
++
++    class Unicode(ctypes.Structure):
++        _fields_ = [("length", w.USHORT), ("maximum", w.USHORT), ("buffer", ctypes.c_void_p)]
++
++    def command_line(process):
++        size = w.ULONG()
++        ntdll.NtQueryInformationProcess(process, 60, None, 0, ctypes.byref(size))
++        if not ctypes.sizeof(Unicode) <= size.value <= 65536:
++            raise ValueError("command line unavailable")
++        buffer = ctypes.create_string_buffer(size.value)
++        if ntdll.NtQueryInformationProcess(process, 60, buffer, size, ctypes.byref(size)) != 0:
++            raise ValueError("command line unavailable")
++        value = Unicode.from_buffer(buffer)
++        start = ctypes.addressof(buffer)
++        if (not value.buffer or value.length == 0 or value.length % 2 or
++                value.length > value.maximum or value.buffer < start or
++                value.buffer + value.length > start + ctypes.sizeof(buffer)):
++            raise ValueError("command line invalid")
++        text = ctypes.wstring_at(value.buffer, value.length // 2)
++        count = ctypes.c_int()
++        args = shell.CommandLineToArgvW(text, ctypes.byref(count))
++        if not args:
++            raise ValueError("arguments unavailable")
++        try:
++            if not 1 <= count.value <= 1024:
++                raise ValueError("arguments unbounded")
++            return list(args[:count.value])
++        finally:
++            kernel.LocalFree(args)
++
++    invalid = ctypes.c_void_p(-1).value
++    table = kernel.CreateToolhelp32Snapshot(2, 0)
++    if not table or table == invalid:
++        raise ValueError("snapshot unavailable")
++    rows, pins = [], []
++    try:
++        entry = Entry()
++        entry.size = ctypes.sizeof(entry)
++        ok = kernel.Process32FirstW(table, ctypes.byref(entry))
++        if not ok:
++            raise ValueError("snapshot empty")
++        total = 0
++        while ok:
++            total += 1
++            if total > 16384:
++                raise ValueError("snapshot unbounded")
++            name = entry.name.lower()
++            if name in BROWSERS | DRIVERS | PYTHONS and entry.pid != os.getpid():
++                if len(rows) >= 256:
++                    raise ValueError("candidate set unbounded")
++                process = kernel.OpenProcess(0x1000 | 0x100000, False, entry.pid)
++                if not process:
++                    raise ValueError("process unavailable")
++                pins.append(process)
++                image = ctypes.create_unicode_buffer(32768)
++                size = w.DWORD(len(image))
++                times = [w.FILETIME() for _ in range(4)]
++                if (not kernel.QueryFullProcessImageNameW(process, 0, image, ctypes.byref(size)) or
++                        not kernel.GetProcessTimes(process, *(ctypes.byref(t) for t in times)) or
++                        Path(image.value).name.lower() != name):
++                    raise ValueError("process identity unavailable")
++                created = times[0].dwLowDateTime | (times[0].dwHighDateTime << 32)
++                rows.append(dict(pid=int(entry.pid), parent=int(entry.parent), created=created,
++                                 name=name, image=image.value, args=command_line(process)))
++            ok = kernel.Process32NextW(table, ctypes.byref(entry))
++        if ctypes.get_last_error() != 18:
++            raise ValueError("snapshot incomplete")
++        state = classify(rows, profile, python)
++        if any(kernel.WaitForSingleObject(process, 0) != 258 for process in pins):
++            raise ValueError("process changed during observation")
++        return state
++    finally:
++        for process in pins:
++            kernel.CloseHandle(process)
++        kernel.CloseHandle(table)
++
++
++def main():
++    if len(sys.argv) != 3 or sys.stdin.readline() != "START\n":
++        return 2
++    try:
++        profile, python = map(Path, sys.argv[1:])
++        if not profile.is_absolute() or not profile.is_dir() or not python.is_absolute() or not python.is_file():
++            raise ValueError("selected roots unavailable")
++        state = snapshot(profile, python)
++    except Exception:
++        state = "PROFILE_INVENTORY_UNVERIFIED"
++    print("PROBE:FINAL:" + state, flush=True)
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T05:01:18.080863+00:00",
+  "sourceHeadAtObservation": "288ab492f0983ff19337b6da26ad15762a5aa128",
+  "scope": "READONLY_NATIVE_CLIENT_OBSERVATION_OF_HISTORICAL_CONTROLLED_TASK",
+  "nativeReadCalls": 1,
+  "historyTurns": 5,
+  "paginationComplete": true,
+  "binding": {
+    "uniqueExactOriginalUserMessage": true,
+    "completedAssistantInSameTurn": true,
+    "checksPassed": 18,
+    "originalProjectAndTaskVerified": true,
+    "frozenAssignmentHashVerified": true,
+    "originalDeliveryAndReceiptVerified": true,
+    "exactConversationVerified": true,
+    "targetDigestAndGenerationVerified": true,
+    "sourceEventReferenceVerified": true,
+    "currentProjectBindingAndOriginalGrantUnchanged": true,
+    "historicalFailureDistinguishedFromLatestDifferentError": true
+  },
+  "classification": {
+    "reportedTool": "native.codex.dispatch",
+    "reportedErrorCode": "WEB_TASK_CACHED_ARGUMENTS_INVALID",
+    "evidenceLevel": "ASSISTANT_REPORTED_TOOL_REJECTION",
+    "independentStructuredToolReceiptAvailable": false,
+    "nativeExecutionVerified": false,
+    "retryAuthorized": false
+  },
+  "effects": {
+    "newMessages": 0,
+    "browserOrWakeStarts": 0,
+    "taskGrantOrBindingChanges": 0,
+    "oldUnknownDeliveriesReplayed": false,
+    "rawConversationContextCredentialsOrDraftsExportedToAuditOrGitHub": false
+  },
+  "acceptanceLimits": {
+    "automaticNativeReadbackWithoutOperatorRelayQualifiedForThisHistoricalResponse": true,
+    "freshDeliveryRepeated": false,
+    "installedCatDeskBrowserReaderQualified": false,
+    "CatDeskV5NativeClientReadInterfaceAssumedAvailableToWebConversations": false,
+    "historicalRetainedStoreIsNotCurrentServingAuthority": true,
+    "originalDispatchRecoveryAuthorized": false,
+    "fullC1Acceptance": "OPEN"
+  },
+  "nextAction": "Use the already available native read interface for bounded identity-checked diagnostics where supported; retain the separate installed-reader and original dispatch review gates",
+  "goalComplete": false
+}

@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-13T10:47:30.469507+00:00",
+  "documentationParent": "4a20dbf413ee538da988d265ef08798510ea18db",
+  "restart": {
+    "stage": "LIVE_ACCEPTED_FOR_CONTROLLED_EXISTING_BACKEND_STOP_START_ONLY",
+    "startedUtc": "2026-11-13T10:40:04.8975525+00:00",
+    "finishedUtc": "2026-11-13T10:40:39.3450977+00:00",
+    "maximumSeconds": 180,
+    "cycleMaximumSeconds": 70,
+    "existingCanonicalSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "completedCycles": 2,
+    "newProcessInstanceProved": true,
+    "secondCreatedAfterFirstStopped": true,
+    "initialStoppedStateRestored": true,
+    "cycles": [
+      {
+        "name": "first",
+        "startedUtc": "2026-11-13T10:40:06.2694076+00:00",
+        "finishedUtc": "2026-11-13T10:40:25.5042364+00:00",
+        "startState": "LOCAL_BACKEND_READY",
+        "readinessGate": "READY",
+        "missingBearerStatus": 401,
+        "wrongBearerStatus": 401,
+        "toolCount": 102,
+        "publicStopState": "STOPPED",
+        "ownedDaemonExited": true,
+        "finalListenerAbsent": true,
+        "finalDaemonAbsent": true,
+        "preservation": {
+          "pinsChecked": 1685,
+          "pinMismatches": 0,
+          "pinSetUnchanged": true,
+          "profileIdentitiesUnchanged": true,
+          "taskInventoryUnchanged": true,
+          "missingSeedPathsUnchanged": true,
+          "passed": true
+        },
+        "resultSha256": "3b435139ba9573357278cfe4d63308bb9657e34c44d7e2af93d678b29a9d4e5e",
+        "ownerSha256": "5bbebcde93db0b40501dd98dfeb5979f016fd288eac57181c6f896db3f00de02"
+      },
+      {
+        "name": "second",
+        "startedUtc": "2026-11-13T10:40:26.4314309+00:00",
+        "finishedUtc": "2026-11-13T10:40:39.2243733+00:00",
+        "startState": "LOCAL_BACKEND_READY",
+        "readinessGate": "READY",
+        "missingBearerStatus": 401,
+        "wrongBearerStatus": 401,
+        "toolCount": 102,
+        "publicStopState": "STOPPED",
+        "ownedDaemonExited": true,
+        "finalListenerAbsent": true,
+        "finalDaemonAbsent": true,
+        "preservation": {
+          "pinsChecked": 1685,
+          "pinMismatches": 0,
+          "pinSetUnchanged": true,
+          "profileIdentitiesUnchanged": true,
+          "taskInventoryUnchanged": true,
+          "missingSeedPathsUnchanged": true,
+          "passed": true
+        },
+        "resultSha256": "df7180df117d6394dfb903d2e6364a31d4da87ae7ddd881ed0a4887e53e6ab78",
+        "ownerSha256": "158f26fe4f443ae56a48c0b076f94c54c861a04c9c3e19c5bce4633bafa41556"
+      }
+    ],
+    "wrapperSha256": "defd4ad00aa690f2f2063756091f467ce22cda8e5552dcdbff3071c7508cd788",
+    "resultSha256": "ad36f9d8b653158b381512a6bed44590a230bdc49254a756d2d099f15d74ebf9",
+    "ownerSha256": "8fd76e0cd25386cc5047ffd459780e01718f994cb2600f424b0568feeac91182",
+    "containment": "KILL_ON_JOB_CLOSE",
+    "timedOut": false,
+    "terminationFailed": false,
+    "crashRecoveryTested": false,
+    "binaryRollbackTested": false,
+    "persistentSupervisorActivated": false,
+    "connectorRetried": false
+  },
+  "wakeStatusObservation": {
+    "stage": "SOURCE_IMPLEMENTED_AND_SOURCE_TESTED_NOT_INSTALLED",
+    "sourceFile": "src/state.rs",
+    "sourceSha256": "781535913b929b243e27ccd08a0497f6065b2cda7ecbae4d3d5e85a303599016",
+    "observedDefect": "A live v5 status response presented month-old on-disk Wake RUNNING/submission fields without a freshness or live-process qualifier.",
+    "change": "Add read-only status-file evidence with heartbeat age, stale/future/unavailable/invalid timestamp categories and liveProcessVerified=false. Preserve historical status and existing availability semantics.",
+    "presentationHeartbeatWindowSeconds": 10,
+    "lockAcquired": false,
+    "processLivenessAsserted": false,
+    "authorityGranted": false,
+    "sourceTests": [
+      {
+        "filter": "state::independent_wake_status_observation_tests::",
+        "passed": 3,
+        "logSha256": "b0e12e3ecd410468e3274a761ce5a5d682895aaa314f23664ee212316c255f25"
+      },
+      {
+        "filter": "transport_status_",
+        "passed": 3,
+        "logSha256": "a2130f9f5a1252aeb7f7e93de01f2522efb0622f1e006acd059dbb9d70bbb278"
+      }
+    ],
+    "sourceTestOwnerSha256": "c65706be9a72b542ae57e9b3be7d5be9971d77d7429667c2d355d17775dbc379",
+    "sourceTestResultSha256": "d03c4303c49d56a393a7297b250b9cf927cc1ade4751f8b729bcdba1a698f34d",
+    "strictClippyPassed": true,
+    "strictClippyOwnerSha256": "aeb08225bdc71e210aa1ae2075390a678363a161de6071b07e2ba2723f746f8e",
+    "strictClippyResultSha256": "0426b32dc7c61aa91179120f81ea366dcfd30e0c724f04e8b0935613e115b44b",
+    "rustfmtPassed": true,
+    "independentCanonicalReleaseReview": false,
+    "releaseArtifactBuilt": false,
+    "installed": false
+  },
+  "browserStarts": 0,
+  "wakeStarts": 0,
+  "tunnelStarts": 0,
+  "messagesSent": 0,
+  "projectActions": 0,
+  "candidateExecuted": false,
+  "protectedMigrationChanged": false,
+  "overallMvpAccepted": false,
+  "retainedArtifactOrigins": {
+    "mainCandidateSource": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+    "mainCandidateSha256": "625feffdd31dfaa33a22c15f91b4b5d1560074be71eedcc0586e771b79896ab1",
+    "mainCandidateContainsNewObservation": false,
+    "wakeTupleSource": "0d6c1074e1fae3cd1fa3fdd8abe2937cd881a99d"
+  },
+  "remaining": [
+    "One pending operator-environment root comparison before fresh purpose-bound Wake migration inputs and explicit account delegation.",
+    "Genuine independent canonical candidate review and existing producer authority before promotion.",
+    "Protected installed update/interruption/rollback and restart qualification.",
+    "Actual project-bound Web edit/verification/Git checkpoint/sync/self-Wake/readback and independent second-project execution."
+  ]
+}

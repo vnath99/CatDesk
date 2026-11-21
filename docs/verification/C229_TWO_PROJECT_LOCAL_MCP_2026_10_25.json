@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C229",
+  "status": "TWO_REAL_REGISTERED_PROJECT_LOCAL_MCP_ENDPOINTS_PASS",
+  "startedUtc": "2026-10-26T01:52:51.6644498+00:00",
+  "finishedUtc": "2026-10-26T01:53:57.7878233+00:00",
+  "installedSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+  "installedSourceCommit": "409513a1c1f81f74f873bd4b3dca825458ef29a8",
+  "profile": "EXISTING_PROJECT_SCOPED_READ_ONLY_HEADLESS",
+  "projectAliases": [
+    "A",
+    "B"
+  ],
+  "privateIdentityMappingRetained": true,
+  "execution": {
+    "concurrentEndpoints": 2,
+    "separateProcessesAndEphemeralPorts": true,
+    "endpointRuntimeSeconds": 60,
+    "outerLimitSeconds": 180,
+    "naturalExits": 2,
+    "exitCodes": [
+      0,
+      0
+    ],
+    "requests": 11,
+    "registrationWorkspaceAndTargetWitnessVerified": true,
+    "correctRepositoryOwnerContextVerified": true,
+    "gitOwnershipSettingsChanged": false
+  },
+  "checks": {
+    "initializeAndScopeCalls": "PASS",
+    "ownReadmeContentMatches": "PASS_BOTH_PROJECTS",
+    "wrongTargetWitness": "REFUSED_RPC_SCOPE_WITNESS_MISMATCH",
+    "siblingWorkspaceRead": "REFUSED_PATH_ESCAPE",
+    "peerReadAfterRefusal": "PASS",
+    "wrongBearerStatus": [
+      401,
+      401
+    ],
+    "nativeWriterClaims": 0,
+    "assignedNativeTasks": 0,
+    "conversationOriginAuthenticated": false
+  },
+  "context": {
+    "independentTrafficAppendsVerified": true,
+    "independentObservedTokenEstimatesGrew": true,
+    "oldEventsAndPoliciesPreserved": true,
+    "rolloverAndBrowserCoveragePreserved": true,
+    "hiddenContextConsumptionExact": false,
+    "allowedChangedExistingLedgers": 2
+  },
+  "preservation": {
+    "pinnedFiles": 1936,
+    "metadataTrees": 13,
+    "approvedConfigurationHeldReadOnly": true,
+    "configurationAndBindingsUnchanged": true,
+    "installedAuthorityAndPriorForegroundHistoryUnchanged": true,
+    "externalProjectSourceAndHeadNotFrozen": true,
+    "externalProjectWrites": 0,
+    "nativeSessionMutations": 0,
+    "browserWakeRecurringStarts": 0,
+    "webMessages": 0
+  },
+  "cleanup": {
+    "noTimeout": true,
+    "noTerminationFailure": true,
+    "cleanupFailures": 0,
+    "exactImageOwnersAndEndpointListenersEmpty": true
+  },
+  "retainedInitialFailure": {
+    "completedMcpRequests": 0,
+    "ledgerChanges": 0,
+    "protectedStateAndCleanupVerified": true,
+    "reason": "Early MainModule inspection could not obtain an image; the original process exit/load cause is unproven because output was not captured.",
+    "correction": "Retained-handle creation/image queries after readiness, initialized nullable cleanup fields and bounded redacted output capture; original evidence preserved and no completed requests replayed."
+  },
+  "proofSha256": {
+    "preparedManifest": "44ab4ef48e1d5a640fb635ee2e9ecf4895d14bc6cb20d01a9a59df933ef6a6b9",
+    "result": "4e4d1a61a1cef77e279d4f94ff0c2529b5e8627dd145895a80b751a526892576",
+    "outer": "e648620552349fa0603971761c13cbdc7fabc476b88dab5b6d8e8194fd1982db",
+    "containment": "45d98b2f87cbadfaed9f6016d7970979f91f5abe7e74088ae9a7c996fe905762",
+    "context": "65cef92533f022cf0ebb95f065e42900e6952fd0cf244dae4280b96140b238c5"
+  },
+  "privacy": "Project identities, local paths, conversation URLs, repository URLs and private README fingerprints/content remain in local evidence only.",
+  "limits": {
+    "actualChatgptWebCallers": false,
+    "projectWriteAcceptance": false,
+    "unattendedOrNativeDaemonAcceptance": false,
+    "officialSecureMcpAcceptance": false,
+    "previousDifferentVersionRollbackAcceptance": false,
+    "connectorDependency": "Prior HTTP429 remains open; not retried"
+  },
+  "next": "Expose the proven project-scoped launch through the existing bounded operator surface without serializing independent project work; qualify actual Web callers once connector access is available.",
+  "operatorActionRequiredForCompletedTest": false,
+  "milestoneComplete": false
+}

@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T19:18:45Z",
+  "status": "PARTIAL_CONTROLLED_LIVE",
+  "sourceCommit": "947aeda5371f738459d5fea9f7830785f778698a",
+  "productionChanged": false,
+  "mainChanged": false,
+  "newDevelopmentAppSha256": "197ac1df7c2bfd3431c496d39eb4dfd5575ddd490325e01b5110271d30f8d7e9",
+  "reusedComponentsSource": "f7f1dedeb2584469e252969f195c43c5b4d3aa6a",
+  "developmentPackageStatus": "PACKAGE_UPDATED_STOPPED",
+  "previousVerifiedDevelopmentFallbackRetained": true,
+  "verificationAuthority": "LOCAL_OPERATOR_PROVIDED_NOT_PRODUCTION_AUTHORITY",
+  "checks": [
+    {
+      "name": "development-catalog",
+      "exitCode": 0
+    },
+    {
+      "name": "stable-lifecycle",
+      "exitCode": 0
+    },
+    {
+      "name": "cached-production-denial",
+      "exitCode": 0
+    },
+    {
+      "name": "full-clippy",
+      "exitCode": 0
+    },
+    {
+      "name": "format",
+      "exitCode": 0
+    },
+    {
+      "name": "normal-development-image",
+      "exitCode": 0
+    }
+  ],
+  "live": {
+    "startedUtc": "2026-11-15T19:14:57.709891+00:00",
+    "finishedUtc": "2026-11-15T19:16:01.082145+00:00",
+    "unauthenticatedStatus": 401,
+    "wrongBearerStatus": 401,
+    "authenticatedInitializeStatus": 200,
+    "authenticatedCatalogStatus": 200,
+    "toolCount": 78,
+    "scopedWebDispatcherPublished": true,
+    "productionActivationStillPublished": false,
+    "cachedActivationRefusedInDevelopmentScope": true,
+    "controllerExitCode": 0,
+    "outputStreamsClosed": true,
+    "developmentListenerClosed": true,
+    "productionListenerBefore": true,
+    "productionListenerWhileDevelopmentReady": true,
+    "productionListenerAfter": true,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "tunnelChanges": 0,
+    "productionLifecycleCommands": 0,
+    "preservation": {
+      "pinsChecked": 1702,
+      "pinMismatches": 0,
+      "pinSetUnchanged": true,
+      "profileIdentitiesUnchanged": true,
+      "taskInventoryUnchanged": true,
+      "missingSeedPathsUnchanged": true,
+      "passed": true
+    }
+  },
+  "fullWebCycleAccepted": false,
+  "productionWebCallDuringRun": "TRANSPORT_SEND_ERROR_NO_HTTP_STATUS",
+  "remaining": {
+    "developmentWeb": "One unchanged canonical v5 connection. Local development needs no external setup. Later actual Web use of missing installed delivery CLI/scoped Git/qualified adapter requires existing reviewed release authority; no silent routing or duplicate infrastructure.",
+    "productionReview": "Original f7 exact start decision pending once; d22 attributable review/producer separate.",
+    "migration": "Coherent protected physical state and legitimate purpose-bound authority not established; expired proposals preserved.",
+    "localTask": "Investigate settled-read-only recovery and structured-receipt parsing at source level; preserve original call IDs and marker. Do not replay the completed read/preview."
+  },
+  "priorAttempts": [
+    {
+      "result": "DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH",
+      "meaning": "Old controller embedded different scripts; refused before update journal. Matching-source controller then succeeded without guard changes."
+    },
+    {
+      "result": "EXPECTED_RED_AND_UNIT_FIXTURE_CORRECTION",
+      "meaning": "Two new tests first failed; corrected one fixture expectation. Final listed checks pass; full application suite not claimed."
+    }
+  ],
+  "localEvidenceHashes": {
+    "result.private.json": "721a38f9731ebc583153d196afd0522700360e81497d3cf3d2f8dc8c16709909",
+    "nov15-isolated-backend-scope-owner.private.json": "d70ffd0205d440ba232a8195fa3fd1b1dbcecd99b0a63ee14d214072e9c182d3",
+    "nov15-dev-scope-package-provenance.private.json": "ed5fb565dee9acae716cdd6238824aa8293381dc0e78832716d06fd2d0aa5187",
+    "nov15-dev-scope-local-review.private.json": "73a316a734cc78ee84213c5d8c5a11289263c7d8ea3e0f84272e76a05fed49af"
+  },
+  "singleCanonicalConnectionDecisionUtc": "2026-11-15T19:23:33Z",
+  "externalInfrastructureChangesAuthorized": false,
+  "singleSystemReleaseModelDecisionUtc": "2026-11-15T19:33:36Z",
+  "localTaskAttempt": {
+    "taskId": "nov15-local-mcp-docs-1",
+    "scope": "LOCAL_MCP_NOT_CHATGPT_WEB",
+    "firstAttempt": "PROJECT_MCP_SCOPE_WITNESS_MISMATCH before dispatch; fixed test harness witnesses only",
+    "secondAttempt": {
+      "wrongTask": "PROJECT_TASK_CALL_NOT_ASSIGNED",
+      "outsideAssignment": "PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT",
+      "readCompleted": true,
+      "previewStatus": "ACCEPTED",
+      "failure": "Harness parsed bounded text instead of structuredContent.payload"
+    },
+    "assignmentPreserved": true,
+    "fileEdits": 0,
+    "verificationCommands": 0,
+    "gitMutations": 0,
+    "wakeOrWebSubmissions": 0,
+    "recovery": "HELD: recorded activity is outside current zero-call/saved-checkpoint admission; no third attempt or marker reset",
+    "finalProductionOrProtectedPinChanges": 0,
+    "finalExpectedDevelopmentContextPinChanges": 1,
+    "newTaskAndRecoveryFiles": 13,
+    "sourceAndExecutionClean": true,
+    "profileIdentitiesUnchanged": true,
+    "testBackendPidsAndListenersRemaining": 0
+  },
+  "documentationChecks": {
+    "primaryCheckPassed": true,
+    "linksChecked": 539,
+    "fixtureTestsPassed": 23,
+    "initialFixtureAttempt": "Before staging new evidence, fixture intentionally omitted untracked files and reported missing link. After explicit staging, all 23 passed; final documentation changes rechecked separately."
+  }
+}

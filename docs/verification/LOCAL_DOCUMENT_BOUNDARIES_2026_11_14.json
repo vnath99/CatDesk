@@ -1,0 +1,46 @@
+{
+  "observedUtc": "2026-11-14T17:08:37.784917+00:00",
+  "scope": "METADATA_ONLY_NO_LOCAL_CONTENT_EXPORTED",
+  "documents": [
+    {
+      "path": "CATDESK_CODEX_HANDOFF_SINGLE.md",
+      "present": true,
+      "bytes": 929916,
+      "classification": "PRIVATE_HISTORICAL_HANDOFF",
+      "lastVerifiedSubstantiveUpdate": "UNKNOWN",
+      "published": false
+    },
+    {
+      "path": ".catdesk/current_plan.md",
+      "present": true,
+      "bytes": 83007,
+      "classification": "LOCAL_SUPPORTING_OPERATIONAL_RECORD",
+      "lastVerifiedSubstantiveUpdate": "UNKNOWN",
+      "published": false
+    },
+    {
+      "path": ".catdesk/session.md",
+      "present": true,
+      "bytes": 93390,
+      "classification": "LOCAL_SUPPORTING_OPERATIONAL_RECORD",
+      "lastVerifiedSubstantiveUpdate": "UNKNOWN",
+      "published": false
+    },
+    {
+      "path": ".catdesk/todo.md",
+      "present": true,
+      "bytes": 517624,
+      "classification": "LOCAL_SUPPORTING_OPERATIONAL_RECORD",
+      "lastVerifiedSubstantiveUpdate": "UNKNOWN",
+      "published": false
+    },
+    {
+      "path": "OPERATOR_ACTIONS.md",
+      "present": true,
+      "bytes": 108474,
+      "classification": "PRIVATE_HISTORICAL_HANDOFF",
+      "lastVerifiedSubstantiveUpdate": "UNKNOWN",
+      "published": false
+    }
+  ]
+}

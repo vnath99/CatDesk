@@ -18,6 +18,7 @@ use std::time::Duration;
 
 use crate::Result;
 use crate::install_broker_endpoint::FixedBrokerPipeEndpoint;
+use crate::install_broker_operator::LocalUserTokenEvidenceV1;
 use crate::install_broker_operator::OperatorTokenEvidenceV1;
 use crate::install_broker_pipe_io::read_once;
 use crate::install_broker_policy::BrokerProtectedPolicyV1;
@@ -29,7 +30,12 @@ const MAX_APPROVAL_FRAME_BYTES: usize = 16 * 1024;
 /// history before the first install mutation.
 pub struct AdmittedBrokerApprovalFrameV1 {
     approval_envelope: Vec<u8>,
-    operator: OperatorTokenEvidenceV1,
+    client: AdmittedClient,
+}
+
+enum AdmittedClient {
+    Operator(OperatorTokenEvidenceV1),
+    LocalUser(LocalUserTokenEvidenceV1),
 }
 
 impl AdmittedBrokerApprovalFrameV1 {
@@ -37,8 +43,32 @@ impl AdmittedBrokerApprovalFrameV1 {
         &self.approval_envelope
     }
 
-    pub fn operator_evidence(&self) -> &OperatorTokenEvidenceV1 {
-        &self.operator
+    pub fn operator_evidence(&self) -> Result<&OperatorTokenEvidenceV1> {
+        match &self.client {
+            AdmittedClient::Operator(operator) => Ok(operator),
+            AdmittedClient::LocalUser(user) => user
+                .operator()
+                .ok_or_else(|| "WAKE_BROKER_ELEVATED_OPERATOR_REQUIRED".into()),
+        }
+    }
+
+    pub(crate) fn authenticated_user_sid_sha256(&self) -> &str {
+        match &self.client {
+            AdmittedClient::Operator(operator) => operator.operator_sid_sha256(),
+            AdmittedClient::LocalUser(user) => user.user_sid_sha256(),
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn isolated_same_state_frame_fixture(
+    envelope: Vec<u8>,
+    operator: OperatorTokenEvidenceV1,
+) -> AdmittedBrokerApprovalFrameV1 {
+    assert!(!envelope.is_empty() && envelope.len() <= MAX_APPROVAL_FRAME_BYTES);
+    AdmittedBrokerApprovalFrameV1 {
+        approval_envelope: envelope,
+        client: AdmittedClient::Operator(operator),
     }
 }
 
@@ -74,7 +104,30 @@ pub fn read_admitted_approval_frame(
     policy.revalidate()?;
     Ok(AdmittedBrokerApprovalFrameV1 {
         approval_envelope,
-        operator,
+        client: AdmittedClient::Operator(operator),
+    })
+}
+
+/// Read one request under the authority already enrolled in protected policy.
+/// Signed maintenance still requires elevated evidence after decoding.
+pub(crate) fn read_admitted_update_frame(
+    endpoint: &mut FixedBrokerPipeEndpoint,
+    policy: &BrokerProtectedPolicyV1,
+    deadline: Duration,
+    stop: &AtomicBool,
+) -> Result<AdmittedBrokerApprovalFrameV1> {
+    if !policy.local_user_updates_enabled()? {
+        return read_admitted_approval_frame(endpoint, policy, deadline, stop);
+    }
+    policy.revalidate()?;
+    let (approval_envelope, user) =
+        read_once_then_admit(endpoint.as_handle(), deadline, stop, |pipe| {
+            policy.inspect_connected_local_user_immediately_after_read(pipe)
+        })?;
+    policy.revalidate()?;
+    Ok(AdmittedBrokerApprovalFrameV1 {
+        approval_envelope,
+        client: AdmittedClient::LocalUser(user),
     })
 }
 

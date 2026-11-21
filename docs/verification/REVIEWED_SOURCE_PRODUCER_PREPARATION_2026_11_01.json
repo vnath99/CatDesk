@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-01T21:22:34.058071+00:00",
+  "scope": "TESTED_CONTROLLED_LIVE_LOCAL_REVIEW_CHAIN_NOT_INSTALLED_PROMOTION",
+  "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "evidenceBaseCommit": "cab7f00db7f77ac493b6430b4362833026c2c36f",
+  "branch": "codex/web-rollover-oct17",
+  "operatorRoadmapReRead": {
+    "singleHandoff": true,
+    "fullContextMeterMandatory": true,
+    "threeMetricsRemainDistinct": true,
+    "laterMultiAiMcpClientSupportMandatory": true,
+    "coreInstalledTwoWebAcceptanceFirst": true
+  },
+  "sourceIntegration": {
+    "existingBranchFastForward": true,
+    "changedTrackedPaths": 401,
+    "previousUntrackedFilesPreserved": 18,
+    "exactIndependentReportCreated": true,
+    "reportBytes": 3407,
+    "reportSha256": "5471731f2f3c5214b589dc6b84df6feff15d3ce0b06e8b4accbeb6ffaffbd86d",
+    "preservationMismatches": 0,
+    "installationChanges": 0
+  },
+  "nativeReviewCompletion": {
+    "state": "COMPLETED_VERIFIED",
+    "stateVersion": 7,
+    "active": false,
+    "originalClientTimeoutPreserved": true,
+    "finalizeResent": false,
+    "snapshotEntriesVerified": 232,
+    "fullTrackedBuildSourceCovered": true,
+    "snapshotId": "a38c74a6eb11f95a978901df79620f53919bea14ce022df59611be772474351c",
+    "manifestFileSha256": "feeeb2d2debc140c5e7870f03edb027ab78d653388f4c453e62a32809372a503",
+    "reportBoundAsCurrentOutput": true,
+    "acknowledgmentVerified": true,
+    "otherInboxRowsPreserved": true,
+    "finiteOwnerNaturalExit": true,
+    "endpointClosed": true
+  },
+  "reviewedProducer": {
+    "state": "PREPARED",
+    "successfulPredecessorSuccessionVerified": true,
+    "priorAuthorityFilesPreserved": 292,
+    "protectedPreservationPins": 4700,
+    "preservationMismatches": 0,
+    "originalPostcheckFailurePreserved": true,
+    "reconciliation": "Application manifest digest verified separately from the serialized manifest file checksum.",
+    "prepareResent": false,
+    "confirmCalls": 0,
+    "buildStarted": false,
+    "attestedNewCandidate": false
+  },
+  "failedPrivatePreparation": {
+    "initialWrapperStoppedBeforeCatdeskCommand": true,
+    "cause": "Direct authority scan initially included historical cache directories; restored existing immediate-file scan scope.",
+    "productGuardsChanged": false
+  },
+  "productionChanges": 0,
+  "browserStarts": 0,
+  "webMessagesSent": 0,
+  "recurringAutomationEnabled": false,
+  "testsReRun": [],
+  "testsClaim": "No source tests were rerun for this evidence-only checkpoint. Prior qualification retains its original scope.",
+  "remaining": [
+    "Confirm this exact prepared producer once; validate its actual attestation and full worker exit.",
+    "Guarded protected promotion and installed health/rollback/restart qualification.",
+    "Reconcile canonical and controlled project authority through supported mechanisms.",
+    "Actual two-project ChatGPT Web workspace editing/native verification and independent Wake acceptance.",
+    "Full unique-context, uncertainty, visibility and calibration qualification; later provider-client MCP matrix."
+  ],
+  "operatorActionRequiredNow": false,
+  "mvpComplete": false
+}

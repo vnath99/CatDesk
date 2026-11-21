@@ -1,0 +1,92 @@
+{
+  "milestoneComplete": false,
+  "limitations": [
+    "Local HTML success does not prove ChatGPT Web acceptance or installed runtime qualification.",
+    "The installed driver dispatches three events per character; the earlier live timeout cause is still unproven.",
+    "C249 unknown submission cannot be blindly retried or cleared.",
+    "Production review, attestation, promotion, rollback and two-conversation Web coding remain incomplete."
+  ],
+  "checkpoint": "C250",
+  "sourceParentRemoteShaVerified": true,
+  "branch": "codex/web-rollover-oct17",
+  "developmentDependency": {
+    "signatureStatus": "NotSigned",
+    "automaticDriverDownloadObserved": true,
+    "previousDriverIdentityRecorded": false,
+    "driverSha256": "2d9a190089ec8546e955479b4ba6866eaea5d63e1afb050b5b97662f4dbad41b",
+    "driverVersion": "155.0.8059.84",
+    "releaseAuthorityGranted": false
+  },
+  "tests": {
+    "adapter": {
+      "passed": 32,
+      "failed": 0
+    },
+    "bridge": {
+      "failed": 0,
+      "passed": 126,
+      "resultSha256": "3f391329fee9a5c7dc2a1eafa92c396ef8ac077c3d0fbabb6cad99a616c7a92c"
+    },
+    "initialIntegrationFailuresPreserved": true,
+    "fixtureMocksUpdatedForNativeInput": true,
+    "rolloverEditor": {
+      "passed": 75,
+      "failed": 0
+    }
+  },
+  "c249Review": {
+    "outcome": "UNKNOWN_NO_REPLAY",
+    "phase": "SUBMITTING",
+    "draftPreserved": true,
+    "responseVerified": false,
+    "readOnlyDiagnosis": "STABLE_PREFIX_NO_EXACT_VISIBLE_USER_READERS_DISAGREE"
+  },
+  "originalTimeoutCauseProved": false,
+  "production": {
+    "newBackendAccepted": false,
+    "retainedC208ExactCopiesRechecked": 2,
+    "promotionPerformed": false
+  },
+  "sourceParent": "2d54c9085e4edbd473784b046d00c9e6ed5a2d49",
+  "date": "2026-10-28",
+  "sourceWorkingPins": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "18ce9970545da4a91520784eb6b7e0733795ec6f8a6073fdb7a28f06359a89d8"
+    },
+    {
+      "path": "wake/adapter.py",
+      "sha256": "e7d6b60d8cde3a12ee8efefeba33a5db8bf7f19ccb3dfa688412d945e7faad32"
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "sha256": "593bf9c897fc5e1ee9c541047abd32f9dac45badbdae126f959f7a81120a8eba"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sha256": "42348f7d1c82041729a47375fccb2e0457e95f36501a20a6584528facef3bc96"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "5f320fc1a08c7379720e82f2985e8b74c1bc6d20f872f24276ad669c7e374f8b"
+    }
+  ],
+  "selectedBrowserAdapterChanged": false,
+  "change": "Reuse the existing native editor CAS for established-conversation messages; no fallback after uncertain native edits. Existing target, empty-draft, submission-boundary and receipt guards remain required.",
+  "isolatedBrowser": {
+    "submitEvents": 0,
+    "bulkSeconds": 0.01600000006146729,
+    "scope": "LOCAL_HTML_ONLY",
+    "inputEvents": 1,
+    "authenticatedProfileUsed": false,
+    "messageBytes": 5700,
+    "keyEvents": 0,
+    "chatgptVisited": false,
+    "existingDraftPreserved": true,
+    "remainingTestOwnedProcesses": 0,
+    "actualBrowser": true,
+    "resultSha256": "7dc1b3f6be1d09cd58de662b01e3848faca6c4962944c7d67cef03f9a33cfa4c"
+  },
+  "classification": "SOURCE_AND_ISOLATED_LOCAL_BROWSER_QUALIFIED",
+  "recurringAutomationEnabled": false
+}

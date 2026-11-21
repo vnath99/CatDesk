@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+  "kind": "parts",
+  "offset": 56,
+  "entries": [
+    {
+      "file": "part-057.diff.txt",
+      "bytes": 8084,
+      "sha256": "98d0288d4e81111a75284bb85634d4b2274de18a3d381aa003df7ecb15007cf8",
+      "startByte": 456715,
+      "endByte": 464799,
+      "paths": [
+        "src/promotion_source_bridge.rs",
+        "src/reviewed_build.rs"
+      ]
+    },
+    {
+      "file": "part-058.diff.txt",
+      "bytes": 8176,
+      "sha256": "7b68490ea087cf6c004d203bed164e7bb95c4d26aad4dee100bccc3be6720c8b",
+      "startByte": 464799,
+      "endByte": 472975,
+      "paths": [
+        "src/reviewed_build.rs",
+        "src/server.rs"
+      ]
+    },
+    {
+      "file": "part-059.diff.txt",
+      "bytes": 8154,
+      "sha256": "45a9626a3a669ac36c73eaf2bcd3ed70791e377a5ad919a93be5c4092fbb7e14",
+      "startByte": 472975,
+      "endByte": 481129,
+      "paths": [
+        "src/server.rs",
+        "src/wake_protocol_client.rs",
+        "src/web_review_work.rs"
+      ]
+    },
+    {
+      "file": "part-060.diff.txt",
+      "bytes": 8166,
+      "sha256": "72788969821dfb36cc521b308aef3d1b83a751cc1a0d58e930229c5c0ef7f942",
+      "startByte": 481129,
+      "endByte": 489295,
+      "paths": [
+        "src/web_review_work.rs"
+      ]
+    },
+    {
+      "file": "part-061.diff.txt",
+      "bytes": 8151,
+      "sha256": "be3a7442b4f43b6155d98ec8526373759ce7dc4a7b8a49de4687680cbf5dfe98",
+      "startByte": 489295,
+      "endByte": 497446,
+      "paths": [
+        "src/web_review_work.rs"
+      ]
+    },
+    {
+      "file": "part-062.diff.txt",
+      "bytes": 8135,
+      "sha256": "bcbddfd70a8bb7a494b1919f24894c09ecf5cbe851359d8a5a9235eabc37dffd",
+      "startByte": 497446,
+      "endByte": 505581,
+      "paths": [
+        "src/web_review_work.rs",
+        "src/web_task_dispatch.rs"
+      ]
+    },
+    {
+      "file": "part-063.diff.txt",
+      "bytes": 8182,
+      "sha256": "76b3d6e56503667118b50a0d1c5f0837da76738f01a2ac65ed770a21f32ac265",
+      "startByte": 505581,
+      "endByte": 513763,
+      "paths": [
+        "src/web_task_dispatch.rs"
+      ]
+    },
+    {
+      "file": "part-064.diff.txt",
+      "bytes": 8166,
+      "sha256": "4839e8dadd1aa3eaad0bcba0395b0ca55e4c05ed3cc2fe6b26131c43df41be41",
+      "startByte": 513763,
+      "endByte": 521929,
+      "paths": [
+        "src/web_task_dispatch.rs"
+      ]
+    }
+  ]
+}

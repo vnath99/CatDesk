@@ -99,6 +99,48 @@ impl PinnedDirectory {
         Self::acquire_with_delete_share(path, label, false)
     }
 
+    /// Pin an existing directory for handle-relative reads without requesting
+    /// child creation rights. Protected toolchain directories need not be writable.
+    #[cfg(windows)]
+    fn acquire_read_only(path: &Path, label: &str) -> Result<Self, String> {
+        classify_pinned_directory(path, label)?;
+        let wide: Vec<u16> = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let raw = unsafe {
+            CreateFileW(
+                wide.as_ptr(),
+                FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                std::ptr::null_mut(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                std::ptr::null_mut(),
+            )
+        };
+        if raw.is_null() || raw == INVALID_HANDLE_VALUE {
+            return Err(format!("{label} identity is unavailable"));
+        }
+        let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+        let information = handle_information(handle.as_raw_handle(), label)?;
+        if information.file_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)
+            != FILE_ATTRIBUTE_DIRECTORY
+        {
+            return Err(format!("{label} is unsafe"));
+        }
+        Ok(Self {
+            path: path.to_path_buf(),
+            handle,
+            identity: (
+                information.volume_serial_number,
+                information.file_index_high,
+                information.file_index_low,
+            ),
+        })
+    }
+
     fn acquire_with_delete_share(
         path: &Path,
         label: &str,
@@ -551,6 +593,15 @@ impl ProtectedDirectoryGuard {
         })
     }
 
+    /// Retain the same directory identity and no-delete-share protection for
+    /// a consumer that only reads existing children, without add-file rights.
+    #[cfg(windows)]
+    pub(crate) fn acquire_read_only(path: &Path, label: &str) -> Result<Self, String> {
+        Ok(Self {
+            directories: vec![PinnedDirectory::acquire_read_only(path, label)?],
+        })
+    }
+
     /// Read-only, handle-relative walk of every directory from a local drive
     /// root through one exact absolute path. UNC, device, verbatim, relative,
     /// normalized and reparse paths fail closed. This creates no mutation
@@ -701,7 +752,9 @@ impl ProtectedDirectoryGuard {
     /// can only make this fail closed.
     #[cfg(windows)]
     pub(crate) fn reopen_direct_child_for_delete(mut self, label: &str) -> Result<Self, String> {
-        if self.directories.len() != 2 {
+        // The final object is a direct child of the preceding pinned handle,
+        // including when that parent has its own retained ancestor chain.
+        if self.directories.len() < 2 {
             return Err(format!("{label} is not a direct child"));
         }
         self.assert_stable(label)?;
@@ -1378,6 +1431,79 @@ pub(crate) fn open_reviewed_regular_for_delete<P: PinnedParent>(
     }
     parent.assert_stable(label)?;
     Ok(file)
+}
+
+/// Rename one exact regular file while retaining its read/delete handle. The
+/// pinned parent and FILE_SHARE_READ prevent pathname replacement between the
+/// byte comparison and the no-replace native commit.
+#[cfg(windows)]
+pub(crate) fn rename_exact_regular_child(
+    parent: &ProtectedDirectoryGuard,
+    source: &str,
+    destination: &str,
+    expected: &[u8],
+    label: &str,
+) -> Result<(), String> {
+    validate_component(source, label)?;
+    validate_component(destination, label)?;
+    if expected.len() > 128 * 1024 || source == destination {
+        return Err(format!("{label} is unsafe"));
+    }
+    parent.assert_stable(label)?;
+    let mut file = open_relative_regular_file_with_disposition_and_share(
+        parent,
+        source,
+        FILE_OPEN,
+        FILE_READ_DATA | FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE,
+        FILE_SHARE_READ,
+        label,
+    )?;
+    let information = handle_information(file.as_raw_handle(), label)?;
+    if information.file_attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0
+        || information.number_of_links != 1
+        || file
+            .metadata()
+            .map_err(|_| format!("{label} is unavailable"))?
+            .len()
+            != expected.len() as u64
+    {
+        return Err(format!("{label} identity drifted"));
+    }
+    let mut actual = Vec::new();
+    Read::by_ref(&mut file)
+        .take(expected.len() as u64 + 1)
+        .read_to_end(&mut actual)
+        .map_err(|_| format!("{label} is unavailable"))?;
+    if actual != expected {
+        return Err(format!("{label} bytes drifted"));
+    }
+    parent.assert_stable(label)?;
+    let name: Vec<u16> = destination.encode_utf16().collect();
+    let name_bytes = name.len() * 2;
+    let mut information = vec![0_u8; 20 + name_bytes];
+    // ReplaceIfExists=false. Never overwrite an occupied evidence name.
+    information[8..16].copy_from_slice(&(parent.last_handle(label)? as usize).to_ne_bytes());
+    information[16..20].copy_from_slice(&(name_bytes as u32).to_ne_bytes());
+    for (index, unit) in name.iter().enumerate() {
+        information[20 + index * 2..22 + index * 2].copy_from_slice(&unit.to_ne_bytes());
+    }
+    let mut status = IO_STATUS_BLOCK {
+        status: 0,
+        information: 0,
+    };
+    let result = unsafe {
+        NtSetInformationFile(
+            file.as_raw_handle(),
+            &mut status,
+            information.as_mut_ptr().cast(),
+            information.len() as u32,
+            FILE_RENAME_INFO_CLASS,
+        )
+    };
+    if result < 0 {
+        return Err(format!("{label} is unavailable ({result:#x})"));
+    }
+    parent.assert_stable(label)
 }
 
 pub(crate) fn validate_component(component: &str, label: &str) -> Result<(), String> {
@@ -3165,5 +3291,114 @@ mod tests {
             assert!(!is_exact_nt_not_found(ambiguous));
             assert!(!is_exact_nt_create_collision(ambiguous));
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn read_only_directory_pin_has_no_add_rights_and_retains_identity() {
+        const WRITE_DAC: u32 = 0x0004_0000;
+        const WRITE_OWNER: u32 = 0x0008_0000;
+        #[link(name = "ntdll")]
+        unsafe extern "system" {
+            fn NtQueryObject(
+                handle: *mut c_void,
+                information_class: i32,
+                information: *mut c_void,
+                length: u32,
+                returned: *mut u32,
+            ) -> i32;
+        }
+        fn granted_access(handle: *mut c_void) -> u32 {
+            #[repr(C)]
+            #[derive(Default)]
+            struct PublicObjectBasicInformation {
+                attributes: u32,
+                granted_access: u32,
+                handle_count: u32,
+                pointer_count: u32,
+                reserved: [u32; 10],
+            }
+            let mut information = PublicObjectBasicInformation::default();
+            assert_eq!(std::mem::size_of_val(&information), 56);
+            let mut returned = 0;
+            let status = unsafe {
+                NtQueryObject(
+                    handle,
+                    0,
+                    (&mut information as *mut PublicObjectBasicInformation).cast(),
+                    std::mem::size_of_val(&information) as u32,
+                    &mut returned,
+                )
+            };
+            assert_eq!(status, 0, "query granted directory access");
+            assert_eq!(returned, 56);
+            information.granted_access
+        }
+
+        let root = std::env::temp_dir().join(format!("catdesk-read-pin-{}", Uuid::new_v4()));
+        let renamed = root.with_extension("renamed");
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("existing.txt"), b"unchanged").unwrap();
+        let writable = ProtectedDirectoryGuard::acquire(&root, "writable fixture").unwrap();
+        let reader = ProtectedDirectoryGuard::acquire_read_only(&root, "read fixture").unwrap();
+        assert_eq!(
+            reader.physical_identity("read fixture").unwrap(),
+            writable.physical_identity("writable fixture").unwrap()
+        );
+        let read_access = granted_access(reader.last_handle("read fixture").unwrap());
+        assert_eq!(
+            read_access & (FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES),
+            FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES
+        );
+        assert_eq!(
+            read_access
+                & (FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY | DELETE | WRITE_DAC | WRITE_OWNER),
+            0,
+            "a read pin must not request mutation rights"
+        );
+        assert_ne!(
+            granted_access(writable.last_handle("writable fixture").unwrap())
+                & (FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY),
+            0,
+            "the existing writable constructor remains unchanged"
+        );
+        drop(writable);
+        let cloned = reader.try_clone("read fixture").unwrap();
+        reader.assert_stable("read fixture").unwrap();
+        assert!(fs::rename(&root, &renamed).is_err(), "no delete sharing");
+        assert_eq!(fs::read(root.join("existing.txt")).unwrap(), b"unchanged");
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 1);
+        drop(cloned);
+        drop(reader);
+        fs::rename(&root, &renamed).unwrap();
+        fs::remove_dir_all(renamed).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn read_only_directory_pin_refuses_files_and_reparse_points() {
+        let root = std::env::temp_dir().join(format!("catdesk-read-pin-type-{}", Uuid::new_v4()));
+        let outside = root.with_extension("outside");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(root.join("file"), b"not a directory").unwrap();
+        assert!(
+            ProtectedDirectoryGuard::acquire_read_only(&root.join("file"), "read fixture").is_err()
+        );
+        assert!(
+            ProtectedDirectoryGuard::acquire_read_only(&root.join("missing"), "read fixture")
+                .is_err()
+        );
+        if std::os::windows::fs::symlink_dir(&outside, root.join("redirect")).is_ok() {
+            assert!(
+                ProtectedDirectoryGuard::acquire_read_only(&root.join("redirect"), "read fixture")
+                    .is_err()
+            );
+            fs::remove_dir(root.join("redirect")).unwrap();
+        }
+        assert_eq!(fs::read(root.join("file")).unwrap(), b"not a directory");
+        assert_eq!(fs::read_dir(&outside).unwrap().count(), 0);
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir(outside).unwrap();
     }
 }

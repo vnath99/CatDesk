@@ -1,0 +1,53 @@
+{
+  "observedUtc": "2026-11-01T19:07:32.475193+00:00",
+  "classification": "SOURCE_QUALIFICATION_LIVE_RECOVERY_PENDING",
+  "failure": {
+    "layer": "source_handoff_collection",
+    "error": "WEB_HANDOFF_TOO_LARGE",
+    "rawResponseUtf8Bytes": 3932,
+    "compactJsonUtf8Bytes": 3664,
+    "oldCollectorLimitBytes": 3500,
+    "existingSharedHandoffLimitBytes": 10240
+  },
+  "change": "Use the existing 10 KiB handoff format bound consistently; retain complete source JSON and all receipt, revision, route, task and ownership checks.",
+  "red": {
+    "startedUtc": "2026-11-01T18:56:14.605841+00:00",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "--bin",
+      "catdesk",
+      "source_handoff_budget_accepts_valid_source_context_above_old_prompt_cap",
+      "--",
+      "--nocapture",
+      "--test-threads=2"
+    ],
+    "browserStarts": 0,
+    "productionChanges": 0,
+    "nativeModelTurns": 0,
+    "exitCode": 101,
+    "expectedRedObserved": true,
+    "logSha256": "cc2486489bd7bd46b715e37f03b18184746fcf86c57673958f207b1f128aa834",
+    "finishedUtc": "2026-11-01T18:57:17.543391+00:00",
+    "elapsedSeconds": 62.938
+  },
+  "tests": {
+    "distinctPassingHandoffCases": 60,
+    "newRegressionCasesIncluded": 3,
+    "strictAllTargetClippy": "PASS",
+    "firstFormattingCheck": "FAIL_RETAINED",
+    "postRustfmtCheck": "PASS",
+    "diffCheck": "PASS",
+    "successfulTestsReplayedAfterFormatting": false
+  },
+  "limits": [
+    "Matching development package and recovery collection not yet qualified.",
+    "The original confirmed source request and completed response must not be resent.",
+    "No production promotion or two-project Web/native coding acceptance is established."
+  ],
+  "browserStartsForSourceTests": 0,
+  "productionChangesForSourceTests": 0,
+  "nativeModelTurnsForSourceTests": 0
+}

@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T16:25:03.342075+00:00",
+  "scope": "C0_C1_ONLY",
+  "sourceCommit": "a80f555175c9621ba2b815d4086face0da32b77a",
+  "attendedClose": {
+    "recordedOutcome": "INTERRUPTED_OR_UNVERIFIED",
+    "matchingProcessesRemaining": 0,
+    "enterFailureCause": "NOT_ESTABLISHED",
+    "legacyPythonHelperWasUsed": true,
+    "documentedNativeLoginOwner": "DEVELOPMENT_SCOPE_ONLY_WITH_EXISTING_ISOLATION_GUARD",
+    "operatorAskedToAuthenticateAgain": false
+  },
+  "liveProfileAccess": {
+    "elapsedSeconds": 36.094,
+    "registeredTab": "EXACT_TOP_FRAME_VERIFIED",
+    "route": "EXACT",
+    "document": "COMPLETE",
+    "history": "PRESENT",
+    "editor": "READY",
+    "composer": "EMPTY",
+    "generation": "IDLE",
+    "assistant": "PRESENT",
+    "coverage": "ADVISORY_NOT_TASK_ATTRIBUTION",
+    "exactReceiptCreated": false,
+    "stateChanged": false,
+    "retryAuthorized": false,
+    "ownedTreeExited": true,
+    "preservationPins": 1049,
+    "preservationMismatches": 0,
+    "remainingProfileProcesses": 0,
+    "remainingWakeProcesses": 0,
+    "servingStarts": 0,
+    "messagesSent": 0
+  },
+  "originalInvitationEvidence": {
+    "visibleExpectedUserCount": 0,
+    "visibleCoverage": "VISIBLE_BOUNDED_ONLY",
+    "visibleAbsenceProvesFailedSubmission": false,
+    "originalControllerSource": "9231a9fea7e04b792181ccc41f74a6b8156767e0",
+    "controllerAndOriginalAdapterBridgeHashesVerified": true,
+    "adapterRequiresNativeAckBeforeUserSend": true,
+    "nativeCoordinatorPersistsSubmittingBeforeAck": true,
+    "originalStoreWritesWitnessBeforeSubmitting": true,
+    "originalStoreAllowsSubmittingToAttention": false,
+    "submissionWitnessTimerArchivePresent": false,
+    "currentPhase": "ATTENTION",
+    "reason": "BROWSER_ATTEMPT_TIMEOUT",
+    "nativeAuthorizationConclusion": "NO_DURABLE_SUBMIT_BOUNDARY_CROSSED_UNDER_VERIFIED_ORIGINAL_PROTOCOL",
+    "journalRearmed": false,
+    "sentAgain": false
+  },
+  "acceptance": {
+    "accountConversationAccess": "PASS_ACTUAL_INSTALLED_PROFILE",
+    "authAccessBlocker": "RESOLVED",
+    "sourceTests": "PREVIOUSLY_QUALIFIED_NOT_RERUN_FOR_DOCUMENTATION",
+    "c1NativeEditVerificationWakeCycle": "NOT_RUN",
+    "c1": "NOT_COMPLETE",
+    "laterMilestones": "NOT_RUN"
+  },
+  "next": {
+    "operatorActionRequired": false,
+    "task": "Guarded central ordinary-request pre-submit recovery using existing Store.retry_pre_submit, exact delivery compare-and-swap and preserved prior evidence. Refuse witnesses, changed target/message/request or unrelated quarantines. Then one original invitation attempt through existing bounded owner.",
+    "newReleaseOrRegistryOrScheduler": "NONE",
+    "automaticReplayBeforeGuards": "FORBIDDEN"
+  }
+}

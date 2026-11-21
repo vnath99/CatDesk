@@ -1,0 +1,187 @@
++        let child = result["job"]["taskId"].as_str().unwrap().to_string();
++        assert!(child.starts_with("native-next-"));
+         assert_eq!(
+-            result["result"]["_meta"]["catdeskProjectScope"]["projectId"],
+-            "alpha"
++            fs::read(&path).unwrap(),
++            original,
++            "rollover cannot rewrite the grant"
++        );
++        let status = call(
++            &alpha,
++            request(&alpha, "rollover-status", "native.codex.status", json!({})),
++        )
++        .await;
++        let status = &status["result"]["structuredContent"];
++        assert_eq!(status["originTaskId"], "native-fixture");
++        assert_eq!(status["lineage"], json!(["native-fixture", child]));
++        assert_eq!(status["receipt"]["treeExitProven"], true);
++        assert_eq!(
++            fs::read_to_string(native_proof(&alpha)).unwrap(),
++            "native fixture task"
+         );
++        let replay = call(&alpha, native_request(&alpha, "rollover-native-once")).await;
+         assert_eq!(
+-            result["result"]["_meta"]["catdeskProjectScope"]["assignedTask"]["isolatedWorktreeWriterClaimed"],
+-            false
++            replay["error"]["message"],
++            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+         );
++        // A second rollover must preserve the already completed native job,
++        // not create another task under a newer conversation identity.
++        native_rollover(&mut alpha);
++        let again = call(&alpha, native_request(&alpha, "rollover-native-once")).await;
+         assert_eq!(
+-            call(&f, fresh).await["error"]["message"],
++            again["error"]["message"],
+             "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+         );
+-        let read_again = call(
+-            &f,
+-            request(&f, "second-read", "read", json!({"path":"src/lib.rs"})),
++        let separate = call(&alpha, native_request(&alpha, "already-ended-new-call")).await;
++        assert_eq!(
++            separate["result"]["structuredContent"]["status"], "no_ready_tasks",
++            "{separate}"
++        );
++        let status = call(
++            &alpha,
++            request(&alpha, "second-status", "native.codex.status", json!({})),
+         )
+         .await;
+-        assert!(read_again.get("error").is_none(), "{read_again}");
+-        crate::web_work::execution_permission(&f.control, f.pins.clone(), true).unwrap();
+         assert_eq!(
+-            call(
+-                &f,
+-                request(&f, "revoked-read", "read", json!({"path":"src/lib.rs"}))
+-            )
+-            .await["error"]["message"],
+-            "WEB_TASK_GRANT_REVOKED"
++            status["result"]["structuredContent"]["lineage"],
++            json!(["native-fixture", child])
+         );
++        let peer = call(&beta, native_request(&beta, "independent-peer")).await;
+         assert_eq!(
+-            crate::web_work::execution_permission(&f.control, f.pins.clone(), false).unwrap_err(),
+-            "WEB_TASK_GRANT_REVOKED"
++            peer["result"]["structuredContent"]["job"]["state"], "NATIVE_EXITED_ZERO",
++            "{peer}"
+         );
+-        drop(crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.task).unwrap());
+-        drop(crate::operator_facade::acquire_web_work_lease(&f.control, "alpha").unwrap());
++        assert_eq!(fs::read(&path).unwrap(), original);
+     }
+ 
+-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+-    async fn cancelled_awaiter_still_drains_exact_patch_and_refuses_replay() {
+-        let f = fixture("alpha");
+-        let preview=call(&f,request(&f,"cancel-preview","patch.preview",json!({"patchId":"cancel-patch","operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 49 }"}]}))).await;
+-        assert!(preview.get("error").is_none(), "{preview}");
+-        let entered = Arc::new(tokio::sync::Notify::new());
+-        let release = Arc::new(tokio::sync::Notify::new());
+-        TEST_GATES
+-            .get_or_init(Default::default)
+-            .lock()
+-            .unwrap()
+-            .insert(f.control.clone(), (entered.clone(), release.clone()));
+-        let apply = request(
+-            &f,
+-            "cancel-apply",
+-            "patch.apply",
+-            json!({"patchId":"cancel-patch"}),
+-        );
+-        let req = serde_json::from_value(apply.clone()).unwrap();
+-        let root = f.control.clone();
+-        let awaiter = tokio::spawn(async move { handle(root.to_str().unwrap(), &req).await });
+-        tokio::time::timeout(Duration::from_secs(10), entered.notified())
+-            .await
++    #[tokio::test]
++    async fn native_rollover_cannot_route_around_ambiguous_call_or_block_peer() {
++        let (mut alpha, beta) = paired_fixtures(true);
++        let admission = crate::web_work::prepare_native_dispatch(
++            &alpha.control,
++            alpha.pins.clone(),
++            &alpha.key,
++            "task-fixture",
++            "unknown-before-rollover",
++        )
++        .unwrap();
++        admission
++            .finish(&Err("CONTROLLED_UNKNOWN_NATIVE_OUTCOME".into()))
+             .unwrap();
+-        assert!(crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.task).is_err());
+-        awaiter.abort();
+-        assert!(matches!(awaiter.await,Err(error) if error.is_cancelled()));
+-        release.notify_one();
+-        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+-        loop {
+-            if let Ok(lease) = crate::operator_facade::acquire_web_work_lease(&f.control, "alpha") {
+-                drop(lease);
+-                break;
+-            }
+-            assert!(
+-                tokio::time::Instant::now() < deadline,
+-                "cancelled turn did not release its project lease"
+-            );
+-            tokio::time::sleep(Duration::from_millis(10)).await;
+-        }
+-        TEST_GATES.get().unwrap().lock().unwrap().remove(&f.control);
+-        assert!(
+-            fs::read_to_string(f.task.join("src/lib.rs"))
+-                .unwrap()
+-                .contains("{ 49 }")
++        native_rollover(&mut alpha);
++        let blocked = call(&alpha, native_request(&alpha, "new-id-after-rollover")).await;
++        assert_eq!(
++            blocked["error"]["message"],
++            "PROJECT_TASK_RECOVERY_REQUIRED"
+         );
+-        assert!(
+-            fs::read_to_string(f.native.join("src/lib.rs"))
+-                .unwrap()
+-                .contains("{ 1 }")
++        let status = call(
++            &alpha,
++            request(&alpha, "unknown-status", "native.codex.status", json!({})),
++        )
++        .await;
++        assert_eq!(
++            status["result"]["structuredContent"]["lineage"],
++            json!(["native-fixture"])
+         );
++        assert!(!native_proof(&alpha).exists());
++        let peer = call(&beta, native_request(&beta, "peer-after-rollover-fence")).await;
+         assert_eq!(
+-            call(&f, apply).await["error"]["message"],
+-            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
++            peer["result"]["structuredContent"]["job"]["state"], "NATIVE_EXITED_ZERO",
++            "{peer}"
+         );
+-        drop(crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.task).unwrap());
+-    }
+-
+-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+-    async fn one_central_http_route_patches_two_projects_and_busy_alpha_does_not_stall_beta() {
+-        central_http_route_fixture(false).await;
+-    }
+-
+-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+-    async fn cached_schema_route_uses_same_scoped_dispatcher_and_no_replay_journal() {
+-        central_http_route_fixture(true).await;
+     }
+ 
+     #[test]
+@@ -661,9 +2409,17 @@ mod tests {
+         drop(crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.native).unwrap());
+     }
+ 
+-    async fn central_http_route_fixture(cached: bool) {
+-        let alpha = fixture("alpha");
+-        let mut beta = fixture("beta");
++    fn paired_fixtures(native: bool) -> (Fixture, Fixture) {
++        let alpha = if native {
++            native_fixture("alpha")
++        } else {
++            fixture_with_manual_wake("alpha", true)
++        };

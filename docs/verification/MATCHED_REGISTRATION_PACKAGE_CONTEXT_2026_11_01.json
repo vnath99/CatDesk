@@ -1,0 +1,73 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T09:48:33.515125+00:00",
+  "classification": "MATCHED_DEVELOPMENT_PACKAGE_QUALIFIED_AND_TWO_REAL_CONVERSATION_RECEIPTS_RECONCILED",
+  "sourceCommit": "6cff7dd25164875ffcf55f2070c3559a53437572",
+  "sourceRemoteShaReadbackVerified": true,
+  "artifactSha256": "e1b557b7c808862807b195109c88da3f0693debfe0ab57e1db241bb8855b63e5",
+  "retainedPreviousArtifactSha256": "7c0f6d1ab1373674d6c2597bdee6f02a3943234a50e1e0eb719e51366a7b76b0",
+  "developmentQualification": {
+    "currentPackageVerified": true,
+    "missingBearerStatus": 401,
+    "authenticatedInitializeStatus": 200,
+    "authenticatedCatalogStatus": 200,
+    "capabilityScopedDevelopmentToolCount": 79,
+    "registryReadPassed": true,
+    "temporaryBackendTreeExitProved": true,
+    "endpointClosed": true,
+    "oldPackageMismatches": 0,
+    "projectAndJournalPinMismatches": 0,
+    "profileIdentityPreserved": true,
+    "productionAuthorityCreated": false
+  },
+  "contextReconciliation": {
+    "elapsedSeconds": 60.579,
+    "projects": [
+      {
+        "projectId": "bug-bounty",
+        "generation": 2,
+        "newConfirmedUserReceipts": 0,
+        "idempotentSecondPassNewReceipts": 0,
+        "beforeObservedTokenProxy": 2546,
+        "afterObservedTokenProxy": 2546,
+        "knownDeliveredUserMessages": 5,
+        "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+        "coverageKnown": false,
+        "observedToolArgumentTokens": 0,
+        "observedToolResultTokens": 0,
+        "automaticRolloverEnabled": false,
+        "automaticObservationEnabled": false
+      },
+      {
+        "projectId": "portfoliodesk",
+        "generation": 2,
+        "newConfirmedUserReceipts": 6,
+        "idempotentSecondPassNewReceipts": 0,
+        "beforeObservedTokenProxy": 1006,
+        "afterObservedTokenProxy": 2915,
+        "knownDeliveredUserMessages": 6,
+        "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+        "coverageKnown": false,
+        "observedToolArgumentTokens": 0,
+        "observedToolResultTokens": 0,
+        "automaticRolloverEnabled": false,
+        "automaticObservationEnabled": true
+      }
+    ],
+    "providerContextExact": false,
+    "rawTranscriptExported": false,
+    "messageOrBrowserAction": false,
+    "projectOrJournalMismatches": 0,
+    "registrationGuardReleasedAfterEachProject": true,
+    "independentProjectWorkspacesOrNativeCallsAccepted": false
+  },
+  "protectedInstallationChanged": false,
+  "recurringBrowserOrWakeHostStarted": false,
+  "remaining": [
+    "Genuine cumulative review and producer authority for corrected source before protected promotion.",
+    "Two independent authenticated project Web source edits with native Codex verification.",
+    "Qualified persistent supervisor/restart and canonical conversation-authority transfer."
+  ],
+  "operatorActionRequired": false,
+  "fullMilestoneAccepted": false
+}

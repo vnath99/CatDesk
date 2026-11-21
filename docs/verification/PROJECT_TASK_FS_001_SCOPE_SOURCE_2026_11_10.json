@@ -1,0 +1,297 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-10T15:14:06.094337+00:00",
+  "classification": "FS_001_NARROW_SOURCE_REMEDIATION_AND_LOCAL_SOURCE_MATRIX_PASS",
+  "sourceBaseCommit": "badf4f7886d4570858a3425416d4db15c515a918",
+  "sourceFenceSha256": "9ac83ce9555d22004e49f34677853e5524db2a6f2434ec46aefd3c3f0d114c28",
+  "sourceInputCount": 238,
+  "changedInputsSha256": {
+    "src/project_mcp_task.rs": "ec6e7dbdc63154c85ba217d3513bd402f01fa71f1d044ded252fb5a2a60d09e8",
+    "src/delegated/patch_engine.rs": "e1fcdf6a9cc3f1a076c2e8a94a508b15dbf93e8bf015b6137d8e995e32ce47e6",
+    "src/workspace_tools.rs": "c5840352b59fc13fd11db29e65e4c6f58c1a4efdfa5b19441c5ec83e4d9a9d6f",
+    "src/delegated/integrated.rs": "2e61656cc682c73c12ca0df0cadaa1a0983cb3b9283703c54c8b5d89b117e55f"
+  },
+  "sourceBehavior": {
+    "resolvedTaskScopeShared": true,
+    "forbiddenFilesFilteredBeforeOpen": true,
+    "gitPathsLiteralAndTaskScoped": true,
+    "authorizedUntrackedTargetBehindTrackedAliasPreserved": true,
+    "fileDeletionWhenReplacedByDirectoryPreserved": true,
+    "conflictedIndexParentWithForbiddenDescendantRefused": true,
+    "taskGrantAndNoReplayAuthorityUnchanged": true,
+    "basis": "SOURCE_FINDINGS_AND_BOUNDED_FIXTURES",
+    "actualLiveDisclosureClaimed": false
+  },
+  "finalSourceQualification": {
+    "passed": true,
+    "workflowSeconds": 115.063,
+    "ownerSeconds": 122.532901,
+    "distinctPassingTests": 35,
+    "taskPassingTests": 26,
+    "newPassingRegressions": 14,
+    "excludedSandboxTests": 2,
+    "workspaceCompatibilityPassingTests": 1,
+    "patchCompatibilityPassingTests": 8,
+    "checks": [
+      {
+        "name": "project-task",
+        "passed": true,
+        "exitCode": 0,
+        "compilerOrHarnessErrors": 0,
+        "logSha256": "ffe409c41cd5376b8a8036da6dd0f16f5ce9452c04ed07f08964ba8196a8caea"
+      },
+      {
+        "name": "workspace-tools",
+        "passed": true,
+        "exitCode": 0,
+        "compilerOrHarnessErrors": 0,
+        "logSha256": "20a2117d4cb8be86d291182ccbbf0864e5c5cb09229296de1a2521c32dc8cc76"
+      },
+      {
+        "name": "patch-engine",
+        "passed": true,
+        "exitCode": 0,
+        "compilerOrHarnessErrors": 0,
+        "logSha256": "6c7cd1b204e1642f0b61594fc6e6889c083b33926ed7fbbec1beb1ee0fe75c2d"
+      },
+      {
+        "name": "fmt-root",
+        "passed": true,
+        "exitCode": 0,
+        "compilerOrHarnessErrors": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "clippy-root",
+        "passed": true,
+        "exitCode": 0,
+        "compilerOrHarnessErrors": 0,
+        "logSha256": "b6afc3716808fa913e98fb4a47879d7449b7061a0bc75cd56b89572911ec1e9e"
+      }
+    ],
+    "resultSha256": "2879172b7d690586545c70d8fcea0a47957ff3c00c08b91d4533ae5118a513ab",
+    "ownerSha256": "0aeddc7fdd75997f93fcb536bb193c8fd20f8893808dada7a37d51bc8d5fe2fa",
+    "scope": "RECORDED_LOCAL_TASK_WORKSPACE_PATCH_TESTS_ROOT_FORMAT_AND_STRICT_CLIPPY_ONLY",
+    "wakeTestsRepeated": false,
+    "releaseBuildCommands": 0,
+    "installedSandboxQualified": false
+  },
+  "narrowIndependentSourceReview": {
+    "verdict": "PASS_NARROW_SOURCE_REMEDIATION_REVIEW",
+    "remainingScopedFindings": 0,
+    "neededScopedReads": 0,
+    "sourcePinsIndependentlyMatched": 238,
+    "sourceMismatches": 0,
+    "fullSourceReviewed": false,
+    "nativeClosedFullSourceAdmissionReceipt": false,
+    "reportSha256": "8418a9d6baf625431242ba143e72f6585d0b6d0efeac62c7caab322b7b3fe090",
+    "runtimeQualificationWasOpenWhenReportCreated": true,
+    "laterActualQualificationRecordedSeparately": true,
+    "laterQualificationReadbackSha256": "3f5aa4711723a6e8d8ebd13c39a65eba40b46ba072bb8ba846ccaa8b3b62f567",
+    "laterQualificationReadbackPassed": true
+  },
+  "historicalEvidence": {
+    "red": {
+      "classification": "INTENDED_FAILURES_REPRODUCED",
+      "passingTests": 0,
+      "failingTests": 5,
+      "compilerErrors": 0,
+      "resultSha256": "a3d039abb0ef093bccadff6bb1c83406c5314f15efb66d254089bda3117db67d",
+      "ownerSha256": "7a96503e299aaff427700dc385c092d39aeed2370fcd4c0266a8aa1ce4a52568"
+    },
+    "focusedGreen": {
+      "passingTests": 5,
+      "failingTests": 0,
+      "compilerErrors": 0,
+      "resultSha256": "130576d6c7b5b1db17d8229089abf7a74aa91b39edae5b36a6ab641f1a00daf2",
+      "ownerSha256": "e6237cc80adbe31351cf786d77075e9fdc97731765ca830418d6544c2d1fd389"
+    },
+    "firstBroader": {
+      "passed": false,
+      "taskPassingTests": 22,
+      "taskFailingTests": 1,
+      "excludedSandboxTests": 2,
+      "failureCategory": "NAMESPACE_JUNCTION_FIXTURE_SETUP_BEFORE_TASK_OPEN",
+      "otherNewCasesPassing": 10,
+      "workspaceCompatibilityPassingTests": 1,
+      "patchCompatibilityPassingTests": 8,
+      "formatAndStrictClippyPassed": true,
+      "resultSha256": "4bb5075101c30bb4685f0a9f50a43731a3ff7aa4b69526a5875f4ced3251d91b",
+      "ownerSha256": "7e02f65de9874180b33f1db702cf01bd580f23e3f68149adedfbf387eca2028d"
+    },
+    "v2": {
+      "passed": true,
+      "taskPassingTests": 23,
+      "newPassingTests": 11,
+      "excludedSandboxTests": 2,
+      "ownerSeconds": 174.6076,
+      "workspaceCompatibilityPassingTests": 1,
+      "patchCompatibilityPassingTests": 8,
+      "formatAndStrictClippyPassed": true,
+      "resultSha256": "e80d7f34294ce154e70bc0f3d317f5907fa41ebe32cc871666be66ab61ca84de",
+      "ownerSha256": "cb3efe5bdd345983151ec9e7c7de02ae5222e3fbf4c0da308ab35cf2f5b05193"
+    },
+    "v3": {
+      "passed": true,
+      "taskPassingTests": 25,
+      "newPassingTests": 13,
+      "excludedSandboxTests": 2,
+      "ownerSeconds": 164.8331059,
+      "workspaceCompatibilityPassingTests": 1,
+      "patchCompatibilityPassingTests": 8,
+      "formatAndStrictClippyPassed": true,
+      "resultSha256": "d719d612ab31b6b7eaf480e10ee51994ad8d4e2fac36ff36cac522f958f6dd4e",
+      "ownerSha256": "849ca75adfe04cc6fa3759ca7e29528e9d03e1921d99a70af703158e619e979f"
+    },
+    "originalRecordsImmutable": true,
+    "v4": {
+      "passed": false,
+      "taskPassingTests": 25,
+      "taskFailingTests": 1,
+      "newPassingTests": 13,
+      "excludedSandboxTests": 2,
+      "failureCategory": "OWNED_BLOB_FIXTURE_SETUP_BEFORE_SCOPE_GUARD",
+      "gitHashObjectReturnedFailure": true,
+      "exactStderrRetained": false,
+      "exactFailureMechanismEstablished": false,
+      "otherFourStagesPassed": true,
+      "resultSha256": "6ae82b5459a82c84da82b25a83f0d8410e0073b13f34b1136edc46ea00993245",
+      "ownerSha256": "588ddb78e2af56e8a4138c5dfa0d03193c031828dc69015271841b52018388f4"
+    }
+  },
+  "finalFixtureRepair": {
+    "stdinBlobSetupReplacesPathArgument": true,
+    "onlyTaskTestModuleChangedSinceV4": true,
+    "otherV4SourcePinsUnchanged": 237,
+    "patchEngineUnchangedSinceV4": true,
+    "taskProductionPrefixUnchanged": true,
+    "originalV4FailurePreserved": true,
+    "inferredPathParsingCauseNotClaimed": true
+  },
+  "preservation": {
+    "sourcePinsMatched": 238,
+    "statePinsMatched": 1650,
+    "protectedPinsMatched": 6,
+    "sourceMismatches": 0,
+    "stateMismatches": 0,
+    "protectedMismatches": 0,
+    "taskFilesAdded": 0,
+    "taskFilesRemoved": 0,
+    "profileIdentityPreserved": true,
+    "hostStopped": true,
+    "ownedCompilerProcessesRemaining": 0,
+    "ownedFixtureProcessesRemaining": 0,
+    "productCommands": 0,
+    "messagesSent": 0,
+    "installedChanges": 0,
+    "serviceChanges": 0
+  },
+  "sandboxExclusions": {
+    "installedSandboxQualified": false,
+    "countedAsPassing": false,
+    "reason": "requires installed native Windows command sandbox; explicit bounded qualification only",
+    "tests": [
+      "project_task_commands_parallel_sandboxed_verification_and_restart",
+      "project_task_commands_timeout_drains_owned_tree_and_preserves_receipt"
+    ],
+    "annotationsRetained": true,
+    "ignoredTestsExecuted": false
+  },
+  "artifactAndAcceptanceBoundary": {
+    "frozenCandidateIncludesNewMainFix": false,
+    "newQualifiedMainArtifactAndRequiredReviewRemainFuture": true,
+    "fullIndependentSourceReviewEstablished": false,
+    "producerOrProtectedReleaseAuthorityEstablished": false,
+    "installedAcceptanceEstablished": false,
+    "actualWebCycleAccepted": false,
+    "c1Accepted": false,
+    "nativeCodexHopRequired": false,
+    "centralCoordinatorRequired": false,
+    "originalNativeAndUnknownOutcomeFencesPreserved": true
+  },
+  "remainingSeparateGates": {
+    "installedWake84": "CONFIRMED_TARGET_INVALID_URL_FOR_EXISTING_PROJECT_CONVERSATION_ROUTES",
+    "approvedWakeIssuerSupplied": false,
+    "signingIdentityCreated": false,
+    "noNewOperatorRequestMade": true
+  },
+  "sourceInputHashEncoding": "RAW_WORKING_TREE_BYTES",
+  "gitNormalizedInputsSha256": {
+    "src/project_mcp_task.rs": "ec6e7dbdc63154c85ba217d3513bd402f01fa71f1d044ded252fb5a2a60d09e8",
+    "src/delegated/patch_engine.rs": "e1fcdf6a9cc3f1a076c2e8a94a508b15dbf93e8bf015b6137d8e995e32ce47e6",
+    "src/workspace_tools.rs": "c5840352b59fc13fd11db29e65e4c6f58c1a4efdfa5b19441c5ec83e4d9a9d6f",
+    "src/delegated/integrated.rs": "2e61656cc682c73c12ca0df0cadaa1a0983cb3b9283703c54c8b5d89b117e55f"
+  },
+  "preparedUtc": "2026-11-10T15:18:51.353717+00:00",
+  "mainCandidateBuild": {
+    "classification": "BUILT_CANDIDATE_ONLY",
+    "finishedUtc": "2026-11-10T15:33:51.745183+00:00",
+    "sourceCommit": "9e41260177f7a6f09cb4fa17e1950536dd690386",
+    "sourceTree": "ebbf4074f9ae5ae0d7ccd910fba0161b1fb945be",
+    "sourceFenceSha256": "9ac83ce9555d22004e49f34677853e5524db2a6f2434ec46aefd3c3f0d114c28",
+    "sourceQualificationResultSha256": "2879172b7d690586545c70d8fcea0a47957ff3c00c08b91d4533ae5118a513ab",
+    "sourceQualificationOwnerSha256": "0aeddc7fdd75997f93fcb536bb193c8fd20f8893808dada7a37d51bc8d5fe2fa",
+    "sourcePublicationReceiptSha256": "55500de06ee6654d7c330c8cad7f0bb22cb1a6f42298ca2c7ae1b0a8d16897c9",
+    "sourceReviewScope": "NARROW_FS_001_SOURCE_REMEDIATION_ONLY",
+    "artifactSha256": "f205822e47ebc6e658bfee110f8100699c49ee5446e2dcae6eaa85239b04b59c",
+    "byteLength": 39558144,
+    "buildProfile": "release",
+    "cargoExitCode": 0,
+    "buildJobs": 1,
+    "workflowSeconds": 502.016,
+    "ownerSeconds": 504.0793086,
+    "buildResultSha256": "5a60a1c34eca2824e59bead8b8ced4b2b1f7fab4272b5bf007200285d4551d14",
+    "buildOwnerSha256": "4c4a78e15fcb59876aa94d1c051ce428114c9dbb9cca2b238cb003be4dbee8df",
+    "provenanceSha256": "180101759de634e59e0a5abd43d4dc7f544a40e6e877114f55edef692538ac62",
+    "readonlyArtifactVerification": {
+      "passed": true,
+      "peMachine": "AMD64",
+      "optionalHeader": "PE32_PLUS",
+      "checksumFileMatches": true,
+      "checksumLineEnding": "CRLF",
+      "checksumFileSha256": "1f12a69dc820f332c3881390b287886e155c837aaf052b11c5ad7e9b90e60ca6",
+      "initialLFOnlyAssertionFailed": true,
+      "initialAssertionPersistentWrites": 0,
+      "existingArtifactAndChecksumBytesUnchanged": true,
+      "verificationSha256": "fee080da1dcea7a7120db0b76c47677aa3517a3c68c4406153defe21c1c8ffde"
+    },
+    "preservation": {
+      "sourcePinsMatched": 238,
+      "statePinsMatched": 1650,
+      "protectedPinsMatched": 6,
+      "sourceMismatches": 0,
+      "stateMismatches": 0,
+      "protectedMismatches": 0,
+      "taskFilesAdded": 0,
+      "taskFilesRemoved": 0,
+      "profileIdentityPreserved": true,
+      "allBuildOwnedProcessesExited": true,
+      "compilerProcessesRemaining": 0,
+      "exactProfileProcessesRemaining": 0
+    },
+    "actions": {
+      "mainCandidateExecutions": 0,
+      "hostBuilds": 0,
+      "brokerBuilds": 0,
+      "productCommands": 0,
+      "browserStarts": 0,
+      "installedChanges": 0,
+      "selectionChanges": 0,
+      "signingActions": 0
+    },
+    "acceptanceBoundary": {
+      "newSeparateCandidateContainsFs001Fix": true,
+      "existingFrozenCandidateDReplaced": false,
+      "candidateApproved": false,
+      "fullIndependentSourceReviewEstablished": false,
+      "producerAuthorityEstablished": false,
+      "releaseAuthorityEstablished": false,
+      "fullApplicationSuitabilityEstablished": false,
+      "runtimeHealthEstablished": false,
+      "installedAcceptanceEstablished": false,
+      "installedSandboxQualified": false,
+      "actualWebCycleAccepted": false,
+      "c1Accepted": false
+    }
+  }
+}

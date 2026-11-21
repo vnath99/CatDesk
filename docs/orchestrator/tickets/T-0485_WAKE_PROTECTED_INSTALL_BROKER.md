@@ -1,5 +1,58 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-21 retained store inventory binding (source only)
+
+The fixed-policy offline V2 diagnostic now requires the retained old-store
+lock set as well as the role pins. Before and after signature verification it
+checks the exact selected inventory digest and membership of the signed
+predecessor root/lock pair. Its canonical UTF-8 JSON uses schemaVersion 2,
+purpose `catdesk-wake-offline-selected-store-inventory`, and a `stores` array
+of `root`/`hostLock` full and legacy identities. Distinct pairs sort by full
+root volume/ID then lock volume/ID; physical aliases share one entry while
+every original alias remains retained and revalidated. These exact bytes are
+the anchor's `closedStoreInventorySha256` input.
+
+This closes the missing comparison between signed inventory bytes and the
+actual retained lock set. It does not independently establish the historical
+inventory's completeness, launcher quarantine or owner exit. Those still need
+reviewed evidence before first-generation ledger admission. No signature
+domain, service transaction, ledger authority, install guard or runtime start
+is enabled. Disposable fixtures cover aliases/order, extra/omitted stores,
+digest/role mismatches, contention and release. Evidence is in the parent
+`checkpoints/offline-store-inventory-oct21` dated audit.
+
+## 2026-10-20 source wiring audit (no installation)
+
+At `87c8ebd`, `run_one_service_submission` still unconditionally returns
+`WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE` after its admitted frame. Ordinary
+`wake/install.ps1` refuses before work unless BuildOnly. Offline V2 remains a
+diagnostic with no first-generation ledger/install consumer; production ledger
+admission requires unproved migration-anchor and old-owner evidence before CI
+and INTENT. Thus provisioning alone cannot finish the release. Typed staging,
+publication and pointer writers already exist and should be reused after
+admission, not recreated. Remaining work includes the independently accepted
+closed store/launcher inventory/anchor, V2 admission and transaction integration,
+protected reader/bootstrap cutover, approved provisioning and exact remote CI.
+No guard, trust key, approval flag, service, pointer or production package was
+changed. Bounded development Web acceptance can proceed independently once its
+current explicit host-start hold is lifted.
+
+## 2026-10-20 retained paired-target readback (source only)
+
+The publisher and pointer writer already exist; earlier test-only/no-publisher
+statements below are historical. First-generation admission is still closed.
+V2 role revalidation now reads the selected old root's pinned fixed config.json
+and the retained CatDesk registry file, checks their signed exact raw-byte
+snapshot hashes, and requires matching project URL/digest/conversation and Wake
+generation. The registry does not store an independent generation counter.
+Pointer/lock roles must resolve under that same pinned old root. Bounded reads,
+duplicate-target/project rejection and write/replacement denial are verified by
+15 focused offline migration tests. No new install authority, service mutation,
+production package change or Wake/browser execution follows from this change.
+Closed store/launcher inventory, independently reviewed first-generation anchor,
+ledger admission, provisioning/reader cutover, exact remote CI and installed
+acceptance remain open. See the current October MVP acceptance record.
+
 ## 2026-10-15 native no-replace publication fixture proof (source only)
 
 Four Windows fixtures prove a single handle-relative no-replace rename after the durable attempt marker, flush both pinned parents, and require exact post-move bytes, ACLs and physical IDs. Collision, injected parent-flush failure, actual DACL drift and same-byte object replacement stay fail closed. Full Wake 213 library tests passed/one ignored plus enabled targets; strict checks and independent review passed. See `T-0485_R30_NATIVE_RENAME_FIXTURE_PROOF.md`. Pushed source `ab67d390dee529e604904daac604ca1e161e34a5` had zero exact GitHub workflow/check runs. The rename is test-only: the stage receipt's delete-denying pins still need a safe production handoff to a typed writer receipt. No production PUBLISHED writer or install authority exists; service/install holds stay closed.

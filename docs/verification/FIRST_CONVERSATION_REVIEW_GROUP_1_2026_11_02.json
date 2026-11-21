@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "acceptedBaselineCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "scopeCounts": {
+    "UNCHANGED_ACCEPTED": 78,
+    "CHANGED_REQUIRES_REVIEW": 6,
+    "NEW": 2
+  },
+  "fullDeclaredCodePaths": 86,
+  "scopeDigest": "a327e9405ec439ad43ccc983e90f1962bcde3cf7ce0197d4378be417d5c6558e",
+  "group": 1,
+  "status": "PREPARED_SOURCE_INPUTS_NOT_REVIEW_ACCEPTANCE",
+  "inputs": [
+    {
+      "number": 1,
+      "path": "scripts/wake_bridge.py",
+      "firstLine": 299,
+      "lastLine": 355,
+      "command": "git --no-optional-locks --no-pager blame -L 299,355 c52e9ef75490381becabaaf027f98f2845f1a183 -- scripts/wake_bridge.py",
+      "utf8Bytes": 6069,
+      "sha256": "76487f7cc5ec353dd88b22201bd4be7a84dc1ae5593f061abbc0dce8cdeb693c"
+    },
+    {
+      "number": 2,
+      "path": "scripts/wake_bridge.py",
+      "firstLine": 2881,
+      "lastLine": 2925,
+      "command": "git --no-optional-locks --no-pager blame -L 2881,2925 c52e9ef75490381becabaaf027f98f2845f1a183 -- scripts/wake_bridge.py",
+      "utf8Bytes": 4706,
+      "sha256": "8cfb37bcd7a92bfaf95ed94cc2efba573a1e23c8a36d67982c04fc0a72eb10b5"
+    },
+    {
+      "number": 3,
+      "path": "scripts/wake_bridge.py",
+      "firstLine": 3636,
+      "lastLine": 3656,
+      "command": "git --no-optional-locks --no-pager blame -L 3636,3656 c52e9ef75490381becabaaf027f98f2845f1a183 -- scripts/wake_bridge.py",
+      "utf8Bytes": 2158,
+      "sha256": "9058dbdffdf9feb435635898b2c8e790aa8d82a5d388711d19b6c8d641a6d8a6"
+    },
+    {
+      "number": 4,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 51,
+      "lastLine": 81,
+      "command": "git --no-optional-locks --no-pager blame -L 51,81 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 2214,
+      "sha256": "0bcfbb1af0c027394d201c89a11f3a9a638535e0134848c58f36536b8ed8d641"
+    },
+    {
+      "number": 5,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 538,
+      "lastLine": 583,
+      "command": "git --no-optional-locks --no-pager blame -L 538,583 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 4097,
+      "sha256": "2820f8bed07b56269931bba8a74b59b178b2dc650eb9280661129559678e470f"
+    },
+    {
+      "number": 6,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 1446,
+      "lastLine": 1467,
+      "command": "git --no-optional-locks --no-pager blame -L 1446,1467 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 2172,
+      "sha256": "a1dc90948f054026ef0e47bf74c26ff4b8e6fbd5d5975e087cc7724b3116216d"
+    },
+    {
+      "number": 7,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 1683,
+      "lastLine": 1718,
+      "command": "git --no-optional-locks --no-pager blame -L 1683,1718 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 3240,
+      "sha256": "52c34aaa640c07ac9a185989a7cd7f390c6587bd894d20d5dc69dbcc319f3fcd"
+    },
+    {
+      "number": 8,
+      "path": "src/operator_web_cli.rs",
+      "firstLine": 1794,
+      "lastLine": 1853,
+      "command": "git --no-optional-locks --no-pager blame -L 1794,1853 c52e9ef75490381becabaaf027f98f2845f1a183 -- src/operator_web_cli.rs",
+      "utf8Bytes": 4831,
+      "sha256": "2b33f7978b79b074582466a289b88224d700d0a8cd3f4237584abeeaa40a55fb"
+    }
+  ],
+  "limitations": [
+    "Prior baseline acceptance covers only unchanged Git blobs.",
+    "All 86 paths remain declared; inspect six changed and two new paths before cumulative current-source acceptance.",
+    "Package health and a source coordinator review do not establish independent review, producer or protected publication authority.",
+    "Retain expanded regression deadline failure and source/installed/live distinctions."
+  ],
+  "additionalEvidenceCommands": [
+    "git --no-optional-locks --no-pager show fa99ae567a3f40c6d77203dd713d7eea42974afd:docs/verification/CURRENT_HANDOFF_NATIVE_ADMIN_QUALIFICATION_2026_11_02.json",
+    "git --no-optional-locks --no-pager show fa99ae567a3f40c6d77203dd713d7eea42974afd:docs/verification/FIRST_CONVERSATION_INITIALIZATION_SOURCE_2026_11_02.json"
+  ]
+}

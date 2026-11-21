@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T23:23:48.924961+00:00",
+  "classification": "TESTED_SOURCE_AND_EXISTING_DISPOSABLE_PROCESS_REGRESSIONS_NOT_WEB_OR_INSTALLED_ACCEPTANCE",
+  "sourceCommit": "c9541810701905176efdafc41957125e1f033617",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "sourceFile": "src/operator_codex_cli/queue.rs",
+  "gitBlobSha256": "4901cb7d6a450e240f2186bbbcc4660bf7e67979517e9bfaaee7ffd913342d1c",
+  "tests": {
+    "passed": 100,
+    "failed": 0,
+    "ignored": 2,
+    "newTests": 2
+  },
+  "strictAllTargetClippy": "PASS",
+  "rustfmt": "PASS",
+  "behavior": [
+    "Queue summaries expose stable requestSha256 without changing persisted job schema",
+    "Optional local dispatch-task --expected-request-sha256 binds schema/task/native project binding/prompt hash/model/effort/cyber program/Windows sandbox",
+    "Receipt, state and attempt updates do not alter request identity",
+    "Request checked before CLI probes and again under the scheduler claim lock",
+    "Exact dispatch reads only its named task, preserving malformed foreign records; global queue/status still refuse corrupt records",
+    "Existing registered CatDesk control workspace equality retained; no alternate control registry or namespace introduced"
+  ],
+  "rejectedHypothesis": {
+    "claim": "A second registry could use the same CatDesk project workspace",
+    "result": "Authoritative resolver already forbids this; unsupported fixture refused before native task launch; redundant namespace changes removed",
+    "retainedFailedFixture": true,
+    "cleanup": "Automatic approval review rejected recursive deletion; reason supplied only as blocked by policy; no alternate deletion attempted"
+  },
+  "initialFailureCorrected": "The new request option was absent from the generic parser allowlist; final full suite passes after correction",
+  "cleanup": {
+    "fixtureProcessesRemaining": 0,
+    "criticalPinnedFilesUnchanged": 6,
+    "protectedScope": "Selected existing baseline files only, not a full fresh inventory",
+    "failedFixtureDirectoryPreserved": true
+  },
+  "logSha256": {
+    "oct29-native-control-root-process-test.log": "07ee659e535a69c0012d9d22305facecec16fbdee89963e2ff82615332758382",
+    "oct29-native-frozen-request-test.log": "b61a8c872d64a0f97f60b7df8f19a9b66fc81f536b4eb9e2751d48e6870dc1d2",
+    "oct29-native-request-scope-suite.log": "086f2563faebb418af221b1b90a962f4586ea32b9980eb408a13781b82b8bd19",
+    "oct29-native-request-scope-suite-final.log": "81dbfe09f88d76c1c8e4cfe17f4726f75e4f6a4fbbaf43efd0484375675e20f4",
+    "oct29-native-request-scope-clippy-final.log": "e67b9782a45e2b48593a360c7aa2744684eaa4911bcf50dc6e50299ef80b321b"
+  },
+  "scopeLimits": [
+    "No native MCP capability or grant added yet",
+    "No real Codex model turn, existing native session, protected install, browser, Wake, tunnel or binding changed",
+    "No connector/profile recheck or completed-canary replay",
+    "The request digest is an integrity selector, not new execution authorization",
+    "Genuine two-Web-chat native coding and installed acceptance remain OPEN"
+  ],
+  "nextExecutableTask": "Store an exact native task selection in the existing execution grant and dispatch it through the same key/journal/owned-drain path; do not create a second authorization registry",
+  "hostedCI": "UNVERIFIED"
+}

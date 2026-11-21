@@ -1,0 +1,196 @@
++    let (tx, rx) = mpsc::sync_channel(1);
++    thread::spawn(move || {
++        // Never retain or export arbitrary terminal input. Three bytes are
++        // sufficient to reject anything other than a single Enter.
++        let mut line = String::new();
++        let result = BufReader::new(reader.take(3))
++            .read_line(&mut line)
++            .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE".to_owned())
++            .and_then(|_| {
++                if matches!(line.as_str(), "\n" | "\r\n") {
++                    Ok(())
++                } else {
++                    Err("DEV_LOGIN_ENTER_REQUIRED".into())
++                }
++            });
++        let _ = tx.send(result);
++    });
++    rx.recv_timeout(wait)
++        .map_err(|_| "DEV_LOGIN_INTERACTION_TIMEOUT".to_owned())?
++}
++
+ fn cleanup_login_child(
+     mut child: Child,
+     job: &crate::process_job::Job,
+@@ -2063,6 +2165,74 @@ fn cleanup_login_child(
+     Ok(exit)
+ }
+ 
++/// Inspect the existing registered development profile without interaction,
++/// message entry, queue mutation, a new profile, or production policy changes.
++pub fn inspect_readiness(workspace: &Path, target_url: &str) -> Result<Value> {
++    let prepared = login_preflight(workspace, target_url)?;
++    let marker = dev_dir(&canonical_workspace(workspace)?).join("login-active.json");
++    write_json_new(
++        &marker,
++        &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
++        "targetSha256":protocol::digest(target_url),"startedUtc":now()}),
++    )?;
++    let mut command = Command::new(&prepared.python);
++    command
++        .arg("-I")
++        .arg("-c")
++        .arg(include_str!("../../scripts/wake_readiness_visual_probe.py"))
++        .arg("--await-start")
++        .arg("--profile")
++        .arg(&prepared.profile)
++        .arg("--conversation-url")
++        .arg(target_url)
++        .arg("--primitives")
++        .arg(&prepared.primitives)
++        .arg("--primitives-sha256")
++        .arg(&prepared.primitives_sha256)
++        .arg("--read-only")
++        .arg("--seconds")
++        .arg("20")
++        .current_dir(&prepared.root);
++    let result = crate::readiness_probe::run_bounded(&mut command, Duration::from_secs(90));
++    if result.as_ref().err() == Some(&"PROBE_CLEANUP_UNVERIFIED") {
++        // Reuse the existing sticky owner marker when cleanup is unproven.
++        return Err("DEV_READINESS_CLEANUP_UNVERIFIED".into());
++    }
++    plain(&marker, false)?;
++    fs::remove_file(&marker).map_err(|_| "DEV_READINESS_CLEANUP_UNVERIFIED")?;
++    let rows = result.map_err(str::to_owned)?;
++    let final_state = rows
++        .last()
++        .and_then(|row| row.strip_prefix("PROBE:FINAL:"))
++        .ok_or("DEV_READINESS_FINAL_UNOBSERVED")?;
++    require_stopped_control(&prepared.root)?;
++    require_observed_target_generation(
++        &Store::open(&prepared.root)?,
++        target_url,
++        prepared.target_generation,
++    )?;
++    let browser_observation = if final_state == "OBSERVATION_UNAVAILABLE" {
++        None
++    } else {
++        rows.iter()
++            .rev()
++            .find_map(|line| crate::readiness_probe::surface_observation(line))
++    };
++    let tab_observation = rows
++        .iter()
++        .rev()
++        .find_map(|line| crate::readiness_probe::tab_observation(line));
++    Ok(
++        json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"BROWSER_READINESS_OBSERVED",
++        "observations":rows,"finalState":final_state,"authenticationVerified":false,
++        "browserObservation":browser_observation,"tabObservation":tab_observation,
++        "registeredTargetSha256":protocol::digest(target_url),
++        "registeredTargetGeneration":prepared.target_generation,
++        "advisory":true,"browserReadOnly":true,"sendAttempted":false,
++        "hostStarted":false,"schedulerStarted":false,"ownedTreeExited":true}),
++    )
++}
++
+ /// Open only the prepared development browser profile for manual sign-in.
+ /// This intentionally never inspects authentication or reports readiness.
+ /// The browser lock stays held until the private Job proves all descendants
+@@ -2114,6 +2284,10 @@ pub fn login(workspace: &Path, target_url: &str) -> Result<Value> {
+             return Err(error);
+         }
+     };
++    // Bound the whole owned interaction, including browser opening, human
++    // acknowledgement and normal close. Expiry still takes the same retained
++    // Job cleanup path; it does not clear an earlier interrupted owner marker.
++    let interaction_deadline = Instant::now() + Duration::from_secs(120);
+     let interaction = (|| -> Result<()> {
+         let output = child
+             .stdout
+@@ -2137,30 +2311,33 @@ pub fn login(workspace: &Path, target_url: &str) -> Result<Value> {
+             .and_then(|_| input.flush())
+             .map_err(|_| "DEV_LOGIN_HELPER_INPUT_UNAVAILABLE")?;
+         let opened = rx
+-            .recv_timeout(Duration::from_secs(120))
++            .recv_timeout(login_remaining(
++                interaction_deadline,
++                Duration::from_secs(120),
++            )?)
+             .map_err(|_| "DEV_LOGIN_BROWSER_OPEN_UNPROVEN")??;
+         if opened != "LOGIN_BROWSER_OPEN" {
+             return Err("DEV_LOGIN_BROWSER_OPEN_UNPROVEN".into());
+         }
+         println!(
+-            "LOGIN_BROWSER_OPEN — sign in in the visible browser, then press Enter here to close it."
++            "LOGIN_BROWSER_OPEN — inspect/sign in in the visible browser, then press Enter here. This session has a 120-second interaction limit, followed by guarded cleanup."
+         );
+         std::io::stdout()
+             .flush()
+             .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE")?;
+-        let mut acknowledgement = String::new();
+-        std::io::stdin()
+-            .read_line(&mut acknowledgement)
+-            .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE")?;
+-        if !matches!(acknowledgement.as_str(), "\n" | "\r\n") {
+-            return Err("DEV_LOGIN_ENTER_REQUIRED".into());
+-        }
++        wait_login_enter(
++            std::io::stdin(),
++            login_remaining(interaction_deadline, Duration::from_secs(120))?,
++        )?;
+         input
+             .write_all(b"\n")
+             .and_then(|_| input.flush())
+             .map_err(|_| "DEV_LOGIN_HELPER_INPUT_UNAVAILABLE")?;
+         let closed = rx
+-            .recv_timeout(Duration::from_secs(30))
++            .recv_timeout(login_remaining(
++                interaction_deadline,
++                Duration::from_secs(30),
++            )?)
+             .map_err(|_| "DEV_LOGIN_BROWSER_CLOSE_UNPROVEN")??;
+         if closed != "LOGIN_BROWSER_CLOSED" {
+             return Err("DEV_LOGIN_BROWSER_CLOSE_UNPROVEN".into());
+@@ -3563,6 +3740,94 @@ mod tests {
+         );
+     }
+ 
++    #[test]
++    fn login_enter_is_bounded_and_never_accepts_text_or_eof() {
++        for bytes in [b"\n".as_slice(), b"\r\n"] {
++            wait_login_enter(std::io::Cursor::new(bytes.to_vec()), Duration::from_secs(1)).unwrap();
++        }
++        for bytes in [b"".as_slice(), b"private input\n", b"\r", b"x\n"] {
++            assert_eq!(
++                wait_login_enter(std::io::Cursor::new(bytes.to_vec()), Duration::from_secs(1))
++                    .unwrap_err(),
++                "DEV_LOGIN_ENTER_REQUIRED"
++            );
++        }
++        assert_eq!(
++            login_remaining(
++                Instant::now() - Duration::from_secs(1),
++                Duration::from_secs(120)
++            )
++            .unwrap_err(),
++            "DEV_LOGIN_INTERACTION_TIMEOUT"
++        );
++    }
++
++    #[test]
++    fn absent_login_enter_expires_without_waiting_for_input_thread() {
++        struct HeldInput(mpsc::Receiver<()>, mpsc::Sender<()>);
++        impl Read for HeldInput {
++            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
++                let _ = self.0.recv();
++                Ok(0)
++            }
++        }
++        impl Drop for HeldInput {
++            fn drop(&mut self) {
++                let _ = self.1.send(());
++            }
++        }
++        let (release, held) = mpsc::channel();
++        let (exited, exit) = mpsc::channel();

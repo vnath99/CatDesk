@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T03:49:45.652885+00:00",
+  "qualification": "TESTED_CONTROLLED_LIVE_SOURCE_REVIEW",
+  "sourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "sourceCodePaths": 90,
+  "acceptedUnchangedBaselinePaths": 72,
+  "changedExistingPaths": 16,
+  "newPaths": 2,
+  "olderPartialObservationIdenticalBlobs": 88,
+  "freshReportOnlyClaim": {
+    "state": "WAITING_FOR_CHATGPT",
+    "active": true,
+    "stateVersion": 4,
+    "providerThreadAbsent": true,
+    "reportAbsent": true,
+    "oldNativeFilesPreserved": true,
+    "oldAccountingRowsPreserved": 580,
+    "newAttributedAccountingRows": 1,
+    "finiteOwnerExited": true,
+    "planRequired": true,
+    "expiredOlderClaimNotRenewed": true
+  },
+  "precontractFailureReconciled": {
+    "failure": "PRIVATE_WRAPPER_EXPECTED_RAW_PLAN_BUT_SUPPORTED_API_FORMATS_MARKDOWN",
+    "earlierNativeSessionAbsentConfirmed": true,
+    "nativeAndAccountingPinsUnchangedConfirmed": true,
+    "actualApiTextMatchesStoredFile": true,
+    "originalPlanRetained": true,
+    "completedPlanUpdateNotReplayed": true,
+    "applicationGuardChanged": false
+  },
+  "partialReviews": [
+    {
+      "checkpoint": 1,
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "739e5b0207d6abd991af7ae27b46a22d716790b3ecf048b77901bc62d0f2f507",
+      "exactUserReceiptVerified": true,
+      "completeExactResponseVerified": true,
+      "coordinatorClosed": true,
+      "gitCallsIndependentlyCorroborated": 10,
+      "invariantFindings": [
+        "CLAIMED and SUBMITTING permit diagnosis; receipt reconciliation remains SUBMITTING-only.",
+        "Diagnosis checks dispatch authority before and after browser observation.",
+        "Diagnosis retains delivery and target identity, requires STOPPED host, and guards deadline and cancellation.",
+        "Observed diagnostic request uses diagnoseSubmission, not submit or reconcile.",
+        "Negative tests cover missing authority, foreign scope, private fields, excessive composer size, invalid frames and cancellation.",
+        "CLAIMED tests preserve delivery state and prohibit receipt creation or USER resend.",
+        "Recorded regression does not establish historical timing-failure cause."
+      ],
+      "inspectedPaths": [
+        "src/operator_web_review.rs:396-453",
+        "wake/src/runtime_review_reconcile.rs:111-174",
+        "wake/src/runtime_review_reconcile.rs:297-355",
+        "wake/src/runtime_review_reconcile.rs:362-411",
+        "wake/src/runtime_review_reconcile.rs:466-550",
+        "wake/src/runtime_review_reconcile.rs:755-854",
+        "wake/src/runtime_review_reconcile.rs:855-954"
+      ],
+      "neededReads": [
+        {
+          "range": "wake/src/runtime_review_reconcile.rs:1-110,175-296,356-361",
+          "reason": "Complete authority and diagnostic frame-validation call paths."
+        },
+        {
+          "range": "wake/src/runtime_review_reconcile.rs:955 onward",
+          "reason": "Complete deadline and cleanup negative-test assertions."
+        },
+        {
+          "range": "Second pinned CURRENT38 delta manifest",
+          "reason": "Review remaining changed dependencies and global interactions."
+        }
+      ],
+      "outputTruncated": false,
+      "cumulativeSourceAccepted": false
+    },
+    {
+      "checkpoint": 2,
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "1a955ae5d0acc6c24040909d18be425aa724f03cb1e4d35c9b5a4f65627c78f1",
+      "exactUserReceiptVerified": true,
+      "completeExactResponseVerified": true,
+      "coordinatorClosed": true,
+      "gitCallsIndependentlyCorroborated": 2,
+      "invariantFindings": [
+        "Cleanup exceeding the diagnostic deadline is asserted to return SCOPED_DIAGNOSE_TIMEOUT.",
+        "The timeout test calls preserved() to verify delivery and control-state preservation.",
+        "The preceding batch established that diagnosis accepts CLAIMED and SUBMITTING, while receipt reconciliation remains SUBMITTING-only.",
+        "Pre-observation and post-observation dispatch-authority checks are present.",
+        "Negative tests cover target scope, cancellation, private fields, invalid frames and unauthorized submission.",
+        "No source approval or permission to retry USER sends follows from these observations."
+      ],
+      "inspectedPaths": [
+        "wake/src/runtime_review_reconcile.rs:955-963"
+      ],
+      "neededReads": [
+        {
+          "range": "wake/src/runtime_review_reconcile.rs:1-110,175-296,356-361",
+          "reason": "Confirm complete authority callback, frame validation and reconciliation dependencies."
+        },
+        {
+          "range": "src/operator_web_review.rs:diagnose_using implementation and authority callback",
+          "reason": "Verify grant-dispatch checks and exact owner binding."
+        },
+        {
+          "range": "Current 90-path cumulative semantic coverage evidence",
+          "reason": "Establish cross-module invariants without promoting earlier partial observations."
+        },
+        {
+          "range": "Historical timing-failure evidence",
+          "reason": "Determine unresolved failure cause; later 172/0/1 results are not retroactive proof."
+        }
+      ],
+      "outputTruncated": false,
+      "cumulativeSourceAccepted": false
+    }
+  ],
+  "knownSourceGitCalls": 12,
+  "generation4Context": {
+    "observedTokenProxy": 16820,
+    "observedToolArgumentTokens": 732,
+    "observedToolResultTokens": 13731,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "rawTextPersisted": false
+  },
+  "priorGenerationLedgersPreserved": true,
+  "additionalPredecessorSemanticParts": 2,
+  "predecessorPartialObservationsRetained": 17,
+  "allPredecessorSemanticParts": 7,
+  "continuityAndConcreteFollowupInputsPrepared": true,
+  "followupMessagesSentByPreparation": 0,
+  "cleanup": {
+    "observedUtc": "2026-11-03T03:49:45.2202731Z",
+    "testOwnedProcesses": 0,
+    "trustedBackendAndExistingTunnelPreserved": true,
+    "sharedWakeHostStopped": true,
+    "queriesAreNotAnAtomicSnapshot": true
+  },
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "productionPromotionPerformed": false,
+  "installedTwoWebCodingAcceptance": false,
+  "originalProjectNativeSessionsChanged": 0,
+  "operatorActionRequired": false,
+  "limits": [
+    "Two current-source partial observations are not global source approval.",
+    "Canonical and controlled project authorities remain distinct; completed controlled reviews do not authorize native project writes.",
+    "Pending concrete dependencies and cumulative current-source judgment precede ACK, snapshot, producer and guarded promotion.",
+    "Prior full-module172-pass/0-fail/1-ignore source evidence was inspected, not rerun by this documentation slice.",
+    "Installed two-Web native edits, independent Wake, qualified persistent recovery, full T-0484 and later CD-P7 remain open."
+  ]
+}

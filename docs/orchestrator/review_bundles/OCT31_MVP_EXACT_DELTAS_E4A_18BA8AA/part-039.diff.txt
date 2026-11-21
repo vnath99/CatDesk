@@ -1,0 +1,183 @@
++        return Err("DEV_READINESS_TARGET_CHANGED".into());
++    }
++    lease.check_target(&expected)?;
++    catdesk_wake::development_runtime::validate_selected_target_isolation(
++        &workspace,
++        &root,
++        &target.url,
++    )?;
++    let mut result = catdesk_wake::development_runtime::inspect_readiness(&workspace, &target.url)?;
++    lease.check_target(&expected)?;
++    let after = mcp::operator_read_project_web_target(&workspace, project_id)
++        .map_err(|_| "DEV_READINESS_TARGET_CHANGED")?
++        .ok_or("DEV_READINESS_TARGET_CHANGED")?;
++    if after.generation != target.generation
++        || after.url != target.url
++        || after.sha256 != target.sha256
++    {
++        return Err("DEV_READINESS_TARGET_CHANGED".into());
++    }
++    result["projectId"] = json!(project_id);
++    result["targetGeneration"] = json!(target.generation);
++    result["targetDigest"] = json!(target.sha256);
++    Ok(result)
++}
++
++fn reconcile_web_development_login(
++    workspace: &Path,
++    project: &str,
++    marker_sha256: &str,
++    execute: bool,
++) -> Result<serde_json::Value, String> {
++    let mut result = catdesk_wake::development_runtime::reconcile_login(
++        workspace,
++        marker_sha256,
++        execute,
++        |store| {
++            let target = mcp::operator_read_login_recovery_target(workspace, project, store)
++                .map_err(|error| match error {
++                    mcp::DesignatedChatTargetErrorV1::ProtectedStateMismatch => {
++                        "DEV_LOGIN_RECOVERY_TARGET_PAIR_MISMATCH"
++                    }
++                    _ => "DEV_LOGIN_RECOVERY_TARGET_UNAVAILABLE",
++                })?
++                .ok_or("DEV_LOGIN_RECOVERY_PROJECT_TARGET_REQUIRED")?;
++            catdesk_wake::protocol::Target::new(target.generation, target.url)
++        },
++    )?;
++    result["projectId"] = json!(project);
++    Ok(result)
++}
++
+ /// Explicit controlled work for live development tests. It uses the same
+ /// paired target and durable queue as normal delivery, but never manufactures
+ /// a natural review record or a delivery receipt.
+@@ -579,6 +681,43 @@ fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>,
+             }
+         }
+         Some("result-stopped") if args.len() == 3 => ReleasePairOperatorAction::ResultStopped,
++        Some("inspect-failed-promotion")
++            if args.len() == 5
++                && args[3] == "--transaction-id"
++                && args[4].len() == 32
++                && args[4]
++                    .bytes()
++                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
++        {
++            ReleasePairOperatorAction::InspectFailedPromotion {
++                transaction_id: args[4].clone(),
++            }
++        }
++        Some(command @ ("retire-failed-promotion" | "qualify-promotion-source"))
++            if args.len() == 7
++                && args[3] == "--transaction-id"
++                && args[5] == "--expected-evidence-sha256"
++                && args[4].len() == 32
++                && args[4]
++                    .bytes()
++                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
++                && args[6].len() == 64
++                && args[6]
++                    .bytes()
++                    .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase()) =>
++        {
++            if command == "qualify-promotion-source" {
++                ReleasePairOperatorAction::QualifyPromotionSource {
++                    transaction_id: args[4].clone(),
++                    evidence_sha256: args[6].clone(),
++                }
++            } else {
++                ReleasePairOperatorAction::RetireFailedPromotion {
++                    transaction_id: args[4].clone(),
++                    evidence_sha256: args[6].clone(),
++                }
++            }
++        }
+         _ => return Err("operator release-pair accepts only fixed actions".into()),
+     };
+     Ok(Some(OperatorAction::ReleasePair(action)))
+@@ -861,6 +1000,16 @@ pub(crate) async fn execute_operator_action(
+                 WebDevelopmentAction::Login { project_id } => {
+                     login_web_development(workspace, &project_id)
+                 }
++                WebDevelopmentAction::InspectReadiness { project_id } => {
++                    inspect_web_development_readiness(workspace, &project_id)
++                }
++                WebDevelopmentAction::ReconcileLogin {
++                    project_id,
++                    marker_sha256,
++                    execute,
++                } => {
++                    reconcile_web_development_login(workspace, &project_id, &marker_sha256, execute)
++                }
+                 WebDevelopmentAction::Status => development_runtime::status(workspace),
+                 WebDevelopmentAction::Start => development_runtime::start(workspace),
+                 WebDevelopmentAction::Stop => development_runtime::stop(workspace),
+@@ -1077,6 +1226,59 @@ pub(crate) async fn execute_operator_action(
+                         json!({"action":"release_pair_rollback_stopped","result":result,"tunnelAction":"none"}),
+                     )
+                 }
++                ReleasePairOperatorAction::InspectFailedPromotion { transaction_id } => {
++                    #[cfg(windows)]
++                    return tokio::task::spawn_blocking(move || {
++                        crate::daemon_reload::retirement::inspect(&workspace, &transaction_id)
++                    })
++                    .await
++                    .map_err(|_| "promotion retirement inspection failed")?;
++                    #[cfg(not(windows))]
++                    {
++                        let _ = transaction_id;
++                        Err("promotion retirement requires Windows".into())
++                    }
++                }
++                ReleasePairOperatorAction::RetireFailedPromotion {
++                    transaction_id,
++                    evidence_sha256,
++                } => {
++                    #[cfg(windows)]
++                    return tokio::task::spawn_blocking(move || {
++                        crate::daemon_reload::retirement::retire(
++                            &workspace,
++                            &transaction_id,
++                            &evidence_sha256,
++                        )
++                    })
++                    .await
++                    .map_err(|_| "promotion retirement requires recovery")?;
++                    #[cfg(not(windows))]
++                    {
++                        let _ = (transaction_id, evidence_sha256);
++                        Err("promotion retirement requires Windows".into())
++                    }
++                }
++                ReleasePairOperatorAction::QualifyPromotionSource {
++                    transaction_id,
++                    evidence_sha256,
++                } => {
++                    #[cfg(windows)]
++                    return tokio::task::spawn_blocking(move || {
++                        crate::daemon_reload::retirement::qualify_stopped_source(
++                            &workspace,
++                            &transaction_id,
++                            &evidence_sha256,
++                        )
++                    })
++                    .await
++                    .map_err(|_| "promotion source qualification failed")?;
++                    #[cfg(not(windows))]
++                    {
++                        let _ = (transaction_id, evidence_sha256);
++                        Err("promotion source qualification requires Windows".into())
++                    }
++                }
+             }
+         }
+         OperatorAction::RepairWakeBridgeEnvironment => {
+@@ -1103,7 +1305,9 @@ pub(crate) async fn execute_operator_action(
+             let result = crate::delegated::autonomy_supervisor::handle_tool(
+                 operation, arguments, &workspace,
+             )
+-            .map_err(|_| "reviewed project operation requires operator attention".to_string())?;
++            .map_err(|error| {
++                crate::delegated::codex_app_server::registration_error_code(&error).to_string()
++            })?;

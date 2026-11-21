@@ -1,0 +1,181 @@
++                    .unwrap()
++                    .to_string_lossy()
++                    .starts_with("CatDesk-Retirement-Fixture-")
++        );
++        let stop = std::env::var("CATDESK_RETIREMENT_FIXTURE_STOP").unwrap();
++        let parent = metadata(&root).unwrap();
++        let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)
++            .unwrap();
++        let mut value = journal(&parent).unwrap().unwrap();
++        archive_locked(&parent, &mut value, |point| {
++            if point == stop {
++                println!("RETIREMENT_CHECKPOINT");
++                std::io::stdout().flush().unwrap();
++                thread::sleep(Duration::from_secs(60))
++            }
++            Ok(())
++        })
++        .unwrap();
++    }
++
++    #[test]
++    fn image_owner_fixture() {
++        if std::env::var("CATDESK_RETIREMENT_IMAGE_OWNER").as_deref() == Ok("fixture-only") {
++            thread::sleep(Duration::from_secs(60))
++        }
++    }
++
++    #[test]
++    fn actual_owned_image_blocks_readonly_inspection_until_its_job_exits() {
++        let (root, _) = fixture();
++        fs::create_dir_all(root.join("scripts")).unwrap();
++        fs::create_dir_all(root.join("candidate")).unwrap();
++        fs::create_dir_all(root.join("target/release")).unwrap();
++        fs::write(
++            root.join("target/release/catdesk.exe"),
++            b"disposable prior image",
++        )
++        .unwrap();
++        fs::write(
++            root.join("slot.json"),
++            b"disposable fixture slot, not release authority",
++        )
++        .unwrap();
++        let helper = r#"
++function Get-CatDeskRecoverySha256($Path){$s=[Security.Cryptography.SHA256]::Create();try{([BitConverter]::ToString($s.ComputeHash([IO.File]::ReadAllBytes($Path))).Replace('-','')).ToLowerInvariant()}finally{$s.Dispose()}}
++function Get-CatDeskCanonicalPairEvidence($Root){$p=Join-Path $Root 'target/release/catdesk.exe';[pscustomobject]@{Binary=$p;Hash=Get-CatDeskRecoverySha256 $p}}
++function Get-CatDeskLastKnownGoodRelease($Root){[pscustomobject]@{Slot='slot-b';Generation=2;Hash=(Get-CatDeskCanonicalPairEvidence $Root).Hash;Metadata=(Join-Path $Root 'slot.json')}}
++function Get-NetTCPConnection{[CmdletBinding()]param([string]$State)}
++"#;
++        let hp = root.join("scripts/catdesk-release-recovery.ps1");
++        fs::write(&hp, helper).unwrap();
++        let candidate = root.join("candidate/catdesk.exe");
++        fs::copy(std::env::current_exe().unwrap(), &candidate).unwrap();
++        let (mut auth, _, _, _) = terminal_fixture();
++        auth.prior_canonical_sha256 =
++            sha256_file(&root.join("target/release/catdesk.exe")).unwrap();
++        let mut command = Command::new(&candidate);
++        command
++            .args([
++                "--exact",
++                "daemon_reload::retirement::tests::image_owner_fixture",
++                "--nocapture",
++            ])
++            .env("CATDESK_RETIREMENT_IMAGE_OWNER", "fixture-only")
++            .stdin(Stdio::null())
++            .stdout(Stdio::null())
++            .stderr(Stdio::null());
++        let mut owner = OwnedCandidateChild::spawn(&mut command).unwrap();
++        let refused = inspect_owners(&root, &auth, None, &sha256_file(&hp).unwrap()).is_err();
++        owner.terminate_tree_and_confirm_quiescent().unwrap();
++        drop(owner);
++        assert!(
++            refused,
++            "a mapped owned candidate must block retirement even without a listener"
++        );
++        inspect_owners(&root, &auth, None, &sha256_file(&hp).unwrap()).unwrap();
++        cleanup_fixture(root);
++    }
++
++    #[test]
++    fn actual_windows_owner_kill_preserves_journal_and_fresh_owner_recovers() {
++        for stop in ["PROMOTION_RENAMED", "HANDOFF_RENAMED"] {
++            let (root, _) = fixture();
++            let mut command = Command::new(std::env::current_exe().unwrap());
++            command
++                .args([
++                    "--exact",
++                    "daemon_reload::retirement::tests::hard_kill_fixture",
++                    "--nocapture",
++                ])
++                .env("CATDESK_RETIREMENT_FIXTURE_ROOT", &root)
++                .env("CATDESK_RETIREMENT_FIXTURE_STOP", stop)
++                .stdin(Stdio::null())
++                .stdout(Stdio::piped())
++                .stderr(Stdio::null());
++            let mut owner = OwnedCandidateChild::spawn(&mut command).unwrap();
++            let out = owner.child_mut().stdout.take().unwrap();
++            let (tx, rx) = mpsc::channel();
++            let reader = thread::spawn(move || {
++                use std::io::BufRead;
++                let mut stream = std::io::BufReader::new(out);
++                let mut line = String::new();
++                while stream.read_line(&mut line).unwrap_or(0) > 0 {
++                    if line.contains("RETIREMENT_CHECKPOINT") {
++                        let _ = tx.send(());
++                        break;
++                    }
++                    line.clear()
++                }
++            });
++            let reached = rx.recv_timeout(Duration::from_secs(8)).is_ok();
++            owner.terminate_tree_and_confirm_quiescent().unwrap();
++            drop(owner);
++            reader.join().unwrap();
++            assert!(reached, "owned fixture did not reach {stop}");
++            let parent = metadata(&root).unwrap();
++            let _lease = mutation_lease(&root).unwrap();
++            let mut value = journal(&parent).unwrap().unwrap();
++            archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
++            ensure_ready(&root).unwrap();
++            drop(_lease);
++            drop(parent);
++            cleanup_fixture(root);
++        }
++    }
++}
++
++#[cfg(not(windows))]
++pub(crate) fn inspect(_workspace: &Path, _transaction: &str) -> Result<serde_json::Value, String> {
++    Err("stopped promotion retirement requires Windows".into())
++}
++#[cfg(not(windows))]
++pub(crate) fn retire(
++    _workspace: &Path,
++    _transaction: &str,
++    _expected: &str,
++) -> Result<serde_json::Value, String> {
++    Err("stopped promotion retirement requires Windows".into())
++}
+diff --git a/src/promotion_source_bridge.rs b/src/promotion_source_bridge.rs
+new file mode 100644
+index 0000000000000000000000000000000000000000..b1421a956f9fbd0738362448053cb69ed09eeb2d
+--- /dev/null
++++ b/src/promotion_source_bridge.rs
+@@ -0,0 +1,296 @@
++//! Bounded old-listener bridge for the existing reviewed promotion worker.
++//! It reuses qualified-stopped headless startup; it never installs an image,
++//! creates release authority, disarms a Job, or starts Wake/browser/tunnel work.
++use super::*;
++use crate::reviewed_candidate_owner::OwnedCandidateChild;
++use crate::windows_protected_fs::{
++    ProtectedDirectoryGuard as Guard, retain_reviewed_regular_artifact,
++};
++use std::os::windows::fs::OpenOptionsExt;
++
++const ROUTE: &str = "catdesk-qualified-stopped-v2";
++const ENDPOINT: &str = "http://127.0.0.1:3200/catdesk-qualified-stopped-v2/mcp";
++
++pub(super) fn lifecycle_lease(workspace: &Path) -> Result<fs::File, String> {
++    let mut parent = Guard::acquire(workspace, "promotion source lifecycle")?;
++    parent.descend_existing(".catdesk", "promotion source lifecycle")?;
++    parent.descend_existing("release-pair-control", "promotion source lifecycle")?;
++    let path = parent.path().join("stopped-owner.lock");
++    let metadata =
++        fs::symlink_metadata(&path).map_err(|_| "promotion source lifecycle unavailable")?;
++    if !metadata.is_file() || metadata.file_type().is_symlink() {
++        return Err("promotion source lifecycle lock is unsafe".into());
++    }
++    OpenOptions::new()
++        .read(true)
++        .write(true)
++        .share_mode(0)
++        .open(path)
++        .map_err(|_| "promotion source public lifecycle is owned".into())
++}
++
++fn qualified_config(workspace: &Path, prior: &str) -> Result<(PathBuf, String), String> {
++    let proof =
++        stopped::result(workspace)?.ok_or("promotion source has no stopped qualification")?;
++    let path = workspace.join(".catdesk/release-pair-control/qualification-config.toml");
++    let observed =

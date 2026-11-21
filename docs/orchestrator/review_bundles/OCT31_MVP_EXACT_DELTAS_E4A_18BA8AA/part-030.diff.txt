@@ -1,0 +1,216 @@
++    fn exact_dispatch_task_parser_requires_all_identity_pins_and_no_launch_overrides() {
++        let root = std::env::temp_dir().to_string_lossy().into_owned();
++        let hash = "a".repeat(64);
++        let base = [
++            "operator",
++            "codex",
++            "queue",
++            "dispatch-task",
++            "--project-id",
++            "alpha",
++            "--workspace",
++            &root,
++            "--task-id",
++            "job_alpha",
++            "--expected-binding-sha256",
++            &hash,
++        ];
++        assert!(matches!(parse(&base), Ok(QueueAction::DispatchTask { .. })));
++        for count in [4, 6, 8, 10] {
++            assert!(parse(&base[..count]).is_err());
++        }
++        for (flag, value) in [
++            ("--model", "gpt-6.1-sol"),
++            ("--task", "replacement"),
++            ("--effort", "medium"),
++            ("--windows-sandbox", "mxc"),
++        ] {
++            let mut args = base.to_vec();
++            args.extend([flag, value]);
++            assert!(parse(&args).is_err());
++        }
++        let mut bad = base;
++        bad[11] = "not-a-hash";
++        assert!(parse(&bad).is_err());
++    }
++
++    #[test]
++    fn frozen_native_request_pin_refuses_material_substitution_but_not_state_changes() {
++        let (fixture, projects, queue) = three_project_fixture(2);
++        let project = &projects[1];
++        let job = QueueJob::new(
++            "frozen_native".into(),
++            project,
++            "approved prompt".into(),
++            Some("gpt-6.1-sol".into()),
++            Some("medium".into()),
++        )
++        .unwrap();
++        let pin = job.request_sha256();
++        assert_eq!(job.summary()["requestSha256"], pin);
++        let mut changed = job.clone();
++        changed.state = QueueState::Attention;
++        changed.receipt_id = Some(Uuid::new_v4().to_string());
++        assert_eq!(changed.request_sha256(), pin);
++        for change in ["prompt", "model", "effort", "sandbox", "cyber", "binding"] {
++            let mut changed = job.clone();
++            match change {
++                "prompt" => {
++                    changed.prompt = "substituted".into();
++                    changed.prompt_sha256 =
++                        format!("{:x}", Sha256::digest(changed.prompt.as_bytes()));
++                }
++                "model" => changed.model = Some("gpt-6.1-terra".into()),
++                "effort" => changed.effort = Some("high".into()),
++                "sandbox" => changed.windows_sandbox = Some("mxc".into()),
++                "cyber" => changed.cyber_access_program = Some("standard".into()),
++                _ => changed.binding.thread_id = Uuid::new_v4().to_string(),
++            }
++            assert_ne!(changed.request_sha256(), pin, "{change}");
++        }
++        queue.save_job(&job).unwrap();
++        let foreign_path = queue.job_path("beta", "malformed_foreign");
++        fs::write(&foreign_path, b"{malformed sibling retained").unwrap();
++        assert!(queue.jobs().is_err());
++        let bytes = fs::read(queue.job_path("alpha", "frozen_native")).unwrap();
++        let scope = job.binding.scope();
++        let binding = project_binding_sha256(project).unwrap();
++        let bad = "0".repeat(64);
++        assert!(
++            claim_selected(
++                &projects[0].workspace,
++                &queue,
++                Some((&scope, &job.task_id, &binding, Some(&bad)))
++            )
++            .unwrap_err()
++            .contains("request changed")
++        );
++        assert_eq!(
++            fs::read(queue.job_path("alpha", "frozen_native")).unwrap(),
++            bytes
++        );
++        assert_eq!(
++            fs::read_dir(projects[0].workspace.join(".catdesk/projects/leases"))
++                .unwrap()
++                .count(),
++            0
++        );
++        let claimed = claim_selected(
++            &projects[0].workspace,
++            &queue,
++            Some((&scope, &job.task_id, &binding, Some(&pin))),
++        )
++        .unwrap()
++        .unwrap();
++        assert_eq!(claimed.request_sha256(), pin);
++        assert_eq!(
++            fs::read(foreign_path).unwrap(),
++            b"{malformed sibling retained"
++        );
++        cleanup(fixture);
++    }
++
++    #[test]
++    fn exact_dispatch_parser_accepts_only_a_valid_optional_request_pin() {
++        let root = std::env::temp_dir().to_string_lossy().into_owned();
++        let binding = "b".repeat(64);
++        let request = "c".repeat(64);
++        let base = [
++            "catdesk",
++            "codex",
++            "queue",
++            "dispatch-task",
++            "--project-id",
++            "alpha",
++            "--workspace",
++            root.as_str(),
++            "--task-id",
++            "frozen_native",
++            "--expected-binding-sha256",
++            binding.as_str(),
++        ];
++        let mut args = base.to_vec();
++        args.extend(["--expected-request-sha256", request.as_str()]);
++        assert!(
++            matches!(parse(&args), Ok(QueueAction::DispatchTask { expected_request_sha256: Some(pin), .. }) if pin == request)
++        );
++        for invalid in [
++            "not-a-hash",
++            "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
++        ] {
++            let mut args = base.to_vec();
++            args.extend(["--expected-request-sha256", invalid]);
++            assert!(parse(&args).is_err());
++        }
++    }
++
++    #[test]
++    fn exact_dispatch_task_claim_is_cold_durable_and_never_mutates_sibling_jobs() {
++        let (fixture, projects, queue) = three_project_fixture(2);
++        let control = &projects[0].workspace;
++        for (project, id) in [
++            (&projects[1], "alpha_first"),
++            (&projects[1], "alpha_second"),
++            (&projects[2], "beta_stale"),
++        ] {
++            let mut job =
++                QueueJob::new(id.into(), project, "fixture task".into(), None, None).unwrap();
++            if id == "beta_stale" {
++                job.binding.thread_id = Uuid::new_v4().to_string();
++            }
++            queue.save_job(&job).unwrap();
++        }
++        let foreign = fs::read(queue.job_path("beta", "beta_stale")).unwrap();
++        let earlier = fs::read(queue.job_path("alpha", "alpha_first")).unwrap();
++        let second = fs::read(queue.job_path("alpha", "alpha_second")).unwrap();
++        let scope = CodexScope {
++            project_id: "alpha".into(),
++            workspace: projects[1].workspace.clone(),
++        };
++        let hash = project_binding_sha256(&projects[1]).unwrap();
++        // No fallback to the native workspace or ambient current directory.
++        assert!(
++            claim_selected(
++                &projects[1].workspace,
++                &queue,
++                Some((&scope, "alpha_second", &hash, None))
++            )
++            .is_err()
++        );
++        assert!(
++            claim_selected(
++                control,
++                &queue,
++                Some((&scope, "alpha_second", &"a".repeat(64), None))
++            )
++            .is_err()
++        );
++        assert_eq!(
++            fs::read(queue.job_path("alpha", "alpha_second")).unwrap(),
++            second
++        );
++        assert!(
++            claim_selected(control, &queue, Some((&scope, "missing", &hash, None)))
++                .unwrap()
++                .is_none()
++        );
++        let claimed = claim_selected(control, &queue, Some((&scope, "alpha_second", &hash, None)))
++            .unwrap()
++            .unwrap();
++        assert_eq!(claimed.task_id, "alpha_second");
++        assert_eq!(claimed.binding.project_id, "alpha");
++        assert_eq!(
++            fs::read(queue.job_path("beta", "beta_stale")).unwrap(),
++            foreign
++        );
++        assert_eq!(
++            fs::read(queue.job_path("alpha", "alpha_first")).unwrap(),
++            earlier
++        );
++        assert!(
++            claim_selected(control, &queue, Some((&scope, "alpha_second", &hash, None)))
++                .unwrap()
++                .is_none()
++        );
++        assert_eq!(
++            queue

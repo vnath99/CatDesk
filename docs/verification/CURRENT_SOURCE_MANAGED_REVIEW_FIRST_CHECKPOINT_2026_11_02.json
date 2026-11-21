@@ -1,0 +1,93 @@
+{
+  "observedUtc": "2026-11-02T21:31:49.984969+00:00",
+  "classification": "TESTED_CONTROLLED_WEB_SOURCE_REVIEW_NOT_NATIVE_CODING_OR_RELEASE_ACCEPTANCE",
+  "sourceCommit": "6d737c9a0f6f34496fc88b9fec02433bd1599117",
+  "acceptedBaselineCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+  "scope": {
+    "declaredCodePaths": 89,
+    "unchangedAcceptedBlobs": 72,
+    "changedExistingPaths": 15,
+    "newPaths": 2,
+    "boundedSourceInputGroups": 12,
+    "frozenRequestsIncludingFinalJudgment": 13
+  },
+  "managedClaim": {
+    "scope": "ABSENT_ADMINISTRATIVE_REVIEW_REPORT_ONLY",
+    "state": "WAITING_FOR_CHATGPT",
+    "stateVersion": 4,
+    "active": true,
+    "reportAbsent": true,
+    "nativeProviderStarts": 0,
+    "providerThreadCaptured": false,
+    "preexistingFilesChecked": 4730,
+    "oldAccountingRowsPreserved": 579,
+    "newClaimRows": 1,
+    "exactLocalMcpInputMatchedGit": true,
+    "planRequiredRetained": true,
+    "finiteOwnerNaturalExit": true
+  },
+  "firstReview": {
+    "singleExactUserReceipt": true,
+    "assistantComplete": true,
+    "exactBodyRead": true,
+    "coordinatorClosed": true,
+    "verdict": "REVIEWED_PARTIAL",
+    "responseSha256": "b78e4c7991028a6e55266d8a70786e05ae0406c632f83ea9ac47b3fac84b5df8",
+    "taskCorrelatedGitCalls": 9,
+    "matchingCommandLogCounts": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "sourceLogsMatchFrozenInputsUnderExistingPrivacyRedaction": true,
+    "reportedDefects": 0,
+    "additionalDependenciesRequested": true,
+    "sourceAccepted": false,
+    "producerAuthority": false
+  },
+  "context": {
+    "generation": 1,
+    "observedTokenProxy": 61524,
+    "toolArgumentTokens": 2130,
+    "toolResultTokens": 56040,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverage": "RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY",
+    "browserBindingVerified": true,
+    "browserCoverage": {
+      "identityGap": false,
+      "initialHistoryGap": true,
+      "lastObservedAtUnix": 1793654950,
+      "observed": true,
+      "overflowGap": true,
+      "textGap": true
+    },
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "thresholdsChanged": false,
+    "repeatToolImportChangedLedger": false,
+    "rawTextPersisted": false,
+    "siblingContextAndJournalMismatches": 0
+  },
+  "preservation": {
+    "projectBindingsChanged": 0,
+    "productionChanges": 0,
+    "nativeProjectGoalsPaused": 0,
+    "recurringOwnersActivated": 0,
+    "oldUnknownsReplayed": 0,
+    "firstCheckpointAndCaptureOwnersExited": true
+  },
+  "remaining": [
+    "Remaining current-source checkpoints and explicitly needed semantic dependencies",
+    "Genuine cumulative SOURCE judgment before ACK/snapshot/producer authority",
+    "Canonical/control and reviewed Wake publication integration",
+    "Two independent authenticated ChatGPT Web source edits and native verification",
+    "Installed persistent supervisor recovery, full meter calibration and later provider clients"
+  ]
+}

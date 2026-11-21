@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-16T19:24:23.372364+00:00",
+  "sourceCommit": "d4f2135bca7fe9a6abc02c0939bd216010d31703",
+  "scope": "EXISTING_FIRST_BROKER_EXCLUSION_AND_OPERATOR_CEREMONY_RECONCILIATION_NOT_INSTALLATION",
+  "correctedInterpretation": {
+    "previousExtraPrerequisite": "Entire production backend supervisor must exit before any first-broker purpose signing input can be used",
+    "sourceRequirement": "Exact signed physical root and current/control/config hashes, STOPPED control, verified signed purpose and operator privilege, fixed namespace absence and retained no-WRITE/no-DELETE state pins",
+    "firstBrokerBootstrapDoesNotRequireSupervisorExit": true,
+    "firstBrokerBootstrapDoesNotSelectRuntimeOrStartService": true,
+    "activeSupervisorRemainsRelevantForSubsequentRuntimeMigration": true,
+    "staleOrChangedInputsStillRefused": true,
+    "noNewSecurityExceptionOrAuthorityCreated": true
+  },
+  "existingImplementation": {
+    "sourceBase": "0d6c1074e1fae3cd1fa3fdd8abe2937cd881a99d",
+    "productionPrefixesByteIdentical": true,
+    "paths": [
+      "wake/src/install_broker_bootstrap.rs",
+      "wake/src/install_broker_bootstrap_files.rs"
+    ],
+    "stateLeafOpen": "Native relative READ with FILE_SHARE_READ only; existing writable handles prevent admission, new write/delete/replacement handles are denied while retained",
+    "pinnedBeforeMutation": true,
+    "stateAndSourcesRevalidatedDuringProvision": true,
+    "sourceEvidence": [
+      "wake/src/install_broker_bootstrap_files.rs:relative_with_sharing",
+      "wake/src/install_broker_bootstrap_files.rs:FixedBootstrapFiles::observe",
+      "wake/src/install_broker_bootstrap_files.rs:FixedBootstrapFiles::revalidate_state_and_sources",
+      "wake/src/install_broker_bootstrap.rs:provision_fixed_broker"
+    ]
+  },
+  "newNativeRegression": {
+    "name": "install_broker_bootstrap_files::tests::bootstrap_native_state_pin_blocks_control_writes_and_atomic_replacement",
+    "actualWindowsHandles": true,
+    "disposableTemporaryState": true,
+    "overwriteDeleteRenameAndAtomicReplacementRefused": true,
+    "originalBytesAndPreparedReplacementPreserved": true,
+    "replacementSucceededAfterPinRelease": true,
+    "fixtureRemoved": true,
+    "exactTestResult": "1 passed; 0 failed",
+    "strictWakeAllTargetAllFeatureClippy": "PASS",
+    "formatting": "PASS",
+    "whitespace": "PASS",
+    "initialFilter": "First unqualified --exact filter selected zero tests; corrected to the fully qualified name before claiming execution",
+    "initialFormat": "One layout check failed and was corrected; no behavioral test repeat or release rebuild"
+  },
+  "actualSupportedStop": {
+    "canonicalV5Calls": "status, stop once, status",
+    "allowWithoutPlanBypass": false,
+    "result": "STOPPED",
+    "oldOwnerExitedNaturally": true,
+    "forcedKills": 0,
+    "postStopHost": "STOPPED",
+    "postStopPid": 0,
+    "originalSubmission": "SUBMITTING",
+    "originalQueueDepth": 1,
+    "preservationPins": 891,
+    "changedPreservedPins": 0,
+    "backendTunnelSupervisorAndPreexistingGuiPreserved": true,
+    "publicOperationalStatusAfterStop": "READY",
+    "observationIsNotUnattendedRecoveryAcceptance": true
+  },
+  "originalUnsignedPacket": {
+    "payloadSha256": "5a61f02181faf8abf51a5c279bea55041570553345ea30f4b9f6a32cd30093a0",
+    "preimageSha256": "e74645abd880721f0842a4f57ae38ca4c2a875576037332d9fba4b43505f4534",
+    "expiresUtc": "2026-11-17T15:41:38Z",
+    "rootReobservedTwiceMatches": true,
+    "currentControlConfigHashesMatchAgainAfterStop": true,
+    "control": "STOPPED",
+    "unexpiredAtObservation": true,
+    "originalBytesPreserved": true,
+    "replacementPacketGenerated": false,
+    "diagnosticRevalidationIsNotNativePreflight": true,
+    "finalNativePreflightMustRevalidateAllSignedState": true
+  },
+  "operatorHelper": {
+    "originalFrozenSha256": "bbc4dd217fbb207cdf2e29bfcd3a21a87d2a6ea18d7dc5cadcfe5238df087904",
+    "originalDefect": "Two actual-mode signing invocations and repeated verification/prompt blocks. Successful first signing would be followed by another key-path prompt and refusal against the newly existing signature.",
+    "originalHelperPreservedDoNotUseForSigning": true,
+    "correctedHelperSha256": "6b1c9917ade63f8b6a9b0ea4bdef15ed4822e542f24d7b6f47b2ed14a3a97144",
+    "cryptographicProgramByteIdentical": true,
+    "originalDuplicatePromptReproducedInInertFixture": true,
+    "correctedFixtureCases": [
+      {
+        "case": "success",
+        "prompts": 2,
+        "signerInvocations": 1,
+        "error": null,
+        "processEnvironmentRestored": true
+      },
+      {
+        "case": "wrong-purpose",
+        "prompts": 1,
+        "signerInvocations": 0,
+        "error": "OPERATOR_PURPOSE_NOT_CONFIRMED",
+        "processEnvironmentRestored": true
+      },
+      {
+        "case": "blank-path",
+        "prompts": 2,
+        "signerInvocations": 0,
+        "error": "OPERATOR_EXISTING_KEY_PATH_REQUIRED",
+        "processEnvironmentRestored": true
+      },
+      {
+        "case": "signer-refused",
+        "prompts": 2,
+        "signerInvocations": 1,
+        "error": "OPERATOR_SIGNING_REFUSED_PRESERVE_OUTPUT_NO_RETRY",
+        "processEnvironmentRestored": true
+      }
+    ],
+    "actualInputOnlyVerification": "UNSIGNED_INPUTS_VERIFIED_OPERATOR_SIGNATURE_REQUIRED",
+    "actualSigningBranchExecuted": false,
+    "privateKeyReads": 0,
+    "signaturesCreated": 0,
+    "firstNewlineNormalizedCopyRejectedNotExecuted": true,
+    "existingKeyAndPublicFingerprintUnchanged": true,
+    "newSignerIdentity": false,
+    "scope": "One-time corrected existing operator ceremony; no new signer service or release manager"
+  },
+  "independentReviewClient": {
+    "marker": "REMAINING_ASSERTIONS_56AA_NOV16",
+    "requestSha256": "2f7a51628d778083587f90b50b6e2499ec1062e3fdbbb3ddfb99a586d0be10c9",
+    "distinctFollowupForFourMissingReads": true,
+    "submissions": 1,
+    "toolReturnedOnlyThreadId": true,
+    "newUserOrTurnNotObserved": true,
+    "previousCompletedTurnStillReturned": true,
+    "clientStatus": "systemError",
+    "outcome": "SUBMISSION_NOT_ATTRIBUTED_OUTCOME_UNKNOWN",
+    "noRetry": true,
+    "noReviewVerdictOrProducerAuthority": true,
+    "originalF7PartialAndD22UnknownUnchanged": true
+  },
+  "nextExecutableSteps": [
+    "Operator uses the corrected hash-pinned one-time helper locally, explicitly confirms the existing Wake-only purpose and supplies the original external raw key path locally. Return only status/hash JSON; never key material.",
+    "After a genuine signature, independently verify it against the retained public root and frozen preimage; construct the existing envelope without changing payload bytes.",
+    "Use the existing elevated native first-broker preflight; execute provisioning only after its current integrity, operator and absence checks pass. No alternate privileged route.",
+    "Finish separate exact candidate/runtime/previous qualification and backend review/producer authority before protected runtime selection and actual Web edit/checkpoint/self-Wake acceptance."
+  ],
+  "newTunnelPluginProfileGrantOrNativeTask": 0,
+  "protectedInstalls": 0,
+  "signaturesCreated": 0,
+  "uncertainRequestReplays": 0,
+  "fullInstalledWebLifecycleAccepted": false
+}

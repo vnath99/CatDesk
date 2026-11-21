@@ -1,0 +1,267 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T13:59:39.265966+00:00",
+  "classification": "SOURCE_QUALIFICATION_AND_ACTUAL_CONTROLLED_SOURCE_AUTHORED_ROLLOVER_NOT_PROTECTED_PRODUCTION_ACCEPTANCE",
+  "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "implementation": {
+    "reusedComponents": [
+      "existing project registry and ProjectStore lock",
+      "durable rollover request and transaction journal",
+      "existing scoped single-event Wake adapter",
+      "qualified authenticated SeleniumBase/CDP profile owner",
+      "existing guarded registry/Wake CAS and continuation"
+    ],
+    "newCommands": [
+      "operator web rollover deliver-handoff --project-id <registered-id>",
+      "operator web rollover reobserve-handoff --project-id <registered-id>"
+    ],
+    "scope": "Journal chooses the exact source handoff event, target generation, message and project; no caller message or URL. Host remains STOPPED; no sibling queue scan.",
+    "sourceFiles": [
+      "src/operator_web_cli.rs",
+      "src/operator_web_rollover.rs",
+      "wake/src/runtime.rs",
+      "wake/src/runtime_scoped_review.rs"
+    ]
+  },
+  "localTests": {
+    "wakeScopedTests": 18,
+    "controllerHandoffTests": 57,
+    "totalDistinctTests": 75,
+    "rootStrictClippyPassed": true,
+    "wakeStrictClippyPassed": true,
+    "formatCheckPassed": true,
+    "diffCheckPassed": true,
+    "initialParentCompileFailurePreserved": true,
+    "initialFailure": "Extra argument to existing reobserve API; corrected before the passing controller run.",
+    "passingRuns": [
+      {
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "handoff",
+          "--",
+          "--nocapture",
+          "--test-threads=2"
+        ],
+        "exitCode": 0,
+        "logSha256": "c395a66b5305f5c3aa9be734bd34b786884601eeaff3537c2ea3915200f61995"
+      },
+      {
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "0ce638f47421bbd1aa425bd30a88865aec04bc71614669a4e42d0d589bf912a9"
+      }
+    ],
+    "wakeTestLogSha256": "68b827bc45dd73fa8c4c50c3c0911a36111844cf807a8ad4756490d66697dedb"
+  },
+  "developmentPackage": {
+    "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+    "currentSha256": "f460a47d38788d41d2bef2e092550d7c7726561ac64fe94cb1deebc9d738dc2f",
+    "previousSha256": "533b2d60b0f08e188781e5a638d722dd88ebdec704918004fecf3eed06929dcc",
+    "passed": true,
+    "ownedBackendTreeExitProved": true,
+    "endpointClosed": true,
+    "oldVerifiedPackageMismatches": 0,
+    "projectOrJournalPinMismatches": 0
+  },
+  "developmentHealth": {
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79
+  },
+  "liveTrigger": {
+    "reason": "INCOMPLETE_HISTORY_GUARD",
+    "configuredBudgetTokens": 96000,
+    "headroomTokens": 24000,
+    "unknownReserveTokens": 8000,
+    "thresholdsReduced": false,
+    "providerExactUsageKnown": false,
+    "policyTemporarilyEnabledOnlyForSelectedProject": true,
+    "originalPolicyRestored": true
+  },
+  "actualLiveStages": {
+    "request": {
+      "startedUtc": "2026-11-01T13:24:11.662114+00:00",
+      "passed": true,
+      "finishedUtc": "2026-11-01T13:25:21.041373+00:00",
+      "elapsedSeconds": 69.375,
+      "preservationMismatches": 0,
+      "profileIdentityPreserved": true,
+      "hostStopped": true,
+      "loginMarkerPresent": false
+    },
+    "send": {
+      "startedUtc": "2026-11-01T13:30:26.901679+00:00",
+      "passed": true,
+      "exitCode": 0,
+      "finishedUtc": "2026-11-01T13:31:27.849621+00:00",
+      "elapsedSeconds": 60.953,
+      "preservationMismatches": 0,
+      "profileIdentityPreserved": true,
+      "hostStopped": true,
+      "loginMarkerPresent": false
+    },
+    "observe": {
+      "startedUtc": "2026-11-01T13:33:10.719236+00:00",
+      "passed": true,
+      "exitCode": 0,
+      "responseState": "COMPLETE",
+      "finishedUtc": "2026-11-01T13:34:07.633331+00:00",
+      "elapsedSeconds": 56.922,
+      "preservationMismatches": 0,
+      "profileIdentityPreserved": true,
+      "hostStopped": true,
+      "loginMarkerPresent": false
+    },
+    "collect": {
+      "startedUtc": "2026-11-01T13:36:10.615931+00:00",
+      "passed": true,
+      "exitCode": 0,
+      "finishedUtc": "2026-11-01T13:37:14.425586+00:00",
+      "elapsedSeconds": 63.812,
+      "preservationMismatches": 0,
+      "profileIdentityPreserved": true,
+      "hostStopped": true,
+      "loginMarkerPresent": false
+    },
+    "create": {
+      "startedUtc": "2026-11-01T13:45:53.978606+00:00",
+      "exitCode": 0,
+      "commandSucceeded": true,
+      "phaseAfter": "CONTINUATION_QUEUED",
+      "bindingPaired": true,
+      "newGeneration": 3,
+      "predecessorPreserved": true,
+      "liveSourceRecheckVerified": true,
+      "finishedUtc": "2026-11-01T13:48:12.919458+00:00",
+      "elapsedSeconds": 138.938,
+      "preservationMismatches": 0,
+      "profileIdentityPreserved": true,
+      "hostStopped": true,
+      "loginMarkerPresent": false
+    },
+    "send-continuation": {
+      "startedUtc": "2026-11-01T13:54:15.388647+00:00",
+      "exitCode": 0,
+      "commandSucceeded": true,
+      "exactReceiptVerified": true,
+      "responseState": "OBSERVING",
+      "finishedUtc": "2026-11-01T13:55:07.522067+00:00",
+      "elapsedSeconds": 52.141,
+      "preservationMismatches": 0,
+      "profileIdentityPreserved": true,
+      "hostStopped": true,
+      "loginMarkerPresent": false
+    },
+    "observe-continuation": {
+      "startedUtc": "2026-11-01T13:55:18.925713+00:00",
+      "exitCode": 0,
+      "commandSucceeded": true,
+      "exactReceiptVerified": true,
+      "responseState": "COMPLETE",
+      "finishedUtc": "2026-11-01T13:56:20.531335+00:00",
+      "elapsedSeconds": 61.594,
+      "preservationMismatches": 0,
+      "profileIdentityPreserved": true,
+      "hostStopped": true,
+      "loginMarkerPresent": false
+    },
+    "read-continuation": {
+      "startedUtc": "2026-11-01T13:57:24.316717+00:00",
+      "exitCode": 0,
+      "commandSucceeded": true,
+      "eventVerified": true,
+      "responseBytes": 1303,
+      "responseSha256": "da6e41cbf9165523a381c5d577f8edb73ba7cf6c9bdf5d8a367c3b9eb43a411f",
+      "exactReceiptVerified": true,
+      "responseState": "COMPLETE",
+      "finishedUtc": "2026-11-01T13:58:07.767606+00:00",
+      "elapsedSeconds": 43.453,
+      "preservationMismatches": 0,
+      "profileIdentityPreserved": true,
+      "hostStopped": true,
+      "loginMarkerPresent": false
+    },
+    "restore-policy": {
+      "startedUtc": "2026-11-01T13:58:14.474288+00:00",
+      "exitCode": 0,
+      "commandSucceeded": true,
+      "originalPolicyRestored": true,
+      "exactReceiptVerified": true,
+      "responseState": "COMPLETE",
+      "finishedUtc": "2026-11-01T13:58:22.200303+00:00",
+      "elapsedSeconds": 7.719,
+      "preservationMismatches": 0,
+      "profileIdentityPreserved": true,
+      "hostStopped": true,
+      "loginMarkerPresent": false
+    }
+  },
+  "actualLiveEvidence": {
+    "sourceAuthoredStructuredHandoffCollected": true,
+    "handoffContentSha256": "1d664af70b382087dfd1c97192e92ca411cf1adbdb627c80e3670746425a5620",
+    "bootstrapSubmittedOnce": true,
+    "actualIssuedReplacementUrlIndependentlyVerified": true,
+    "replacementResponseCompletedBeforeBinding": true,
+    "liveSourceRecheckRequiredAndPassed": true,
+    "registryAndWakePairedAtGeneration": 3,
+    "predecessorAndOldJournalsPreserved": true,
+    "continuationDeliveredOnce": true,
+    "continuationExactResponseRead": true,
+    "noNativeOrReleaseAuthorityInherited": true
+  },
+  "independentProgress": {
+    "peerMetadataProbe": {
+      "startedUtc": "2026-11-01T13:30:54.755566+00:00",
+      "finishedUtc": "2026-11-01T13:30:55.958373+00:00",
+      "elapsedSeconds": 1.203,
+      "exitCode": 0,
+      "browserStarts": 0,
+      "productionChanges": 0
+    },
+    "qualification": "Read-only peer context status completed while the selected source handoff sender was active. This is metadata concurrency only, not simultaneous Web coding."
+  },
+  "finalProcesses": {
+    "testOwnedCount": 0,
+    "expectedTrustedImageMatches": true,
+    "hostStopped": true,
+    "loginMarkerPresent": false,
+    "processActions": 0
+  },
+  "productionPromotionPerformed": false,
+  "nativeModelTurns": 0,
+  "recurringAutomationEnabled": false,
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "remaining": [
+    "Genuine source-exact cumulative review and accepted managed report; prior reports remain partial or inconclusive.",
+    "Existing ACK/snapshot/reviewed-build producer and protected promotion gates.",
+    "Canonical registry/runtime pairing and authenticated per-project execution qualification.",
+    "Two real Web conversations performing owned source edits and native verification with cross-project and duplicate refusal.",
+    "Installed supervisor restart/recovery and unattended acceptance."
+  ],
+  "operatorActionRequired": false,
+  "continuationTaskResumption": {
+    "status": "STOPPED_ON_CONTRADICTORY_REGISTRY_SCOPE",
+    "exactBodyVerified": true,
+    "finding": "The new Web chat received controlled generation 3, but its v5 registry query returned the distinct older canonical native-bound project at generation 1. It stopped before source review because current ownership was unverified.",
+    "developmentPairInternallyConsistent": true,
+    "connectorVisibleCanonicalPairMigrationProven": false,
+    "noTaskResumptionOrNativeExecutionClaimed": true,
+    "nextAction": "Inspect the existing canonical versus development registry/runtime scope and supported paired migration before assigning work. Preserve native ownership and old holds."
+  }
+}

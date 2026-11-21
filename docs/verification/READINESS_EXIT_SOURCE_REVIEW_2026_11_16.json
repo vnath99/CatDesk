@@ -1,0 +1,818 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-16T17:30:20.320665+00:00",
+  "scope": "GENUINE_FOCUSED_SOURCE_REVIEW_AND_NEW_DEVELOPMENT_CORRECTION_NOT_RELEASE_ACCEPTANCE",
+  "sourceReviewed": "06d1a5ba3326c8f2d591370c3f2d2f4946fc2290",
+  "sourceTreeReviewed": "92f4f7f9240d9a058fec5c74505ee623f8c50a42",
+  "sourceCorrectionCommit": "ba2db7aba0780daa0a52961c673aae710c107f08",
+  "sourceCorrectionBranch": "codex/wake-source-review-nov16",
+  "sourceCorrectionRemoteShaVerified": true,
+  "reviewBatch": {
+    "maximumMessages": 6,
+    "actualMessages": 6,
+    "closed": true,
+    "requestedMaximumSecondsPerTurn": 180,
+    "totalReportedPublicCalls": 67,
+    "sourceOnly": true,
+    "operatorMessageRelay": false,
+    "newNativeContract": false,
+    "parts": [
+      {
+        "marker": "SIX06D-P1",
+        "verdict": "GROUP_PARTIAL",
+        "actualInspectedPathsAndRanges": [
+          {
+            "path": "scripts/wake_bridge.py",
+            "ranges": "60-150,275-344,578-650,1141-1306,1855-2185,2290-3102,3258-3568",
+            "candidateGitBlob": "8589542c796ef92d351b610ec6282c7fcde28c24"
+          },
+          {
+            "path": "wake/adapter.py",
+            "ranges": "109-188,614-720,925-1078,1128-1225,1242-1318",
+            "candidateGitBlob": "889c6db99ca39e89a51f712d111054c14eecae4d"
+          },
+          {
+            "path": "wake/src/readiness_probe.rs",
+            "ranges": "Function inventory and relevant response/diagnostic entry points",
+            "candidateGitBlob": "df0adc3917f04b0f0c71f08c95edc31940a1ef94"
+          },
+          {
+            "path": "scripts/wake_readiness_visual_probe.py",
+            "ranges": "1-115,115-292,295-319,472-570,570-665",
+            "candidateGitBlob": "6446fc6b3df50e9ea01d730267cbbe20ca22bc0c"
+          },
+          {
+            "path": "tests/test_wake_bridge.py",
+            "ranges": "Test inventory and selected receipt, response and navigation cases"
+          },
+          {
+            "path": "tests/test_wake_readiness_probe.py",
+            "ranges": "Test inventory, response-settling and frozen-observation cases",
+            "candidateGitBlob": "f20b892990c5e83c736721471db5f353f98568c6"
+          },
+          {
+            "path": "wake/tests/test_adapter.py",
+            "ranges": "Test inventory and selected acknowledgment, reconciliation and response cases",
+            "candidateGitBlob": "d89fac1ee045789d56d7173322371a20cfcb4581"
+          }
+        ],
+        "findings": [],
+        "remainingReads": [
+          {
+            "priority": 1,
+            "paths": [
+              "wake/src/runtime_response.rs",
+              "wake/src/runtime_readiness.rs",
+              "wake/src/runtime.rs"
+            ],
+            "reason": "Finish native receipt, response-state, timer and historical/current attribution consumers before qualifying the end-to-end lifecycle."
+          },
+          {
+            "priority": 2,
+            "paths": [
+              "wake/src/readiness_probe.rs",
+              "scripts/wake_readiness_visual_probe.py"
+            ],
+            "reason": "Complete native diagnostic parser review and independently reconstruct the remaining 89-line standalone-probe delta."
+          },
+          {
+            "priority": 3,
+            "paths": [
+              "tests/test_wake_bridge.py",
+              "tests/test_wake_readiness_probe.py",
+              "wake/tests/test_adapter.py"
+            ],
+            "reason": "Examine complete applicable regression assertions and independently reconcile exact baseline test blobs."
+          }
+        ],
+        "actualAssistantSeconds": 156.70745587348938,
+        "responseCharacters": 6831,
+        "responseCharactersRequested": 4500,
+        "reportedPublicCalls": 12,
+        "responseSha256": "338526f0c4d862602cb162052f3e158038c7a085f525832f58d65d580aacadf2"
+      },
+      {
+        "marker": "SIX06D-P2",
+        "verdict": "GROUP_PARTIAL",
+        "actualInspectedPathsAndRanges": [
+          {
+            "path": "wake/src/runtime.rs",
+            "blob": "a07e144e8f773d84473dc2b84f6e385271312da1",
+            "ranges": "1706-2060, 3250-3418, 7626-7994, 8212-8460",
+            "basis": "Full candidate and baseline fetched; applicable net-change regions compared."
+          },
+          {
+            "path": "wake/src/store.rs",
+            "blob": "ec479a011d675b9ceb66d79ff48c12b549ed084c",
+            "ranges": "1750-2450, 3510-3600; relevant embedded-test inventory",
+            "basis": "Full candidate and baseline fetched; selected state, receipt and timer transitions inspected."
+          },
+          {
+            "path": "wake/src/runtime_response.rs",
+            "blob": "beadd53dff06bcdba4ea4a2edf6a00917c3f5188",
+            "ranges": "13-19, 132-178, 675-780, 789-1046",
+            "basis": "Validator, observer and test inventory; selected complete implementation ranges."
+          },
+          {
+            "path": "wake/src/runtime_readiness.rs",
+            "blob": "7c7b3212ff76d4b9ec0bb50ce406f8dfcd57bcea",
+            "ranges": "19-157, 206-268, 377-881, 903-1498",
+            "basis": "Function and test inventory; selected scope and diagnostic conditions."
+          },
+          {
+            "path": "wake/src/runtime_adapter_teardown_tests.rs",
+            "blob": "c67f04c752f3a7ca135d0a41a4c081fa49f440f6",
+            "ranges": "1-169",
+            "basis": "Windows teardown test source and assertions."
+          },
+          {
+            "path": "wake/src/process_job.rs",
+            "blob": "7c61314a62d34d5ec922a495a72280afc16e73eb",
+            "ranges": "1-210",
+            "basis": "Windows Job ownership, accounting, termination and platform branches."
+          }
+        ],
+        "findings": [],
+        "remainingReads": [
+          {
+            "path": "wake/src/runtime_readiness.rs",
+            "ranges": "377-881, 964-1498",
+            "reason": "Finish detailed historical/current selection, diagnostic journal binding and all applicable negative-test assertions."
+          },
+          {
+            "path": "wake/src/runtime_response.rs",
+            "ranges": "19-675, 789-1046",
+            "reason": "Complete canonical diagnostic validation and embedded negative-case review beyond the selected response-observation implementation."
+          },
+          {
+            "path": "wake/src/store.rs",
+            "ranges": "473-1125, 2250-2460 and applicable embedded tests",
+            "reason": "Finish interrupted target-CAS, timer and submission recovery paths, including unrelated-project progress."
+          },
+          {
+            "path": "wake/src/runtime.rs",
+            "ranges": "Complete bootstrap failure handling and remaining retirement call-site error paths",
+            "reason": "Confirm no indirect failure path promotes a failed response or unproved browser retirement to success."
+          }
+        ],
+        "actualAssistantSeconds": 103.7072741985321,
+        "responseCharacters": 6249,
+        "responseCharactersRequested": 4000,
+        "reportedPublicCalls": 12,
+        "responseSha256": "52964c8ff09baea9e934f4e0bbf4113a34175689185b6cca5eb65e1a14bd9990"
+      },
+      {
+        "marker": "SIX06D-P3",
+        "verdict": "GROUP_PARTIAL",
+        "actualInspectedPathsAndRanges": [
+          {
+            "path": "src/operator_web_rollover.rs",
+            "blob": "9476d8ee97d2f59adaf3f0178f4471d1c13aa58d",
+            "ranges": "1501-1535,1644-1666,2600-2860,3801-4047; test inventory"
+          },
+          {
+            "path": "src/operator_web_onboarding.rs",
+            "blob": "c8150893dc3297256f06b59d4fd9ce53fc35e0db",
+            "ranges": "145-236,309-531,609-733; test inventory"
+          },
+          {
+            "path": "src/operator_web_quarantine.rs",
+            "blob": "a340ebe211979906bcd9666259250bdedc91b9a6",
+            "ranges": "76-129,252-498; test inventory"
+          },
+          {
+            "path": "src/web_rollover_admission.rs",
+            "blob": "a13d23d8530274c0f4ebd86fbb2754100b316e8c",
+            "ranges": "70-415; test inventory"
+          },
+          {
+            "path": "src/web_conversation_context.rs",
+            "blob": "25fda269f2ad6a0e97d067c0c96f9a8ee49dd2ae",
+            "ranges": "379-420,668-730,1309-1332; legacy-test inventory"
+          },
+          {
+            "path": "src/web_work_delivery.rs",
+            "blob": "43c69e30c2f035f7f750555afab38bf6720b6c27",
+            "ranges": "44-138,145-405; test inventory"
+          },
+          {
+            "path": "src/web_work.rs",
+            "blob": "f6e3e92f07a9207993f507b93b5166ca23b85cd6",
+            "ranges": "1-120,994-1120; test inventory"
+          },
+          {
+            "path": "wake/src/runtime_bootstrap_observation.rs",
+            "blob": "d60a2e620e4ea390d9bf71692d5d23f02b91522a",
+            "ranges": "25-172,384-545; test inventory"
+          },
+          {
+            "path": "wake/tests/test_new_conversation.py",
+            "blob": "1765f4a2aa737b6e9ad839897abd17c5270f27c5",
+            "ranges": "Test/function inventory, including 1405-1481 and 1907-1950"
+          },
+          {
+            "path": "wake/tests/test_project_initialization.py",
+            "blob": "98d789aeabe38af447af3a51121b07ddc34208c5",
+            "ranges": "Test/function inventory, including 75-157 and 355-527"
+          }
+        ],
+        "findings": [],
+        "remainingReads": [
+          {
+            "paths": [
+              "src/operator_web_rollover.rs",
+              "src/operator_web_onboarding.rs",
+              "src/web_rollover_admission.rs"
+            ],
+            "reason": "Complete receipt-to-binding CAS ordering, interrupted commits, destination-hint rejection and all applicable changed-code branches."
+          },
+          {
+            "paths": [
+              "src/operator_web_quarantine.rs",
+              "src/web_work_delivery.rs",
+              "src/web_work.rs"
+            ],
+            "reason": "Finish successor admission, original UNKNOWN preservation, ordinary-work caller authority and alternate transition paths."
+          },
+          {
+            "paths": [
+              "src/web_conversation_context.rs"
+            ],
+            "reason": "Reconstruct the full 97-addition/3-deletion net change and verify literal-content estimates, replay preservation and legacy token-count compatibility."
+          },
+          {
+            "paths": [
+              "wake/src/runtime_bootstrap_observation.rs",
+              "wake/tests/test_new_conversation.py",
+              "wake/tests/test_project_initialization.py"
+            ],
+            "reason": "Complete exact readback validation, no-resend recovery and applicable negative-test assertions."
+          }
+        ],
+        "actualAssistantSeconds": 87.09775590896606,
+        "responseCharacters": 5815,
+        "responseCharactersRequested": 4000,
+        "reportedPublicCalls": 12,
+        "responseSha256": "75cb5b04cbdc3fc2212e19b444c17937e42725bd3d5537ef57d68ca0cf6fb11c"
+      },
+      {
+        "marker": "SIX06D-P4",
+        "verdict": "BOUNDARY_COMPLETE_NO_FINDINGS",
+        "actualInspectedPathsAndRanges": [
+          {
+            "path": "wake/src/store.rs",
+            "gitBlob": "ec479a011d675b9ceb66d79ff48c12b549ed084c",
+            "ranges": "473-1166, 2250-2460, 3130-3335, 3863-3955, 4562-4954, 5042-5091",
+            "coverage": "Project quiescence, source-progress fingerprints, target CAS and rollback, receiptless SUBMITTING, timeout recovery and relevant negative tests."
+          },
+          {
+            "path": "wake/src/runtime.rs",
+            "gitBlob": "a07e144e8f773d84473dc2b84f6e385271312da1",
+            "ranges": "1778-2057, 3200-3418, 7626-7989, 8220-8435",
+            "coverage": "Adapter teardown, bootstrap failures, all ordinary retirement call sites and submission authorization."
+          },
+          {
+            "path": "wake/src/runtime_bootstrap_observation.rs",
+            "gitBlob": "d60a2e620e4ea390d9bf71692d5d23f02b91522a",
+            "ranges": "1-176, 728-803",
+            "coverage": "Destination hints, post-submit UNKNOWN classification and negative tests."
+          },
+          {
+            "path": "docs/verification/ROUTINE_UPDATE_ARTIFACTS_2026_11_11.json",
+            "gitBlob": "c6cd947281bbfd6c5e48c7efb99c667b42f10442",
+            "coverage": "Retained baseline provenance and explicit authority exclusions."
+          }
+        ],
+        "findings": [],
+        "remainingReads": [],
+        "actualAssistantSeconds": 160.88339114189148,
+        "responseCharacters": 5046,
+        "responseCharactersRequested": 3500,
+        "reportedPublicCalls": 10,
+        "responseSha256": "1d2c2e16aacc198ed63bbd90b713e21b23e3cb5bf620cb4f1a2a2700c81f906b"
+      },
+      {
+        "marker": "SIX06D-P5",
+        "verdict": "BOUNDARY_PARTIAL",
+        "actualInspectedPathsAndRanges": [
+          {
+            "path": "wake/src/runtime_response.rs",
+            "blob": "beadd53dff06bcdba4ea4a2edf6a00917c3f5188",
+            "ranges": "19-695, 675-780, 789-950; remaining tests indexed"
+          },
+          {
+            "path": "wake/src/runtime_readiness.rs",
+            "blob": "7c7b3212ff76d4b9ec0bb50ce406f8dfcd57bcea",
+            "ranges": "19-156, 268-881, 964-1256; remaining tests indexed"
+          },
+          {
+            "path": "wake/src/readiness_probe.rs",
+            "blob": "df0adc3917f04b0f0c71f08c95edc31940a1ef94",
+            "ranges": "9-56, 415-494, 494-849, 851-881, 1246-1298",
+            "netChange": "83 added lines, no deletions; all changed regions located and examined"
+          },
+          {
+            "path": "scripts/wake_readiness_visual_probe.py",
+            "blob": "6446fc6b3df50e9ea01d730267cbbe20ca22bc0c",
+            "ranges": "34-294, 396-472, 564-751",
+            "netChange": "89 added lines, no deletions; all changed regions located and examined"
+          },
+          {
+            "path": "tests/test_wake_readiness_probe.py",
+            "blob": "f20b892990c5e83c736721471db5f353f98568c6",
+            "ranges": "17-110, 167-300, 309-485, 590-646, 697-746, 890-945, 1097-1145"
+          }
+        ],
+        "findings": [],
+        "remainingReads": [
+          {
+            "path": "wake/src/runtime_response.rs",
+            "ranges": "205-562, 951-1046",
+            "reason": "Complete detailed validation of every versioned task-hint/refusal branch and the final completion-control negative assertions."
+          },
+          {
+            "path": "wake/src/runtime_readiness.rs",
+            "ranges": "1257-1498",
+            "reason": "Finish packaged-observer, ambiguous-delivery and changed-project negative assertions."
+          },
+          {
+            "path": "wake/src/readiness_probe.rs",
+            "ranges": "541-642",
+            "reason": "Close interrupted-observer cleanup, especially post-Job-assignment pipe error returns and whether they guarantee descendant exit before another browser owner."
+          }
+        ],
+        "actualAssistantSeconds": 103.7087140083313,
+        "responseCharacters": 4805,
+        "responseCharactersRequested": 3500,
+        "reportedPublicCalls": 12,
+        "responseSha256": "b4ec7f6a5427c9aff362a87fb075243661a9c504aaae781ed2ef8dfd306041fa"
+      },
+      {
+        "marker": "SIX06D-P6-READINESS-EXIT",
+        "verdict": "CONCRETE_FINDING",
+        "actualInspectedPathsAndRanges": [
+          {
+            "path": "wake/src/readiness_probe.rs",
+            "blob": "df0adc3917f04b0f0c71f08c95edc31940a1ef94",
+            "ranges": "494-642, 643-849, 1120-1320"
+          },
+          {
+            "path": "wake/src/runtime_readiness.rs",
+            "blob": "7c7b3212ff76d4b9ec0bb50ce406f8dfcd57bcea",
+            "ranges": "521-881, 896-940, 1430-1498"
+          },
+          {
+            "path": "wake/src/process_job.rs",
+            "blob": "7c61314a62d34d5ec922a495a72280afc16e73eb",
+            "ranges": "1-130"
+          },
+          {
+            "path": "wake/src/development_runtime.rs",
+            "blob": "cb988e00247d3a91cfc4d7ad9dcbd01c53e856b3",
+            "ranges": "2390-2470"
+          },
+          {
+            "path": "wake/src/runtime.rs",
+            "blob": "a07e144e8f773d84473dc2b84f6e385271312da1",
+            "ranges": "1715-1716; confirmed ordinary Adapter ownership remains separate"
+          }
+        ],
+        "findings": [
+          {
+            "id": "SIX06D-P6-01",
+            "path": "wake/src/readiness_probe.rs",
+            "line": "624-628",
+            "relatedPath": "wake/src/runtime_readiness.rs",
+            "relatedLine": "544-549, 680-700",
+            "severity": "CONDITIONAL_SHARED_BROWSER_OWNERSHIP_GAP",
+            "reason": "The normal helper path calls Job::terminate_and_wait_empty, but an error returns PROBE_CLEANUP_UNVERIFIED without establishing zero active descendants. The readiness caller correctly propagates that error, yet its scoped browser-session lock is released during return. Another browser owner can therefore acquire the shared lock without positive proof that the previous Job is empty.",
+            "reachability": "The failure branch is reachable if Windows Job termination or process accounting fails, or if descendants remain active through the bounded wait. It does not require malformed pipe extraction.",
+            "evidence": "The source establishes the fail-stop lock-ordering violation under failed cleanup. No actual overlapping browsers, surviving Chrome process or duplicate USER submission was observed.",
+            "qualification": "The error is not incorrectly reported as successful cleanup. The defect is releasing shared-browser ownership while exit remains unproved."
+          }
+        ],
+        "remainingReads": [],
+        "actualAssistantSeconds": 131.99669194221497,
+        "responseCharacters": 6521,
+        "responseCharactersRequested": 4000,
+        "reportedPublicCalls": 9,
+        "responseSha256": "c8bf0756149fc6fefac49f02440c69a372c858833a03a90e866b6f00022ad9d0"
+      }
+    ],
+    "cumulativeFullSourceReview": false,
+    "artifactReview": false,
+    "producerAuthority": false,
+    "responseBounds": "Actual lengths retained; several replies exceeded their requested soft text cap. None was resent."
+  },
+  "originalResponseRecovery": {
+    "part": "SIX06D-P2",
+    "initialBodyCharacters": 61,
+    "recoveredBodyCharacters": 6249,
+    "sameTurnAndAssistantIdentity": true,
+    "initialEvidencePreserved": true,
+    "deliveryRetries": 0,
+    "operatorRelay": false,
+    "lesson": "Idle/completed turn status alone did not establish settled body coverage; original response was recovered by later read-only history."
+  },
+  "actualCompilerInputs": {
+    "roles": [
+      {
+        "role": "gui",
+        "artifactName": "CatDeskBinagotchy.exe",
+        "artifactSha256": "0d9568d765defa26bd0bf9062ec7ba2019144c1f6096406f2443a3254d7c7620",
+        "depinfoSha256": "7217e4d58981b0d51600ee59f57990c2a8638fa68d2fd688e14148971b12ad58",
+        "depinfoLastWriteUtc": "2026-11-16T12:40:34.099229+00:00",
+        "rawOperandCount": 220,
+        "distinctSourceInputs": 220,
+        "inputPaths": [
+          "scripts/catdesk-release-recovery.ps1",
+          "scripts/wake_bridge.py",
+          "scripts/wake_development_login.py",
+          "scripts/wake_profile_quiescence.py",
+          "scripts/wake_readiness_visual_probe.py",
+          "src/app_info.rs",
+          "src/binagotchy_cli.rs",
+          "src/binagotchy_gen/binagotchy_utils.rs",
+          "src/binagotchy_gen/character.rs",
+          "src/binagotchy_gen/constants.rs",
+          "src/binagotchy_gen/eye_animation.rs",
+          "src/binagotchy_gen/headwear.rs",
+          "src/binagotchy_gen/mod.rs",
+          "src/binagotchy_gen/spirit.rs",
+          "src/binagotchy_gen/types.rs",
+          "src/browser.rs",
+          "src/command.rs",
+          "src/control_plane_supervisor.rs",
+          "src/core_host_acceptance_preflight.rs",
+          "src/core_host_gate_approval.rs",
+          "src/core_host_gate_evidence.rs",
+          "src/daemon_reload.rs",
+          "src/daemon_reload_approval.rs",
+          "src/delegated/advisor.rs",
+          "src/delegated/autonomous_contract.rs",
+          "src/delegated/autonomous_controller.rs",
+          "src/delegated/autonomous_qwen_tools.rs",
+          "src/delegated/autonomy_accounting.rs",
+          "src/delegated/autonomy_observability.rs",
+          "src/delegated/autonomy_projects.rs",
+          "src/delegated/autonomy_runtime.rs",
+          "src/delegated/autonomy_state.rs",
+          "src/delegated/autonomy_supervisor.rs",
+          "src/delegated/autonomy_verifier.rs",
+          "src/delegated/codex_app_server.rs",
+          "src/delegated/codex_cli.rs",
+          "src/delegated/codex_model_policy.rs",
+          "src/delegated/context.rs",
+          "src/delegated/contracts.rs",
+          "src/delegated/coordinator.rs",
+          "src/delegated/events.rs",
+          "src/delegated/fault_injection.rs",
+          "src/delegated/github_bootstrap.rs",
+          "src/delegated/github_publication.rs",
+          "src/delegated/github_publication_executor.rs",
+          "src/delegated/integrated.rs",
+          "src/delegated/job_manager.rs",
+          "src/delegated/journal.rs",
+          "src/delegated/mod.rs",
+          "src/delegated/patch_engine.rs",
+          "src/delegated/provider_router.rs",
+          "src/delegated/runtime.rs",
+          "src/delegated/sol_worker_identity_preflight.rs",
+          "src/delegated/sol_worker_launch_journal.rs",
+          "src/delegated/sol_worker_lifecycle.rs",
+          "src/delegated/sol_worker_nonce.rs",
+          "src/delegated/sol_worker_output.rs",
+          "src/delegated/sol_worker_staging.rs",
+          "src/delegated/sol_worker_staging_security.rs",
+          "src/delegated/sol_worker_token_security.rs",
+          "src/delegated/state_machine.rs",
+          "src/delegated/supervisor.rs",
+          "src/delegated/worker_provider.rs",
+          "src/devtools.rs",
+          "src/git_workflow.rs",
+          "src/isolated_fixture_git_objects.rs",
+          "src/isolated_fixture_github_authority.rs",
+          "src/isolated_fixture_manifest.rs",
+          "src/isolated_fixture_snapshot.rs",
+          "src/macos_terminal.rs",
+          "src/main.rs",
+          "src/mascot.rs",
+          "src/mcp.rs",
+          "src/ngrok.rs",
+          "src/openai_tunnel.rs",
+          "src/operator_codex_cli.rs",
+          "src/operator_codex_cli/queue.rs",
+          "src/operator_codex_cli/queue/advisory.rs",
+          "src/operator_codex_cli/queue/native_continuation.rs",
+          "src/operator_codex_cli/queue/native_dispatch.rs",
+          "src/operator_codex_cli/queue/operator_review.rs",
+          "src/operator_codex_cli/queue/owned_native.rs",
+          "src/operator_codex_cli/queue/review_invite.rs",
+          "src/operator_codex_cli/queue/review_reader.rs",
+          "src/operator_codex_cli/recovery.rs",
+          "src/operator_development_backend.rs",
+          "src/operator_development_project.rs",
+          "src/operator_facade.rs",
+          "src/operator_installed_backend.rs",
+          "src/operator_installed_project.rs",
+          "src/operator_review_observation.rs",
+          "src/operator_web_auto.rs",
+          "src/operator_web_cli.rs",
+          "src/operator_web_initialization.rs",
+          "src/operator_web_observe.rs",
+          "src/operator_web_onboarding.rs",
+          "src/operator_web_quarantine.rs",
+          "src/operator_web_receipts.rs",
+          "src/operator_web_retirement.rs",
+          "src/operator_web_review.rs",
+          "src/operator_web_rollover.rs",
+          "src/ordinary_worker_artifact_provider.rs",
+          "src/ordinary_worker_pair_approval.rs",
+          "src/planning.rs",
+          "src/project_mcp.rs",
+          "src/project_mcp_task.rs",
+          "src/project_memory.rs",
+          "src/project_task_command.rs",
+          "src/project_task_context.rs",
+          "src/project_task_context_identity.rs",
+          "src/project_task_git.rs",
+          "src/project_task_manual_wake.rs",
+          "src/project_task_recovery.rs",
+          "src/promotion_retirement.rs",
+          "src/promotion_source_bridge.rs",
+          "src/prompt_templates.rs",
+          "src/release_pair_stopped.rs",
+          "src/repo_map.rs",
+          "src/reviewed_build.rs",
+          "src/reviewed_candidate_owner.rs",
+          "src/reviewed_source_snapshot.rs",
+          "src/server.rs",
+          "src/stable_wake_adapter_runtime.rs",
+          "src/stable_wake_bootstrap.rs",
+          "src/stable_wake_core.rs",
+          "src/stable_wake_delivery.rs",
+          "src/stable_wake_owner.rs",
+          "src/stable_wake_owner_mode.rs",
+          "src/state.rs",
+          "src/supervisor_lifecycle.rs",
+          "src/task_queue.rs",
+          "src/theme/concise.rs",
+          "src/theme/mod.rs",
+          "src/theme/neon.rs",
+          "src/tunnel.rs",
+          "src/user_worker_release.rs",
+          "src/verification.rs",
+          "src/wake_protocol_client.rs",
+          "src/web_context_control.rs",
+          "src/web_context_user_receipts.rs",
+          "src/web_conversation_context.rs",
+          "src/web_review_authorization.rs",
+          "src/web_review_work.rs",
+          "src/web_rollover_admission.rs",
+          "src/web_task_dispatch.rs",
+          "src/web_task_handoff.rs",
+          "src/web_work.rs",
+          "src/web_work_delivery.rs",
+          "src/web_work_manual_delivery.rs",
+          "src/web_work_state.rs",
+          "src/widget/catdesk_dashboard.html",
+          "src/windows_gui.rs",
+          "src/windows_protected_fs.rs",
+          "src/windows_supervisor_control_pipe.rs",
+          "src/windows_supervisor_startup.rs",
+          "src/workspace_tools.rs",
+          "wake/adapter.py",
+          "wake/src/development_foreground.rs",
+          "wake/src/development_login_recovery.rs",
+          "wake/src/development_root_view.rs",
+          "wake/src/development_runtime.rs",
+          "wake/src/install_authority.rs",
+          "wake/src/install_broker_approval.rs",
+          "wake/src/install_broker_bootstrap.rs",
+          "wake/src/install_broker_bootstrap_files.rs",
+          "wake/src/install_broker_bootstrap_scm.rs",
+          "wake/src/install_broker_candidate_stage.rs",
+          "wake/src/install_broker_ci_fetch.rs",
+          "wake/src/install_broker_ci_witness.rs",
+          "wake/src/install_broker_client.rs",
+          "wake/src/install_broker_current_observer.rs",
+          "wake/src/install_broker_durability.rs",
+          "wake/src/install_broker_endpoint.rs",
+          "wake/src/install_broker_ledger.rs",
+          "wake/src/install_broker_ledger_same_state.rs",
+          "wake/src/install_broker_legacy_owner.rs",
+          "wake/src/install_broker_lifecycle.rs",
+          "wake/src/install_broker_local_access.rs",
+          "wake/src/install_broker_offline_ledger.rs",
+          "wake/src/install_broker_offline_pins.rs",
+          "wake/src/install_broker_offline_pointer.rs",
+          "wake/src/install_broker_offline_recovery.rs",
+          "wake/src/install_broker_offline_v2.rs",
+          "wake/src/install_broker_operator.rs",
+          "wake/src/install_broker_operator_uac.rs",
+          "wake/src/install_broker_pipe_io.rs",
+          "wake/src/install_broker_pointer_writer.rs",
+          "wake/src/install_broker_pointer_writer_v2.rs",
+          "wake/src/install_broker_policy.rs",
+          "wake/src/install_broker_preflight.rs",
+          "wake/src/install_broker_publish_v2.rs",
+          "wake/src/install_broker_reader.rs",
+          "wake/src/install_broker_reader_v2.rs",
+          "wake/src/install_broker_request.rs",
+          "wake/src/install_broker_same_state_approval.rs",
+          "wake/src/install_broker_service_core.rs",
+          "wake/src/install_broker_service_runtime.rs",
+          "wake/src/install_broker_source.rs",
+          "wake/src/install_broker_source_runtime.rs",
+          "wake/src/install_broker_stage_writer.rs",
+          "wake/src/install_broker_stage_writer_v2.rs",
+          "wake/src/lib.rs",
+          "wake/src/process_job.rs",
+          "wake/src/protocol.rs",
+          "wake/src/readiness_probe.rs",
+          "wake/src/review_binding.rs",
+          "wake/src/runtime.rs",
+          "wake/src/runtime_bootstrap_observation.rs",
+          "wake/src/runtime_install_selection.rs",
+          "wake/src/runtime_readiness.rs",
+          "wake/src/runtime_reobserve.rs",
+          "wake/src/runtime_response.rs",
+          "wake/src/runtime_review_reconcile.rs",
+          "wake/src/runtime_same_state_install.rs",
+          "wake/src/runtime_scheduler.rs",
+          "wake/src/runtime_scoped_review.rs",
+          "wake/src/runtime_snapshot.rs",
+          "wake/src/runtime_task_context.rs",
+          "wake/src/store.rs",
+          "wake/src/store_reobserve.rs"
+        ]
+      },
+      {
+        "role": "host",
+        "artifactName": "CatDeskWakeHost.exe",
+        "artifactSha256": "4489976970dae0f9d093843ee6938bd716afcf01df2d4cf993d8f89b3cecf015",
+        "depinfoSha256": "81979390892121003f54794bcb19a524e1856c923e15c62a995c2716ad9cd818",
+        "depinfoLastWriteUtc": "2026-11-16T12:40:00.533278+00:00",
+        "rawOperandCount": 69,
+        "distinctSourceInputs": 69,
+        "inputPaths": [
+          "scripts/wake_bridge.py",
+          "scripts/wake_development_login.py",
+          "scripts/wake_profile_quiescence.py",
+          "scripts/wake_readiness_visual_probe.py",
+          "wake/adapter.py",
+          "wake/src/bin/CatDeskWakeHost.rs",
+          "wake/src/development_foreground.rs",
+          "wake/src/development_login_recovery.rs",
+          "wake/src/development_root_view.rs",
+          "wake/src/development_runtime.rs",
+          "wake/src/install_authority.rs",
+          "wake/src/install_broker_approval.rs",
+          "wake/src/install_broker_bootstrap.rs",
+          "wake/src/install_broker_bootstrap_files.rs",
+          "wake/src/install_broker_bootstrap_scm.rs",
+          "wake/src/install_broker_candidate_stage.rs",
+          "wake/src/install_broker_ci_fetch.rs",
+          "wake/src/install_broker_ci_witness.rs",
+          "wake/src/install_broker_client.rs",
+          "wake/src/install_broker_current_observer.rs",
+          "wake/src/install_broker_durability.rs",
+          "wake/src/install_broker_endpoint.rs",
+          "wake/src/install_broker_ledger.rs",
+          "wake/src/install_broker_ledger_same_state.rs",
+          "wake/src/install_broker_legacy_owner.rs",
+          "wake/src/install_broker_lifecycle.rs",
+          "wake/src/install_broker_local_access.rs",
+          "wake/src/install_broker_offline_ledger.rs",
+          "wake/src/install_broker_offline_pins.rs",
+          "wake/src/install_broker_offline_pointer.rs",
+          "wake/src/install_broker_offline_recovery.rs",
+          "wake/src/install_broker_offline_v2.rs",
+          "wake/src/install_broker_operator.rs",
+          "wake/src/install_broker_operator_uac.rs",
+          "wake/src/install_broker_pipe_io.rs",
+          "wake/src/install_broker_pointer_writer.rs",
+          "wake/src/install_broker_pointer_writer_v2.rs",
+          "wake/src/install_broker_policy.rs",
+          "wake/src/install_broker_preflight.rs",
+          "wake/src/install_broker_publish_v2.rs",
+          "wake/src/install_broker_reader.rs",
+          "wake/src/install_broker_reader_v2.rs",
+          "wake/src/install_broker_request.rs",
+          "wake/src/install_broker_same_state_approval.rs",
+          "wake/src/install_broker_service_core.rs",
+          "wake/src/install_broker_service_runtime.rs",
+          "wake/src/install_broker_source.rs",
+          "wake/src/install_broker_source_runtime.rs",
+          "wake/src/install_broker_stage_writer.rs",
+          "wake/src/install_broker_stage_writer_v2.rs",
+          "wake/src/lib.rs",
+          "wake/src/process_job.rs",
+          "wake/src/protocol.rs",
+          "wake/src/readiness_probe.rs",
+          "wake/src/review_binding.rs",
+          "wake/src/runtime.rs",
+          "wake/src/runtime_bootstrap_observation.rs",
+          "wake/src/runtime_install_selection.rs",
+          "wake/src/runtime_readiness.rs",
+          "wake/src/runtime_reobserve.rs",
+          "wake/src/runtime_response.rs",
+          "wake/src/runtime_review_reconcile.rs",
+          "wake/src/runtime_same_state_install.rs",
+          "wake/src/runtime_scheduler.rs",
+          "wake/src/runtime_scoped_review.rs",
+          "wake/src/runtime_snapshot.rs",
+          "wake/src/runtime_task_context.rs",
+          "wake/src/store.rs",
+          "wake/src/store_reobserve.rs"
+        ]
+      }
+    ],
+    "distinctUnionCount": 221,
+    "originalReviewIndexCount": 257,
+    "extendedIndexCount": 261,
+    "extendedChangedCount": 38,
+    "missingPathsNowAdded": [
+      "scripts/catdesk-release-recovery.ps1",
+      "scripts/wake_development_login.py",
+      "scripts/wake_profile_quiescence.py",
+      "scripts/wake_readiness_visual_probe.py"
+    ],
+    "originalIndexPreserved": true,
+    "correspondingOutputBytesMatchedFrozenCandidate": true,
+    "originalRawCompilerReadBytesCertified": false,
+    "limitation": "Retained depinfo records actual paths. Git maps committed bytes; it does not prove the raw bytes at each original compiler read."
+  },
+  "sourceCorrection": {
+    "finding": "SIX06D-P6-READINESS-EXIT",
+    "demonstrated": "Registered native readiness dropped the existing browser lock after PROBE_CLEANUP_UNVERIFIED; exceptional missing pipes also bypassed its common Job-empty barrier.",
+    "operationalBrowserOverlapObserved": false,
+    "missingConfiguredPipeNormallyReachable": false,
+    "changes": [
+      "Reuse bounded Job-empty/reap cleanup before every explicit post-assignment pipe return",
+      "Reuse existing fail-stop browser-lock retention on unproved observer cleanup"
+    ],
+    "changedPaths": [
+      "wake/src/readiness_probe.rs",
+      "wake/src/runtime_readiness.rs"
+    ],
+    "independentPostCorrectionReleaseReview": false,
+    "releaseExecutablesBuilt": 0,
+    "selectedDevelopmentPackageChanged": false,
+    "protectedInstallationChanged": false
+  },
+  "tests": {
+    "newActualWindowsNativeTestsPassed": 3,
+    "nativeScope": [
+      "Missing stdin/stdout exercised with live owned descendants; exact retained kernel handles prove exit before refusal returns",
+      "Real shared-browser File lock retained after injected cleanup-unproved result; verified cleanup releases it",
+      "Separate project can queue metadata while shared browser lock remains held; project config bytes unchanged"
+    ],
+    "lockTestRepeatedAfterDisposableCleanupScopeAssertion": true,
+    "existingProbeRegressionTestsPassed": 19,
+    "newTestsExcludedFromExistingRegressionRerun": true,
+    "strictRootClippy": "PASS",
+    "strictWakeClippy": "PASS",
+    "formatAndWhitespace": "PASS",
+    "initialTestCompile": "Test compared Config without PartialEq; corrected to exact config bytes before native tests ran",
+    "liveBrowserOrInstalledAcceptance": false
+  },
+  "preservation": {
+    "intakePinsChecked": 4,
+    "intakePinsMatched": true,
+    "originalF7PartialAndClaimUnchanged": true,
+    "originalD22UnknownNotReplayed": true,
+    "projectRegistryUnchanged": true,
+    "frozenFourArtifactsMatched": true,
+    "canonicalBackendExecutableMatched": true,
+    "unsignedPurposePayloadAndPreimageUnchanged": true,
+    "pendingOperatorSignaturePresent": false,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "protectedActions": 0,
+    "newTestOwnedNativeProcesses": "Normal test completion; helper reaping, descendant kernel-handle exits and fixture lock release verified",
+    "recurringAutomationEnabled": false
+  },
+  "tracks": [
+    {
+      "track": "Independent source review and correction",
+      "status": "ACTIVE",
+      "next": "Review the new small correction, then finish distinct remaining source coverage and assess retained build/artifact provenance; no candidate-review.json fabricated"
+    },
+    {
+      "track": "Operator-only first broker migration",
+      "status": "BLOCKED",
+      "next": "Existing exact offline purpose signature remains separate; preserve packet and expiry. After genuine signature, independent public verification then existing elevated native preflight"
+    },
+    {
+      "track": "Original d22 backend authority",
+      "status": "BLOCKED",
+      "next": "Genuine original outcome/attribution or an applicable reviewed recovery transition, never blind resend"
+    },
+    {
+      "track": "Direct Web edit/checkpoint/self-Wake",
+      "status": "BLOCKED_FOR_NEW_ACCEPTANCE",
+      "next": "Required installed capability chains and actual original authorized lifecycle. Prior backend/auth/restart/v5 acceptance is retained; these source tests do not replace it"
+    }
+  ]
+}

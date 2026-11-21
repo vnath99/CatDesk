@@ -1,0 +1,23 @@
+# Keep only this continuity surface byte-stable across Windows clones.
+/CATDESK_PROJECT_HANDOFF.md text eol=lf
+/CATDESK_MILESTONES.md text eol=lf
+/CATDESK_IMPORTANT_COMMANDS.md text eol=lf
+/CATDESK_ACTIVITY_LOG.md text eol=lf
+/CATDESK_TICKETS.md text eol=lf
+/scripts/catdesk_docs.py text eol=lf
+/tests/test_catdesk_docs.py text eol=lf
+/docs/activity/2026-11.md text eol=lf
+/docs/archive/PRE_CONSOLIDATION_2026_11_14.md text eol=lf
+/docs/orchestrator/tickets/DOC_CONTINUITY_2026_11_14.md text eol=lf
+/docs/verification/DOCUMENT_INVENTORY_2026_11_14.csv text eol=lf
+/docs/verification/REPOSITORY_RECONCILIATION_2026_11_14.json text eol=lf
+/docs/verification/REPOSITORY_RECONCILIATION_2026_11_14.md text eol=lf
+/docs/verification/WIDGET_RESOURCE_DIAGNOSTIC_2026_11_14.json text eol=lf
+/docs/verification/LOCAL_DOCUMENT_BOUNDARIES_2026_11_14.json text eol=lf
+/docs/verification/READONLY_CONTROLLER_CLEANUP_2026_11_14.json text eol=lf
+/docs/verification/DOCUMENTATION_QUALIFICATION_2026_11_14.json text eol=lf
+/docs/verification/DOCUMENTATION_ACCEPTANCE_2026_11_14.json text eol=lf
+
+/docs/verification/DOC_INTEGRATION_REVIEW_2026_11_14.json text eol=lf
+
+/docs/verification/DOC_SYNC_STATE_2026_11_14.json text eol=lf

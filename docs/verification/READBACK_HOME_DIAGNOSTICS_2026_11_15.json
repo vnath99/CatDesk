@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T00:29:20.715629+00:00",
+  "sourceCommit": "c43265ad4d6054f92afd22762beb2740ffc34c81",
+  "scope": "SOURCE_CORRECTIONS_AND_BOUNDED_ORIGINAL_NO_SEND_READBACKS",
+  "goalState": "ACTIVE",
+  "sourceChanges": [
+    "Closed driver/document/phase/failure diagnostics in existing project journal directory",
+    "Existing Home recovery restricted to empty idle Home; no reload or alternate-context fallthrough",
+    "Fixed CLI allowlist preserves known initialization errors without allowing arbitrary prefix strings",
+    "Existing nine-field browser-surface reader and native validator reused"
+  ],
+  "sourceChecks": {
+    "pythonAdapterInitializationAndConversation": 156,
+    "existingReadinessTests": 16,
+    "rootFirstConversationDuringDiagnosticChange": 10,
+    "focusedWakeBootstrapDuringRecoveryChange": 22,
+    "closedFailureDecoderLatest": 1,
+    "outerCliErrorRegression": 1,
+    "strictRootAndWakeClippy": "PASS",
+    "countsAreSeparateRunsNotAdditive": true,
+    "sourceTestsAreNotInstalledOrWebAcceptance": true
+  },
+  "liveAttempts": [
+    {
+      "startedUtc": "2026-11-14T23:50:24.821551+00:00",
+      "finishedUtc": "2026-11-14T23:51:10.266668+00:00",
+      "sourceCommit": "5d0fcf7a67dad827a5994816ac48d56a35201074",
+      "error": "RESPONSE_TARGET_DRIFT",
+      "durablePhase": "SUBMITTING",
+      "sameTaskAndMessage": true,
+      "profileQuiescentAfter": true,
+      "otherRegistrationsUnchanged": true,
+      "otherWakeTargetsUnchanged": true,
+      "developmentControlStopped": true,
+      "messagesSubmitted": 0,
+      "bindingsCommitted": false,
+      "observations": [
+        {
+          "documentRoute": "HOME",
+          "driverRoute": "HOME",
+          "phase": "INITIAL_OBSERVATION"
+        }
+      ],
+      "ownerTimedOut": false,
+      "ownerTerminationFailed": false
+    },
+    {
+      "startedUtc": "2026-11-15T00:02:59.827196+00:00",
+      "finishedUtc": "2026-11-15T00:03:44.224924+00:00",
+      "sourceCommit": "172a988f545824a19cd8ce314ef631cfcffce388",
+      "error": "WEB_OPERATION_REFUSED",
+      "durablePhase": "SUBMITTING",
+      "sameTaskAndMessage": true,
+      "profileQuiescentAfter": true,
+      "otherRegistrationsUnchanged": true,
+      "otherWakeTargetsUnchanged": true,
+      "developmentControlStopped": true,
+      "messagesSubmitted": 0,
+      "bindingsCommitted": false,
+      "observations": [
+        {
+          "documentRoute": "HOME",
+          "driverRoute": "HOME",
+          "phase": "HOME_RECOVERY"
+        }
+      ],
+      "ownerTimedOut": false,
+      "ownerTerminationFailed": false
+    },
+    {
+      "startedUtc": "2026-11-15T00:12:03.084778+00:00",
+      "finishedUtc": "2026-11-15T00:12:49.062504+00:00",
+      "sourceCommit": "43aa65bdb5a225dae82c752712ac8cd618320f93",
+      "error": "INITIALIZATION_READBACK_HOME_STATE_UNPROVEN",
+      "durablePhase": "SUBMITTING",
+      "sameTaskAndMessage": true,
+      "profileQuiescentAfter": true,
+      "otherRegistrationsUnchanged": true,
+      "otherWakeTargetsUnchanged": true,
+      "developmentControlStopped": true,
+      "messagesSubmitted": 0,
+      "bindingsCommitted": false,
+      "observations": [
+        {
+          "documentRoute": "HOME",
+          "driverRoute": "HOME",
+          "failureCode": "BOOTSTRAP_HOME_NOT_READY",
+          "phase": "HOME_RECOVERY"
+        }
+      ],
+      "ownerTimedOut": false,
+      "ownerTerminationFailed": false
+    },
+    {
+      "startedUtc": "2026-11-15T00:20:12.156570+00:00",
+      "finishedUtc": "2026-11-15T00:20:57.950600+00:00",
+      "sourceCommit": "c43265ad4d6054f92afd22762beb2740ffc34c81",
+      "error": "INITIALIZATION_READBACK_HOME_STATE_UNPROVEN",
+      "durablePhase": "SUBMITTING",
+      "sameTaskAndMessage": true,
+      "profileQuiescentAfter": true,
+      "otherRegistrationsUnchanged": true,
+      "otherWakeTargetsUnchanged": true,
+      "developmentControlStopped": true,
+      "messagesSubmitted": 0,
+      "bindingsCommitted": false,
+      "observations": [
+        {
+          "documentRoute": "HOME",
+          "driverRoute": "HOME",
+          "failureCode": "BOOTSTRAP_HOME_NOT_READY",
+          "phase": "HOME_RECOVERY",
+          "surface": {
+            "assistant": "ABSENT",
+            "composer": "UNKNOWN",
+            "document": "COMPLETE",
+            "editor": "MISSING",
+            "exchange": "UNATTRIBUTED",
+            "generation": "IDLE",
+            "history": "ABSENT",
+            "recovery": "OBSERVATION_ONLY",
+            "route": "HOME"
+          }
+        }
+      ],
+      "ownerTimedOut": false,
+      "ownerTerminationFailed": false
+    }
+  ],
+  "currentDevelopmentPackage": {
+    "packageId": "1.0.0-dev.85-48539d133499d28491d2812858fc3b2cbb79ef00977dac56289ed5d13eb58692",
+    "artifacts": {
+      "CatDeskBinagotchy.exe": "ccf2b55e4dae79e940d5a1a115834dde4e79ff99868f74224abbee3784a3a72c",
+      "CatDeskWakeHost.exe": "b58c3d23726897fd96d8b060cb62040ad2c249fbd036f83fb827f25d73362423",
+      "adapter.py": "e4c6f85351e55bcc1bf6771b2a70c579e015491304b4e83812a41e010aa700f8",
+      "wake_bridge.py": "5bb3a46a473fb41e0401484c5b206fcef6621ac3a9fe2a2a5dcf554f35c02b8c"
+    },
+    "sourceCommit": "c43265ad4d6054f92afd22762beb2740ffc34c81",
+    "verifiedPreviousPackageRetained": true,
+    "workingHealthQualificationGranted": false,
+    "protectedInstallationChanged": false
+  },
+  "nativeNoReplayWitness": {
+    "observedUtc": "2026-11-15T00:26:34.892Z",
+    "completedTurns": 1,
+    "userMessageCount": 1,
+    "assistantMessageCount": 1,
+    "paginationComplete": true,
+    "noAdditionalUserMessages": true,
+    "allTurnsWithoutError": true,
+    "exactOriginalUserDigestMatches": true
+  },
+  "preservation": {
+    "originalJournalBytesUnchanged": true,
+    "pinsChecked": 1689,
+    "existingPinChanges": 1,
+    "onlyExpectedDevelopmentPointerChanged": true,
+    "newPrivateDiagnosticArtifacts": 1,
+    "profileIdentitiesUnchanged": true,
+    "unknownSubmissionStillFenced": true
+  },
+  "remaining": {
+    "browserReadbackReceiptAndBinding": "NOT_ACCEPTED",
+    "freshTwoTurnWake": "OPEN",
+    "directWebEditVerificationAndSelfWake": "OPEN",
+    "serialMultiProject": "OPEN",
+    "contextRolloverQualification": "OPEN",
+    "operatorActionRequiredForCurrentSourceStep": false,
+    "nextExecutableSourceTask": "Connect existing select_registered_target_tab to the same immutable browser primitives/readback owner, then test the original candidate without send or draft mutation."
+  }
+}

@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T03:14:43.801053+00:00",
+  "classification": "ACTUAL_SELECTED_DEVELOPMENT_SHARED_USER_READER_OUTCOME",
+  "sourceBaseCommit": "51c7b1324bf05968c448a3991940c958c3110551",
+  "tests": {
+    "dom": {
+      "passed": 54,
+      "logSha256": "8ac98cefc456590745660d988607576bedc71c78467fcb9b0028faefcbf318bd"
+    },
+    "adapter": {
+      "passed": 38,
+      "logSha256": "4191140c1b7891d340e2a0d063f6e2a580efc6fe8486dad07571c661b1b5e48c"
+    },
+    "bridgeResponse": {
+      "passed": 16,
+      "logSha256": "0dd9a44383b3be2a1ddbde92209c5ad6af86bf75c6449bc2214cca49301e43ed"
+    }
+  },
+  "retainedUnchangedNativeTests": 480,
+  "distinctPassingTestsWithUnchangedNative": 588,
+  "focusedUpdatedAssertionsPassed": 1,
+  "focusedTestOverlapsDomSuite": true,
+  "focusedLogSha256": "3a671b71beca05f62181364c1f263e5b525a68004de9470437e9bef850da4552",
+  "redFailures": 2,
+  "redLogSha256": "04f6c2570606ec86d38f9f591514e0ef86ec750f15152744275643477a5150c6",
+  "implementation": {
+    "samePlaintextExtractorAsComposer": true,
+    "receiptAndPrivateSnapshotShareUserBodyReader": true,
+    "knownBodySelfMatchSupported": true,
+    "presentationControlsRemovedOnlyFromDetachedClone": true,
+    "authoredLiteralTextAndParagraphBoundariesPreserved": true,
+    "unknownBodyFallbackRemainsUnproven": true,
+    "exactDigestDuplicateLatestTurnRouteAndUnknownOutcomeGuardsUnchanged": true,
+    "scopeAnchorAloneCannotAuthorizeCompletion": true,
+    "newWaitRetryReloadClickOrUserSubmit": false,
+    "newOwnerOrScheduler": false,
+    "rawNewConversationOrDraftExport": false
+  },
+  "precedingSelectedLive": {
+    "sourceCommit": "51c7b1324bf05968c448a3991940c958c3110551",
+    "appSha256": "501de7c479cc99367bc4ee4ace03817c5bd28274c056f454a38547c26f6b5018",
+    "reason": "RESPONSE_USER_REPRESENTATION_MISMATCH",
+    "elapsedSeconds": 120.797,
+    "timerAndLedgerPreserved": true,
+    "criticalPinsUnchanged": 5069,
+    "previousFilesUnchanged": 7,
+    "userMessagesSent": 0,
+    "hostStopped": true,
+    "profileState": "PROFILE_QUIESCENT",
+    "assistantCompletionPredicateReached": false
+  },
+  "liveCauseEstablished": false,
+  "newSourceLiveQualified": true,
+  "sourceAccepted": false,
+  "producerStarted": false,
+  "productionChanged": false,
+  "operatorActionRequired": false,
+  "nextExecutableTask": "RECONCILE_ONLY_OWN_KNOWN_INCONCLUSIVE_NATIVE_REVIEW_CLAIM_THROUGH_EXISTING_SUPPORTED_API; PREPARE_ADMISSIBLE_MATERIAL64_PATH_CURRENT_SOURCE_REVIEW_UNDER_STANDING_SCOPE; PRESERVE_SENT_UI_HOLD",
+  "goal": "ACTIVE",
+  "newSourceBundleSelectedAndBackendHealthy": true,
+  "receiptGateAccepted": true,
+  "assistantCompletionRecovered": false,
+  "transportClosed": false,
+  "actualSelectedDevelopment": {
+    "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+    "candidateSha256": "4acf1c3f594dedded2da7609a83f6fa2a9adc2c9ac5a2fcf80aa08c5900e4a3f",
+    "previousSha256": "501de7c479cc99367bc4ee4ace03817c5bd28274c056f454a38547c26f6b5018",
+    "selectedPackageId": "1.0.0-dev.85-4e61bc3bbc38380feb9a314eaa8dafd7abc4e6908d6e224fee998540e16579cf",
+    "elapsedSeconds": 139.062,
+    "hostStopped": true,
+    "reobserveExitCode": 0,
+    "responseTimerState": "OBSERVING",
+    "timerCompleted": false,
+    "transportClosed": false,
+    "observedResponseState": "PENDING",
+    "diagnosticReason": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "completionControls": {
+      "assistantBodyPresent": true,
+      "assistantInsideSemanticUnit": true,
+      "buttonsInTurn": 4,
+      "completionActionFound": false,
+      "copyLabelInParent": 0,
+      "copyLabelInTurn": 0,
+      "copyMessageLabelInParent": 1,
+      "copyMessageLabelInTurn": 1,
+      "copyResponseLabelInParent": 0,
+      "copyResponseLabelInTurn": 0,
+      "copyTestIdInParent": 0,
+      "copyTestIdInTurn": 0,
+      "copyTextInTurn": 0,
+      "knownCopyInAssistant": 0,
+      "knownCopyInBody": 0,
+      "pairedTurn": true,
+      "roleAssistantNodes": 0,
+      "semanticAssistantUnits": 1,
+      "sharedCopyAfterAssistant": 0,
+      "toolbarContainersInTurn": 1
+    },
+    "health": [
+      {
+        "label": "installed-debug-health",
+        "maximumRuntimeSeconds": 15,
+        "expectedSha256": "4acf1c3f594dedded2da7609a83f6fa2a9adc2c9ac5a2fcf80aa08c5900e4a3f",
+        "actualSha256": "4acf1c3f594dedded2da7609a83f6fa2a9adc2c9ac5a2fcf80aa08c5900e4a3f",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "packageId": "1.0.0-dev.85-4e61bc3bbc38380feb9a314eaa8dafd7abc4e6908d6e224fee998540e16579cf",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-31T03:01:26.381537+00:00"
+      }
+    ]
+  },
+  "build": {
+    "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+    "elapsedSeconds": 52.797,
+    "pinnedFilesChecked": 5081,
+    "pinnedMismatchCount": 0
+  },
+  "preservation": {
+    "criticalPinsChecked": 5069,
+    "criticalMismatchCount": 0,
+    "previousFilesChecked": 7,
+    "previousMismatchCount": 0,
+    "profileIdentityPreserved": true,
+    "nonUsageConfigurationPreserved": true,
+    "timerStartedUtcPreserved": true,
+    "otherLedgerRecordsPreserved": true,
+    "allGrantsPreserved": true,
+    "adapterLogPrefixPreserved": true,
+    "messagesSent": 0,
+    "productionChanged": false,
+    "recurringOrTunnelOwnerStarts": 0,
+    "nativeTaskOrSessionCommandsInvoked": false
+  },
+  "cleanup": {
+    "state": "PROFILE_QUIESCENT",
+    "observedUtc": "2026-10-31T03:06:29.844758+00:00",
+    "testOwnedRemaining": 0
+  },
+  "privateEvidenceSha256": {
+    "oct31-user-body-debug-build-result.private.json": "fdca07bda85ec9c90437fde7c927f3a78447df2e65ac266e9cb206e1f5e0b14e",
+    "oct31-user-body-debug-live-v2-result.private.json": "7ed6a11b362c41c59f32d248db999a8c0b43792eacb64fab5da6ca16308678ef",
+    "oct31-user-body-debug-live-v2-owner.private.json": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "oct31-profile-quiescence-user-body-cleanup-result.private.json": "a8f18eb3f5b2a5252d48c7e7926f893f9a85e6ebbd017ab0087f0655315b2367"
+  },
+  "nextMaterialReviewInputs": {
+    "classification": "PREPARED_PRIVATE_NOT_SUBMITTED_NOT_AUTHORITY",
+    "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+    "targetCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+    "sourcePathCount": 64,
+    "scopeIncludesRootLauncherAdapterAndNativeResponse": true,
+    "sourcePathFilter": "ALL_CHANGED_RS_PY_PS1_PATHS_REGARDLESS_OF_DIRECTORY",
+    "totalBytes": 869938,
+    "streamSha256": "4b2f21c0690721683a6869a7711923d0e1fa36e05eb7d7e8c73e50fd53430928",
+    "partCount": 107,
+    "maximumPartBytes": 8192,
+    "exactReassemblyVerified": true,
+    "privacyFindingCount": 0,
+    "published": false,
+    "nativeClaimOrMessageCreated": false,
+    "manifestSha256": "ac4522dce364a299e9317f4b4b17223a7247810565d1433651bc8aec3a9fbfaf"
+  },
+  "remainingLivePredicate": {
+    "reason": "ASSISTANT_COMPLETION_ACTION_UNPROVEN",
+    "knownCopyInAssistant": 0,
+    "knownCopyInBody": 0,
+    "knownSharedCopyAfterAssistant": 0,
+    "singleCopyMessageOutsideQualifiedAssistantScope": true,
+    "userVersusAuxiliaryIdentityEstablished": false,
+    "matchingUserScopeAloneAuthorizesCompletion": false,
+    "newProbeBeforeChangedEvidence": false
+  }
+}

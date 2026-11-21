@@ -1,0 +1,149 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T14:41:29.876223+00:00",
+  "classification": "COORDINATOR_SOURCE_INVESTIGATION_AND_ACTUAL_WINDOWS_LITERAL_IDENTITY_TESTS_REQUIRING_INDEPENDENT_REASSESSMENT",
+  "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "fullReleaseCodePathScope": 84,
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "reviewQuestions": [
+    {
+      "question": "Transitive reobservation callback lock order",
+      "coordinatorFinding": "The project journal lock is retained. Runtime completes browser observation before calling the final registry guard; its inner commit checks only local deadline/control, then takes the Wake store lock for exact timer/delivery/target CAS. No paired-target mutex is acquired under registration lock. Prepared registry resolution loads metadata and checks Git identity without taking a second registration lock.",
+      "status": "SOURCE_PATH_IDENTIFIED_REQUIRES_INDEPENDENT_REASSESSMENT"
+    },
+    {
+      "question": "Separate pre-submit observations",
+      "coordinatorFinding": "ProjectStore retains the OS project lock; exact journal/request/native-owner/event/target/policy are rechecked before the existing durable SUBMITTING fence and submit ACK. Existing tests cover changed selection/owner, sibling isolation, unknown outcome and duplicate suppression. Concurrent policy or registration updates are not claimed impossible. Collection and binding retain their separate owner/source witness checks.",
+      "status": "NO_EXPLOITABLE_DEFECT_ESTABLISHED_SCOPE_AND_FINAL_CAS_MUST_BE_REVIEWED"
+    },
+    {
+      "question": "Supervisor component wildcard interpretation",
+      "coordinatorFinding": "Actual Windows PowerShell5 and PowerShell7 read the exact frozen identity function. literal[1] and literal1 remain distinct, case aliases match and spaces/plus/parentheses are accepted. Windows directory-name syntax excludes wildcard star/question-mark components. This does not prove resistance to malicious concurrent directory replacement.",
+      "status": "LITERAL_BRACKET_CONFLATION_NOT_REPRODUCED"
+    },
+    {
+      "question": "Legacy monitor and mutable helper boundaries",
+      "coordinatorFinding": "Matching legacy mutex reservations are supported. Pre-fix monitors through another case spelling remain unqualified and require verified quiescence before upgrade. The function extraction reads trusted local source, not a handle-pinned hostile file. No production activation or new same-user adversarial trust model is claimed.",
+      "status": "KNOWN_COMPATIBILITY_AND_TRUST_LIMITS_PRESERVED"
+    }
+  ],
+  "actualWindowsQualification": {
+    "startedUtc": "2026-11-01T14:38:12.284632+00:00",
+    "finishedUtc": "2026-11-01T14:38:13.309811+00:00",
+    "elapsedSeconds": 1.015,
+    "sourceSha256": "ec98614183ecd97d7ac51bec2de9b535f767c955d1623fe57eaa92e7fe7a5b4a",
+    "childSha256": "848c996ed2551b143d5b47e9f567e71d58b8c8797ea458eef0eec2cf1f30735a",
+    "sourceUnchanged": true,
+    "childUnchanged": true,
+    "identitiesMatchAcrossHostVersions": true
+  },
+  "hosts": [
+    {
+      "hostSha256": "60c9b29843624dd8af6b6a7b26147753be6aeef65098b9a503cc50850afe410f",
+      "exitCode": 0,
+      "stdoutSha256": "ed3e865a9b7cef3afbcec75978bb74cfc88d6929f65a95748b975f502cb6d29d",
+      "caseAliasMatches": true,
+      "bracketAndPlainSiblingDistinct": true,
+      "version": "5.1.26100.9711",
+      "monitorStarts": 0,
+      "protectedWrites": 0,
+      "edition": "Desktop",
+      "spacePlusParenthesisAccepted": true,
+      "bracketNameAccepted": true,
+      "lifecycleCommands": 0
+    },
+    {
+      "hostSha256": "362a356ce7f0940ec74f73a8fc2c990a2cc24a38a11c90bbd8eca947110ad139",
+      "exitCode": 0,
+      "stdoutSha256": "d0305be01c08c28bbaafd2ccbde11920504dadc14ac40aa033a0cc537856cd7a",
+      "bracketNameAccepted": true,
+      "bracketAndPlainSiblingDistinct": true,
+      "spacePlusParenthesisAccepted": true,
+      "edition": "Core",
+      "monitorStarts": 0,
+      "protectedWrites": 0,
+      "caseAliasMatches": true,
+      "lifecycleCommands": 0,
+      "version": "7.6.5"
+    }
+  ],
+  "harnessFailuresPreserved": {
+    "attemptsBeforePass": 2,
+    "reason": "Windows PowerShell inherited the bundled PowerShell7 PSModulePath and could not load Get-FileHash. A first case-sensitive environment-key removal missed the uppercased Windows mapping. Case-insensitive removal for the child restored default host module discovery.",
+    "scope": "Private diagnostic harness only. Canonical release-recovery helpers already hash through .NET; no product helper regression was established by this test.",
+    "priorResultsChanged": false
+  },
+  "sourceReads": [
+    {
+      "path": "src/operator_web_rollover.rs",
+      "start": 2014,
+      "end": 2164,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 2014,2164 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_web_rollover.rs",
+      "expectedOutputBytes": 7946,
+      "expectedOutputSha256": "ce4d98527924026de9d230f959d471c820bd5556d30236d9c6a19bd822de40f7"
+    },
+    {
+      "path": "wake/src/runtime_reobserve.rs",
+      "start": 48,
+      "end": 124,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 48,124 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/src/runtime_reobserve.rs",
+      "expectedOutputBytes": 3978,
+      "expectedOutputSha256": "5074c2ae933fd7a43e5f3b8d9043679564241e96c103792e7ea8f51f32445c94"
+    },
+    {
+      "path": "wake/src/store_reobserve.rs",
+      "start": 12,
+      "end": 119,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 12,119 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/src/store_reobserve.rs",
+      "expectedOutputBytes": 5843,
+      "expectedOutputSha256": "cc703a7cd10fc9a43cf0f47f8c3efa4521bf3baaffc3ef9695ff5f22b342472d"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "start": 704,
+      "end": 770,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 704,770 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_web_rollover.rs",
+      "expectedOutputBytes": 3245,
+      "expectedOutputSha256": "199606752d292c7b10f7486a117ac4afc32de39ea5fb2b3072fa11767fd227e2"
+    },
+    {
+      "path": "src/delegated/autonomy_projects.rs",
+      "start": 2023,
+      "end": 2038,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 2023,2038 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/delegated/autonomy_projects.rs",
+      "expectedOutputBytes": 848,
+      "expectedOutputSha256": "30a92f79ab388affa1b5ea2233b3afe692f5323154fc247e7f470202586d69b6"
+    },
+    {
+      "path": "src/delegated/autonomy_projects.rs",
+      "start": 276,
+      "end": 337,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 276,337 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/delegated/autonomy_projects.rs",
+      "expectedOutputBytes": 3525,
+      "expectedOutputSha256": "5344d300ffd427059941add7c8fffb33f0b60b6c8b0d7e75483b78aeba75da8a"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "start": 7219,
+      "end": 7254,
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 7219,7254 6e97db1fdaaf91f9d6393997e930023a387f0403 -- wake/src/runtime.rs",
+      "expectedOutputBytes": 2264,
+      "expectedOutputSha256": "3195ebaf92c9171e059fbf38f1960d5c20a6d94a508bc8f4b477e03d509ff69d"
+    }
+  ],
+  "processAndStateActions": {
+    "production": 0,
+    "monitorStarts": 0,
+    "browserStarts": 0,
+    "nativeSessions": 0,
+    "bindingChanges": 0,
+    "modulePathPersistentlyChanged": false,
+    "ownedTreeExitProved": true
+  },
+  "limitations": [
+    "Literal-path behavior is proved for the tested normal local filesystem only; malicious directory/helper replacement is not tested.",
+    "Existing legacy case-alias migration still requires known-owner quiescence; no arbitrary process termination is authorized.",
+    "These coordinator tests and source references are not an independent release verdict or installed startup qualification."
+  ]
+}

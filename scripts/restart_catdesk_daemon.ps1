@@ -10,10 +10,35 @@ param(
     [int]$StartupDelaySeconds = 3,
     [int]$ExitTimeoutSeconds = 15,
     [int]$ReadyTimeoutSeconds = 90,
+    [switch]$BackendOnly,
     [switch]$Execute
 )
 
 $ErrorActionPreference = "Stop"
+
+function Get-RestartSha256([string]$Path) {
+    $sha=[Security.Cryptography.SHA256]::Create();$stream=[IO.File]::OpenRead($Path)
+    try { return ([BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '')).ToLowerInvariant() }
+    finally { $stream.Dispose();$sha.Dispose() }
+}
+
+function Test-RestartBackendOnlySupport([string]$Path, [string]$ExpectedHash) {
+    $process = $null
+    try {
+        if ((Get-RestartSha256 $Path) -cne $ExpectedHash) { return $false }
+        $info = [Diagnostics.ProcessStartInfo]::new()
+        $info.FileName = $Path; $info.Arguments = '--catdesk-daemon --backend-only --check-support'
+        $info.UseShellExecute = $false; $info.CreateNoWindow = $true
+        $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
+        $process = [Diagnostics.Process]::Start($info)
+        $output = $process.StandardOutput.ReadToEndAsync(); $errorOutput = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(5000) -or -not $output.Wait(1000) -or -not $errorOutput.Wait(1000) -or $process.ExitCode -ne 0 -or $output.Result.Length -gt 1024 -or $errorOutput.Result.Length -ne 0) { return $false }
+        $value = $output.Result | ConvertFrom-Json -ErrorAction Stop
+        return ($value -isnot [array] -and @($value.PSObject.Properties).Count -eq 5 -and $value.schemaVersion -eq 1 -and $value.mode -ceq 'LOCAL_BACKEND_ONLY' -and $value.supported -is [bool] -and $value.supported -and $value.stateCreated -is [bool] -and -not $value.stateCreated -and $value.servicesStarted -is [bool] -and -not $value.servicesStarted -and (Get-RestartSha256 $Path) -ceq $ExpectedHash)
+    } catch { return $false } finally {
+        if ($null -ne $process) { if (-not $process.HasExited) { $process.Kill(); [void]$process.WaitForExit(5000) }; $process.Dispose() }
+    }
+}
 
 function Write-HandoffState {
     param([hashtable]$State)
@@ -47,7 +72,7 @@ function Test-ExpectedOldProcessIdentity {
         }
         if ($ExpectedSha256) {
             if ($ExpectedSha256 -notmatch '^[A-Fa-f0-9]{64}$') { return $false }
-            $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $actualPath -ErrorAction Stop).Hash.ToLowerInvariant()
+            $actualSha256 = Get-RestartSha256 $actualPath
             if (-not $actualSha256.Equals($ExpectedSha256.ToLowerInvariant(), [StringComparison]::Ordinal)) { return $false }
         }
         return $true
@@ -136,7 +161,12 @@ if ($env:CATDESK_CODEX_CLI_EXECUTABLE -and -not (Test-Path -LiteralPath $env:CAT
 $oldPorts = @(Get-NetTCPConnection -State Listen -OwningProcess $OldPid -ErrorAction SilentlyContinue |
     Where-Object { $_.LocalAddress -in @("127.0.0.1", "::1") } |
     Select-Object -ExpandProperty LocalPort -Unique)
-$buildHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $resolvedBuild).Hash.ToLowerInvariant()
+$buildHash = Get-RestartSha256 $resolvedBuild
+if ($BackendOnly) {
+    if ($McpPort -ne 3200) { throw 'Backend-only handoff requires the fixed local port 3200.' }
+    if ($env:CATDESK_MCP_AUTH_TOKEN -cnotmatch '\A[\x21-\x7E]{24,}\z') { throw 'Backend-only handoff requires a valid process-scoped MCP token.' }
+    if (-not (Test-RestartBackendOnlySupport -Path $resolvedBuild -ExpectedHash $buildHash)) { throw 'Replacement does not support the local-backend-only profile; old process was not stopped.' }
+}
 $oldOwnsConfiguredPort = @(Get-NetTCPConnection -State Listen -LocalPort $McpPort -ErrorAction SilentlyContinue |
     Where-Object { $_.OwningProcess -eq $OldPid -and $_.LocalAddress -in @("127.0.0.1", "::1") }).Count -gt 0
 $intent = [ordered]@{
@@ -153,6 +183,7 @@ $intent = [ordered]@{
     startupDelaySeconds = $StartupDelaySeconds
     recovery = "If this record remains non-successful, start the verified CatDesk build manually from the approved workspace; do not restart the external Secure MCP tunnel."
 }
+if ($BackendOnly) { $intent.schemaVersion = 4; $intent['profile'] = 'LOCAL_BACKEND_ONLY'; $intent['mcpAuthenticated'] = $false }
 Write-HandoffState -State $intent
 
 Write-Output "PREFLIGHT_OK old_catdesk_pid=$OldPid"
@@ -192,5 +223,6 @@ $workerArgs = @(
     "-ExitTimeoutSeconds", $ExitTimeoutSeconds,
     "-ReadyTimeoutSeconds", $ReadyTimeoutSeconds
 )
+if ($BackendOnly) { $workerArgs += @('-BackendOnly', '-ExpectedBuildSha256', $buildHash) }
 $detached = Start-Process -FilePath $trustedPowerShell -ArgumentList $workerArgs -WorkingDirectory $resolvedWorkspace -WindowStyle Hidden -PassThru
 Write-Output "HANDOFF_DETACHED worker_pid=$($detached.Id)"

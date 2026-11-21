@@ -1,0 +1,76 @@
++function Digest([string]$Text){$sha=[Security.Cryptography.SHA256]::Create();try{([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text))).Replace('-','')).ToLowerInvariant()}finally{$sha.Dispose()}}
++$seams=@{
++ CanonicalIdentity={param($root,$hash,$fingerprint) if($fingerprint -cne (Join-Path $root 'target/release/catdesk.exe.sha256')){throw 'wrong doctor fingerprint root'};[pscustomobject]@{Path=(Join-Path $root 'target/release/catdesk.exe');Sha256=('a'*64)}}
++ DoctorAuthority={[pscustomobject]@{State='RECOVERY_READY'}}
++ LocalMcp={[pscustomobject]@{Port=3200}}
++ Listener={[pscustomobject]@{MatchesCanonical=$true}}
++ DoctorRuntimeClient={'fixture-client'}
++ DoctorCodexCommand={'fixture-command'}
++}
++$forbid={ $script:forbidden++;throw 'DOCTOR_FORBIDDEN_OPERATION' }
++foreach($name in @('Recovery','RecoveryReadiness','LocalMcpReadiness','RuntimeStatus','CodexStatus','StopProcess','WakeRepair','WakeRuntime','WakeMcp','AutostartTasks')){$seams[$name]=$forbid}
++function Invoke-Doctor([hashtable]$Overrides=@{},[switch]$Import){
++ $parameters=@{Workspace=$testRoot;ProjectWorkspace=$projectRoot;WakeRoot=$wakeRoot;TestSeams=$seams.Clone()}
++ foreach($key in $Overrides.Keys){$parameters.TestSeams[$key]=$Overrides[$key]}
++ if($Import){$parameters.ObservationFile=$observation}
++ $text=@(& $facade doctor @parameters) -join "`n"
++ Require ($text -notmatch 'PRIVATE_MARKER|chatgpt\.com/c/|C:\\|fixture-client|fixture-command') 'private data leaked'
++ return ($text|ConvertFrom-Json)
++}
++function Layer($Report,[string]$Name){@($Report.layers|Where-Object{$_.layer -ceq $Name})[0]}
++try{
++ [void][IO.Directory]::CreateDirectory((Join-Path $projectRoot '.catdesk/projects'))
++ [void][IO.Directory]::CreateDirectory((Join-Path $wakeRoot 'queue'))
++ [void][IO.Directory]::CreateDirectory((Join-Path $wakeRoot 'deliveries'))
++ $url='https://chatgpt.com/c/doctor-fixture';$digest=Digest $url
++ Save (Join-Path $projectRoot '.catdesk/projects/projects.json') @{schemaVersion=1;projects=@(@{projectId='alpha';workspace=$projectRoot;chatgptTargetUrl=$url;chatgptTargetSha256=$digest;codexThreadId='PRIVATE_MARKER'})}
++ Save (Join-Path $wakeRoot 'config.json') @{schemaVersion=1;targets=@{alpha=@{url=$url;digest=$digest;generation=1}}}
++ Save (Join-Path $wakeRoot 'control.json') @{schemaVersion=1;desired='STOPPED'}
++ Save (Join-Path $wakeRoot 'deliveries/unknown.json') @{phase='SUBMITTING';message='PRIVATE_MARKER'}
++ $before=@{};foreach($path in [IO.Directory]::EnumerateFiles($testRoot,'*',[IO.SearchOption]::AllDirectories)){$before[$path]=[IO.File]::ReadAllText($path)}
++ $report=Invoke-Doctor
++ Require ($report.command -ceq 'doctor' -and $report.readOnly -and $report.networkRequests -eq 0 -and $report.repairs -eq 0) 'doctor contract invalid'
++ Require ($report.layers.Count -eq 17) 'doctor omitted a layer'
++ Require ((Layer $report 'RELEASE_PAIR').status -ceq 'PASS') 'valid release not observed'
++ Require ((Layer $report 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1) 'paired metadata not observed'
++ Require ((Layer $report 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME') 'unknown send was hidden'
++ Require ((Layer $report 'LOCAL_MCP').status -ceq 'NOT_RUN' -and (Layer $report 'CONNECTOR').status -ceq 'NOT_RUN') 'unexecuted probes claimed success'
++ $dead=Invoke-Doctor @{Listener={$null}}
++ Require ((Layer $dead 'LOCAL_DAEMON').code -ceq 'LOCAL_MCP_LISTENER_MISSING') 'dead backend classification'
++ $wrong=Invoke-Doctor @{Listener={[pscustomobject]@{MatchesCanonical=$false}}}
++ Require ((Layer $wrong 'LOCAL_DAEMON').code -ceq 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH') 'wrong owner classification'
++ $wrongType=Invoke-Doctor @{Listener={[pscustomobject]@{MatchesCanonical='True'}}}
++ Require ((Layer $wrongType 'LOCAL_DAEMON').status -ceq 'FAIL') 'truthy owner proof was accepted'
++ $broken=Invoke-Doctor @{CanonicalIdentity={throw 'CATDESK_CANONICAL_HASH_MISMATCH'};DoctorAuthority={[pscustomobject]@{State='LKG_AUTHORITY_MISSING'}}}
++ Require ((Layer $broken 'RELEASE_PAIR').code -ceq 'CANONICAL_HASH_MISMATCH') 'hash mismatch classification'
++ Require ((Layer $broken 'RECOVERY_AUTHORITY').code -ceq 'LKG_AUTHORITY_MISSING') 'authority classification'
++ Require ((Layer $broken 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1 -and (Layer $broken 'CODEX_CLI').status -ceq 'UNVERIFIED') 'release failure stalled independent layers'
++ $import=@{schemaVersion=1;source='RETAINED_REPORT';observedUtc='2020-01-01T00:00:00Z';observations=@(
++  @{layer='CONNECTOR';code='UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE'},@{layer='BROWSER';code='HOME_EDITOR_MISSING'},
++  @{layer='LOCAL_MCP';code='LOCAL_MCP_AUTH_REJECTED'},@{layer='NATIVE_SESSION';code='WORKER_GONE'},
++  @{layer='LOCAL_PROVIDER';code='LOCAL_PROVIDER_UNAVAILABLE'},@{layer='LOCAL_HEALTH';code='LOCAL_HEALTH_READY'},
++  @{layer='WAKE_QUEUE';code='WAKE_METADATA_OBSERVED'},@{layer='CODEX_CLI';code='CODEX_CLI_UNAVAILABLE'})}
++ Save $observation $import;$recorded=Invoke-Doctor -Import
++ Require ((Layer $recorded 'CONNECTOR').code -ceq 'UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE' -and (Layer $recorded 'CONNECTOR').provenance -ceq 'IMPORTED_ADVISORY') '429 conflated with backend failure'
++ Require ((Layer $recorded 'LOCAL_HEALTH').status -ceq 'UNVERIFIED') 'retained health became current PASS'
++ Require ((Layer $recorded 'BROWSER').code -ceq 'HOME_EDITOR_MISSING' -and (Layer $recorded 'NATIVE_SESSION').code -ceq 'WORKER_GONE') 'independent retained gates lost'
++ Require ((Layer $recorded 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME' -and (Layer $recorded 'WAKE_QUEUE').provenance -ceq 'CURRENT_PASSIVE_METADATA' -and (Layer $recorded 'WAKE_QUEUE').observedUtc -ceq $recorded.observedUtc) 'retained positive hid a current unknown send'
++ Require ((Layer $recorded 'CODEX_CLI').code -ceq 'CODEX_PRESENT_AUTH_UNVERIFIED') 'retained absence hid current command discovery'
++ Require ((Layer $report 'BROWSER').nextDiagnostic -ceq 'operator web-dev-runtime inspect-readiness --project-id <registered-project>') 'uninspected browser lost its first diagnostic'
++ foreach($browserCode in @('HOME_EDITOR_MISSING','BROWSER_TARGET_MISSING','BROWSER_DRAFT_UNKNOWN')){
++  $import.observations=@(@{layer='BROWSER';code=$browserCode});Save $observation $import
++  $browserReport=Invoke-Doctor -Import;$browserLayer=Layer $browserReport 'BROWSER'
++  Require ($browserLayer.nextDiagnostic -ceq 'QUALIFIED_READONLY_PROFILE_OBSERVATION_AFTER_OWNER_RECONCILIATION') 'coarse browser refusal requested human classification or repeated automation'
++  Require ($browserLayer.code -ceq $browserCode -and $browserLayer.status -ceq 'UNVERIFIED' -and $browserLayer.provenance -ceq 'IMPORTED_ADVISORY' -and $browserReport.runtimeStarts -eq 0 -and $browserReport.networkRequests -eq 0 -and $browserReport.repairs -eq 0) 'operator advice changed evidence or performed an action'
++ }
++ $import.observations=@(@{layer='BROWSER';code='BROWSER_EXACT_READY'});Save $observation $import
++ Require ((Layer (Invoke-Doctor -Import) 'BROWSER').nextDiagnostic -cne 'operator web-dev-runtime login --project-id <registered-project>') 'retained readiness unnecessarily requested operator login'
++ foreach($case in @(
++  @{code='BROWSER_AUTH_REQUIRED';next='operator web-dev-runtime login --project-id <registered-project>'},
++  @{code='BROWSER_OWNER_CLEANUP_UNVERIFIED';next='RECONCILE_EXISTING_BROWSER_OWNER_WITHOUT_MARKER_CLEAR_OR_RELAUNCH'},
++  @{code='BROWSER_RESPONSE_LOAD_ERROR';next='ATTRIBUTE_EXACT_WAKE_RESPONSE_WITHOUT_USER_RESEND'})){
++  $import.observations=@(@{layer='BROWSER';code=$case.code});Save $observation $import
++  $browserReport=Invoke-Doctor -Import;$browserLayer=Layer $browserReport 'BROWSER'
++  Require ($browserLayer.nextDiagnostic -ceq $case.next -and $browserLayer.code -ceq $case.code) 'browser failure layers conflated'
++  Require ($browserLayer.status -ceq 'UNVERIFIED' -and $browserLayer.provenance -ceq 'IMPORTED_ADVISORY' -and $browserReport.runtimeStarts -eq 0 -and $browserReport.networkRequests -eq 0 -and $browserReport.repairs -eq 0) 'retained browser failure gained authority or performed an action'
++ }

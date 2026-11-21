@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T22:09:45.900034+00:00",
+  "observedClientTime": "2026-10-31T18:09:45.900034-04:00",
+  "sourceBaseCommit": "504db1c1ef6a9ef2d6609a1af480fa5197348093",
+  "classification": "ONE_CUSTOM_MCP_TUNNEL_SETUP_ATTEMPT_REFUSED_BY_UPSTREAM_DISCOVERY",
+  "authorizedAction": {
+    "name": "CatDesk-Local-Tunnel-v5",
+    "attemptCount": 1,
+    "surface": "EXISTING_USER_CHROME_CUSTOM_MCP_FORM",
+    "connection": "EXISTING_SECURE_MCP_TUNNEL",
+    "enteredTunnelAndAuthenticationPreserved": true,
+    "replacementTunnelCreated": false,
+    "newBrowserOrProfileCreated": false
+  },
+  "capturedFailure": {
+    "observedUtc": "2026-10-31T22:06:53.454Z",
+    "setupResponseHttpStatus": 424,
+    "type": "mcp_error",
+    "kind": "invalid_response",
+    "upstreamStatus": 429,
+    "developerMessage": "MCP SSE probe returned 429 from openai.org",
+    "upstreamLayer": "OPENAI_HOSTED_TUNNEL_GATEWAY",
+    "gatewayTunnelMatchesPreparedForm": true,
+    "retryAfterExposedOnSetupResponse": false,
+    "rawUpstreamBodyOrQuotaReasonExposed": false,
+    "provesPluginCreationQuotaExceeded": false,
+    "provesLocalDaemonReturned429": false,
+    "privateRequestCorrelationAndScreenshotRetained": true
+  },
+  "existingOwnerReadOnlyStatus": {
+    "observedUtc": "2026-10-31T22:05:20.593621+00:00",
+    "processRunning": false,
+    "ready": false,
+    "healthy": false,
+    "runtimeState": "stopped",
+    "stale": false,
+    "remoteLookupAttempted": true,
+    "statusError": "",
+    "registeredAliasVerified": true,
+    "clientIdentityVerified": true,
+    "profileIdentityPreserved": true
+  },
+  "independentLocalObservation": {
+    "observedUtc": "2026-10-31T22:07:07.596934+00:00",
+    "port3200Listeners": 0,
+    "catdeskOrOfficialClientProcesses": 0,
+    "localHttpRequests": 0
+  },
+  "creationVerification": {
+    "ownedInventoryCompleteBeforeAndAfter": true,
+    "ownedPluginCountBefore": 7,
+    "ownedPluginCountAfter": 7,
+    "ownedPluginIdentitiesUnchanged": true,
+    "newV5Observed": false,
+    "existingV4Scope": "PRIVATE_PERSONAL_USER",
+    "existingV4PrivateScopeProvesOriginalC49ConnectionType": false
+  },
+  "diagnosis": {
+    "knownPrerequisiteFailure": "EXISTING_BACKEND_AND_TUNNEL_OWNER_STOPPED",
+    "offlineStateExplainsEvery429": false,
+    "specific429QuotaScopeResetOrInternalGatewayCause": "NOT_EXPOSED",
+    "transportDiscoveryFailureSeparateFromToolPublication": true,
+    "separateFromProtectedReviewAndProducerAuthority": true,
+    "noC49ReplayOrAlternateTransport": true
+  },
+  "officialGuidance": {
+    "connectionAndRefresh": "https://developers.openai.com/plugins/deploy/connect-chatgpt#refresh-metadata",
+    "tunnelTroubleshooting": "https://developers.openai.com/api/docs/guides/secure-mcp-tunnels#troubleshooting",
+    "newPluginRequiredForEveryToolChange": false,
+    "customMcpRefreshAndPublishedContinuousReviewAreDifferent": true,
+    "existingV4RefreshUiVerified": false
+  },
+  "nextEligibleAction": "ESTABLISH_A_QUALIFIED_SERVING_WINDOW_WITH_THE_EXISTING_SUPPORTED_BACKEND_AND_REGISTERED_TUNNEL_OWNER_BEFORE_ONE_FRESH_DISCOVERY_CHECK_NO_REPLACEMENT_TUNNEL_OR_BLIND_RETRY",
+  "supportEscalationIfGateway429PersistsWhenReady": "PROVIDE_PRIVATE_UTC_REQUEST_CORRELATION_AND_424_WITH_NESTED_429_TO_OPENAI_SUPPORT_NO_SUPPORT_MESSAGE_SENT",
+  "preservation": {
+    "pinsChecked": 5121,
+    "pinChanges": 0,
+    "projectBindingsOrNativeSessionsChanged": false,
+    "protectedSettingsOrReleaseAuthorityChanged": false,
+    "c49Attempts": 0,
+    "projectMessagesSent": 0,
+    "backendWakeOfficialOrRecurringStarts": 0,
+    "browserNetworkObservationDisabled": true,
+    "existingSetupFormAndValuesPreserved": true
+  },
+  "qualificationScope": "ACTUAL_FAILED_BROWSER_SETUP_PLUS_READONLY_RUNTIME_AND_INVENTORY_NOT_SUCCESSFUL_PLUGIN_CREATION_OR_WEB_CODING_ACCEPTANCE"
+}

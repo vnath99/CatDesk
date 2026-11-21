@@ -1,0 +1,57 @@
+{
+  "liveSelection": "TARGET_TAB_DRIFT_FINAL_CHROME_ERROR_NO_READY_AUTHORITY",
+  "sourceQualificationSha256": "3a74ed44ef9496febd6145073280574545a060024e061e4bd7ee2e49710f4f4e",
+  "milestoneComplete": false,
+  "qualification": {
+    "fixedDiagnosticOutputFiltering": "PASS",
+    "nativeTimeoutAndHeldPipeCleanup": "PASS",
+    "wakeStrictClippy": "PASS_ALL_TARGETS_TEST_SUPPORT",
+    "wakeFormat": "PASS",
+    "pythonPassed": 11,
+    "failed": 0,
+    "nativeWindowsPassed": 4
+  },
+  "priorAutomationState": "HOME",
+  "date": "2026-10-28",
+  "operatorEvidence": "BYOVD conversation history loaded after manual sign-in; this does not substitute for exact machine URL verification",
+  "productionActions": 0,
+  "classification": "SOURCE_NATIVE_QUALIFIED_LIVE_TARGET_DRIFT_CHROME_ERROR",
+  "sourceParentCommit": "102681bbc355bcb5cf4554b3146e05de6f05f2bf",
+  "selection": {
+    "authenticationAuthorityCreated": false,
+    "typing": false,
+    "metadataAndDocumentUrlAgreement": true,
+    "productionProbeChanged": false,
+    "maximumTabs": 32,
+    "navigationDuringSelection": false,
+    "otherTabUrlsExported": false,
+    "selectedDocumentRechecked": true,
+    "uniqueReturnedTargetRequired": true,
+    "tabClosing": false
+  },
+  "purpose": "Resolve human-visible conversation versus controlled CDP tab discrepancy without wrong-chat selection",
+  "sourceCommit": "10af858fe9846c5665b2f212e53b078a5ed9050d",
+  "liveEvidence": {
+    "outerVerificationSha256": "f6be883f2857fa6f41e00f0d64c0ba69cb50ca938d0806b731676c8138b787ac",
+    "startedUtc": "2026-10-28T20:29:27.8983462+00:00",
+    "protectedFiles": 8484,
+    "sendAttempted": false,
+    "authenticationVerified": false,
+    "observations": [
+      "PROBE:TARGET_TAB_DRIFT",
+      "PROBE:CHROME_ERROR",
+      "PROBE:FINAL:CHROME_ERROR"
+    ],
+    "failedAuthenticationInferred": false,
+    "metadataOnlyPreserved": 2,
+    "hostStarted": false,
+    "ownersRemaining": 0,
+    "resultSha256": "aa11830adc5dec6368c3775d7306ff745cb882c0012cd28545ca9ee0ce8469bf",
+    "productionActions": 0,
+    "finishedUtc": "2026-10-28T20:30:35.5906859+00:00",
+    "selectedRuntimeChanged": false,
+    "underlyingChromeErrorCode": "NOT_COLLECTED",
+    "schedulerStarted": false
+  },
+  "sourceCi": "UNVERIFIED_ZERO_CHECKS_AND_RUNS_OBSERVED_FOR_10af858"
+}

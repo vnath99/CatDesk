@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T08:35:56.125565+00:00",
+  "classification": "ACTUAL_SUPPORTED_COORDINATOR_BLOCKED_REPORT_NOT_EXECUTION_OR_OWNERSHIP_RELEASE",
+  "controllerSourceCommit": "bbf72a78de481330220057f67b39b32f7dd146ec",
+  "controllerSha256": "ab9801483046d8dc35a7c2697a09ccffcde17c37dec7c936c4d4b660d50aa4f5",
+  "operation": "operator web work resolve",
+  "outcome": "blocked",
+  "elapsedSeconds": 10.5,
+  "owner": {
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "report": {
+    "recorded": true,
+    "requestPhase": "OPEN",
+    "reportedState": "blocked",
+    "reasonCode": "ASSISTANT_REPORTED_TRANSPORT_SAFETY_CHECK_NO_LOCAL_RECEIPT",
+    "taskCompletionVerified": false,
+    "ownershipReleased": false,
+    "reportedStatusIsExecutionEvidence": false,
+    "originalWorkTargetGeneration": 4,
+    "currentVerifiedContinuationGeneration": 5,
+    "knownAttemptedToolIdentityOrDeliveryInvented": false,
+    "blockedOperationReplayed": false
+  },
+  "evidenceBasis": "PREVIOUSLY_VERIFIED_EXACT_CONTINUATION_ASSISTANT_RESPONSE_AND_RETAINED_ZERO_CALL_LOCAL_TASK_JOURNAL_PLATFORM_REJECTION_RECEIPT_UNAVAILABLE",
+  "preservation": {
+    "criticalPinsChecked": 5107,
+    "unchangedCriticalPins": 5106,
+    "expectedWorkLedgerChanges": 1,
+    "unexpectedChanges": 0,
+    "allOtherRequestFieldsAndTasksPreserved": true,
+    "bindingsReceiptsHistoryGrantsAndNativeSessionsUnchanged": true,
+    "newProviderBrowserBackendWakeOfficialOrRecurringActions": 0,
+    "protectedPromotion": false,
+    "forensicBaselineDerivedWithoutReplacingParentOrClaimingReleaseAuthority": true,
+    "hostStopped": true
+  },
+  "nextExecutableTask": "REUSE_EXISTING_PROJECT_OBSERVATION_CYCLE_TO_ACCOUNT_CURRENT_TARGET_SENT_WAKE_RECEIPTS_WITHOUT_NEW_BROWSER_OWNER_OR_SCHEDULER",
+  "operatorActionRequiredNow": false,
+  "fullNativeTwoWebAcceptance": "OPEN",
+  "goal": "ACTIVE"
+}

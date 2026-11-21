@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-08T06:09:02.949422+00:00",
+  "scope": "C1_ORIGINAL_INVITATION_DIAGNOSIS",
+  "baselineCommit": "5c57ac4189bd682df4dc61872fe9271f0c1fbaa7",
+  "finding": {
+    "existingSourceReviewDiagnosisAcceptsOrdinaryInvitation": false,
+    "installedAdapterDeclaresDiagnosisProtocol": false,
+    "installedAdapterDeclaresCooperativeReconciliation": false,
+    "unknownProtocolWasSentToInstalledAdapter": false,
+    "existingReviewOrReceiptAuthorityWeakened": false
+  },
+  "implementation": {
+    "command": "operator web work inspect --project-id REGISTERED_PROJECT_ID --request-id EXISTING_REQUEST_ID",
+    "selection": "EXISTING_OPEN_ORDINARY_WORK_LEDGER_AND_PAIRED_WAKE_TARGET",
+    "runtimeScope": "INSTALLED_STORE_ONLY",
+    "acceptedRetainedDeliveryPhases": [
+      "CLAIMED",
+      "SUBMITTING",
+      "ATTENTION"
+    ],
+    "requiresAbsentReceipt": true,
+    "eventAndMessageDigestVerified": true,
+    "deliveryFileHashCheckedBeforeExecutionAndAfterCleanup": true,
+    "eventMessageInProcessArguments": false,
+    "browserOwner": "EXISTING_STOPPED_HOST_PROFILE_OBSERVER",
+    "comparisonReader": "EXISTING_ADAPTER_READER_SHARED_WITH_WAKE_BRIDGE",
+    "metadataValidator": "EXISTING_NATIVE_SUBMISSION_DIAGNOSIS_VALIDATOR",
+    "visibleComparisonFields": [
+      "composerClass",
+      "composerBytes",
+      "expectedUserCount",
+      "lastUserMatches",
+      "trustedMatches",
+      "turnsAfter",
+      "stable",
+      "coverage"
+    ],
+    "coverage": "VISIBLE_BOUNDED_ONLY",
+    "zeroOrDuplicateCountsResolveDelivery": false,
+    "receiptCreated": false,
+    "stateChanged": false,
+    "retryAuthorized": false,
+    "sendAttempted": false,
+    "nativeExecutionGrantCreated": false,
+    "sharedMetadataLocksHeldAcrossBrowserWait": false,
+    "retainedHelperArtifact": "CONTROLLER_ADJACENT_BROWSER_OBSERVER_WITH_COMPILED_SHA256",
+    "badAdjacentHelperMayFallBackToMutableSource": false,
+    "sourceOnlyFallbackStillRequiresCompiledSha256": true
+  },
+  "qualification": {
+    "pythonReadiness": {
+      "passed": 32,
+      "command": "python -I -m unittest discover -s tests -p test_wake_readiness_probe.py -v"
+    },
+    "adapterRegression": {
+      "passed": 46,
+      "command": "python -I -m unittest discover -s wake/tests -p test_adapter.py -v"
+    },
+    "wakeReadiness": {
+      "passed": 12,
+      "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --lib readiness -- --test-threads=2"
+    },
+    "reviewReconciliationRegression": {
+      "passed": 14,
+      "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --lib runtime::review_reconcile::tests -- --test-threads=2"
+    },
+    "webCli": {
+      "passed": 40,
+      "command": "cargo test --locked --offline --bin catdesk operator_facade::web::tests -- --test-threads=2"
+    },
+    "deliveryRegression": {
+      "passed": 4,
+      "command": "cargo test --locked --offline --bin catdesk web_work::delivery::tests -- --test-threads=2"
+    },
+    "strictRootAndWakeAllTargetClippy": "PASS",
+    "formatting": "PASS",
+    "packagedHelperSurvivesSourceEditsAndRejectsWrongHash": "PASS",
+    "homeDriftSkipsMessageComparisonWithoutNavigationRetry": "PASS",
+    "changedEventTargetDigestOrReceiptRejected": "PASS",
+    "privateDraftTextHashesAndProbeErrorsNotExported": "PASS"
+  },
+  "acceptance": {
+    "implementation": "TESTED_SOURCE",
+    "separateControllerBuild": "PASS_RETAINED_HELPER_NOT_INSTALLED",
+    "eventAwareInstalledProfileObservation": "NEGATIVE_ROUTE_GUARD_QUALIFIED_POSITIVE_ACCESS_BLOCKED",
+    "previousLiveObserverEvidence": "REGISTERED_READ_ONLY_BROWSER_OBSERVATION_2026_11_08.json",
+    "profileAccessPrerequisite": "PENDING_EXISTING_OPERATOR_ACCOUNT_ACCESS_CHECK",
+    "originalDelivery": "UNCHANGED_ATTENTION_UNVERIFIED_NO_REPLAY",
+    "nativeEditVerificationAndWakeCycle": "NOT_RUN",
+    "productionOrSelectedPackageChanges": 0,
+    "newBrowserOrConnectorChecksThisIncrement": 0,
+    "c1": "NOT_COMPLETE",
+    "c2ThroughC5": "NOT_RUN"
+  },
+  "implementationCommit": "a000ba3519daaaec11d193991f3b930dfd8e14e6",
+  "developmentController": {
+    "classification": "BUILT_SEPARATELY_NOT_INSTALLED",
+    "sha256": "bde8796da5a3e1ca3c5a99b38ebbd5941a6ef3a37b036431d3b779e776cb4f97",
+    "observerArtifactSha256": "0ccc94a27ffc826627fcdcd75308e8179d99b7d3c1b1a6d17129457a105fb301",
+    "buildSeconds": 54.156,
+    "preservationPins": 1049,
+    "preservationMismatches": 0
+  },
+  "operatorWrapperQualification": {
+    "samePendingCommandRetained": true,
+    "sameProjectWorkspaceAndReadOnlyScope": true,
+    "oldWrapperPreserved": true,
+    "controllerAndHelperHashesVerified": true,
+    "preflight": "PASS_ARTIFACT_IDENTITIES_ONLY",
+    "preflightCatdeskCommands": 0,
+    "preflightBrowserStarts": 0,
+    "accountAccessStillUnverified": true
+  },
+  "resumedLiveQualification": {
+    "observedUtc": "2026-11-08T15:39:03.714164+00:00",
+    "sourceCommit": "1e78e0937568cc0f2dbfbfad00f1553532a361ed",
+    "scope": "FIRST_EVENT_AWARE_READ_ONLY_INSPECTION_OF_ORIGINAL_REQUEST",
+    "elapsedSeconds": 35.188,
+    "controllerSha256": "bde8796da5a3e1ca3c5a99b38ebbd5941a6ef3a37b036431d3b779e776cb4f97",
+    "finalState": "HOME",
+    "browserObservation": {
+      "assistant": "ABSENT",
+      "composer": "UNKNOWN",
+      "document": "COMPLETE",
+      "editor": "MISSING",
+      "exchange": "UNATTRIBUTED",
+      "generation": "IDLE",
+      "history": "ABSENT",
+      "recovery": "OBSERVATION_ONLY",
+      "route": "HOME"
+    },
+    "tabObservation": {
+      "alternateRoute": false,
+      "candidateFrame": "TOP",
+      "candidateRoute": "HOME",
+      "candidateShape": "STRING",
+      "controlledRoute": "HOME",
+      "controlledShape": "STRING",
+      "metadataMatches": 1,
+      "schemaVersion": 1,
+      "stage": "DOCUMENT",
+      "state": "TARGET_TAB_DRIFT",
+      "tabCount": 1,
+      "unreadableMetadata": 0
+    },
+    "retainedDeliveryHashGuardPassed": true,
+    "submissionObservation": null,
+    "submissionObservationState": "TARGET_UNAVAILABLE",
+    "messageCountsInferred": false,
+    "receiptCreated": false,
+    "stateChanged": false,
+    "retryAuthorized": false,
+    "preservationPins": 1049,
+    "preservationMismatches": 0,
+    "ownedTreeExited": true,
+    "installedProfileProcessMatches": 0,
+    "wakeHostProcessMatches": 0,
+    "wakeHostStopped": true,
+    "port3200ListenerPresent": false,
+    "messagesSent": 0,
+    "bindingChanges": 0,
+    "nativeGrantsCreated": 0,
+    "servingStarts": 0,
+    "connectorCalls": 0,
+    "result": "PASS_GUARD_REFUSAL_ON_UNUSABLE_DOCUMENT_NOT_POSITIVE_C1_ACCEPTANCE",
+    "next": "Existing attended account/conversation-access inspection. No new approval or equivalent request; no automatic repeat."
+  }
+}

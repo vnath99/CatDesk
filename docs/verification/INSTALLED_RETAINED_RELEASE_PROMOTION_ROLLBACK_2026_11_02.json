@@ -1,0 +1,120 @@
+{
+  "recordedUtc": "2026-11-02T03:12:06.017834+00:00",
+  "classification": "TESTED_INSTALLED_AND_ONE_READ_ONLY_V5_CONNECTOR",
+  "publishedSourceCheckpointBeforeEvidence": "6607e0d298e4557ae3480bd80936a6068365ebee",
+  "payload": {
+    "reviewedSourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "bytes": 38482432,
+    "attestationFileSha256": "cb9967689bbacf2f5b32dc286acf190b4f6bec580cd8fedeefd23e447fb7c2de",
+    "rebuilt": false,
+    "producerReconfirmed": false
+  },
+  "administrativeController": {
+    "reviewedSourceCommit": "313f6a31f13c04c90d6098fad57f1e6a6c99cfd7",
+    "sha256": "4e655bb132ba31dee783f598cf4d660593c70a6f561438eba15511a896df4911",
+    "installedAsPayload": false
+  },
+  "completedMetadataTransition": {
+    "passed": true,
+    "receiptArchivedWithoutByteChange": true,
+    "originalJournalUnchanged": true,
+    "preservationPins": 5689,
+    "binaryChangedByMetadataTransition": false
+  },
+  "normalPromotion": {
+    "preflight": "PREFLIGHT_READY",
+    "confirmCalls": 1,
+    "terminalState": "PROMOTION_COMPLETED",
+    "boundedOwnerExit": "STOPPED_AFTER_BOUNDED_OWNER",
+    "workerMaximumSeconds": 600,
+    "outerMaximumSeconds": 780,
+    "containmentExitCode": 0,
+    "trustedSlot": "slot-b",
+    "trustedGeneration": 4,
+    "priorVerifiedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+    "priorTrustedSlot": "slot-a",
+    "priorTrustedGeneration": 3,
+    "retainedPriorArtifactsPreservedBeforeSlotRotation": true,
+    "preservationPins": 5694,
+    "unrelatedPinMismatches": 0
+  },
+  "installedServing": {
+    "publicBackendOnlyLifecycle": true,
+    "actualCanonicalAndFingerprintMatch": true,
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "publicLauncherExited": true,
+    "daemonSurvivedLauncherExit": true,
+    "authStatuses": [
+      401,
+      401,
+      200,
+      200
+    ],
+    "catalog": {
+      "toolCount": 102,
+      "nativeStatusAdvertised": true,
+      "centralDispatcherPresent": true,
+      "nativeDispatchAdvertised": true
+    },
+    "originalTunnelOwnerPreserved": true,
+    "originalProfilePreserved": true,
+    "tunnelReady": true,
+    "configAuthorityUnchanged": true,
+    "onlyNormalUsageCountersMayVary": true
+  },
+  "controlledRollback": {
+    "passed": true,
+    "fault": "TRANSIENT_EXCLUSIVE_READ_HANDLE_ON_CURRENT_RECOVERY_SLOT",
+    "artifactBytesChangedByFault": false,
+    "artifactAclChangedByFault": false,
+    "previousSelectedByExistingRecoveryAuthority": true,
+    "previousPublicRecoveryAndAuthVerified": true,
+    "currentPublicRecoveryAndAuthVerified": true,
+    "releaseSlotsManifestsPointerAndPromotionAuthorityUnchanged": true,
+    "finalCurrentServingRestored": true,
+    "boundedChildMaximumSeconds": 180,
+    "fingerprintManuallyRewritten": false
+  },
+  "connector": {
+    "operation": "autonomy_runtime_capabilities",
+    "structuredResponseBeforeAndAfterControlledRestart": true,
+    "postRestartProbeCount": 1,
+    "http429Observed": false,
+    "centralDispatcherVisibilityInLoadedClient": "ABSENT_FROM_THIS_CHATS_LOADED_CATALOG",
+    "clientCatalogPresenceNotInferredFromServerPublication": true,
+    "pluginManagementReadOnlySearch": "TRANSPORT_SEND_FAILURE_NO_HTTP_STATUS_NO_RETRY"
+  },
+  "cleanup": {
+    "recordedAdministrativeAndRollbackTestOwnersExited": true,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "tunnelLifecycleActions": 0,
+    "recurringAutomationEnabled": false,
+    "intentionalServingOwnersRetained": true
+  },
+  "preservation": {
+    "originalProjectBindingsUnchanged": true,
+    "nativeProjectSessionsNotLaunchedOrInterrupted": true,
+    "oldReceiptsAndC49NotReplayed": true,
+    "originalCompletedHistoryPreserved": true
+  },
+  "failedAttempts": [
+    {
+      "scope": "PRIVATE_ROLLBACK_HARNESS_ADMISSION",
+      "error": "POWERSHELL_SWITCH_LOOP_VARIABLE_COLLISION",
+      "beforeAttemptCreationOrLifecycleMutation": true,
+      "originalScriptPreserved": true,
+      "correctedBeforeActualDrill": true
+    }
+  ],
+  "remainingAcceptance": [
+    "Reconcile canonical and controlled project authority through existing supported paired binding procedures without changing unrelated native ownership.",
+    "Make the existing v5 client catalog expose the now-installed central native dispatcher through a supported refresh/publication path.",
+    "Two distinct authenticated ChatGPT Web project callers must perform useful isolated edits and native verification; local catalogs and a read-only connector response do not prove this.",
+    "Installed independent manual Wake, context-triggered continuation, supervisor restart/reboot and unattended operation remain open.",
+    "Full T-0484 estimator calibration and later Gemini/DeepSeek/local MCP client acceptance remain mandatory."
+  ],
+  "operatorActionRequiredForCompletedSlice": false,
+  "goal": "ACTIVE"
+}

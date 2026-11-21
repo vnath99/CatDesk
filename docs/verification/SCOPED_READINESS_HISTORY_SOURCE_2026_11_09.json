@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-09T16:31:59.242675+00:00",
+  "classification": "SOURCE_ONLY_NOT_INSTALLED_OR_LIVE_ACCEPTANCE",
+  "sourceBaselineCommitPrefix": "19605f4",
+  "sourceCommit": "3f5b96678395b707adda544955553eb9300b466d",
+  "sourceCommitStatus": "EXACT_REVIEWED_SOURCE_COMMIT_RECORDED_PUBLICATION_VERIFIED_SEPARATELY",
+  "sourceFiles": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "ed8fa04cd1b4ee93647bdb0424b0255465e0df82aa8bfabe843aff1cb8b6befe"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "sha256": "20f05c309c59d610dd90aabca653fc77a186e4244c454462680dccedc2a6325c"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "76efc39f64b84c56c9479374a2a2623c22e6c289b78b0bcb3c16ce3639f0cdd2"
+    },
+    {
+      "path": "wake/src/runtime_scoped_review.rs",
+      "sha256": "12778066acdb6e70048404c77078766066b420cdf5ab50aaadb5ce73d3b1917a"
+    }
+  ],
+  "demonstratedDefect": {
+    "terminalReadiness": "Known AUTH/CAPTCHA Attention could exit before the existing readiness observer emitted fixed route/reason metadata.",
+    "scopedPersistence": "Scoped attempts consumed validated readiness metadata only in transient local status; adapter.log contains stderr, not the JSON stdout protocol.",
+    "historicalReadinessReconstructed": false,
+    "authenticationExpiryInferred": false
+  },
+  "implementation": {
+    "pythonTerminalObservation": "Emit existing closed route/reason categories before re-raising the same terminal LOGIN/CAPTCHA Attention.",
+    "observerFailure": "Preserve the same terminal refusal without navigation, recovery or exporting arbitrary observer exception text.",
+    "scopedPersistence": "Reuse the existing bounded readiness-history journal under the existing event owner.",
+    "journalEntryFields": [
+      "observedUtc",
+      "eventId",
+      "route",
+      "reason"
+    ],
+    "journalEntryLimit": 64,
+    "journalDuplicateSuppression": "Consecutive equal eventId/route/reason observations use the existing deduplication.",
+    "journalValidation": "Reject unknown route/reason categories and corrupt existing history before input; preserve corrupt bytes.",
+    "scopeBinding": "Use the current exact claimed delivery and existing ownership guard; this metadata is not a receipt or authentication proof.",
+    "scopedAbsoluteDeadlineExtended": false,
+    "ordinaryReadinessDeadlinePolicyChanged": false,
+    "submitCallbackOrReceiptAuthorityChanged": false,
+    "statusContractOrGlobalStatusOverwritten": false,
+    "newBrowserOwnerSchedulerOrRecoveryFramework": false,
+    "rawUrlSelectorDraftConversationCredentialOrPrivateContextStored": false
+  },
+  "qualification": {
+    "python": [
+      {
+        "command": "python -I -m unittest discover -s tests -p test_wake_bridge_current_dom.py -q",
+        "passed": 136,
+        "elapsedSeconds": 168.584,
+        "includesNewTerminalObservationCases": 5
+      },
+      {
+        "command": "python -I -m unittest discover -s tests -p test_wake_bridge.py -q",
+        "passed": 127,
+        "elapsedSeconds": 176.054
+      }
+    ],
+    "rust": [
+      {
+        "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --lib runtime::scoped_review::tests -- --test-threads=2",
+        "passed": 28
+      },
+      {
+        "command": "cargo test --locked --offline --manifest-path wake/Cargo.toml --lib readiness -- --test-threads=2",
+        "passed": 37
+      }
+    ],
+    "deduplication": {
+      "rawRustPasses": 65,
+      "sharedRustCases": [
+        "runtime::scoped_review::tests::scoped_readiness_failure_is_retained_for_its_event_without_blocking_a_sibling",
+        "runtime::scoped_review::tests::scoped_readiness_rejects_untrusted_or_corrupt_history_before_input"
+      ],
+      "sharedRustCaseCount": 2,
+      "distinctRustCases": 63,
+      "distinctPythonCases": 263,
+      "distinctTotal": 326,
+      "separateFiveCaseRunAlreadyIncludedInDomTotal": true
+    },
+    "strictClippy": {
+      "root": {
+        "status": "PASS",
+        "allTargets": true,
+        "warningsDenied": true,
+        "elapsedSeconds": 78.704
+      },
+      "wake": {
+        "status": "PASS",
+        "allTargets": true,
+        "warningsDenied": true,
+        "elapsedSeconds": 14.378
+      }
+    },
+    "formatting": "PASS",
+    "retainedOwnerResults": {
+      "fmt": {
+        "exitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      "dom-tests": {
+        "exitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      "bridge-tests": {
+        "exitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      "scoped-tests": {
+        "exitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      "readiness-tests": {
+        "exitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      "wake-clippy": {
+        "exitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      },
+      "root-clippy": {
+        "exitCode": 0,
+        "timedOut": false,
+        "terminationFailed": false
+      }
+    },
+    "sourcePeerReview": "LIMITED_PASS_NOT_RELEASE_REVIEW_AUTHORITY",
+    "evidenceBasis": "Retained local qualifying outputs and owner receipts; publisher binds exact private evidence separately.",
+    "realBrowserOrNetworkAcceptancePerformed": false
+  },
+  "testedBoundaries": [
+    "AUTH_ROUTE_FIXED_METADATA",
+    "CAPTCHA_FIXED_METADATA",
+    "EXACT_TARGET_LOGIN_BOUNDED_WAIT",
+    "OBSERVER_FAILURE_RETAINS_ORIGINAL_REFUSAL",
+    "UNLISTED_REASON_NOT_EXPORTED",
+    "SCOPED_EVENT_HISTORY_SURVIVES_FAILED_ATTEMPT",
+    "INDEPENDENT_SYNTHETIC_SIBLING_CONTINUES",
+    "UNTRUSTED_OR_CORRUPT_HISTORY_FAILS_BEFORE_INPUT",
+    "SCOPED_PROGRESS_DOES_NOT_EXTEND_DEADLINE"
+  ],
+  "preservedState": {
+    "selectedDevSourceCommit": "bb7487c4e36fa53280b8d08c1d2f762131573639",
+    "selectedDevGuiSha256": "d46ba6647d78915f0d3d058cd962e308b1b7f4f87f3557984835560ffa92c4fe",
+    "selectedDevPackageChangedByThisSourceWork": false,
+    "frozenMainSourceCommit": "ae3f81445dc543d236732060e8d02e54b8c3a978",
+    "frozenMainInputPublicationCommit": "8d96edea45ba759ccd809d5b4d52d1e3126db4f9",
+    "frozenMainSourceOrInputBytesChanged": false,
+    "originalTaskBindingGrantOrUnknownFenceMutationsPerformed": false,
+    "newRuntimePackageBuilt": false,
+    "newPackageSelectedOrInstalled": false,
+    "protectedProductionChanged": false,
+    "newBrowserStarts": 0,
+    "nativeDispatches": 0,
+    "messagesSent": 0,
+    "recurringAutomationStarted": false,
+    "newRuntimeOrAuthenticationCheckPerformed": false
+  },
+  "acceptance": {
+    "source": "TESTED_SOURCE",
+    "installed": "NOT_QUALIFIED_FOR_THIS_PATCH",
+    "live": "NOT_RUN_FOR_THIS_PATCH",
+    "historicalFailureRoute": "NOT_RECONSTRUCTED",
+    "genuineCurrentWebSourceReview": "NOT_OBTAINED",
+    "producerAuthorityCreated": false,
+    "retryAuthorized": false,
+    "c1": "INCOMPLETE"
+  },
+  "next": "Use the existing development qualification and release procedures before deploying this source patch. Preserve the pending original review and use supported observed-profile readiness and guarded recovery; do not replay tasks or infer authentication expiry."
+}

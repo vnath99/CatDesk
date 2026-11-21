@@ -1,0 +1,223 @@
++                    recovery_pair,
++                    |_| Ok(())
++                )
++                .is_err()
++            );
++            assert_eq!(fs::read(conflict).unwrap(), b"unknown historical artifact");
++            assert!(dev_dir(&workspace).join("login-active.json").exists());
++            cleanup(&parent);
++        }
++    }
++
+     #[test]
+     fn explicit_prepare_is_sticky_and_readback_rejects_source_drift() {
+         let (parent, workspace, package, python) = fixture();
+diff --git a/wake/src/lib.rs b/wake/src/lib.rs
+index af82b661e837c2e9cdaf4e16c76806dba3718933..4271a26a0211e0921f0d9ca806fc045c453225ca 100644
+--- a/wake/src/lib.rs
++++ b/wake/src/lib.rs
+@@ -44,6 +44,7 @@ pub(crate) mod install_broker_source;
+ #[cfg(windows)]
+ pub mod install_broker_stage_writer;
+ pub mod process_job;
++pub mod readiness_probe;
+ #[cfg(not(windows))]
+ pub mod development_runtime {
+     use crate::Result;
+diff --git a/wake/src/protocol.rs b/wake/src/protocol.rs
+index 99a61e31906b2b4af88d1f674226eb8639bd0465..c3bef73368370044513e704f12f8c985d528a116 100644
+--- a/wake/src/protocol.rs
++++ b/wake/src/protocol.rs
+@@ -14,6 +14,84 @@ pub fn valid_id(value: &str) -> bool {
+             .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+ }
+ 
++/// Typed Wake intent metadata lives in the existing audit-reference namespace.
++/// Events without these references retain their original JSON and digests.
++const WAKE_METADATA_NAMESPACE: &str = "catdesk.wake.";
++const WAKE_METADATA_V1: &str = "catdesk.wake.v1:";
++pub const MAX_WAKE_TTL_SECONDS: u64 = 24 * 60 * 60;
++
++#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
++#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
++pub enum WakePurpose {
++    ManualEndTurn,
++    NewTask,
++    Rollover,
++    PeriodicHealth,
++}
++
++impl WakePurpose {
++    fn wire_value(self) -> &'static str {
++        match self {
++            Self::ManualEndTurn => "MANUAL_END_TURN",
++            Self::NewTask => "NEW_TASK",
++            Self::Rollover => "ROLLOVER",
++            Self::PeriodicHealth => "PERIODIC_HEALTH",
++        }
++    }
++
++    fn parse(value: &str) -> Result<Self> {
++        match value {
++            "MANUAL_END_TURN" => Ok(Self::ManualEndTurn),
++            "NEW_TASK" => Ok(Self::NewTask),
++            "ROLLOVER" => Ok(Self::Rollover),
++            "PERIODIC_HEALTH" => Ok(Self::PeriodicHealth),
++            _ => Err("QUEUE_WAKE_METADATA_INVALID".into()),
++        }
++    }
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub struct WakeMetadata {
++    pub purpose: WakePurpose,
++    pub source_event_id: String,
++    pub source_turn_id: String,
++    /// Scheduling hint only; it does not override per-project FIFO or fairness.
++    pub priority: u8,
++    /// Absolute Unix seconds. TTL is measured from the immutable received time.
++    pub expires_utc: u64,
++}
++
++impl WakeMetadata {
++    pub fn validate(&self, created_utc: u64) -> Result<()> {
++        if created_utc == 0
++            || !valid_id(&self.source_event_id)
++            || !valid_id(&self.source_turn_id)
++            || self.expires_utc <= created_utc
++            || self.expires_utc - created_utc > MAX_WAKE_TTL_SECONDS
++        {
++            return Err("QUEUE_WAKE_METADATA_INVALID".into());
++        }
++        Ok(())
++    }
++
++    /// Pass these references to the existing immutable, target-bound producer.
++    /// All five are required together; partial metadata is never accepted.
++    pub fn audit_references(&self, created_utc: u64) -> Result<Vec<String>> {
++        self.validate(created_utc)?;
++        Ok([
++            ("purpose", self.purpose.wire_value().to_owned()),
++            ("source-event", self.source_event_id.clone()),
++            ("source-turn", self.source_turn_id.clone()),
++            ("priority", self.priority.to_string()),
++            ("expires-utc", self.expires_utc.to_string()),
++        ]
++        .into_iter()
++        .map(|(key, value)| format!("{WAKE_METADATA_V1}{key}:{value}"))
++        .collect())
++    }
++}
++
+ /// Accept only an exact conversation URL, including a ChatGPT Project route
+ /// and the reviewed uppercase WEB: conversation compatibility spelling. No
+ /// redirects, query strings, ports or URL credentials.
+@@ -109,8 +187,76 @@ impl Event {
+         {
+             return Err("QUEUE_EVENT_INVALID".into());
+         }
++        self.wake_metadata()?;
+         Ok(())
+     }
++
++    pub fn wake_metadata(&self) -> Result<Option<WakeMetadata>> {
++        let mut fields = std::collections::BTreeMap::new();
++        for reference in &self.audit_references {
++            if !reference.starts_with(WAKE_METADATA_NAMESPACE) {
++                continue;
++            }
++            let (key, value) = reference
++                .strip_prefix(WAKE_METADATA_V1)
++                .and_then(|reference| reference.split_once(':'))
++                .ok_or("QUEUE_WAKE_METADATA_INVALID")?;
++            if !matches!(
++                key,
++                "purpose" | "source-event" | "source-turn" | "priority" | "expires-utc"
++            ) || fields.insert(key, value).is_some()
++            {
++                return Err("QUEUE_WAKE_METADATA_INVALID".into());
++            }
++        }
++        if fields.is_empty() {
++            return Ok(None);
++        }
++        if fields.len() != 5 {
++            return Err("QUEUE_WAKE_METADATA_INVALID".into());
++        }
++        let priority = fields["priority"]
++            .parse::<u8>()
++            .map_err(|_| "QUEUE_WAKE_METADATA_INVALID")?;
++        let expires_utc = fields["expires-utc"]
++            .parse::<u64>()
++            .map_err(|_| "QUEUE_WAKE_METADATA_INVALID")?;
++        if priority.to_string() != fields["priority"]
++            || expires_utc.to_string() != fields["expires-utc"]
++        {
++            return Err("QUEUE_WAKE_METADATA_INVALID".into());
++        }
++        let metadata = WakeMetadata {
++            purpose: WakePurpose::parse(fields["purpose"])?,
++            source_event_id: fields["source-event"].into(),
++            source_turn_id: fields["source-turn"].into(),
++            priority,
++            expires_utc,
++        };
++        metadata.validate(self.created_utc)?;
++        Ok(Some(metadata))
++    }
++
++    /// Add metadata without replacing ordinary evidence or rewriting an intent.
++    pub fn with_wake_metadata(mut self, metadata: WakeMetadata) -> Result<Self> {
++        if let Some(existing) = self.wake_metadata()? {
++            if existing != metadata {
++                return Err("QUEUE_WAKE_METADATA_CONFLICT".into());
++            }
++        } else {
++            self.audit_references
++                .extend(metadata.audit_references(self.created_utc)?);
++        }
++        self.validate()?;
++        Ok(self)
++    }
++
++    /// Expiration forbids a new submission, never reconciliation of a prior one.
++    pub fn is_expired_at(&self, observed_utc: u64) -> Result<bool> {
++        Ok(self
++            .wake_metadata()?
++            .is_some_and(|metadata| observed_utc >= metadata.expires_utc))
++    }
+ }
+ 
+ #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+@@ -140,3 +286,151 @@ impl Target {
+         Ok(())
+     }
+ }
++
++#[cfg(test)]
++mod wake_metadata_tests {
++    use super::*;
++
++    const LEGACY_EVENT: &str = r#"{"schemaVersion":1,"eventId":"legacy-event","projectId":"alpha","eventType":"test","createdUtc":100,"message":"Review alpha","targetGeneration":1,"auditReferences":["review-receipt-1"]}"#;
++
++    fn event() -> Event {
++        serde_json::from_str(LEGACY_EVENT).unwrap()
++    }
++
++    fn metadata() -> WakeMetadata {
++        WakeMetadata {
++            purpose: WakePurpose::ManualEndTurn,
++            source_event_id: "source-event-1".into(),
++            source_turn_id: "source-turn-1".into(),
++            priority: 5,
++            expires_utc: 160,
++        }
++    }
++
++    #[test]
++    fn wake_metadata_absence_preserves_legacy_event_wire_bytes_and_digest() {
++        let event = event();
++        event.validate().unwrap();
++        assert_eq!(event.wake_metadata().unwrap(), None);
++        assert!(!event.is_expired_at(u64::MAX).unwrap());

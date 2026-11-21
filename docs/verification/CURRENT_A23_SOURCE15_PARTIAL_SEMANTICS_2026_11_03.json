@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T16:07:27.348479+00:00",
+  "sourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+  "classification": "SANITIZED_ACTUAL_PARTIAL_NOT_CUMULATIVE_APPROVAL",
+  "originalResponseSha256": "4954b9dd867ae1bfd2fd59f8faed7db9fba5045a02a97fa580489413cba0a3a4",
+  "controlledNamesGeneralized": true,
+  "substantiveFindingsPreserved": true,
+  "effectScope": {
+    "readOnly": true,
+    "nativeExecution": false,
+    "bindingChanges": false,
+    "protectedProductionChanges": false,
+    "historicalUnknownReplay": false
+  },
+  "response": {
+    "marker": "NOV03_A23_15",
+    "sourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+    "verdict": "REVIEWED_PARTIAL",
+    "findings": [
+      "No independently established defect in the inspected ranges.",
+      "v5 session current-report-only-review remains active, WAITING_FOR_CHATGPT, stateVersion 4.",
+      "Project absent from v5 registry snapshot; native ownership remains unverified.",
+      "Batch 5 completed: 10/10 pinned source reads succeeded, exitCode 0.",
+      "No batch 4 commands repeated.",
+      "Historical timing failure cause remains UNKNOWN."
+    ],
+    "invariantFindings": [
+      "Review publication reserves the exact grant and message, prepares the ledger record, then publishes a scoped event.",
+      "Before browser submission, project, event, message digest, target, grant audit reference, lease and grant permit are revalidated.",
+      "Dispatch-start evidence is persisted before the guarded Wake execution boundary.",
+      "Uncertain outcomes do not trigger automatic retry or quota refund.",
+      "Preflight reports eligibility without browser execution or platform approval.",
+      "Rollover admission journals enforce unique project-intent identities, valid sequences and at most one ACTIVE admission.",
+      "Admission uses OS locks and atomic journal persistence.",
+      "Abandoned ACTIVE admissions become QUARANTINED, not proof of conversation creation.",
+      "Recorded conversation creation requires an exact prior durable receipt; binding and completion remain separate.",
+      "Waiting admissions use ordered selection; ineligible predecessors are quarantined without modifying their project journals.",
+      "Supervisor startup classification requires matching user SID and native Windows support."
+    ],
+    "inspectedPaths": [
+      "src/web_review_work.rs:246-350,396-480",
+      "src/web_rollover_admission.rs:76-351",
+      "src/windows_supervisor_startup.rs:181-197"
+    ],
+    "completedArtifacts": [
+      "CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_5_2026_11_03.json",
+      "10 pinned source outputs independently inspected",
+      "All 10 exitCode 0; no observed truncation",
+      "Bounded dependency batches 1-5 completed; 47 source reads across these batches"
+    ],
+    "outputTruncated": false,
+    "limitations": [
+      "Source reads use pinned 38be blobs; A23 equivalence relies on previously reported unchanged-blob evidence.",
+      "Cross-store atomicity between grant reservation, ledger preparation and Wake publication is not fully proven.",
+      "Tests were inspected, not executed.",
+      "Rollover admission eligibility callback and downstream transaction boundaries require further review.",
+      "Cumulative 90-path acceptance remains unestablished.",
+      "Installed, native, live-browser and producer acceptance remain unverified."
+    ],
+    "neededReads": [
+      "Bounded dependency batches 6-10 without repeating completed reads.",
+      "Review publication failure and partial-commit recovery paths.",
+      "Wake dispatch callback and durable receipt/no-replay dependencies.",
+      "Rollover admission eligibility and project-journal reconciliation.",
+      "Remaining 90-path global scope datasets and cumulative semantic evidence.",
+      "Historical timing regression evidence."
+    ],
+    "cumulativeSourceAccepted": false
+  },
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

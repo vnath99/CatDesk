@@ -1,0 +1,103 @@
+{
+  "observedUtc": "2026-11-02T00:51:10.412283+00:00",
+  "scope": [
+    "TESTED_INSTALLED_EXISTING_C254_RESTART",
+    "TESTED_SOURCE",
+    "TESTED_CONTROLLED_READ_ONLY_TUNNEL_HEALTH"
+  ],
+  "completedPromotionRetirement": {
+    "state": "COMPLETED",
+    "schemaVersion": 2,
+    "exactEvidenceCas": true,
+    "archivedOriginalRecords": 6,
+    "originalBytesAndPreviousJournalPreserved": true,
+    "binaryInstallationActions": 0
+  },
+  "servingRelease": {
+    "sha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+    "trustedSlot": "slot-a",
+    "trustedGeneration": 3,
+    "supportedPublicStopCalls": 1,
+    "supportedPublicStartCalls": 1,
+    "newExactOwnerVerified": true,
+    "survivedLauncherExit": true,
+    "localReadiness": "READY",
+    "authStatuses": [
+      401,
+      401,
+      200,
+      200
+    ],
+    "catalogTools": 102,
+    "centralDispatcherPresent": true,
+    "nativeDispatchAdvertised": false,
+    "rollbackQualification": "OPEN",
+    "unattendedRecovery": "OPEN"
+  },
+  "preservation": {
+    "checkedPins": 18,
+    "mismatches": 0,
+    "projectBindingFilesUnchanged": true,
+    "externalTunnelIdentityAndProfileUnchanged": true,
+    "credentialChanges": 0,
+    "browserStarts": 0,
+    "nativeProjectActions": 0,
+    "recurringWakeHost": "STOPPED",
+    "testOwnedProcessesRemaining": 0
+  },
+  "preservedFailures": [
+    "Original private child precondition refused a verified OS console auxiliary before any lifecycle effect.",
+    "Successful metadata retirement was followed by private null-array restoration failure before a public start.",
+    "Restoration-only draft first hit a PowerShell alias collision before its attempt marker; corrected before the single public start.",
+    "The public start launcher exited, but inherited output pipes stayed open; independently verified the existing new daemon without another start.",
+    "Incorrect backend-root health probe was not a supported readiness endpoint; original failure is retained.",
+    "Strict-mode official readiness helper misclassified optional status aliases as transient although actual existing-owner status reported running/healthy/ready."
+  ],
+  "sourceCorrection": {
+    "paths": [
+      "scripts/start-catdesk-stack.ps1",
+      "scripts/test-start-catdesk-stack.ps1"
+    ],
+    "behavior": "Read only present optional runtime status properties under strict mode; preserve existing readiness and health gates.",
+    "newStrictModeCases": 9,
+    "oldBehaviorReproduced": "RUNTIME_STATUS_TRANSIENT",
+    "correctedReadOnlyBehavior": "READY",
+    "canonicalHelperModified": false,
+    "rebuildOrNewCandidateRequiredForThisDiagnostic": false
+  },
+  "verification": {
+    "powershell7BootstrapSuite": {
+      "passed": true,
+      "seconds": 20.161011,
+      "containmentDeadlineSeconds": 180
+    },
+    "windowsPowerShell51BootstrapSuite": {
+      "passed": true,
+      "seconds": 13.577493,
+      "containmentDeadlineSeconds": 180
+    },
+    "existingTunnelHealth": {
+      "statusBasis": "retained actual same-owner status; no fresh runtime query",
+      "healthz": 200,
+      "readyz": 200,
+      "runtimeRestartActions": 0
+    },
+    "rustTests": "NOT_RUN_POWERSHELL_ONLY_CHANGE",
+    "hostedCi": "NOT_RUN_OPTIONAL"
+  },
+  "artifactRoles": {
+    "reviewedAdministrativeControllerSha256": "896e2c285692c9fca5e3b87e7e064620512b507ba85e41b9e0c3a9794a69bf31",
+    "retainedAttestedReleasePayloadSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "newPayloadInstalled": false,
+    "sourcePatchChangesCanonicalQualification": false
+  },
+  "remainingAcceptance": [
+    "Guarded normal promotion of retained attested payload using qualified administrative controller.",
+    "Installed new-payload startup, rollback and supervisor restart/recovery.",
+    "Canonical/control project authority reconciliation.",
+    "Two genuine independent ChatGPT Web workspace edits and native verification.",
+    "Independent Wake, complete context-meter acceptance and later provider-client work."
+  ],
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}

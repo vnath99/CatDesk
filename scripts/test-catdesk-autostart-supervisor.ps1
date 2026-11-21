@@ -15,10 +15,76 @@ function Require([bool]$Condition, [string]$Message) {
 
 function States($Output) { return @($Output | ForEach-Object { ($_ | ConvertFrom-Json).state }) }
 
+function Invoke-RealGuardChild {
+    param([string]$Root, [switch]$LegacyOnly)
+    $quotedSource = $supervisorPath.Replace("'", "''")
+    $quotedRoot = $Root.Replace("'", "''")
+    $code = ". '$quotedSource' -Workspace '$quotedRoot' -LoadOnly; " +
+        "`$guard=Acquire-SupervisorGuard -Root '$quotedRoot'; " +
+        "try { @{acquired=`$guard.Acquired}|ConvertTo-Json -Compress } finally { Release-SupervisorGuard -Guard `$guard }"
+    if ($LegacyOnly) {
+        $code = ". '$quotedSource' -Workspace '$quotedRoot' -LoadOnly; " +
+            "`$created=`$false; `$id=Get-SupervisorWorkspaceId '$quotedRoot' -Legacy; " +
+            "`$mutex=[Threading.Mutex]::new(`$true,('Local\CatDesk.Autostart.'+`$id),[ref]`$created); " +
+            "try { @{acquired=`$created}|ConvertTo-Json -Compress } finally { if(`$created){`$mutex.ReleaseMutex()};`$mutex.Dispose() }"
+    }
+    $code = "`$ProgressPreference='SilentlyContinue'; " + $code
+    $info = [Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = (Get-Process -Id $PID).Path
+    $info.Arguments = '-NoProfile -NonInteractive -EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $child = [Diagnostics.Process]::new()
+    $child.StartInfo = $info
+    $started = $false
+    try {
+        $started = $child.Start()
+        Require $started 'guard test child started'
+        Require ($child.WaitForExit(10000)) 'guard test child exited within ten seconds'
+        $output = $child.StandardOutput.ReadToEnd()
+        $errors = $child.StandardError.ReadToEnd()
+        Require ($child.ExitCode -eq 0 -and $errors.Length -eq 0 -and $output.Length -lt 1024) "guard child returned one bounded successful result (exit=$($child.ExitCode), stderrBytes=$($errors.Length), stdoutBytes=$($output.Length))"
+        return $output | ConvertFrom-Json
+    } finally {
+        if ($started -and -not $child.HasExited) { $child.Kill(); Require ($child.WaitForExit(5000)) 'owned guard child cleanup completed' }
+        $child.Dispose()
+    }
+}
+
 New-Item -ItemType Directory -Path $workspace -Force | Out-Null
 try {
     . $supervisorPath -Workspace $workspace -LoadOnly
     $script:SupervisorSeams = @{}
+    Require ((Get-SupervisorWorkspaceId $workspace) -ceq (Get-SupervisorWorkspaceId $workspace -Legacy)) 'canonical input retains its existing singleton name'
+    # Real OS mutexes and a separate Windows process, without a supervisor,
+    # backend, persistence registration or lifecycle seam being started.
+    $guard = Acquire-SupervisorGuard -Root $workspace
+    try {
+        Require $guard.Acquired 'first fixture workspace guard is owned'
+        $duplicateCase = Invoke-RealGuardChild -Root $workspace.ToUpperInvariant()
+        Require (-not $duplicateCase.acquired) 'case-only workspace alias cannot acquire a second supervisor guard'
+        $independent = Join-Path $workspace 'independent'
+        [void](New-Item -ItemType Directory -Path $independent)
+        Require ((Invoke-RealGuardChild -Root $independent).acquired) 'independent workspace guard is not blocked'
+    } finally { Release-SupervisorGuard -Guard $guard }
+    Require ((Invoke-RealGuardChild -Root $workspace.ToLowerInvariant()).acquired) 'natural owner release permits a later case-alias owner'
+    $guard = Acquire-SupervisorGuard -Root $workspace.ToUpperInvariant()
+    try {
+        Require $guard.Acquired 'new owner acquires canonical and legacy alias reservations'
+        Require (-not (Invoke-RealGuardChild -Root $workspace.ToUpperInvariant() -LegacyOnly).acquired) 'new owner retains original mutex namespace for legacy callers'
+    } finally { Release-SupervisorGuard -Guard $guard }
+    $created = $false
+    $legacyId = Get-SupervisorWorkspaceId $workspace.ToUpperInvariant() -Legacy
+    $legacy = [Threading.Mutex]::new($true, "Local\CatDesk.Autostart.$legacyId", [ref]$created)
+    try {
+        Require $created 'isolated legacy owner reserved original input-spelling mutex'
+        Require (-not (Invoke-RealGuardChild -Root $workspace.ToUpperInvariant()).acquired) 'existing matching legacy owner refuses a new monitor'
+        $probe = $null
+        Require (-not [Threading.Mutex]::TryOpenExisting("Local\CatDesk.Autostart.$(Get-SupervisorWorkspaceId $workspace)", [ref]$probe)) 'failed legacy reservation releases the newly acquired canonical mutex'
+    } finally { $legacy.ReleaseMutex(); $legacy.Dispose() }
+
     $calls = [Collections.Generic.List[string]]::new()
     $delays = [Collections.Generic.List[int]]::new()
     $script:SupervisorSeams['AcquireGuard'] = { param($root) [pscustomobject]@{ Acquired = $true; Handle = $null } }
@@ -202,6 +268,52 @@ $detail = if ($parts.Count -eq 2) { $parts[1] } else { 'redacted' }
     Require (($actionRequired -join ',') -eq 'DEGRADED,READY,MONITORING_COMPLETE') 'action-required recovery remains degraded'
     Require (([string]::Join(',', $calls)) -eq 'status,recover,status') 'action-required recovery stops without repeated mutation'
     Require (([string]::Join(',', $delays)) -eq '30') 'action-required recovery uses degraded cooldown'
+
+    # Real script invocation of the existing public facade, with no daemon or
+    # tunnel fixture. Backend-only mode must pass the closed recovery switch,
+    # distinguish local failure from external degradation, and refuse broad
+    # repair for authentication/release/foreign-owner or malformed evidence.
+    $backendFacade=@'
+param([Parameter(Position=0)][string]$Action,[string]$Workspace,[switch]$BackendOnly)
+[IO.File]::AppendAllText((Join-Path $Workspace 'backend-calls.log'),($Action+'|'+[string][bool]$BackendOnly+"`n"))
+$kind=[IO.File]::ReadAllText((Join-Path $Workspace 'backend-kind.txt'))
+if($Action -ceq 'recover'){
+ if(!$BackendOnly -or $kind -cne 'missing'){throw 'UNAUTHORIZED_FIXTURE_RECOVERY'}
+ [IO.File]::WriteAllText((Join-Path $Workspace 'backend-kind.txt'),'healthy')
+ @{command='recover';state='LOCAL_BACKEND_READY'}|ConvertTo-Json -Compress;return
+}
+if($Action -cne 'diagnose' -or $BackendOnly){throw 'UNEXPECTED_FIXTURE_COMMAND'}
+$layers=@(
+ @{layer='CANONICAL_RELEASE';state='READY';gate='READY'},
+ @{layer='LOCAL_MCP_CONFIG';state='READY';gate='READY'},
+ @{layer='LOCAL_DAEMON';state='READY';gate='READY'},
+ @{layer='LOCAL_MCP_PROTOCOL';state='READY';gate='READY'},
+ @{layer='OFFICIAL_RUNTIME';state='FAILED';gate='RUNTIME_STATUS_NOT_READY'})
+switch -CaseSensitive($kind){
+ 'missing' {$layers[2].state='FAILED';$layers[2].gate='LOCAL_MCP_LISTENER_MISSING';$layers[3].state='NOT_REQUIRED'}
+ 'foreign' {$layers[2].state='FAILED';$layers[2].gate='LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'}
+ 'auth' {$layers[3].state='FAILED';$layers[3].gate='LOCAL_MCP_AUTH_TOKEN_INVALID'}
+ 'release' {$layers[0].state='FAILED';$layers[0].gate='CANONICAL_HASH_MISMATCH'}
+ 'duplicate' {$layers+=@{layer='LOCAL_DAEMON';state='READY';gate='READY'}}
+}
+@{command='diagnose';state='DEGRADED';layers=$layers}|ConvertTo-Json -Depth 5 -Compress
+'@
+    [IO.File]::WriteAllText((Join-Path $workspace 'catdesk.ps1'),$backendFacade)
+    $script:SupervisorSeams.Remove('Lifecycle')
+    $backendLog=Join-Path $workspace 'backend-calls.log';$kindPath=Join-Path $workspace 'backend-kind.txt'
+    [IO.File]::WriteAllText($kindPath,'missing')
+    $restarted=States (Invoke-CatDeskAutostartSupervisor -BackendOnly -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
+    Require (($restarted -join ',') -ceq 'RECOVERED,READY,MONITORING_COMPLETE') 'backend-only recovery did not return to normal monitoring'
+    Require (([IO.File]::ReadAllText($backendLog).Trim() -replace "`r",'') -ceq "diagnose|False`nrecover|True`ndiagnose|False") 'backend recovery widened public lifecycle scope'
+    foreach($kind in @('foreign','auth','release','duplicate')){
+        [IO.File]::WriteAllText($kindPath,$kind);[IO.File]::WriteAllText($backendLog,'')
+        $held=States (Invoke-CatDeskAutostartSupervisor -BackendOnly -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 1)
+        Require (($held -join ',') -ceq 'DEGRADED,MONITORING_COMPLETE') 'unsafe backend evidence did not hold'
+        Require ([IO.File]::ReadAllText($backendLog).Trim() -ceq 'diagnose|False') 'unsafe backend evidence triggered recovery'
+    }
+    [IO.File]::WriteAllText($kindPath,'healthy');[IO.File]::WriteAllText($backendLog,'')
+    $external=States (Invoke-CatDeskAutostartSupervisor -BackendOnly -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 1)
+    Require (($external -join ',') -ceq 'READY,MONITORING_COMPLETE' -and [IO.File]::ReadAllText($backendLog).Trim() -ceq 'diagnose|False') 'external degradation recycled a healthy local daemon'
 
     try { Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 1 -FailureCooldownSeconds 30 -MaximumMonitorCycles 1 | Out-Null; throw 'invalid low poll accepted' } catch { if ($_.Exception.Message -match 'invalid low poll accepted') { throw } }
     try { Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 15 -FailureCooldownSeconds 1 -MaximumMonitorCycles 1 | Out-Null; throw 'invalid low cooldown accepted' } catch { if ($_.Exception.Message -match 'invalid low cooldown accepted') { throw } }

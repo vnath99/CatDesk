@@ -1,0 +1,190 @@
++                        .recv_timeout(Duration::from_secs(30))
++                        .expect("bounded preparation release");
++                    crate::delegated::autonomy_projects::PreparedProjectScopeV1::resolve(
++                        root, project,
++                    )
++                    .map_err(|_| "TEST_PREPARATION_FAILED".into())
++                },
++            )
++        });
++        tokio::task::spawn_blocking(move || waiting.recv_timeout(Duration::from_secs(10)))
++            .await
++            .unwrap()
++            .unwrap();
++        let registry =
++            crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1::open_read_only(
++                alpha.control.join(".catdesk/projects"),
++            )
++            .unwrap();
++        registry.with_registration_lock(|| Ok(())).unwrap();
++        let peer = call(
++            &beta,
++            manual_request(&beta, "prepared-peer", "prepared-peer-turn"),
++        )
++        .await;
++        release.send(()).unwrap();
++        let admitted = owner.await.unwrap().unwrap();
++        assert_eq!(
++            peer["result"]["structuredContent"]["projectId"], "beta",
++            "{peer}"
++        );
++        assert_eq!(admitted["projectId"], "alpha");
++        let a = admitted["eventId"].as_str().unwrap();
++        let b = peer["result"]["structuredContent"]["eventId"]
++            .as_str()
++            .unwrap();
++        assert_ne!(a, b);
++        assert!(wake.delivery(a).unwrap().is_none());
++        assert!(wake.delivery(b).unwrap().is_none());
++        for f in [&alpha, &beta] {
++            assert!(
++                fs::read_to_string(f.native.join("src/lib.rs"))
++                    .unwrap()
++                    .contains("{ 1 }")
++            );
++        }
++    }
++
++    #[test]
++    fn manual_wake_prepared_scope_refuses_changed_project_and_controller() {
++        for changed_id in ["alpha", "catdesk"] {
++            let f = fixture_with_manual_wake("alpha", true);
++            let wake = ready_manual_wake(&f);
++            let before = wake.events().unwrap();
++            let registry_path = f.control.join(".catdesk/projects/projects.json");
++            let original = fs::read(&registry_path).unwrap();
++            let result = crate::web_work::manual_wake_with_preparation(
++                &f.control,
++                f.pins.clone(),
++                &f.key,
++                "task-fixture",
++                "prepared-drift",
++                json!({"sourceTurnId":"prepared-drift-turn","priority":10,"ttlSeconds":300}),
++                |root, project| {
++                    let prepared =
++                        crate::delegated::autonomy_projects::PreparedProjectScopeV1::resolve(
++                            root, project,
++                        )
++                        .unwrap();
++                    let mut registry: AutonomousProjectRegistryV1 =
++                        serde_json::from_slice(&original).unwrap();
++                    registry
++                        .projects
++                        .iter_mut()
++                        .find(|p| p.project_id == changed_id)
++                        .unwrap()
++                        .verification_profile = "web_only_v1".into();
++                    fs::write(&registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
++                    Ok(prepared)
++                },
++            );
++            fs::write(&registry_path, original).unwrap();
++            assert_eq!(result.unwrap_err(), "WEB_WORK_PROJECT_REGISTRATION_CHANGED");
++            assert_eq!(wake.events().unwrap(), before);
++            assert!(
++                !f.control
++                    .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal")
++                    .exists()
++            );
++        }
++    }
++    fn native_proof(f: &Fixture) -> PathBuf {
++        let p = resolve_registered_project_from_control_root(
++            &f.control,
++            f.pins["projectId"].as_str().unwrap(),
++        )
++        .unwrap();
++        f.native.join(format!(
++            "queue-proof-{}.txt",
++            p.project.codex_thread_id.unwrap()
++        ))
++    }
++
++    async fn native_http_fixture(cached: bool) {
++        let (alpha, beta) = paired_fixtures(true);
++        let mut app = crate::state::AppState::new_isolated_fixture(
++            0,
++            alpha.control.to_str().unwrap().into(),
++            alpha.control.join("inert-config.toml"),
++        )
++        .unwrap();
++        app.tool_mode = crate::state::ToolMode::SupervisorOnly;
++        let state = Arc::new(tokio::sync::Mutex::new(app));
++        let token = "native-http-fixture-bearer";
++        crate::configure_native_mcp_auth(&state, Ok(token.into()))
++            .await
++            .unwrap();
++        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
++        let router = crate::native_mcp_router(state, None, "/central/mcp".into(), tx).await;
++        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let address = listener.local_addr().unwrap();
++        let url = format!("http://{address}/central/mcp");
++        let (stop, stopped) = tokio::sync::oneshot::channel();
++        let server = tokio::spawn(async move {
++            axum::serve(listener, router)
++                .with_graceful_shutdown(async {
++                    let _ = stopped.await;
++                })
++                .await
++                .unwrap();
++        });
++        let client = reqwest::Client::builder()
++            .timeout(Duration::from_secs(30))
++            .build()
++            .unwrap();
++        let transport = |mut body: Value| {
++            if cached {
++                body["params"] = json!({"name":"run_command","arguments":{"command":format!("CATDESK_WEB_TASK={}", body["params"]["arguments"])}});
++            }
++            body
++        };
++        let send = |body: Value| {
++            client
++                .post(&url)
++                .bearer_auth(token)
++                .json(&transport(body))
++                .send()
++        };
++        assert_eq!(
++            client
++                .post(&url)
++                .json(&transport(native_request(&alpha, "unauth")))
++                .send()
++                .await
++                .unwrap()
++                .status(),
++            reqwest::StatusCode::UNAUTHORIZED
++        );
++        let mut cross = native_request(&beta, "wrong-key");
++        cross["params"]["arguments"]["executionKey"] = json!(alpha.key);
++        let denied: Value = send(cross).await.unwrap().json().await.unwrap();
++        assert_eq!(denied["error"]["message"], "WEB_TASK_GRANT_SCOPE_MISMATCH");
++        let mut cross_status = request(&beta, "status-wrong-key", "native.codex.status", json!({}));
++        cross_status["params"]["arguments"]["executionKey"] = json!(alpha.key);
++        let denied: Value = send(cross_status).await.unwrap().json().await.unwrap();
++        assert_eq!(denied["error"]["message"], "WEB_TASK_GRANT_SCOPE_MISMATCH");
++        let mut override_call = native_request(&alpha, "override");
++        override_call["params"]["arguments"]["arguments"] = json!({"workspace":beta.native});
++        let denied: Value = send(override_call).await.unwrap().json().await.unwrap();
++        assert_eq!(
++            denied["error"]["message"],
++            "WEB_TASK_NATIVE_ARGUMENTS_INVALID"
++        );
++        assert!(!native_proof(&alpha).exists() && !native_proof(&beta).exists());
++        let entered = Arc::new(tokio::sync::Notify::new());
++        let release = Arc::new(tokio::sync::Notify::new());
++        let gate_key = alpha.control.join("native-alpha");
++        TEST_GATES
++            .get_or_init(Default::default)
++            .lock()
++            .unwrap()
++            .insert(gate_key.clone(), (entered.clone(), release.clone()));
++        let body = transport(native_request(&alpha, "native-once"));
++        let c = client.clone();
++        let endpoint = url.clone();
++        let awaiter = tokio::spawn(async move {
++            c.post(endpoint)
++                .bearer_auth(token)
++                .json(&body)
++                .send()
++                .await

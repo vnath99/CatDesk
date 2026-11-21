@@ -1,0 +1,170 @@
++                    raise ValueError("candidate set unbounded")
++                process = kernel.OpenProcess(0x1000 | 0x100000, False, entry.pid)
++                if not process:
++                    raise ValueError("process unavailable")
++                pins.append(process)
++                image = ctypes.create_unicode_buffer(32768)
++                size = w.DWORD(len(image))
++                times = [w.FILETIME() for _ in range(4)]
++                if (not kernel.QueryFullProcessImageNameW(process, 0, image, ctypes.byref(size)) or
++                        not kernel.GetProcessTimes(process, *(ctypes.byref(t) for t in times)) or
++                        Path(image.value).name.lower() != name):
++                    raise ValueError("process identity unavailable")
++                created = times[0].dwLowDateTime | (times[0].dwHighDateTime << 32)
++                rows.append(dict(pid=int(entry.pid), parent=int(entry.parent), created=created,
++                                 name=name, image=image.value, args=command_line(process)))
++            ok = kernel.Process32NextW(table, ctypes.byref(entry))
++        if ctypes.get_last_error() != 18:
++            raise ValueError("snapshot incomplete")
++        state = classify(rows, profile, python)
++        if any(kernel.WaitForSingleObject(process, 0) != 258 for process in pins):
++            raise ValueError("process changed during observation")
++        return state
++    finally:
++        for process in pins:
++            kernel.CloseHandle(process)
++        kernel.CloseHandle(table)
++
++
++def main():
++    if len(sys.argv) != 3 or sys.stdin.readline() != "START\n":
++        return 2
++    try:
++        profile, python = map(Path, sys.argv[1:])
++        if not profile.is_absolute() or not profile.is_dir() or not python.is_absolute() or not python.is_file():
++            raise ValueError("selected roots unavailable")
++        state = snapshot(profile, python)
++    except Exception:
++        state = "PROFILE_INVENTORY_UNVERIFIED"
++    print("PROBE:FINAL:" + state, flush=True)
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/scripts/wake_readiness_visual_probe.py b/scripts/wake_readiness_visual_probe.py
+index 5e3d2ba5abb58b9e20a1ae89a027981f323f8585..60ad352fe972bd64f9c5a28ddfbe719d2e84dd72 100644
+--- a/scripts/wake_readiness_visual_probe.py
++++ b/scripts/wake_readiness_visual_probe.py
+@@ -1,6 +1,10 @@
+ from __future__ import annotations
+ import argparse
++import hashlib
++import importlib.util
++import json
+ import os
++import re
+ import sys
+ import time
+ from pathlib import Path
+@@ -11,56 +15,358 @@ EDITOR = "#prompt-textarea"
+ STOP = ("button[data-testid='stop-button']", "button[aria-label*='stop' i]")
+ LOGIN = ("a[href*='/auth/login']", "button[data-testid*='login' i]")
+ CAPTCHA = ("iframe[title*='captcha' i]", "[data-testid*='captcha' i]", "iframe[title*='security' i]", "[data-testid*='security' i]")
++NETWORK_ERRORS = frozenset({
++    "ERR_NETWORK_CHANGED", "ERR_INTERNET_DISCONNECTED", "ERR_NAME_NOT_RESOLVED",
++    "ERR_CONNECTION_CLOSED", "ERR_CONNECTION_RESET", "ERR_CONNECTION_ABORTED",
++    "ERR_CONNECTION_REFUSED", "ERR_CONNECTION_TIMED_OUT", "ERR_TIMED_OUT",
++    "ERR_PROXY_CONNECTION_FAILED", "ERR_TUNNEL_CONNECTION_FAILED",
++    "ERR_CERT_DATE_INVALID", "ERR_CERT_AUTHORITY_INVALID", "ERR_CERT_COMMON_NAME_INVALID",
++    "ERR_BLOCKED_BY_CLIENT", "ERR_BLOCKED_BY_ADMINISTRATOR", "ERR_BLOCKED_BY_RESPONSE",
++    "ERR_HTTP_RESPONSE_CODE_FAILURE", "ERR_TOO_MANY_RETRIES", "ERR_EMPTY_RESPONSE",
++    "ERR_FAILED", "ERR_HTTP2_PROTOCOL_ERROR", "ERR_SSL_PROTOCOL_ERROR", "ERR_QUIC_PROTOCOL_ERROR",
++})
++HOME_CHECKS = frozenset({
++    "EMPTY", "NOT_HOME", "BUSY", "DOCUMENT_LOADING", "EDITOR_MISSING",
++    "EDITOR_AMBIGUOUS", "EDITOR_UNSUPPORTED", "DRAFT_PRESENT", "EDITOR_MEDIA_PRESENT",
++    "ATTACHMENT_INDICATOR", "EVALUATION_UNKNOWN", "EVALUATION_FAILED",
++})
++
++def load_observation_sink(path, expected_sha256, profile, url):
++    """Execute only exact owner-verified primitive bytes, not an import search."""
++    if (path.name != "wake_bridge.py" or not path.is_file() or path.is_symlink()
++            or getattr(path, "is_junction", lambda: False)()
++            or path.parent.is_symlink() or getattr(path.parent, "is_junction", lambda: False)()):
++        raise ValueError("primitives unavailable")
++    with path.open("rb") as stream:
++        content = stream.read(4 * 1024 * 1024 + 1)
++    if len(content) > 4 * 1024 * 1024 or hashlib.sha256(content).hexdigest() != expected_sha256:
++        raise ValueError("primitives identity mismatch")
++    spec = importlib.util.spec_from_file_location("catdesk_readiness_primitives", path)
++    module = importlib.util.module_from_spec(spec)
++    sys.modules[spec.name] = module
++    exec(compile(content, str(path), "exec"), module.__dict__)
++    sink = module.CdpSink(url, profile, 30, 20)
++    if not callable(getattr(sink, "browser_surface_observation", None)):
++        raise ValueError("observation primitives unsupported")
++    return sink
++
++
++def surface_state(value):
++    route = value["route"]
++    if route != "EXACT":
++        return {"HOME": "HOME", "AUTH_REQUIRED": "LOGIN_VISIBLE", "SECURITY_CHECK": "CAPTCHA_VISIBLE",
++                "NETWORK_ERROR": "CHROME_ERROR", "TARGET_DRIFT": "TARGET_DRIFT"}.get(route, "OBSERVATION_UNAVAILABLE")
++    if value["document"] == "LOADING":
++        return "EXACT_DOCUMENT_LOADING"
++    if value["document"] != "COMPLETE":
++        return "OBSERVATION_UNAVAILABLE"
++    if value["editor"] != "READY":
++        return "EXACT_EDITOR_AMBIGUOUS" if value["editor"] == "AMBIGUOUS" else "EXACT_NO_EDITOR"
++    if value["generation"] == "ACTIVE":
++        return "EXACT_READY_BUSY"
++    if value["generation"] != "IDLE":
++        return "OBSERVATION_UNAVAILABLE"
++    if value.get("composer") == "DRAFT_PRESENT":
++        return "EXACT_DRAFT_PRESENT"
++    if value.get("composer") != "EMPTY" or value["assistant"] == "UNKNOWN":
++        return "OBSERVATION_UNAVAILABLE"
++    if value["assistant"] == "DELIVERY_TIMEOUT":
++        return "EXACT_READY_RESPONSE_TIMEOUT"
++    return "EXACT_READY_RESPONSE_LOAD_ERROR" if value["assistant"] == "LOAD_ERROR" else "EXACT_READY_IDLE"
+ 
+ def visible(cdp, selector):
+     try: return bool(cdp.is_element_visible(selector))
+     except Exception: return False
+ 
++def conversation_id(value):
++    """Same strict route contract as the owner-verified bridge primitives."""
++    if (not isinstance(value, str) or not value or len(value) > 512 or not value.isascii()
++            or any(char.isspace() or ord(char) < 32 for char in value)):
++        return None
++    try:
++        actual = urlparse(value)
++        if (actual.scheme != "https" or actual.hostname not in {"chatgpt.com", "chat.openai.com"}
++                or actual.username or actual.password or actual.port is not None or actual.query or actual.fragment):
++            return None
++        if not re.fullmatch(r"/(?:c/[A-Za-z0-9_-]{1,200}|g/[A-Za-z0-9_-]{1,200}/c/[A-Za-z0-9_-]{1,200})", actual.path):
++            return None
++        return actual.path.split("/")[-1]
++    except Exception:
++        return None
++
++
++def exact_url(current, expected):
++    identity = conversation_id(current)
++    return identity is not None and identity == conversation_id(expected)
++
++
++def value_shape(value):
++    return "STRING" if isinstance(value, str) else ("WRAPPED" if isinstance(value, (dict, tuple, list)) else "OTHER")
++
++
++def route_class(value, expected):
++    if not isinstance(value, str):
++        return "UNKNOWN"
++    if value.startswith("chrome-error://"):
++        return "NETWORK"
++    if exact_url(value, expected):
++        return "EXACT"
++    try:
++        parsed = urlparse(value)
++        if (parsed.scheme != "https" or parsed.hostname not in {"chatgpt.com", "chat.openai.com"}
++                or parsed.username or parsed.password or parsed.port is not None):
++            return "OTHER"
++        if parsed.path.startswith('/auth/'):
++            return "AUTH"
++        if parsed.path in {"", "/"} and not parsed.query and not parsed.fragment:
++            return "HOME"
++    except Exception:
++        return "INVALID"

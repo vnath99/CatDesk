@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-16T12:29:54.027390+00:00",
+  "scope": "F7_04_01_DEMONSTRATED_BROWSER_OWNER_TEARDOWN_GAP_SOURCE_FIX_AND_NATIVE_WINDOWS_FIXTURES",
+  "parentSourceHead": "7fd39baf6361e22b0f6aa0b3ea242279ef24990e",
+  "originalReviewedSource": "f7f1dedeb2584469e252969f195c43c5b4d3aa6a",
+  "review": {
+    "sameOriginalContract": "nov15-independent-f7-wake-review",
+    "contractHash": "fnv1a64:f0ca191204309d3b",
+    "actualSourceAssessmentsObserved": 4,
+    "verdict": "PARTIAL",
+    "fullCoverage": false,
+    "latestFinding": {
+      "id": "F7-04-01",
+      "severity": "UNQUALIFIED_SOURCE_LIFECYCLE_GAP",
+      "path": "wake/src/runtime.rs",
+      "line": "1778-1805, 1824-1840, 1880-1998",
+      "relatedPath": "wake/src/process_job.rs",
+      "relatedLine": "32-80, 100-106",
+      "reason": "On forced Adapter drop, the parent kills and waits for the Python child. The Job is subsequently closed, triggering kill-on-close for assigned browser descendants, but the ordinary path does not obtain positive zero-active-process accounting before releasing its browser-session lock. Job::wait_empty and terminate_and_wait_empty exist but are not used by this ordinary teardown path. The source therefore does not prove descendant quiescence before another owner can acquire the lock.",
+      "qualification": "This is a concrete missing lifecycle proof, not evidence that a duplicate USER submission occurred. The delivery witness and SUBMITTING no-replay protections remain separate. Whether actual browser-profile overlap occurs requires further qualification."
+    },
+    "originalPermittedReportRetained": true,
+    "reportSha256": "891d4461401922c60dbbef70113257623a78067323078057367e08f86cade87b",
+    "originalSourceInputBytesStillMatch": 255,
+    "originalContractOrClaimReplaced": false,
+    "finalizedOrAcknowledged": false,
+    "snapshotOrProducerAuthority": false
+  },
+  "confirmedCurrentSourceGap": "Adapter Drop waited for Python only. The retained private Job was closed asynchronously without positive zero-active-process accounting before the browser lock field dropped. Ordinary retirement and outer callers supplied no later wait barrier.",
+  "implementation": {
+    "reuses": "Existing private Windows Job terminate_and_wait_empty and existing retained-owner fail-stop convention",
+    "normalAndForced": "Prove zero active processes in the retained exact Job before releasing the existing browser-session lock; reap the exact direct child only after terminal proof.",
+    "failure": "Retain the existing lock handle for the live owner process lifetime and emit BROWSER_JOB_EXIT_UNPROVEN; no new browser owner can acquire that lock in the meantime. This is not proof of cleanup or a complete crash-recovery qualification.",
+    "diagnostics": "Ordinary retirement returns no successful closure result on missing exit proof, retains ATTENTION and the exact native cause, and cannot enter its pre-submit browser retry branch.",
+    "earlyFailures": "Missing pipes or reader-thread creation failure use the same bounded cleanup before unwinding.",
+    "noReplay": "No changes to delivery identities, witnesses, timers, CAS, source task, authentication or submission eligibility.",
+    "compatibility": "No wire schema, tool catalog, release manager, broker, signer, profile, tunnel or connection change.",
+    "clippyCompatibility": "A pre-existing collapsible-if diagnostic in the unchanged frozen-request hash guard was corrected mechanically; the same hash comparison and refusal remain."
+  },
+  "sourceFileSha256": {
+    "wake/src/runtime.rs": "88c7e48de002e1fcc15251df73d5d66fe07d8aef6f9d57732b2673e9ed12c0b8",
+    "wake/src/development_runtime.rs": "467d48852fb838255f69c3768a16a4e3141c8acc1d7c19191fda94b0060ebeb1",
+    "wake/src/runtime_adapter_teardown_tests.rs": "d489ebbc4f0a6e7e20a25312caf955f3739817a33c7dd06da36b47d4d3282936"
+  },
+  "verification": {
+    "newTargetedWindowsTestsPassed": 3,
+    "sourceChangedBeforeFinalRun": true,
+    "tests": [
+      "forced_retirement_proves_descendant_exit_before_next_browser_owner",
+      "clean_helper_exit_does_not_substitute_for_descendant_exit",
+      "unproven_exit_retains_real_browser_lock_until_owner_handle_closes"
+    ],
+    "actualNativeScope": "Hidden disposable PowerShell helpers and descendants in private Jobs; retained exact descendant kernel handles, real browser-file lock contention, parent/descendant exit and subsequent owner admission. No browser was launched.",
+    "cleanup": "Targeted test owners returned normally; exact descendant handles were terminal and fixture locks/directories were released. No test-owned browser, Wake, tunnel or production process was started.",
+    "standaloneWakeClippy": "PASS_ALL_TARGETS_ALL_FEATURES_DENY_WARNINGS",
+    "rootClippy": "PASS_ALL_TARGETS_ALL_FEATURES_DENY_WARNINGS",
+    "formatting": "PASS_ROOT_AND_STANDALONE_WAKE",
+    "whitespace": "PASS",
+    "testLogSha256": "202e25419a629c0db6a080f808fa684a7f8192ba12e67e798b3fcdc283d11113",
+    "wakeClippyLogSha256": "42efb806fcef5b3b8ab8e03b05a412e5624ed619e958d77e0db9c68474606bd1",
+    "rootClippyLogSha256": "a2b945297e6d5e1e271a43e95d9da24cce57f8c4327c6bcb13a75f79b7de9587",
+    "historicalCanariesRepeated": false
+  },
+  "readbackQualification": {
+    "necessaryOperatorMessageRelay": false,
+    "originalUserAndAssistantTaskIdentityEstablished": true,
+    "response01": "Complete PARTIAL; incorrect contractId hash preserved verbatim",
+    "response02": "Complete PARTIAL; contractId explicitly corrected by reviewer",
+    "response03": "Reader truncated at 20000; returned prefix retained, not fabricated JSON",
+    "response04": "Initial idle read still contained incomplete body; same-handle reread obtained complete JSON without resend",
+    "readerValidationRefusal": "Requested maxOutput above 20000 was a local tool-argument error, not established upstream HTTP failure. Corrected within documented schema.",
+    "fullInstalledCatDeskResponseReaderAcceptance": false
+  },
+  "d22": {
+    "newReadJustification": "New successful first-party f7 response readback",
+    "boundedOriginalProviderReads": 1,
+    "result": "Only older history returned; original task turn unestablished. UNKNOWN remains, absence is not non-submission proof.",
+    "resends": 0,
+    "furtherUnchangedPolling": "STOP"
+  },
+  "releaseImplications": {
+    "oldF7ArtifactsUnchanged": true,
+    "oldF7NotDeclaredReleaseQualified": true,
+    "newFixIsNotCoveredByOriginalExactF7Approval": true,
+    "newRuntimeCandidateWouldBeMateriallyNecessaryToIncludeThisFix": true,
+    "newGuiHostOrProtectedPackageBuilt": false,
+    "reuseExistingReviewedBrokerWhereExactPurposePredicatesPass": true,
+    "newReviewContractCreated": false,
+    "productionOrRollbackSelectedOrChanged": false,
+    "existingV5Changed": false,
+    "wakeRootAndSigningAuthority": "STILL_SEPARATE_UNRESOLVED_GATES",
+    "backendD22Authority": "STILL_SEPARATE_UNRESOLVED_GATE",
+    "fullWebEditVerificationGitSelfWake": "OPEN"
+  },
+  "next": "Publish verified source through the existing feature branch, obtain a narrowly scoped independent patch assessment under standing registered-project review permissions, then qualify only a material new development candidate through the existing workflow. Do not certify it using the unchanged f7 contract or start protected installation before legitimate state/signing/release gates."
+}

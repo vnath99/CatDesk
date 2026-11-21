@@ -1,0 +1,81 @@
+{
+  "observedUtc": "2026-11-02T04:39:10.017235+00:00",
+  "sourceCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "classification": "MATCHED_DEVELOPMENT_PACKAGE_QUALIFIED_NOT_INSTALLED_WAKE_OR_WEB_CODING",
+  "buildSeconds": 82.312,
+  "qualificationSeconds": 44.828,
+  "artifacts": {
+    "CatDeskBinagotchy.exe": {
+      "sha256": "92867fcb7455aa1f54b6908b8ef235d93d2fef224b8ce2f489f5379fa0d65e49",
+      "bytes": 75111936
+    },
+    "CatDeskWakeHost.exe": {
+      "sha256": "51bfd4a7c5d5631e900089b50bcd20c74c35c29282d7a9fd7dd6e4bc1b6ec1e3",
+      "bytes": 3697152
+    },
+    "adapter.py": {
+      "sha256": "710e2e4538ea061a64f0fa935ad3766a3d75c419fb5b2240b9137c5326ed26de",
+      "bytes": 65389
+    },
+    "wake_bridge.py": {
+      "sha256": "f12ce34f99456a17f9787975aab2721a02e2fce771a980f97df92ec5c78a9fc4",
+      "bytes": 211996
+    }
+  },
+  "previousVerifiedControllerSha256": "846b90b2150288b2e240e1443bfe794d8a9752a6f3743f6eda492a0ee2344bcf",
+  "previousVerifiedPackagePreserved": true,
+  "finiteHealth": {
+    "maximumRuntimeSeconds": 15,
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79,
+    "registeredProjectsRead": true,
+    "ownerExitCode": 0,
+    "readersClosed": true,
+    "ownedTreeExitProved": true,
+    "endpointClosed": true
+  },
+  "developmentVerificationRecorded": true,
+  "projectOrJournalPinMismatches": 0,
+  "profileIdentityPreserved": true,
+  "hostStopped": true,
+  "loginMarkerPresent": false,
+  "canonicalBackendAndFingerprintSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+  "canonicalBackendChanged": false,
+  "installedWake": {
+    "packageId": "1.0.0-dev.84-02431feba5ed-1c6bcdfcedf0",
+    "initializationProtocolSupported": false,
+    "modified": false
+  },
+  "actualBlocker": "The canonical registered native project selects the existing installed Wake package. Its dev.84 adapter/primitives lack first-conversation initialization. The qualified development package is a separate runtime; do not copy its binaries/profile into the installation or borrow a controlled project identity.",
+  "nextReadyTask": "Use genuine exact-source review of the six changed and two new paths within the retained 86-path scope, then existing qualified installed-Wake release/publication preflight. Reuse the standing routine-review authorization and preserve every completed or unknown request.",
+  "sourceReviewInputs": {
+    "prepared": true,
+    "fullScopePaths": 86,
+    "states": {
+      "UNCHANGED_ACCEPTED": 78,
+      "CHANGED_REQUIRES_REVIEW": 6,
+      "NEW": 2
+    },
+    "boundedReads": 55,
+    "largestReadBytes": 6581,
+    "reviewAccepted": false,
+    "claimCreated": false,
+    "messagesSent": 0
+  },
+  "browserStarts": 0,
+  "wakeStarts": 0,
+  "nativeModelTurns": 0,
+  "projectBindingChanges": 0,
+  "productionPromotions": 0,
+  "operatorActionRequiredForNextReviewPreparation": false,
+  "remainingAcceptance": [
+    "Canonical first-conversation initialization",
+    "Two genuine Web project edits/native verification",
+    "Installed independent Wake and rollover",
+    "Unattended/reboot recovery",
+    "Full context calibration",
+    "Later provider-client MCP integration"
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T06:20:52Z",
+  "scope": "INSTALLED_CLI_REGISTRATION_AND_CODEX_V5_READBACK_NOT_WEB_CODING_ACCEPTANCE",
+  "sourceBaseline": "ac112e8c05c29566163dce8f6fb1f77f06a26a51",
+  "installed": {
+    "attestedSource": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "executableSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "command": "operator web project register",
+    "exitCode": 0,
+    "status": "REGISTERED_WEB_ONLY",
+    "productionExecutableOrReleaseAuthorityChanged": false
+  },
+  "registration": {
+    "projectId": "catdesk-web-direct-mvp-nov15",
+    "newRegisteredSourceWorktree": true,
+    "separateUnregisteredExecutionWorktree": true,
+    "bothWorktreesCleanAtBaseline": true,
+    "previousProjectCount": 6,
+    "currentProjectCount": 7,
+    "existingProjectRecordsUnchanged": true,
+    "otherRegistryFieldsUnchanged": true,
+    "onlyOneProjectAdded": true,
+    "targetUnbound": true,
+    "nativeOwnerAssigned": false
+  },
+  "connectorReadback": {
+    "tool": "autonomy_project_registry_read",
+    "client": "CODEX_V5_NOT_CHATGPT_WEB",
+    "calls": 1,
+    "isError": false,
+    "structuredResponse": true,
+    "projectCount": 7,
+    "exactNewProjectFound": true,
+    "webConversationConnectionProven": false
+  },
+  "preservation": {
+    "pinsChecked": 1699,
+    "rawPinCheckPassed": false,
+    "expectedChangedPins": 1,
+    "expectedChange": "NEW_PROJECT_APPEND_TO_EXISTING_REGISTRY",
+    "unexpectedChangedPins": 0,
+    "pinSetUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "missingSeedPathsUnchanged": true,
+    "noBlanketRebaseline": true
+  },
+  "owner": {
+    "maximumSeconds": 80,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "containment": "KILL_ON_JOB_CLOSE",
+    "browserStarts": 0,
+    "backendOrTunnelStarts": 0,
+    "messagesSent": 0,
+    "grantsCreated": 0
+  },
+  "preparedOnly": {
+    "frozenSetupMessage": true,
+    "freshTaskId": "nov15-direct-web-docs-1",
+    "prospectiveAssignment": true,
+    "nativeAssignmentValidationPerformed": false,
+    "requestQueued": false,
+    "assignmentAssociated": false,
+    "executionKeyCreated": false,
+    "oldUnknownOperationReplayed": false
+  },
+  "actualInstalledCapabilityBoundary": {
+    "sourceInspectedAtExactInstalledCommit": true,
+    "scopedFileOperations": "PRESENT_IN_SOURCE_NOT_FRESH_WEB_QUALIFIED",
+    "verifyCommand": "PRESENT_IN_SOURCE_NOT_FRESH_WEB_QUALIFIED",
+    "manualEndTurnWake": "PRESENT_IN_SOURCE_NOT_FRESH_WEB_QUALIFIED",
+    "gitCheckpointInScopedToolEnum": false,
+    "allowGitCheckpointOperatorFlag": false,
+    "globalGitFallbackAuthorized": false,
+    "backendReviewAndPromotionRequiredForFullScopedCheckpointAcceptance": true,
+    "wakeUpgradeRequiredForUnboundRegistration": false
+  },
+  "next": {
+    "directWeb": "ONE_NEW_V5_CHAT_SETUP_AND_ACTUAL_ISSUED_URL_THEN_GUARDED_PAIRING_AND_ASSIGNMENT_ADMISSION",
+    "review": "ONE_EXACT_F7_CONTRACT_START_DECISION_PENDING_SEPARATELY",
+    "oldD22Delivery": "UNKNOWN_NO_REPLAY",
+    "fullWebEditCheckpointSelfWake": "OPEN",
+    "protectedWakeMigration": "SEPARATE_UNCHANGED_GATE",
+    "goal": "ACTIVE"
+  }
+}

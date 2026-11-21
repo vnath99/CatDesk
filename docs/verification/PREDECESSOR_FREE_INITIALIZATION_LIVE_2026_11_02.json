@@ -1,0 +1,70 @@
+{
+  "observedUtc": "2026-11-02T09:46:07.727712+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_INITIALIZATION_AND_PUBLIC_SOURCE_TOOLS_NOT_NATIVE_OR_INSTALLED_ACCEPTANCE",
+  "sourceCommit": "9039ee9d89cbcf457160ac7e76fdfcd00fdb159e",
+  "initialization": {
+    "newIsolatedWebOnlyProjectRegistered": true,
+    "predecessor": null,
+    "sourceGeneration": 0,
+    "pairedGeneration": 1,
+    "actualIssuedUrlAndDigestVerified": true,
+    "exactBootstrapUserReceipt": true,
+    "exactAcknowledgmentVerifiedByQualifiedCompletionProbe": true,
+    "phase": "BOUND",
+    "emptyPredecessorHistory": true,
+    "newNativeThreadOrExecutionGrant": false,
+    "oldProjectBindingsHistoriesAndOwnersPreserved": true
+  },
+  "recovery": {
+    "originalWrapperExitCode": 1,
+    "reason": "Private evidence checker expected an empty optional history field that serde correctly omitted.",
+    "productAlreadyBoundBeforeCheckerError": true,
+    "originalArtifactsPreserved": true,
+    "readOnlySeparateProcessStatusReconciled": true,
+    "extraCreateOrResumeCommands": 0,
+    "duplicateMessages": 0,
+    "fingerprintOrAuthorityRewritten": false
+  },
+  "followup": {
+    "oneFrozenPublicReviewSent": true,
+    "exactReceiptAndCompletedResponseVerified": true,
+    "verdict": "REVIEWED_PARTIAL",
+    "responseSha256": "08af8d1c06a4a9a335d65fecafba0f5a08d112b5509c92d71ff137beff14bc91",
+    "taskCorrelatedGitCalls": 3,
+    "serverLogsMatchedFrozenInputs": true,
+    "sourceAccepted": false,
+    "producerAuthority": false,
+    "meaning": "Fresh conversation retained v5 selection and completed explicitly assigned read-only public-source work. This is not fixture-workspace caller authentication or native execution."
+  },
+  "context": {
+    "generation": 1,
+    "observedProxy": 3491,
+    "argumentProxy": 179,
+    "resultProxy": 2371,
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "otherProjectsTrafficImported": false,
+    "rawTextPersisted": false
+  },
+  "durability": {
+    "separateReadOnlyPairAndContextProcesses": 2,
+    "recordAndLedgerBytesUnchangedByReadback": true,
+    "productionRestartClaimed": false
+  },
+  "cleanup": {
+    "testOwnedProcesses": 0,
+    "sharedWakeHostStopped": true,
+    "originalTrustedBackendAndTunnelRetained": true,
+    "productionAuthenticationExistingBindingsAndNativeSessionChanges": 0
+  },
+  "remaining": [
+    "Genuine cumulative semantic source review; C52 INCONCLUSIVE preserved.",
+    "Canonical/control authority reconciliation and reviewed Wake publication.",
+    "Two independent Web project workspace edits through native Codex.",
+    "Installed independent Wake/rollover and unattended restart/reboot qualification.",
+    "Full T-0484 accounting and calibration; later CD-P7 clients."
+  ],
+  "operatorActionRequired": false
+}

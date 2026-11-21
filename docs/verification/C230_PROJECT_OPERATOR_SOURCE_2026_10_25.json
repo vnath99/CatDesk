@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "C230",
+  "status": "SOURCE_QUALIFIED_LIVE_OPERATOR_TEST_PENDING",
+  "sourceParent": "c32880aa94cd58c67a855856d2cfd6761ca10b53",
+  "branch": "codex/web-rollover-oct17",
+  "command": "operator installed-backend run-project --control-workspace <approved-control> --project-id <registered-id> --project-target-generation <generation> --project-target-sha256 <digest> --max-runtime-seconds <1..180>",
+  "implementation": {
+    "admission": "Closed dedicated controller invocation and bounded existing lifecycle lease; retry only sharing/lock violations before child startup.",
+    "cleanup": "Whole-command deadline, armed owned Jobs, separate consumed-holder state, per-project listener verification, no global empty-process guard during peer serving.",
+    "legacy": "Existing unscoped run path and protected release guards remain unchanged.",
+    "configuration": "Reuse approved development configuration; typed read-only preflight refuses identity initialization or route migration before child launch.",
+    "registry": "Existing project registry and paired Wake target; no competing registry, arbitrary execution root or native writer assignment.",
+    "pins": "Acquire canonical and selected-release pins under the lease, revalidate after pinning, retain read-only deny-write/delete handles during serving. No registry or task lease held during serving.",
+    "handoff": "Authenticate and verify child scope, release/reap lease holder exactly once, then publish READY. A peer may start while the first serves."
+  },
+  "qualification": {
+    "groups": {
+      "legacyBackend": 8,
+      "configuration": 2,
+      "stoppedRecovery": 5,
+      "legacyCli": 1,
+      "projectCli": 1,
+      "projectBackend": 8,
+      "windowsOwner": 16,
+      "projectRouting": 7
+    },
+    "ignoredOptInHelpers": 2,
+    "format": "PASS",
+    "note": "The original backend filter selected legacy tests only. A supplemental run selected only the eight new project-module tests. Its first harness parse failed before tests started; corrected harness and both histories are retained.",
+    "independentStaticReviews": 2,
+    "sourcePinsPreserved": true,
+    "supplementalResultSha256": "98ad1af1ba41ce6bbd9fceb6049e3f8793996800bcb078af63bd713142e905cd",
+    "rustPassed": 48,
+    "startedUtc": "2026-10-26T02:26:08.8417956+00:00",
+    "strictClippy": "PASS",
+    "mainResultSha256": "284c163f4cafc2c43c7c0dcc8bb707b6727b1fe9e0f3e5b3e2d88a30a7aab202",
+    "mainOuterSha256": "718b829e485fa5e1b1f81bd6c7b6e5773e4562f9e58aa2fddbf3bb7cbdb89864",
+    "supplementalOuterSha256": "861b0fcdc1ceb4d382f1a6be85bc1355f48eec2544405ec83632c8b40837c27e",
+    "finishedUtc": "2026-10-26T02:29:24.2257384+00:00"
+  },
+  "cleanup": {
+    "processActions": 0,
+    "canonicalPortListeners": 0,
+    "ownerRecordsChecked": 10,
+    "matchingLiveOwners": 0,
+    "evidenceSha256": "0dc872590db58a12f4f3d866c4f944db52c0fb6b327efa38064997586a93fd8a"
+  },
+  "qualifiedWorkingFileSha256": {
+    "src/operator_facade.rs": "1a45cfafde5e9c703ad69a3d0da364d4b795073f18d9705dc6295964b9c56ad4",
+    "src/operator_installed_backend.rs": "6e8aa50438b0f45cfa6a92c9db3bd0295cd33e13ffebaf4ce692ba64d13d6624",
+    "src/operator_installed_project.rs": "17026fd23f536526e66c553afd2383a79927c2f6c6d55a74612c3ca1db24b614",
+    "src/reviewed_candidate_owner.rs": "dc642a560a070eb7e845280cea94afeb9800080d884941e1bcdc4fb042af0c98",
+    "src/state.rs": "dd3bcaf470e6518a1f0d20076010b2628ded510359972e4cbc41dfebd691dca5"
+  },
+  "limits": [
+    "Current known slot-b generation-2 stopped release only; source-qualified controller must be built separately.",
+    "Read-only local project operation is not authenticated ChatGPT Web coding, project-write ownership or unattended serving.",
+    "No new installed artifact, promotion, different-version rollback or external connector acceptance.",
+    "Connector HTTP 429 not retried; live independent operator controllers remain the next qualification."
+  ],
+  "productionActions": 0,
+  "browserWakeRecurringStarts": 0,
+  "milestoneComplete": false
+}

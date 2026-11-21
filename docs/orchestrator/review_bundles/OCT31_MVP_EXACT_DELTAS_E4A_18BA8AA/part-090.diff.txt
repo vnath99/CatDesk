@@ -1,0 +1,194 @@
++        let start = Instant::now();
++        assert_eq!(
++            wait_login_enter(HeldInput(held, exited), Duration::from_millis(25)).unwrap_err(),
++            "DEV_LOGIN_INTERACTION_TIMEOUT"
++        );
++        assert!(start.elapsed() < Duration::from_secs(2));
++        release.send(()).unwrap();
++        exit.recv_timeout(Duration::from_secs(2)).unwrap();
++    }
++
++    #[test]
++    fn expired_login_uses_existing_exact_job_cleanup_before_retiring_own_marker() {
++        use std::os::windows::process::CommandExt;
++        let (parent, workspace, _, _) = fixture();
++        let marker = workspace.join("owned-login-test.json");
++        fs::write(&marker, b"retained fixture marker").unwrap();
++        let shell = PathBuf::from(std::env::var_os("SystemRoot").unwrap())
++            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
++        let mut child = Command::new(shell)
++            .args(["-NoProfile", "-NonInteractive", "-Command",
++                "if([Console]::In.ReadLine() -cne 'START'){exit 2}; [Console]::Out.WriteLine('READY'); Start-Sleep -Seconds 600"])
++            .creation_flags(0x0800_0000)
++            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
++            .spawn().unwrap();
++        let job = crate::process_job::Job::assign(&child).unwrap();
++        let output = child.stdout.take().unwrap();
++        let (tx, rx) = mpsc::sync_channel(1);
++        thread::spawn(move || {
++            let _ = tx.send(read_login_token(&mut BufReader::new(output)));
++        });
++        let mut input = child.stdin.take().unwrap();
++        input.write_all(b"START\n").unwrap();
++        input.flush().unwrap();
++        assert_eq!(
++            rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap(),
++            "READY"
++        );
++        assert!(marker.is_file());
++        assert!(job.active_processes().unwrap() >= 1);
++        let start = Instant::now();
++        let exit = cleanup_login_child(child, &job, &marker).unwrap();
++        assert!(!exit.success());
++        assert!(start.elapsed() < Duration::from_secs(25));
++        assert_eq!(job.active_processes().unwrap(), 0);
++        assert!(!marker.exists());
++        drop(input);
++        drop(job);
++        cleanup(&parent);
++    }
++
+     #[test]
+     fn login_preflight_requires_exact_target_stopped_host_and_free_browser() {
+         let (parent, workspace, package, python) = fixture();
+@@ -3583,6 +3848,26 @@ mod tests {
+         );
+         let selected = login_preflight(&workspace, url).unwrap();
+         assert_eq!(selected.root, root);
++        assert_eq!(selected.target_generation, 1);
++        assert_eq!(selected.primitives.file_name().unwrap(), "wake_bridge.py");
++        assert_eq!(
++            hash_file(&selected.primitives, MAX_PACKAGE_FILE).unwrap(),
++            selected.primitives_sha256
++        );
++        store
++            .set_target(
++                "canary-project",
++                1,
++                "https://chatgpt.com/c/intervening-generation",
++            )
++            .unwrap();
++        store.set_target("canary-project", 2, url).unwrap();
++        assert_eq!(
++            require_observed_target_generation(&store, url, selected.target_generation)
++                .unwrap_err(),
++            "DEV_LOGIN_TARGET_GENERATION_CHANGED"
++        );
++        require_observed_target_generation(&store, url, 3).unwrap();
+         assert_eq!(
+             login_preflight(&workspace, url).err().unwrap(),
+             "HOST_ALREADY_RUNNING"
+@@ -3605,6 +3890,43 @@ mod tests {
+         cleanup(&parent);
+     }
+ 
++    #[test]
++    fn login_preflight_uses_chrome_compatible_identity_preserving_paths() {
++        let (parent, workspace, package, python) = fixture();
++        prepare_fixture(&workspace, &package, &python);
++        let root = root_for_workspace(&workspace).unwrap().unwrap();
++        let url = "https://chatgpt.com/c/chrome-compatible-profile-path";
++        Store::open(&root)
++            .unwrap()
++            .set_target("alpha", 0, url)
++            .unwrap();
++        let prepared = login_preflight(&workspace, url).unwrap();
++        assert_eq!(
++            identity(&prepared.profile, true).unwrap(),
++            identity(&root.join("browser-profile"), true).unwrap()
++        );
++        assert_eq!(
++            identity(&prepared.python, false).unwrap(),
++            identity(&root.join("runtime/python.exe"), false).unwrap()
++        );
++        let browser_paths_are_normal = !prepared
++            .profile
++            .as_os_str()
++            .to_string_lossy()
++            .starts_with(r"\\?\")
++            && !prepared
++                .python
++                .as_os_str()
++                .to_string_lossy()
++                .starts_with(r"\\?\");
++        drop(prepared);
++        cleanup(&parent);
++        assert!(
++            browser_paths_are_normal,
++            "Browser children must receive the existing Chrome-compatible drive spelling"
++        );
++    }
++
+     #[test]
+     fn unresolved_login_marker_blocks_all_dev_authority_selection() {
+         let (parent, workspace, package, python) = fixture();
+@@ -3625,6 +3947,290 @@ mod tests {
+         cleanup(&parent);
+     }
+ 
++    fn recovery_login_fixture() -> (PathBuf, PathBuf, PathBuf, String) {
++        let (parent, workspace, package, python) = fixture();
++        prepare_fixture(&workspace, &package, &python);
++        let root = root_for_workspace(&workspace).unwrap().unwrap();
++        Store::open(&root)
++            .unwrap()
++            .set_target("alpha", 0, "https://chatgpt.com/c/login-recovery-alpha")
++            .unwrap();
++        let marker = dev_dir(&workspace).join("login-active.json");
++        write_json_new(&marker, &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
++            "targetSha256":protocol::digest("https://chatgpt.com/c/login-recovery-alpha"),"startedUtc":now()})).unwrap();
++        let hash = hash_file(&marker, 4096).unwrap();
++        (parent, workspace, root, hash)
++    }
++
++    fn recovery_pair(store: &Store) -> Result<protocol::Target> {
++        store
++            .config()?
++            .targets
++            .get("alpha")
++            .cloned()
++            .ok_or("missing fixture target".into())
++    }
++
++    #[test]
++    fn login_recovery_preflight_preserves_fence_and_execute_archives_exact_bytes_only() {
++        let (parent, workspace, root, hash) = recovery_login_fixture();
++        let dev = dev_dir(&workspace);
++        let marker = dev.join("login-active.json");
++        let original = fs::read(&marker).unwrap();
++        let config = fs::read(root.join("config.json")).unwrap();
++        let pointer = fs::read(root.join("current.json")).unwrap();
++        let authority = fs::read(dev.join("authority.json")).unwrap();
++        let unknown = root.join("unknown-send-preserved.json");
++        fs::write(&unknown, b"unknown send must never be replayed or resolved").unwrap();
++        let preflight = login_recovery::reconcile_with_observer(
++            &workspace,
++            &hash,
++            false,
++            recovery_pair,
++            |_| Ok(()),
++        )
++        .unwrap();
++        assert_eq!(preflight["status"], "LOGIN_RECOVERY_PREFLIGHT_PASSED");
++        assert!(!preflight["markerArchived"].as_bool().unwrap());
++        assert_eq!(fs::read(&marker).unwrap(), original);
++        assert!(!dev.join(format!("login-recovery-{hash}.json")).exists());
++        assert_eq!(
++            root_for_workspace(&workspace).unwrap_err(),
++            "DEV_LOGIN_CLEANUP_UNVERIFIED"
++        );
++        let committed =
++            login_recovery::reconcile_with_observer(&workspace, &hash, true, recovery_pair, |_| {
++                Ok(())
++            })
++            .unwrap();
++        assert_eq!(committed["status"], "LOGIN_ONLY_MARKER_ARCHIVED");
++        assert_eq!(
++            committed["historicalSubmissionOutcome"],
++            "UNCHANGED_UNPROVEN"
++        );
++        assert_eq!(
++            fs::read(dev.join(format!("login-recovered-{hash}.json"))).unwrap(),
++            original
++        );
++        assert!(!marker.exists());

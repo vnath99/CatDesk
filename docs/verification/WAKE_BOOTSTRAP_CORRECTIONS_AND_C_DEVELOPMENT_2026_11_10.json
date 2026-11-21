@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-10T11:29:55.075015+00:00",
+  "classification": "CORRECTED_D_SOURCE_QUALIFIED_SEPARATELY_FROM_RETAINED_C_RELEASE_BUILD_AND_LOCAL_DEVELOPMENT_HEALTH",
+  "sourceAndArtifactSeparation": {
+    "nativeArtifactSourceCommit": "9fefacec2d238c8d66ab8b0770285b2c2ea81c8b",
+    "correctedSourceRevision": "D_FENCED_SOURCE_INPUTS",
+    "correctedSourceBaseCommit": "9fefacec2d238c8d66ab8b0770285b2c2ea81c8b",
+    "correctedSourceFenceSha256": "faa9171d08b191ba450ef49a78de3d262735108f2f014442f751d44c52ce01ec",
+    "correctedSourceInputCount": 238,
+    "correctedSourceCommitForSignedAdmission": null,
+    "correctedSourceBuildPerformed": false,
+    "correctedSourceInstalled": false,
+    "changedInputsSha256": {
+      "wake/install.ps1": "11278bdbfb2dc126ee11f3ad6eb71794e753fe5e33109bdd9325e103b9e3180a",
+      "scripts/test-wake-broker-install-wrapper.ps1": "b9225c24f78276ffb242304b053bb1b11f3f8a91d15a337b4ab7061f2abc29d2",
+      "wake/src/install_broker_operator.rs": "b356eefe59abc1f00bd0a09b28cd88b675d5e0a8cbf89bbfa83939f2e485998d"
+    },
+    "meaning": "The source review covers the exact three corrected inputs and remaining fenced inputs. Existing C binaries do not contain the native INTERACTIVE correction; later launcher source does not alter those binaries."
+  },
+  "retainedFindingsAndCorrections": {
+    "originalCBootstrapReview": {
+      "verdict": "FAIL",
+      "findingsCount": 1,
+      "reason": "Nonzero session did not establish enabled, non-deny-only INTERACTIVE token membership.",
+      "originalArtifactVerdictPreserved": true,
+      "nativeBootstrapUseQualified": false
+    },
+    "correctedNativeTokenGate": {
+      "scope": "EXISTING_PRIMARY_PROCESS_AND_SAME_READ_PIPE_GATES",
+      "requiresEnabledNonDenyOnlyInteractiveGroup": true,
+      "priorIdentityElevationAndRestrictionGatesRetained": true,
+      "wholeBufferCheckedTokenGroupsParser": true,
+      "newPassingRegressionCases": 7
+    },
+    "originalLeafOnlyJunctionProbe": {
+      "counterexampleEstablished": true,
+      "oldPinnedLeafStayedUnchanged": true,
+      "samePathResolvedDifferentBytes": true,
+      "cleanupVerified": true,
+      "executableLaunches": 0,
+      "protectedWrites": 0
+    },
+    "initialParentPinRegression": {
+      "passed": false,
+      "failureCode": "PATH_PIN_DID_NOT_EXCLUDE_PARENT_WRITER",
+      "sourceAndProtectedMismatches": 0,
+      "originalFailurePreserved": true
+    },
+    "directoryAccessDiagnostic": {
+      "scope": "OWNED_TEMP_INERT_FILES_AND_DIRECTORIES_ONLY",
+      "ownerPassed": true,
+      "allValidMountControlsEstablished": true,
+      "metadataOnlyAccess": "0x00120080",
+      "correctedListDirectoryAccess": "0x00120081",
+      "metadataOnlyAddChildOpenSucceeded": true,
+      "correctedAddChildOpenRefused": true,
+      "correctedDataWriteOpenRefused": true,
+      "correctedDeleteOpenRefused": true,
+      "attributesOnlyOpenStillPossible": true,
+      "nonemptyAttributeMountRefusedWithWin32Error": 145,
+      "cleanupVerified": true,
+      "productionSecurityClaim": false
+    },
+    "emptyRetainedParentNativeRelativeCreateDiagnostic": {
+      "scope": "MIRRORED_API_CALLS_ON_CURRENT_USER_INERT_TEMP_OBJECTS",
+      "ownerPassed": true,
+      "normalRelativeProtocolEstablished": true,
+      "validEmptyMountControls": true,
+      "attributeOnlyMountMutationSucceeded": true,
+      "changedFileCreateNtStatus": "0xc0000280",
+      "changedDirectoryCreateNtStatus": "0xc0000280",
+      "changedCasesCreatedNoObservedChildAtEitherDestination": true,
+      "retainedParentReparseInspectionWouldRefuse": true,
+      "cleanupVerified": true,
+      "productionSecurityDescriptorUsed": false,
+      "installedProof": false,
+      "limit": "The observed deterministic before-create case is resolved; this does not prove general attribute-write exclusion or universal concurrency behavior."
+    }
+  },
+  "correctedSourceValidation": {
+    "passed": true,
+    "finishedUtc": "2026-11-10T11:12:57.110175+00:00",
+    "distinctPassingRustTests": 352,
+    "stageCount": 12,
+    "stages": [
+      {
+        "name": "bootstrap-focused",
+        "exitCode": 0,
+        "passingTestExecutions": 10,
+        "passed": true
+      },
+      {
+        "name": "same-state",
+        "exitCode": 0,
+        "passingTestExecutions": 37,
+        "passed": true
+      },
+      {
+        "name": "broker-regression",
+        "exitCode": 0,
+        "passingTestExecutions": 293,
+        "passed": true
+      },
+      {
+        "name": "selection",
+        "exitCode": 0,
+        "passingTestExecutions": 10,
+        "passed": true
+      },
+      {
+        "name": "lifecycle-transactions",
+        "exitCode": 0,
+        "passingTestExecutions": 21,
+        "passed": true
+      },
+      {
+        "name": "host-entry",
+        "exitCode": 0,
+        "passingTestExecutions": 4,
+        "passed": true
+      },
+      {
+        "name": "host-recovery",
+        "exitCode": 0,
+        "passingTestExecutions": 6,
+        "passed": true
+      },
+      {
+        "name": "native-cli",
+        "exitCode": 0,
+        "passingTestExecutions": 6,
+        "passed": true
+      },
+      {
+        "name": "fmt-root",
+        "exitCode": 0,
+        "passingTestExecutions": 0,
+        "passed": true
+      },
+      {
+        "name": "fmt-wake",
+        "exitCode": 0,
+        "passingTestExecutions": 0,
+        "passed": true
+      },
+      {
+        "name": "clippy-root",
+        "exitCode": 0,
+        "passingTestExecutions": 0,
+        "passed": true
+      },
+      {
+        "name": "clippy-wake",
+        "exitCode": 0,
+        "passingTestExecutions": 0,
+        "passed": true
+      }
+    ],
+    "formattingAndStrictRootWakeClippyPassed": true,
+    "workflowElapsedSeconds": 222.828,
+    "ownerElapsedSeconds": 223.9861126,
+    "sourceInputs": 238,
+    "sourceInputMismatches": 0,
+    "sourceAddressChanges": 0,
+    "protectedPreservationInputs": 6,
+    "protectedPreservationMismatches": 0,
+    "sourceCompilerProcessesRemaining": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "releaseBuildCommands": 0,
+    "productCommands": 0,
+    "installedChanges": 0,
+    "independentReview": {
+      "verdict": "PASS_SOURCE_ONLY",
+      "fullBootstrapSourceReviewed": true,
+      "sourceReviewComplete": true,
+      "findingsCount": 0,
+      "neededReadsCount": 0,
+      "all238HashesIndependentlyCompared": true,
+      "artifactBoundBootstrapPass": false,
+      "signatureOrOperationalAuthorityCreated": false
+    }
+  },
+  "powerShellAndPathPinValidation": {
+    "passed": true,
+    "totalCases": 19,
+    "assertions": 70,
+    "nativeTempPathPinCases": 4,
+    "workflowElapsedSeconds": 0.8546631,
+    "ownerElapsedSeconds": 1.7467775,
+    "nativeInputsCompared": 236,
+    "nativeInputMismatches": 0,
+    "protectedPreservationInputs": 6,
+    "protectedPreservationMismatches": 0,
+    "temporaryCleanupVerified": true,
+    "processStarts": 0,
+    "builds": 0,
+    "systemQueries": 0,
+    "nativeBootstrapCalls": 0,
+    "serviceChanges": 0,
+    "actualRetainedCImageReadPin": {
+      "passed": true,
+      "canonicalPathMatched": true,
+      "pinDisposed": true,
+      "ownerElapsedSeconds": 1.3612302,
+      "hostSha256": "4280a66f28d84befdbd959984c0f709e9a4e156b25de16ffdec1f1256033ed6e",
+      "executableLaunches": 0,
+      "protectedWrites": 0
+    }
+  },
+  "retainedCReleaseBuild": {
+    "passed": true,
+    "sourceCommit": "9fefacec2d238c8d66ab8b0770285b2c2ea81c8b",
+    "profile": "release",
+    "lockedOffline": true,
+    "workflowElapsedSeconds": 686.125,
+    "ownerElapsedSeconds": 687.9370191,
+    "runtimeMapManifestSha256": "b8585219b22b3437d43c6b62ae2e33b8b334738768d3496e58347d308f44e239",
+    "runtimeArtifacts": [
+      {
+        "name": "CatDeskBinagotchy.exe",
+        "sha256": "a842c5aff26ced1d36bf2ab9259bcd787486cc54a2859ca2de76efac036603d9",
+        "byteLength": 39500288
+      },
+      {
+        "name": "CatDeskWakeHost.exe",
+        "sha256": "4280a66f28d84befdbd959984c0f709e9a4e156b25de16ffdec1f1256033ed6e",
+        "byteLength": 2841600
+      },
+      {
+        "name": "adapter.py",
+        "sha256": "11ef16ca7d7636c861dc1b6492f5e74ade269c03ed34e77dc4407da9fa606b9b",
+        "byteLength": 66268
+      },
+      {
+        "name": "wake_bridge.py",
+        "sha256": "5671574c987ca5962c5e181ba7a26a84ba418c8a64a1864134cc58ba6b958a6f",
+        "byteLength": 299980
+      }
+    ],
+    "separateBrokerArtifact": {
+      "name": "CatDeskWakeInstallBroker.exe",
+      "sha256": "9dce23453c24112c2f364c95e61e4e370644996060903e5cd3a02714f6360c9e",
+      "byteLength": 2121728
+    },
+    "sourceInputsCompared": 238,
+    "sourceInputMismatches": 0,
+    "protectedPreservationInputs": 6,
+    "protectedPreservationMismatches": 0,
+    "compilerProcessesRemaining": 0,
+    "allBuildOwnedProcessesExited": true,
+    "previousArtifactWrites": 0,
+    "newNativeTokenCorrectionIncluded": false,
+    "bootstrapReviewVerdict": "FAIL",
+    "protectedInstallationQualified": false
+  },
+  "actualCDevelopmentHealth": {
+    "passed": true,
+    "scope": "EXISTING_ISOLATED_DEVELOPMENT_PAUSED_HOST_AND_AUTHENTICATED_LOOPBACK_BACKEND_ONLY",
+    "sourceCommit": "9fefacec2d238c8d66ab8b0770285b2c2ea81c8b",
+    "finishedUtc": "2026-11-10T10:26:49.173665+00:00",
+    "actualPausedStarts": 2,
+    "maximumSecondsPerPausedStart": 10,
+    "distinctNativeChildIdentitiesAndMatchingForegroundReceipts": true,
+    "authenticatedBackendMaximumSeconds": 15,
+    "missingBearerStatus": 401,
+    "wrongBearerStatus": 401,
+    "authenticatedInitializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79,
+    "centralTaskToolPublished": true,
+    "registeredProjectsRead": true,
+    "workflowElapsedSeconds": 40.422,
+    "ownerElapsedSeconds": 45.1275504,
+    "preservationInputs": 1637,
+    "preservationMismatches": 0,
+    "taskStateFilesAdded": 0,
+    "taskStateFilesRemoved": 0,
+    "profileIdentityPreserved": true,
+    "verifiedPreviousAPreserved": true,
+    "ownedImagesRemaining": 0,
+    "profileProcessesRemaining": 0,
+    "endpointConnectResult": 10061,
+    "endpointClosed": true,
+    "hostStopped": true,
+    "browserStarts": 0,
+    "wakeDispatches": 0,
+    "messagesSent": 0,
+    "tunnelStarts": 0,
+    "nativeProjectTasks": 0,
+    "productionChanges": 0,
+    "rawWorkingReleaseQualification": false,
+    "nativeBootstrapUseQualified": false,
+    "privilegedLauncherUseQualified": false,
+    "fullSourceSecurityApproval": false,
+    "installedOrWebAcceptance": false
+  },
+  "actualCLocalMetadataVerification": {
+    "passed": true,
+    "scope": "LOCAL_DEVELOPMENT_VERIFICATION_RECORD_ONLY",
+    "finishedUtc": "2026-11-10T10:45:12.393251+00:00",
+    "ownerElapsedSeconds": 1.5369237,
+    "preservationInputs": 1647,
+    "preservationMismatches": 0,
+    "taskStateFilesAdded": 0,
+    "taskStateFilesRemoved": 0,
+    "profileIdentityPreserved": true,
+    "verificationRecordSha256": "ff908b18fc555e36be8cf9a8929e6a25ab8280b92ae3f3084ef6a05471a0f09e",
+    "verificationInputSha256": "ffdc2ec3af368aaf85ae7e4266fa36bdc94b254c10c0969158b0a84161c1d710",
+    "rawWorkingReleaseQualification": false,
+    "privilegedLauncherUseQualified": false,
+    "protectedSourceSecurityApproval": false,
+    "productionAuthorityCreated": false
+  },
+  "directInstalledV5Priority": {
+    "objective": "Two independent ChatGPT Web conversations edit and verify assigned local projects, then deliver and observe their own manual Wakes.",
+    "nativeCodexHopRequired": false,
+    "existingBackendEntry": "run_command",
+    "projectScopedEnvelope": "CATDESK_WEB_TASK=",
+    "routeEvidenceLayer": "RETAINED_COMPILED_SOURCE_PROVENANCE_AND_HISTORICAL_INSTALLED_MCP_EVIDENCE; NO_FRESH_GRANTED_FILE_EXECUTION",
+    "compiledCanonicalRouteSupportEstablished": true,
+    "compiledCanonicalSourceProvenanceIndependentlyChecked": true,
+    "compiledSourceProvenance": {
+      "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+      "canonicalImageSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+      "canonicalImageByteLength": 38482432,
+      "method": "Retained original producer attestation and native verifier receipt plus independently recomputed snapshot authority and manifest commitments.",
+      "snapshotDigestsRecomputed": true,
+      "actualCanonicalHashAndLengthMatch": true,
+      "originalNativeVerifierExitCode": 0,
+      "originalNativeVerifierState": "BUILD_ATTESTED",
+      "routeCriticalSnapshotFilesCompared": 6,
+      "sourceParityAloneProvesBinaryProvenance": false,
+      "freshProducerOrPrivilegedValidationPerformed": false,
+      "allSnapshotEntriesReaudited": false
+    },
+    "retainedHistoricalRuntimeEvidence": {
+      "installedImageAuthenticationAndCentralDispatcherCatalogPassed": true,
+      "malformedCachedAliasReachedTaskSchemaValidation": true,
+      "malformedAliasError": "WEB_TASK_ARGUMENTS_INVALID",
+      "taskOrGrantSuppliedInMalformedCheck": false,
+      "aliasResponseAloneBoundBackendHash": false,
+      "freshGrantedFileEditOrVerificationAccepted": false,
+      "meaning": "Historical transport/catalog/schema admission and compiled-source linkage are genuine distinct evidence; none proves completion of the held tasks."
+    },
+    "existingScopeGuardsRetained": true,
+    "cachedEnvelopeIsShellCommand": false,
+    "workspaceOverridePermitted": false,
+    "workRequestQueuingAloneProvesCodeExecution": false,
+    "sourceGrantBarrier": {
+      "originalSourceSentRequired": true,
+      "currentOriginalExactSentReceiptsAbsent": true,
+      "sourceFailureCode": "WEB_WORK_SOURCE_SENT_REQUIRED",
+      "newDirectTaskExecutionOrManualWakeGrantsIssued": false,
+      "nativeAliasGrantsAreSubstitutes": false,
+      "ownedDraftOrZeroVisibleMatchProvesNeverSent": false
+    },
+    "positiveReceiptRecovery": {
+      "supportedNoUserSendReconciliationExists": true,
+      "requiresFullAssistantBodySnapshot": false,
+      "availableInAlreadyBuiltDevelopmentController": true,
+      "canonicalInstalledCliContainsWorkReconcile": false,
+      "requiresOriginalSubmittingStateWitnessAndStableUniquePersistedExpectedUserProof": true,
+      "positiveCommitRevalidatesOriginalIdentityAndCasBeforeSentAndTimer": true,
+      "priorWitnessBoundRecoveryReturnedUnproven": true,
+      "materiallyNewPositiveProofAvailable": false,
+      "otherHeldInvitationWithoutWitnessEligible": false,
+      "newBrowserProbePlanned": false,
+      "messageResendPermitted": false
+    },
+    "manualSelfWake": {
+      "authenticatedMetadataCallRecordsQueuedIntentOnly": true,
+      "normalSharedHostIsExistingSupportedRoute": true,
+      "missingNewExactSelectorAloneProvesUpgradeRequired": false,
+      "independentlyEligibleProjectCanUseNormalRouteSubjectToExistingAuthority": true,
+      "sharedHostMayServiceOtherEligibleEvents": true,
+      "normalRunRequiresActualGlobalQueueAndOwnerAuthorization": true,
+      "uncertainSubmittingUsesReconcileBranchWithoutUserSendOrDraftTyping": true,
+      "uncertaintyAndPendingTimersReserveTheirOwnProjectWhileEligibleSiblingsCanProgress": true,
+      "legacyAssistantResponseRetryMayFollowPositivePersistedUserReceipt": true,
+      "genericReconciliationIsUnconditionallyObservationOnly": false,
+      "newExactBoundedScopedSenderRequiresCompatibleFencedEntryPair": true,
+      "installedDev84SatisfiesNewScopedEntryContract": false,
+      "legacyDev84TypingBeforeFenceRiskRemains": true,
+      "sourceSentOrTaskGrantCanBeManufacturedByRunningHost": false,
+      "actualDeliveredAndCompletedSelfWakeAccepted": false,
+      "attentionOtherThanChatgptNotIdleIsNotEligibleForSend": true
+    },
+    "heldUnknownRequestsReplayed": false,
+    "newKeysOrSignaturesCreated": false,
+    "approvedSignerProvided": false,
+    "issuerEnrollmentEstablished": false,
+    "newProtectedReleaseBuildScheduled": false,
+    "upgradeIndispensability": "NOT_ESTABLISHED_BY_EXACT_SELECTOR_ABSENCE; ASSESS_EXISTING_NORMAL_ROUTE_AND_ACTUAL_ADMISSION_FIRST",
+    "newBrowserOrRetryPlanned": false,
+    "next": "Preserve held tasks and require materially new attributable proof for any original receipt recovery. For independently eligible work, use existing direct scoped file APIs without a mandatory native Codex hop; assess normal shared-owner queue authority before scheduling any bounded Wake window. Do not schedule another protected build or signing workflow merely to satisfy a new selector abstraction.",
+    "actualTwoWebEditVerifySelfWakeAccepted": false
+  },
+  "authorityLimits": {
+    "correctedSourceReviewIsArtifactAuthority": false,
+    "approvedSignerEstablished": false,
+    "signaturesCreated": false,
+    "protectedServiceProvisioned": false,
+    "protectedSelectionChanged": false,
+    "installedRollbackQualified": false,
+    "productionBackendQualifiedByThisRecord": false,
+    "browserWakeQualified": false,
+    "multiProjectWebMilestoneComplete": false,
+    "originalFailuresAndUnknownTaskFencesPreserved": true
+  },
+  "evidenceSha256": {
+    "correctedSourceResult": "3f391393a83c5a159508c5bfdeacf09c81374218cbe656fc2627ea31ff7801ff",
+    "correctedSourceOwner": "c1164616fc15c62a81223f1bf739d6cd6969ee7a99b469b36a2883e7607b5526",
+    "correctedSourceFence": "faa9171d08b191ba450ef49a78de3d262735108f2f014442f751d44c52ce01ec",
+    "finalIndependentSourceReview": "f24d536dc296855a90f27534339ac0fd1b087e7c98a41b786508da27ea10c508",
+    "originalCBootstrapReview": "8b9c8cebc15b036e5c6bdfacb7f62f38bc3e05272bc0c6eec7030b99e1638efb",
+    "priorityScopeNote": "5cbe6be9091a13b0cab527eb2bd2bb090a39a79d783766aaf7bc39e0e575981b",
+    "finalPowerShellResult": "05ff774d0d59b7a7653f8db19192c733d19cb4b609147d0ca613ffd51bd37bc1",
+    "finalPowerShellOwner": "ed2689a8737fc4b07b4da14da76931d3cf8326c706384dae8f46fb3bf8e6444c",
+    "retainedFailedPowerShellResult": "06f383c653e698e79fea369aad1f652af56a96c2430755e129c14b9d76cd8ef0",
+    "retainedFailedPowerShellOwner": "c35f7fc56a2835a7f5a2fcea9b4d41e631131dfb50cc43819a5336bf5693980c",
+    "originalJunctionCounterexample": "ba9ca9a030afb2ae27d288e1b1ace2189a102d9efd83f10b95cdac9c1437b901",
+    "directoryDiagnosticWorkflow": "6658d47175c95ad0bf470704b0adb616f1c5b013a582ec394c01a3a1155dfb22",
+    "directoryDiagnosticResult": "4cf5767acbcb758057169a193ec775b8f3a1bcca9a0eb47ac8f8fc0ba703ea7e",
+    "directoryDiagnosticOwner": "01fc42b3405fb8925e3c16a2bda535a55fd4ef0813c26ac7ad55618c34c3d888",
+    "emptyParentMirroredWorkflow": "133597fa494de3df71284546a6eb679b792a2ecb3a985c2f7bd1d390c068f12b",
+    "emptyParentMirroredResult": "61e2971237058caa1d3bbfc084b739514009ab47aec6ca003f3d5f6a3785cf00",
+    "emptyParentMirroredOwner": "66ff65efa9940d90f71f62723ed4a82b91906d62280fbd1b11bf98900549c602",
+    "retainedCReadPinResult": "c04c20b3595789a357567df924d7de02604fa6102821f97cdb1088f55424542d",
+    "retainedCReadPinOwner": "33ce44b43a5301cec049cb7d035e658a65584a10eca9b912054927c7d7d654c6",
+    "retainedCBuildResult": "f52c67e31336f04db53814e2fa287ebade4379148f1f570241ad571adc5e2908",
+    "retainedCBuildOwner": "e159f3137b1474752951d4e371f1500cdffa0ddc52d284bef00bfd604a4fa0b8",
+    "retainedCSourceQualification": "1aa6833e273b937a593b33b4b6cfabf557b5ff71d28ab13077598a04ea20f7ac",
+    "retainedCExactPublication": "4be8b76ac5283453fe521ec761c9a5e8d0d6de64ed234756f8ff80fae787f529",
+    "retainedCProvenance": "7abff97178e4dc4471c2910eee066e6fadc05c01ccc440e619345ea1ed866442",
+    "actualCDevelopmentHealthResult": "e976fdffab3eee4a81d289260fd537a3797a10f402c43ee97533b26b55d68a2d",
+    "actualCDevelopmentHealthOwner": "21e2d231844a8d08812811cbb85ab5fc73688dc4eb9fdc1f11c5061409b43bd0",
+    "actualCLocalMetadataResult": "7f66fb8cb455d320fbb280ee43adc8594eed57fc5b829f70136d79db1752c03a",
+    "actualCLocalMetadataOwner": "af6779eeb83e69b26346b66bc4506f20b8feee77ff338deb47f725260c4e382d",
+    "existingDirectRouteAssessmentV2": "74b6de47dbb8dcc9da3ddf031acdd010696aca38f8e70a26f0a7e0ee72afed79",
+    "originalProducerAttestation": "cb9967689bbacf2f5b32dc286acf190b4f6bec580cd8fedeefd23e447fb7c2de",
+    "originalProducerResult": "3c669f3e63f124772c18a24e3e1450b45113ac21e73d5d33b10e187312c1b510",
+    "originalNativeBuildAttestationVerifier": "6770ef2b5346b636aad76e62daf372225dd98511b427ed2e696bdd13852e58ce",
+    "retainedCompiledSnapshotManifest": "feeeb2d2debc140c5e7870f03edb027ab78d653388f4c453e62a32809372a503",
+    "historicalCachedAliasSchemaAdmission": "a219854b8f9061d7f3563a6feee25f939ba89b374fac852dc7e7b7013822871b",
+    "historicalInstalledImageMcpVerification": "8da349b19358228bad4e5cecebff610b1b012f9fddf02261e0f3d0ab1868e003",
+    "historicalInstalledImageServingVerification": "883a6e7194ac6839748e1ef25520e946bc82560cf01d01b19184f612e6215dce",
+    "retainedUnprovenNoSendRecovery": "9aca1c0585841a792bcd5c2d54920a1e373dc5b6c9ed22012568ad5283269e17",
+    "retainedBoundedWitnessDiagnostic": "9113e6b819317b8747743ebb88f1e380de25e388ed22e55690f326f45f9061a2",
+    "sourceFactsOnlyPrivateProducer": "4a6f80766edeccb32a9304df19b070129a8a5765d3c4999920933c9f8ab2b271"
+  }
+}

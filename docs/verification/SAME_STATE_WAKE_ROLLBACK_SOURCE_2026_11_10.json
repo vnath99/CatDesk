@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-10T08:40:55.833288+00:00",
+  "classification": "TESTED_SOURCE_AND_DISPOSABLE_NATIVE_WINDOWS_ROLLBACK_TRANSACTION",
+  "sourceBaseCommit": "dba8fc374622c93f9b8ca3744f8ba59f99fb7030",
+  "implementationFilesSha256": {
+    "wake/src/install_broker_client.rs": "d327fc1cb0d203f9280df8797c5daa9e06420e8d248361c73a4c36b0196dc668",
+    "wake/src/install_broker_ledger.rs": "cc0cff0d6bc247200108901d600ba401cf7e462857f0db5dd95394f069d707f5",
+    "wake/src/install_broker_ledger_same_state.rs": "ee70ad20c9b67fc6382f0b88613d35996255037b5f8447f26bb95d5b3fcc73e4",
+    "wake/src/install_broker_policy.rs": "559ea7b8144fde0bb61849f3e1ff6774677c40c42f285444ee882c206cecbcb0",
+    "wake/src/install_broker_same_state_approval.rs": "dbb1c232cc47ff7b35393251f0c154113bffdf68a3b307b5087cbcf7b71f3f4d",
+    "wake/src/install_broker_service_runtime.rs": "020e7123630faf938b44f0044d7a679c2f206ce97069820439a494ab539a30ec",
+    "wake/src/runtime_same_state_install.rs": "15a953e7b38d8095078f181afce6efb04dff2f795438c1958e4a3621a088d114",
+    "wake/src/runtime_same_state_install_tests.rs": "f1f5bdbb19a4e3102ff474f93f867355c376e01728d09560763fea95dbe21245"
+  },
+  "verification": {
+    "passed": true,
+    "distinctPassingTests": 329,
+    "stages": [
+      {
+        "name": "same-state",
+        "exitCode": 0,
+        "passingTestExecutions": 37
+      },
+      {
+        "name": "broker-regression",
+        "exitCode": 0,
+        "passingTestExecutions": 271
+      },
+      {
+        "name": "selection",
+        "exitCode": 0,
+        "passingTestExecutions": 10
+      },
+      {
+        "name": "lifecycle-transactions",
+        "exitCode": 0,
+        "passingTestExecutions": 21
+      },
+      {
+        "name": "host-entry",
+        "exitCode": 0,
+        "passingTestExecutions": 4
+      },
+      {
+        "name": "host-recovery",
+        "exitCode": 0,
+        "passingTestExecutions": 6
+      },
+      {
+        "name": "native-cli",
+        "exitCode": 0,
+        "passingTestExecutions": 5
+      },
+      {
+        "name": "fmt-root",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      },
+      {
+        "name": "fmt-wake",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      },
+      {
+        "name": "clippy-root",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      },
+      {
+        "name": "clippy-wake",
+        "exitCode": 0,
+        "passingTestExecutions": 0
+      }
+    ],
+    "sourcePins": 231,
+    "sourceMismatches": 0,
+    "productionPreservationPins": 6,
+    "productionPreservationMismatches": 0,
+    "elapsedOwnerSeconds": 190.6326117,
+    "maximumOwnerSeconds": 530,
+    "timedOut": false,
+    "terminationFailed": false
+  },
+  "initialFailure": {
+    "preserved": true,
+    "passed": false,
+    "distinctPassingTests": 323,
+    "rejectedCases": 6,
+    "reason": "Extra unshared INTENT read handle conflicted with the same transaction history scan",
+    "correction": "Close only that decoded record handle before scanning; retain the global ledger lock",
+    "sourceAndPreservationMismatches": 0
+  },
+  "coverage": [
+    "Exact original escrowed selection.previous pointer and full qualification digest required",
+    "Signed distinct rollback purpose; unchanged omitted SELECT ledger field encoding",
+    "Previously qualified working release only; reconstruction and alternate predecessor refused",
+    "Actual damaged-current image observations retained; failed image hashes never become qualification",
+    "Explicit missing-image absence boundary for supported selectors; mapped or running image conflicts refuse without termination",
+    "Actual Windows five-phase rollback with current-byte CAS and stopped readback",
+    "Before/after pointer interruption resumes from exact escrow without blind replay",
+    "Changed failed-image observation on resume refuses",
+    "Lost COMPLETE reply retains original failed-current diagnostics",
+    "Closed response schema refuses substituted operation or inconsistent image metadata"
+  ],
+  "compatibility": {
+    "existingServicePipePolicyLedgerReused": true,
+    "newOwnerOrRegistryCreated": false,
+    "legacyInstallGuardUnchanged": true,
+    "fullHistoricalReceiptBytesRequired": true,
+    "manualCopiedLaunchersQuarantined": false
+  },
+  "authority": {
+    "productionInstallPerformed": false,
+    "serviceProvisionedOrStarted": false,
+    "signingAuthorityCreated": false,
+    "protectedFullReleaseReviewEstablished": false,
+    "rollbackWriterImplementedAndNativeFixtureQualified": true,
+    "actualInstalledRollbackQualified": false,
+    "automaticStartupFallbackActivated": false,
+    "processCrashOrPowerLossQualified": false,
+    "installedWebEditVerifySelfWakeAccepted": false
+  },
+  "evidenceSha256": {
+    "finalResult": "23d98d9d1f4be67e838f3920abb9ee7f1127e65370e79867da371b8d2442c61c",
+    "finalOwner": "9fd57834be7df7dbe535501df3c4eb99d8b2804e512a7196abe1072a23472940",
+    "initialResult": "042f298545585880639822393415b435991e7cfbafc103703d38ed5fda132c53",
+    "initialOwner": "35be7eb922d0997737e7033e0fc1a0bb78d925de855299fb87c28e0599724597"
+  },
+  "nextExecutableTask": "Build exact published candidate artifacts. Qualify reviewed broker bootstrap and genuine signer enrollment through the existing installation boundary before protected selection; preserve held Web submissions."
+}

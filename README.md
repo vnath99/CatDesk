@@ -1,21 +1,13 @@
 # CatDesk
 
+> Current source and resumption authority: [Project handoff](CATDESK_PROJECT_HANDOFF.md), [Milestones](CATDESK_MILESTONES.md), [Commands](CATDESK_IMPORTANT_COMMANDS.md), [Activity](CATDESK_ACTIVITY_LOG.md), [Tickets](CATDESK_TICKETS.md). Historical snapshots retain only their recorded scope.
+
+
 An open-source tool that turns ChatGPT Web into a coding agent. No reverse engineering, no API, no Codex. A ChatGPT Plus subscription is enough.
 
 ## Current project handoff
 
-For the current accepted milestone state, operational ownership boundaries, and
-the safe procedure for resuming work in a new ChatGPT conversation, start with
-[the canonical project handoff](docs/orchestrator/CATDESK_PROJECT_HANDOFF.md).
-For operational shortcuts and the guarded chat/Wake target rollover procedure,
-see [CatDesk Important Commands](docs/orchestrator/CATDESK_IMPORTANT_COMMANDS.md).
-It reconciles the durable [milestone tracker](CATDESK_MILESTONES.md),
-[current plan](.catdesk/current_plan.md), and [work queue](.catdesk/todo.md).
-Those sources take precedence over historical review bundles and this README's
-general product documentation.
-
-For the current trust, ownership, and document-status map, see the
-[canonical architecture and security model](docs/orchestrator/CANONICAL_CURRENT_ARCHITECTURE.md).
+Begin with [CATDESK_PROJECT_HANDOFF.md](CATDESK_PROJECT_HANDOFF.md). It distinguishes current development, installed evidence and held operations. The five root documents divide resumption, roadmap, commands, chronological activity and ticket status. [Technical architecture](docs/orchestrator/CANONICAL_CURRENT_ARCHITECTURE.md) remains the design reference. Local `.catdesk` operational files are supporting state, absent from clean clones and never publication authority.
 
 <p align="center">
   <img src="docs/images/catdesk_preview.gif" alt="CatDesk in ChatGPT Web"><br>

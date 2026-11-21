@@ -1,0 +1,1589 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T12:03:24.874674+00:00",
+  "classification": "ACTUAL_TARGETED_WEB_REASSESSMENT_AND_SOURCE_COVERAGE_REFERENCE_MAP_NOT_RELEASE_ACCEPTANCE",
+  "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+  "fullDeclaredCodePathCount": 84,
+  "focusedWebFollowup": {
+    "verdict": "REVIEWED_PARTIAL",
+    "responseSha256": "61ae502575627ffbf93fbccb7a9459c9018f3fa4df756af8e748f47d54a8f5ec",
+    "messageSentExactlyOnce": true,
+    "exactUserReceiptVerified": true,
+    "completedResponseVerified": true,
+    "coordinatorDeliveryClosed": true,
+    "actualSourceToolCalls": 12,
+    "allSourceLogsMatchPinnedInputsWithExistingPrivacyRedaction": true,
+    "concernStatuses": [
+      {
+        "concern": "Initialization may admit concurrent Web work before commit",
+        "status": "MITIGATED_BY_EXISTING_SOURCE",
+        "finding": "Initialization opens ProjectStore before examining the active rollover record. ProjectStore acquires and retains an OS file lock. WorkLease retains the same ProjectStore lock across central native admission and finalization. The specific alleged pre-lock admission race is not supported by the reviewed implementation.",
+        "evidence": [
+          "src/operator_web_initialization.rs:130-146",
+          "src/operator_web_rollover.rs:385-402",
+          "src/operator_web_rollover.rs:705-754",
+          "src/web_work.rs:187-263"
+        ],
+        "remainingUncertainty": "Full concurrency and crash-restart behavior remains outside this focused source review."
+      },
+      {
+        "concern": "Activated-child crash recovery may duplicate or corrupt continuation",
+        "status": "MITIGATED_BY_EXISTING_SOURCE_AND_TESTS",
+        "finding": "The follow function traverses durable parent-child links. check_link validates request identity and origin while preserving the child's recorded activation bit. Continuation persists a dormant child, parent link, and activation in ordered checkpoints. The regression covers interruptions at all three boundaries and asserts idempotent recovery, preserved metadata, and exactly two jobs.",
+        "evidence": [
+          "src/operator_codex_cli/queue/native_continuation.rs:151-206",
+          "src/operator_codex_cli/queue/native_continuation.rs:299-390",
+          "src/operator_codex_cli/queue/native_continuation.rs:472-527"
+        ],
+        "remainingUncertainty": "Real filesystem crash durability and concurrent-controller recovery were not independently exercised."
+      },
+      {
+        "concern": "Interrupted native finalization may permit duplicate execution",
+        "status": "MITIGATED_BY_EXISTING_SOURCE_AND_TESTS",
+        "finding": "Native admission retains its project lease through journal finalization. Existing call IDs are rejected, and unresolved earlier calls block new identities. The journal records Requested, PolicyAllowed and Executing before dispatch. Native queue claims are serialized and restricted to READY jobs. An ambiguous-native regression asserts both same-ID and changed-ID replay rejection while an independent project continues.",
+        "evidence": [
+          "src/web_work.rs:187-263",
+          "src/project_mcp_task.rs:866-962",
+          "src/project_mcp_task.rs:1093-1189",
+          "src/operator_codex_cli/queue.rs:3546-3671",
+          "src/web_task_dispatch.rs:2049-2084"
+        ],
+        "remainingUncertainty": "Journal/queue crash consistency, installed-runtime behavior, and real interrupted native-process recovery remain unverified by this independent review."
+      }
+    ],
+    "limitations": [
+      "This was a targeted independent source reassessment, not a complete 84-path cumulative review.",
+      "Source outside the 11 pinned ranges remains outside this follow-up.",
+      "The manifest was reviewed as source-reported evidence rather than independently reproduced runtime evidence.",
+      "Individual output hashes and byte counts were not independently verified.",
+      "No tests, compilation, native execution, browser actions, or production acceptance were performed.",
+      "Current live project ownership and active native sessions were not independently queried. Existing sessions and predecessor history remain untouched.",
+      "No files, credentials, authentication settings, bindings, or production configuration were changed.",
+      "No C49 or uncertain operation was replayed.",
+      "No protected release promotion was performed.",
+      "The completed artifact is this JSON assessment; no files were written.",
+      "Remaining blockers include full 84-path cumulative coverage reconciliation, independent executed-regression verification, installed two-Web native-edit acceptance, and supervisor-restart acceptance.",
+      "The three concerns have plausible existing mitigations supported by the inspected source; absence of all related defects is not established.",
+      "Browser response completion is not equivalent to native task completion or release approval."
+    ]
+  },
+  "contextAccounting": {
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "coverageForcedComplete": false,
+    "browserStarts": 0,
+    "projects": [
+      {
+        "projectId": "bug-bounty",
+        "generation": 2,
+        "observedTokenProxy": 69883,
+        "observedToolArgumentTokens": 1252,
+        "observedToolResultTokens": 64268,
+        "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+        "coverageKnown": false,
+        "duplicateImportChangedLedger": false,
+        "siblingContextPreserved": true
+      },
+      {
+        "projectId": "portfoliodesk",
+        "generation": 2,
+        "observedTokenProxy": 68718,
+        "observedToolArgumentTokens": 1822,
+        "observedToolResultTokens": 62106,
+        "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+        "coverageKnown": false,
+        "duplicateImportChangedLedger": false,
+        "siblingContextPreserved": true
+      }
+    ],
+    "additionalKnownToolCalls": 21,
+    "duplicateImportsChangedLedgers": false,
+    "wrongProjectInputRefused": true,
+    "projectAndSiblingStateMismatches": 0
+  },
+  "cleanup": {
+    "testOwnedProcesses": 0,
+    "temporaryHostStopped": true,
+    "loginMarkerPresent": false,
+    "trustedProductionOwnerPreserved": true,
+    "port3200OwnedByTrustedBackend": true,
+    "processActions": 0
+  },
+  "coverageReferenceMap": {
+    "reportsCollated": 18,
+    "classCounts": {
+      "PRIOR_REFERENCED_BLOB_CHANGED": 18,
+      "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS": 16,
+      "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW": 50
+    },
+    "meaning": "A same-blob reference preserves the value of a prior selected-range or fragment inspection; it does not imply full-file semantic review, independently executed tests, acceptance, or absence of defects. No old inconclusive verdict is upgraded.",
+    "paths": [
+      {
+        "path": "catdesk.ps1",
+        "currentGitBlob": "c557d9ef6c6077c2f740275fc2c9dc88ab69e184",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/catdesk-autostart-supervisor.ps1",
+        "currentGitBlob": "6c81c79cb1e8380212ae1ad0877cf3f45fd88b20",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "scripts/catdesk-doctor.ps1",
+        "currentGitBlob": "8e849888f819aa566cd317781d8cd2c4cb8acca1",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/promote-reviewed-catdesk-build.ps1",
+        "currentGitBlob": "38b312b85a81957852e5e48e7b5c87cb130f3db6",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/setup-secure-mcp.ps1",
+        "currentGitBlob": "4afc1afb9b539dfd914f906cb0f29352cd69a308",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/start-catdesk-stack.ps1",
+        "currentGitBlob": "3a6b958b04b394d7731c0d3920f16bec952d9bb8",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/test-backend-only-native-capability.ps1",
+        "currentGitBlob": "1ba610bc295c71e989351ee5c8790ed4e7ac329a",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/test-catdesk-autostart-supervisor.ps1",
+        "currentGitBlob": "c6018eea45cd434efa243249d85d0ffc617e5fd8",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "scripts/test-catdesk-doctor.ps1",
+        "currentGitBlob": "e3c88378754b5473130389ad9ed0a6d21350d311",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/test-catdesk-lifecycle.ps1",
+        "currentGitBlob": "345a69c06fed875b2bc859ae443656cd0c6ad989",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/test-catdesk-production-acceptance.ps1",
+        "currentGitBlob": "a46cb96640c7220b5a87e924a7c4fc73ac0687db",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "scripts/test-local-mcp-readiness-strict.ps1",
+        "currentGitBlob": "29539a9ec65bf77c42df3a49a99285f5069d1505",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/test-local-mcp-user-bearer.ps1",
+        "currentGitBlob": "0e4db6bb4b63bf2d1fe779cee38dfcc3082aab5c",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "scripts/test-promotion-handoff-script-status.ps1",
+        "currentGitBlob": "2f23d169596226fc98d354f18b65099cff920ed1",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/test-release-worker-command-line.ps1",
+        "currentGitBlob": "a01631140011d25edd9be3af4aef4fd0f3a5e69d",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/test-secure-mcp-bearer-forwarding.ps1",
+        "currentGitBlob": "95864aca9a2fa4e811c825ff20ef4c09d3198c8d",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/test-start-catdesk-stack.ps1",
+        "currentGitBlob": "8c50470e03bf2cb15629db220c28981795eb63a3",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/wake_bridge.py",
+        "currentGitBlob": "0a27834153a6dd03fac005f06396572c77052f3e",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-corrected-runtime-delta-review:2",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-corrected-runtime-cumulative-review:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/wake_profile_quiescence.py",
+        "currentGitBlob": "67370ea65a1021915e38255676832c074e13a2a7",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "scripts/wake_readiness_visual_probe.py",
+        "currentGitBlob": "60ad352fe972bd64f9c5a28ddfbe719d2e84dd72",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/command.rs",
+        "currentGitBlob": "5a08915496a395eb165f437684e12cc6b9a48472",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "src/daemon_reload.rs",
+        "currentGitBlob": "9bb9fd36a4ee8fa99dd5f38bb7ed79d3a57ced9d",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/delegated/autonomy_projects.rs",
+        "currentGitBlob": "65775cedd410d0b1e1e89ad0f8fa3f01407638a0",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-corrected-runtime-delta-review:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-corrected-runtime-cumulative-review:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/delegated/autonomy_runtime.rs",
+        "currentGitBlob": "62da648421f5ac77013609a0d07bfffa55a42e22",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/delegated/autonomy_supervisor.rs",
+        "currentGitBlob": "f30ffebb20206435d1beba279f191394fb75a080",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/delegated/codex_app_server.rs",
+        "currentGitBlob": "a22414e763e06bad49819dfc4c93827885298b2a",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/main.rs",
+        "currentGitBlob": "634e0c07881903d3bf5a7b8366300340a34f84a8",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-corrected-runtime-delta-review:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/mcp.rs",
+        "currentGitBlob": "495f67951806e23f86fc82a6fcb53d53f6c74f11",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_codex_cli.rs",
+        "currentGitBlob": "e809e394918e9675ac21d4af0a5c348d9fd7e2f2",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_codex_cli/queue.rs",
+        "currentGitBlob": "e17c6af767f85f11598997d8797d33c7b9790744",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-native-dependency-reviews:1",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-native-dependency-reviews:1",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-native-dependency-reviews:2",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_codex_cli/queue/native_continuation.rs",
+        "currentGitBlob": "b68ec8cedec1959401b575db98323f377aa5c834",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-current-native-managed-review-v2:2",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": "1-391",
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-native-dependency-reviews:5",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-native-dependency-reviews:5",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-corrected-runtime-cumulative-review:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_codex_cli/queue/native_dispatch.rs",
+        "currentGitBlob": "53fd80cd92e7b8a3f617c05bf113017c7034005b",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-current-native-managed-review-v2:1",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": "1-209",
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_codex_cli/queue/owned_native.rs",
+        "currentGitBlob": "0847dbcd36c48d057ad0f163c05cee8ff66452d4",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-current-native-managed-review-v2:1",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": "1-266",
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_development_backend.rs",
+        "currentGitBlob": "fe28c8c580776127a63541706b0a64a9fc21882a",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "src/operator_development_project.rs",
+        "currentGitBlob": "07a7ed027417927093d8c8ac640d57ea91774978",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "src/operator_facade.rs",
+        "currentGitBlob": "205add5ae4742bc6e68da0e0138d402a8f98666b",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_installed_backend.rs",
+        "currentGitBlob": "c068bb004a5e877102a7f770ad982d818fe606de",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_installed_project.rs",
+        "currentGitBlob": "677f2474512f82d7f4d8d603a9667748861c67ca",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_web_auto.rs",
+        "currentGitBlob": "7721eefac3b0678a497f028554240c87b5149351",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "src/operator_web_cli.rs",
+        "currentGitBlob": "62a263ff6036b1a93ed4a8a40507bbab301772a7",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-two-public-git-reviews:2",
+            "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_web_initialization.rs",
+        "currentGitBlob": "13470d3dfef91746f82b6d764b64018000e2fead",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-two-public-git-reviews:1",
+            "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-native-dependency-reviews:6",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-corrected-runtime-cumulative-review:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_web_observe.rs",
+        "currentGitBlob": "d91d091c7b9d81c6a016447b77115774ab01a1ae",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "src/operator_web_quarantine.rs",
+        "currentGitBlob": "49b1943fde4d4c7ecbd6589f766e63f4a6dfcfd4",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-native-dependency-reviews:6",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/operator_web_receipts.rs",
+        "currentGitBlob": "8bfa31b49ca4525e29c597c69afbcf7ac538ddde",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "src/operator_web_rollover.rs",
+        "currentGitBlob": "eeceedcf7378a2603e2af88ef0cb11492ff3c807",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-portfolio-dependency-reviews:2",
+            "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-portfolio-rollover-parts-review:1",
+            "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-native-dependency-reviews:6",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/project_mcp.rs",
+        "currentGitBlob": "1da2ff9348f67a26e74e9ff32cbd0d6b34514515",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/project_mcp_task.rs",
+        "currentGitBlob": "ff18e81441020fa943382d788ce7ebe032678bbc",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-native-dependency-reviews:4",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-native-dependency-reviews:4",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-native-dependency-reviews:5",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-corrected-runtime-cumulative-review:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/project_task_context.rs",
+        "currentGitBlob": "626daeac5ae116cc6eb42c6d702e850347a56089",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "src/promotion_retirement.rs",
+        "currentGitBlob": "8d3825761dc1f283ede4664ab77f6404c05f67fe",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/promotion_source_bridge.rs",
+        "currentGitBlob": "b1421a956f9fbd0738362448053cb69ed09eeb2d",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/reviewed_build.rs",
+        "currentGitBlob": "879f72dc7346ba3bd57f8d1bfd120d9717def3da",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/reviewed_candidate_owner.rs",
+        "currentGitBlob": "35f6f277156bfeea8c9fcd3fcc69bdf9496994b2",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-native-dependency-reviews:2",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/server.rs",
+        "currentGitBlob": "33ce3507b6441f47273bcaeb58afc9cf10f211fb",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-native-dependency-reviews:3",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-native-dependency-reviews:3",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/wake_protocol_client.rs",
+        "currentGitBlob": "093e4767e4180d686a8144e1bef500c69faf34e4",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/web_context_user_receipts.rs",
+        "currentGitBlob": "9f2f6899b0d8f1452e9227d6e39952d70660ba59",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-corrected-runtime-cumulative-review:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/web_conversation_context.rs",
+        "currentGitBlob": "4298bc0ace317b41e54e19046b427f5bbb27c5b5",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "src/web_review_work.rs",
+        "currentGitBlob": "c3b6e1c02dc0e5ec0cb8f204d2bc7de6e51208ad",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/web_rollover_admission.rs",
+        "currentGitBlob": "c7b5a410784a14e3eac3e9c8a342725c60df9759",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "src/web_task_dispatch.rs",
+        "currentGitBlob": "ae3718722ecb0530c08a7914507dc30b77721967",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-current-native-managed-review-v2:2",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": "1-380",
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-corrected-runtime-cumulative-review:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/web_work.rs",
+        "currentGitBlob": "ca37f4a328661dcc1dce64f28a8327e2caa751af",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-portfolio-dependency-reviews:1",
+            "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-native-dependency-reviews:4",
+            "sourceCommit": "4090a39fb3b5b38aebd0671007467806459e3fbf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "nov01-cumulative-concern-followup:1",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/windows_protected_fs.rs",
+        "currentGitBlob": "8685c3f0f25b73a74a62fd9717a311368ea404f8",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "src/windows_supervisor_startup.rs",
+        "currentGitBlob": "5db1048720e83635dd7cdf7b199838d3452b525a",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "tests/test_wake_bridge.py",
+        "currentGitBlob": "e190c12e90c71840b35ad87343138450d6eab4b2",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "tests/test_wake_bridge_current_dom.py",
+        "currentGitBlob": "dc614d93223e049a8eee8ec7234ed63f53990893",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "nov01-corrected-runtime-delta-review:2",
+            "sourceCommit": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+            "verdict": "REVIEWED_PARTIAL",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          },
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "tests/test_wake_profile_quiescence.py",
+        "currentGitBlob": "1212f35682f715e8ddbe4113e93de17e463451a8",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "tests/test_wake_readiness_probe.py",
+        "currentGitBlob": "4be25881565108803062140f2f909fa57ca436fc",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/adapter.py",
+        "currentGitBlob": "a2f6b2852fcdd5ba7582e3f4b254376596fb423d",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/bin/CatDeskWakeProfileProbe.rs",
+        "currentGitBlob": "e66c442a4735017c4960cad8d4658105d779acb4",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/development_login_recovery.rs",
+        "currentGitBlob": "e159f49fc232e7ab1f2c04e9c897052a07121e0b",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/development_runtime.rs",
+        "currentGitBlob": "47831a330f54c7aaedb71a9c508509c5608f0413",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/lib.rs",
+        "currentGitBlob": "4271a26a0211e0921f0d9ca806fc045c453225ca",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/protocol.rs",
+        "currentGitBlob": "c3bef73368370044513e704f12f8c985d528a116",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/readiness_probe.rs",
+        "currentGitBlob": "fb83b1d5a795a34b759d1b5819dae8207c876d9a",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/runtime.rs",
+        "currentGitBlob": "bf908c6908ca75ce1cde5f629512f3e2c34d3805",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "wake/src/runtime_reobserve.rs",
+        "currentGitBlob": "e6018abf836d0b11cc2eb1ac8ec3e169200f69cd",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/runtime_response.rs",
+        "currentGitBlob": "b722756e940a9db077fca9f5d9e8919d0a1f875e",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/runtime_scheduler.rs",
+        "currentGitBlob": "00b4750977eb336b9b62cfcbec91386f596692a0",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/runtime_scoped_review.rs",
+        "currentGitBlob": "608f3d43b1c49a087bea09896c7746c2c3fda6cd",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "wake/src/runtime_snapshot.rs",
+        "currentGitBlob": "28dac0b1764ce8881d97a777514a78ceb54e538e",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/src/runtime_task_context.rs",
+        "currentGitBlob": "9ee965ed2f33487ef7da0d9947c0f36e4a935edf",
+        "coverage": "NO_REFERENCED_INSPECTION_IN_COLLATED_RECORDS",
+        "references": []
+      },
+      {
+        "path": "wake/src/store.rs",
+        "currentGitBlob": "a4efac11a50312b636b4faa8f247d7a09c211e38",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/tests/protocol_store.rs",
+        "currentGitBlob": "fa09cba5788a3de0e6ef7f639940e79caae98669",
+        "coverage": "CURRENT_BLOB_REFERENCED_BY_PARTIAL_OR_INCONCLUSIVE_REVIEW",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": true,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/tests/test_adapter.py",
+        "currentGitBlob": "7d2fdd9979ad870779e7fb4472aba6a5513e486f",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      },
+      {
+        "path": "wake/tests/test_new_conversation.py",
+        "currentGitBlob": "08b9c7502308981b4470161dc187b27b87595f9e",
+        "coverage": "PRIOR_REFERENCED_BLOB_CHANGED",
+        "references": [
+          {
+            "review": "oct31-broad-inconclusive",
+            "sourceCommit": "18ba8aa207f8977a772484f66e639e2603b938a6",
+            "verdict": "INCONCLUSIVE",
+            "sameBlobAsCurrent": false,
+            "rangeClaim": null,
+            "notCumulativeAcceptance": true
+          }
+        ]
+      }
+    ]
+  },
+  "releaseState": {
+    "sourceAccepted": false,
+    "managedReviewStillPending": true,
+    "acceptedReportArtifactPresent": false,
+    "acknowledged": false,
+    "producerAuthority": false,
+    "protectedPromotionPerformed": false
+  },
+  "remainingAcceptance": [
+    "Complete genuine cumulative source coverage and independent review; prioritize changed or unreferenced implementation paths from this map instead of repeating the three mitigated concerns.",
+    "Use the existing acknowledged-review, exact-source integration, immutable snapshot, controlled producer and protected promotion procedures only after their gates pass.",
+    "Installed two-conversation authenticated workspace source edits/native verification, manual Wake receipts and controlled supervisor restart remain open."
+  ],
+  "operatorActionRequired": false
+}

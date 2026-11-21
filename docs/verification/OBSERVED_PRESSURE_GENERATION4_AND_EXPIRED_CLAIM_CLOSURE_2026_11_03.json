@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T03:33:33.488179+00:00",
+  "qualification": "TESTED_CONTROLLED_LIVE",
+  "implementationSourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "controllerSha256": "d2bfe7796865152f530ca5c43495d9530625712ef5180e447584542de3c0e713",
+  "dependencyReview5": {
+    "verdict": "REVIEWED_PARTIAL",
+    "sourceCommit": "6d737c9a0f6f34496fc88b9fec02433bd1599117",
+    "responseSha256": "ea4827468504591ca256c3d8ee8b3cc9f78f6ce85272f8b2d56f860f4aae50f7",
+    "exactUserReceipt": true,
+    "completeExactResponse": true,
+    "coordinatorClosed": true,
+    "independentlyCorroboratedGitCalls": 8,
+    "successfulPartialObservationsTotal": 17,
+    "corroboratedGitCallsTotal": 133,
+    "cumulativeSourceAccepted": false
+  },
+  "sourceGenerationContext": {
+    "generation": 3,
+    "observedTokenProxy": 75628,
+    "observedToolArgumentTokens": 4054,
+    "observedToolResultTokens": 65950,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "rawTextPersisted": false
+  },
+  "pressurePolicy": {
+    "configuredBudgetTokens": 96000,
+    "safetyHeadroomTokens": 24000,
+    "observedTriggerTokens": 72000,
+    "thresholdsChanged": false,
+    "rolloverTrigger": "OBSERVED_PRESSURE",
+    "incompleteHistoryLineageGuardReused": false,
+    "providerCapacityClaimed": false
+  },
+  "rollover": {
+    "sourceGeneration": 3,
+    "replacementGeneration": 4,
+    "stages": {
+      "request": {
+        "startedUtc": "2026-11-03T02:59:21.175053+00:00",
+        "finishedUtc": "2026-11-03T03:00:30.437804+00:00",
+        "elapsedSeconds": 69.266,
+        "preservationMismatches": 0
+      },
+      "send": {
+        "startedUtc": "2026-11-03T03:00:56.841677+00:00",
+        "finishedUtc": "2026-11-03T03:01:51.955898+00:00",
+        "elapsedSeconds": 55.109,
+        "preservationMismatches": 0
+      },
+      "observe": {
+        "startedUtc": "2026-11-03T03:04:21.420181+00:00",
+        "finishedUtc": "2026-11-03T03:05:16.904829+00:00",
+        "elapsedSeconds": 55.484,
+        "preservationMismatches": 0
+      },
+      "collect": {
+        "startedUtc": "2026-11-03T03:10:15.961553+00:00",
+        "finishedUtc": "2026-11-03T03:11:17.013119+00:00",
+        "elapsedSeconds": 61.063,
+        "preservationMismatches": 0
+      },
+      "create": {
+        "startedUtc": "2026-11-03T03:13:42.179535+00:00",
+        "finishedUtc": "2026-11-03T03:15:56.191085+00:00",
+        "elapsedSeconds": 134.016,
+        "preservationMismatches": 0
+      },
+      "send-continuation": {
+        "startedUtc": "2026-11-03T03:19:40.071497+00:00",
+        "finishedUtc": "2026-11-03T03:20:32.749344+00:00",
+        "elapsedSeconds": 52.672,
+        "preservationMismatches": 0
+      },
+      "observe-continuation": {
+        "startedUtc": "2026-11-03T03:21:53.225820+00:00",
+        "finishedUtc": "2026-11-03T03:22:50.838342+00:00",
+        "elapsedSeconds": 57.625,
+        "preservationMismatches": 0
+      },
+      "read-continuation": {
+        "startedUtc": "2026-11-03T03:24:04.090313+00:00",
+        "finishedUtc": "2026-11-03T03:24:46.752645+00:00",
+        "elapsedSeconds": 42.656,
+        "preservationMismatches": 0
+      },
+      "restore-policy": {
+        "startedUtc": "2026-11-03T03:25:28.871426+00:00",
+        "finishedUtc": "2026-11-03T03:25:36.438506+00:00",
+        "elapsedSeconds": 7.563,
+        "preservationMismatches": 0
+      }
+    },
+    "handoffSha256": "5c63a10b51a33d27a073f824ce32b728df90d34ede43193826d5c3fc152e607b",
+    "handoffUtf8Bytes": 4936,
+    "semanticEvidenceReferencesRetained": true,
+    "sourceAuthoredHandoff": true,
+    "independentlyIssuedUrlVerified": true,
+    "exactBootstrapUserReceiptVerified": true,
+    "replacementBootstrapResponseComplete": true,
+    "registryAndWakePaired": true,
+    "sourceRecheckedLiveBeforeBinding": true,
+    "predecessorPreserved": true,
+    "siblingsPreserved": true,
+    "projectWorkspaceAndNativeOwnerPreserved": true,
+    "continuationSentOnceAndComplete": true,
+    "continuationResponseSha256": "dc2bcc14e59cfe3ccdf83501bb4e8fb3f202188caabac7505aceb1feafbace74",
+    "continuationResponseBytes": 1192,
+    "originalPolicyRestored": true,
+    "blindResends": 0
+  },
+  "expiredReportClaimClosure": {
+    "startedUtc": "2026-11-03T03:27:38.146829+00:00",
+    "finishedUtc": "2026-11-03T03:27:59.985588+00:00",
+    "elapsedSeconds": 21.844,
+    "state": "CANCELLED",
+    "active": false,
+    "stateVersion": 5,
+    "oldEventPrefixPreserved": true,
+    "otherNativeFilesPreserved": true,
+    "allWebRecordsAndGrantsPreserved": true,
+    "reportStillAbsent": true,
+    "providerThreadAbsent": true,
+    "ownedServerExitProved": true,
+    "projectGoalPaused": false,
+    "newReviewClaimCreated": false,
+    "sourceAccepted": false
+  },
+  "cleanup": {
+    "observedUtc": "2026-11-03T03:32:48.5415459Z",
+    "testOwnedProcesses": 0,
+    "existingTrustedBackendPreserved": true,
+    "existingTunnelOwnerPreserved": true,
+    "sharedWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "processActions": 0,
+    "queriesAreNotAnAtomicSnapshot": true
+  },
+  "limits": [
+    "Replacement continuation is complete but holds native execution on the separate canonical versus controlled registry authority gap.",
+    "Completed controlled rollover does not qualify installed multi-project native coding, independent Wake or unattended recovery.",
+    "Expired older-source partial observations remain immutable evidence, not current-source cumulative approval or release authority.",
+    "Current 90-path source review, acknowledgment, snapshot and producer remain required; older 89-path claims cannot approve newer bytes.",
+    "Authenticated caller attribution, full context calibration and later provider-client acceptance remain open."
+  ],
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "productionChanges": 0,
+  "originalProjectNativeSessionsChanged": 0,
+  "recurringAutomationEnabled": false
+}

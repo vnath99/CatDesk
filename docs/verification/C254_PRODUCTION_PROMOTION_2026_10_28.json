@@ -1,0 +1,38 @@
+{
+  "observedDate": "2026-10-28",
+  "outerPreservationVerified": true,
+  "wakeActions": 0,
+  "classification": "INSTALLED_PROTECTED_PROMOTION_VERIFIED_SERVING_ACCEPTANCE_PENDING",
+  "promotionHelperFixCommit": "958e8d73903d9661051d992ee47e948efadea6f0",
+  "remainingAcceptance": [
+    "installed public startup and restart",
+    "authenticated installed MCP and unauthorized rejection",
+    "actual rollback and restoration",
+    "separate official connector availability",
+    "two independent ChatGPT Web coding conversations",
+    "normal unattended operation"
+  ],
+  "nativeCapabilityRegression": {
+    "fixtureSeamsInstalled": 0,
+    "windowsPowerShell51": "PASS",
+    "daemonStarts": 0,
+    "powerShell7": "PASS"
+  },
+  "diskTransactionRemaining": false,
+  "previousVerifiedGeneration": 2,
+  "candidateSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "externalRuntimeActions": 0,
+  "outerResultSha256": "c59ec17d9c686cd035d289d7c8a0f808944cd3dd827248498efaafe458fe31f0",
+  "nativeWrapperResultSha256": "71aecee64ed3dfe4e02ec970a5fc73f5ac994ea3a5106cd7659c2b1038ec5118",
+  "servingState": "STOPPED_AFTER_BOUNDED_OWNER",
+  "previousSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+  "candidateSourceCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "firstPublicStartCause": "Launcher read nonexistent Output instead of bounded helper Stdout",
+  "schemaVersion": 1,
+  "installedFingerprintMatches": true,
+  "browserActions": 0,
+  "nativeResult": "PROMOTION_COMPLETED",
+  "firstPublicStart": "LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED",
+  "ci": "UNVERIFIED_NO_NEW_REMOTE_RUN",
+  "currentVerifiedGeneration": 3
+}

@@ -9,8 +9,29 @@ $script:CatDeskReleaseRecoveryMaxPointerBytes = 1024
 $script:CatDeskReleaseRecoveryMaxBinaryBytes = 128MB
 $script:CatDeskReleaseRecoverySlots = @('slot-a', 'slot-b')
 
+function ConvertFrom-CatDeskLiteralJson([string]$Text) {
+    # PowerShell7.5+ otherwise coerces ISO identity witnesses to DateTime,
+    # changing their literal process-creation proof. Windows PowerShell5.1
+    # already keeps JSON strings and does not support the DateKind parameter.
+    $reader=Get-Command ConvertFrom-Json -CommandType Cmdlet -ErrorAction Stop
+    if($reader.Parameters.ContainsKey('DateKind')) {
+        return $Text | ConvertFrom-Json -DateKind String -ErrorAction Stop
+    }
+    return $Text | ConvertFrom-Json -ErrorAction Stop
+}
+
 function Get-CatDeskRecoverySha256([string]$Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+    # The fixed Windows PowerShell worker may inherit a Core-only module path.
+    # Hash through the framework directly, retaining the existing helper/API.
+    $stream = [IO.File]::OpenRead($Path)
+    $sha = $null
+    try {
+        $sha = [Security.Cryptography.SHA256]::Create()
+        return ([BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '')).ToLowerInvariant()
+    } finally {
+        if ($null -ne $sha) { $sha.Dispose() }
+        $stream.Dispose()
+    }
 }
 
 function Resolve-CatDeskRecoveryRoot([string]$Root) {
@@ -147,7 +168,7 @@ function Read-CatDeskLkgSlot([string]$Root, [string]$Slot) {
     if ($expected -notmatch '^[a-f0-9]{64}$') { throw 'release recovery fingerprint is malformed' }
     $actual = Get-CatDeskRecoverySha256 $binary
     if ($actual -ne $expected) { throw 'release recovery binary fingerprint did not match' }
-    $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -ErrorAction Stop
+    $manifest = ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($manifestPath))
     $properties = @($manifest.PSObject.Properties.Name | Sort-Object)
     $required = @('capturedAtUtc', 'generation', 'schemaVersion', 'sha256', 'source')
     if ([string]::Join('|', $properties) -ne [string]::Join('|', ($required | Sort-Object))) { throw 'release recovery manifest fields are invalid' }
@@ -157,8 +178,11 @@ function Read-CatDeskLkgSlot([string]$Root, [string]$Slot) {
     # Only independently reviewed promotion evidence is rollback authority.
     # Older builds could persist `operational_verified` here from runtime health;
     # those legacy snapshots must now fail closed rather than remain trusted LKG.
-    if ([string]$manifest.source -notin @('reviewed_promotion', 'reviewed_reconciliation', 'operational_verified')) { throw 'release recovery source is invalid' }
-    if ([string]$manifest.source -eq 'reviewed_reconciliation') {
+    if ([string]$manifest.source -notin @('reviewed_promotion', 'reviewed_reconciliation', 'reviewed_qualified_stopped', 'operational_verified')) { throw 'release recovery source is invalid' }
+    if ([string]$manifest.source -eq 'reviewed_qualified_stopped') {
+        if ($Slot -ne 'slot-b' -or $generation -ne 2) { throw 'stopped recovery slot identity is invalid' }
+        [void](Get-CatDeskQualifiedStoppedAuthority -Root $Root -ExpectedHash $expected)
+    } elseif ([string]$manifest.source -eq 'reviewed_reconciliation') {
         if ($Slot -ne 'slot-b' -or $generation -ne 2) { throw 'reconciliation recovery slot identity is invalid' }
         [void](Get-CatDeskReviewedReconciliationAuthority -Root $Root -ExpectedHash $expected)
     } elseif ([string]$manifest.source -ne 'reviewed_promotion') {
@@ -187,7 +211,7 @@ function Get-CatDeskReviewedReconciliationAuthority([string]$Root, [string]$Expe
         $path = Assert-CatDeskRecoveryContainedPath -Root $Root -Path (Join-Path $control $entry.Name) -Label 'reconciliation recovery authority'
         $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
         if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -lt 1 -or $item.Length -gt $entry.Limit) { throw 'reconciliation recovery authority is unsafe' }
-        $read[$entry.Name] = [IO.File]::ReadAllText($path) | ConvertFrom-Json -ErrorAction Stop
+        $read[$entry.Name] = ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($path))
     }
     $a = $read['authorization.json']; $c = $read['claim.json']; $j = $read['transaction.json']; $r = $read['job-release.json']; $proof = $read['reconciled-release.json']
     $shapes = @(
@@ -217,7 +241,7 @@ function Read-CatDeskLkgPointer([string]$Root) {
     if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -gt $script:CatDeskReleaseRecoveryMaxPointerBytes) {
         throw 'release recovery pointer is invalid'
     }
-    $pointer = [IO.File]::ReadAllText($path) | ConvertFrom-Json -ErrorAction Stop
+    $pointer = ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($path))
     $properties = @($pointer.PSObject.Properties.Name | Sort-Object)
     $required = @('generation', 'schemaVersion', 'sha256', 'slot')
     if ([string]::Join('|', $properties) -ne [string]::Join('|', ($required | Sort-Object))) { throw 'release recovery pointer fields are invalid' }
@@ -276,6 +300,115 @@ function Get-CatDeskCanonicalPairEvidence([string]$Root) {
 # record written by the reviewed promotion success boundary.  Reload receipts,
 # process continuity, health, and review-bundle files are deliberately not
 # inputs to this proof.
+function Get-CatDeskQualifiedStoppedAuthority([string]$Root, [string]$ExpectedHash) {
+    $rootPath=Resolve-CatDeskRecoveryRoot $Root
+    $records=@{}
+    foreach($name in @('authorization.json','claim.json','transaction.json','qualification.json','stopped-quiescence.json','qualified-stopped.json')) {
+        $path=Assert-CatDeskRecoveryContainedPath $rootPath (Join-Path $rootPath ('.catdesk\release-pair-control\'+$name)) 'stopped authority'
+        $item=Get-Item -LiteralPath $path -Force
+        if($item.PSIsContainer -or $item.Length -lt 1 -or $item.Length -gt 12288){throw 'stopped authority is unavailable'}
+        $records[$name]=ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($path))
+    }
+    $outer=$records['authorization.json'];$a=$outer.authorization;$c=$records['claim.json'];$j=$records['transaction.json']
+    $q=$records['qualification.json'];$exit=$records['stopped-quiescence.json'];$receipt=$records['qualified-stopped.json']
+    $shapes=@(
+        @{Value=$outer;Fields=@('schemaVersion','mode','controllerSha256','controllerSessionId','authorization')},
+        @{Value=$a;Fields=@('schemaVersion','authorizationId','transactionId','expiresAtUnix','reviewedPreflightSha256','reviewedAuthorizationId','candidateRelativePath','candidateSha256','originalBinarySha256','originalSidecarFileSha256','originalSidecarValue','slotABinarySha256','slotASidecarFileSha256','slotAManifestSha256','originalPointerSha256','scriptSha256','recoveryHelperSha256','powershellSha256')},
+        @{Value=$c;Fields=@('schemaVersion','mode','authorizationId','transactionId','state')},
+        @{Value=$j;Fields=@('schemaVersion','mode','authorizationId','transactionId','phase','candidateSha256','originalBinarySha256','originalSidecarFileSha256')},
+        @{Value=$q;Fields=@('schemaVersion','mode','profile','authorizationId','transactionId','candidateSha256','ownerPid','ownerStartedAtUtc','unauthorizedStatus','authorizedStatus','initializeVerified','toolsListVerified','toolCount','qualifiedAtUnix')},
+        @{Value=$exit;Fields=@('schemaVersion','mode','state','authorizationId','transactionId','qualificationSha256','candidateJob','helperJob')},
+        @{Value=$receipt;Fields=@('schemaVersion','mode','state','profile','authorizationId','transactionId','candidateSha256','qualificationSha256','quiescenceSha256')}
+    )
+    foreach($shape in $shapes){$names=@($shape.Value.PSObject.Properties.Name);if($names.Count -ne $shape.Fields.Count -or @($names|Where-Object{$_ -notin $shape.Fields}).Count){throw 'stopped authority fields differ'}}
+    foreach($value in @($outer,$c,$j,$q,$exit,$receipt)) {if($value.schemaVersion -ne 2 -or $value.mode -cne 'QUALIFIED_STOPPED'){throw 'stopped authority mode differs'}}
+    if($a.schemaVersion -ne 1 -or $a.authorizationId -cnotmatch '^[a-f0-9]{32}$' -or $a.transactionId -cnotmatch '^[a-f0-9]{32}$' -or
+        $outer.controllerSha256 -cnotmatch '^[a-f0-9]{64}$' -or $ExpectedHash -cnotmatch '^[a-f0-9]{64}$' -or $a.candidateSha256 -cne $ExpectedHash){throw 'stopped authority identity differs'}
+    foreach($value in @($c,$j,$q,$exit,$receipt)){if($value.authorizationId -cne $a.authorizationId -or $value.transactionId -cne $a.transactionId){throw 'stopped authority transaction differs'}}
+    foreach($value in @($j,$q,$receipt)){if($value.candidateSha256 -cne $ExpectedHash){throw 'stopped authority candidate differs'}}
+    if($c.state -cne 'STOPPED_CLAIMED_PENDING' -or $j.phase -cne 'COMPLETED' -or $exit.state -cne 'OWNED_TREE_EXITED' -or
+        $receipt.state -cne 'QUALIFIED_STOPPED' -or $receipt.profile -cne 'HEADLESS_LOCAL' -or $q.profile -cne 'HEADLESS_LOCAL' -or
+        $q.ownerPid -lt 1 -or $q.unauthorizedStatus -ne 401 -or $q.authorizedStatus -ne 200 -or $q.initializeVerified -isnot [bool] -or
+        -not $q.initializeVerified -or $q.toolsListVerified -isnot [bool] -or -not $q.toolsListVerified -or $q.toolCount -lt 2 -or $q.qualifiedAtUnix -lt 1 -or
+        $j.originalBinarySha256 -cne $a.originalBinarySha256 -or $j.originalSidecarFileSha256 -cne $a.originalSidecarFileSha256){throw 'stopped qualification or exit proof is incomplete'}
+    [void]([DateTime]::Parse([string]$q.ownerStartedAtUtc))
+    foreach($name in @('candidateSha256','originalBinarySha256','originalSidecarFileSha256','originalSidecarValue','slotABinarySha256','slotASidecarFileSha256','slotAManifestSha256','originalPointerSha256','scriptSha256','recoveryHelperSha256','powershellSha256','reviewedPreflightSha256')){if($a.$name -cnotmatch '^[a-f0-9]{64}$'){throw 'stopped authority digest differs'}}
+    $control=Join-Path $rootPath '.catdesk\release-pair-control'
+    $qualificationHash=Get-CatDeskRecoverySha256 (Join-Path $control 'qualification.json')
+    if($receipt.qualificationSha256 -cne $qualificationHash -or $exit.qualificationSha256 -cne $qualificationHash -or
+        $receipt.quiescenceSha256 -cne (Get-CatDeskRecoverySha256 (Join-Path $control 'stopped-quiescence.json')) -or
+        $exit.candidateJob -cne "Local\CatDesk.ReleasePairStopped.$($a.transactionId).candidate" -or
+        $exit.helperJob -cne "Local\CatDesk.ReleasePairStopped.$($a.transactionId).helper"){throw 'stopped receipt evidence digest differs'}
+    # This authority means a reviewed image actually passed bounded local MCP
+    # qualification and its owned tree exited. It asserts no serving lifetime,
+    # ordinary native startup, Secure MCP ingress, or unattended operation.
+    return $receipt
+}
+
+function Enter-CatDeskStoppedLifecycleLease([string]$Root) {
+    $rootPath=Resolve-CatDeskRecoveryRoot $Root
+    $control=Assert-CatDeskRecoveryContainedPath $rootPath (Join-Path $rootPath '.catdesk\release-pair-control') 'release-pair control' -AllowMissingLeaf
+    if(-not(Test-Path -LiteralPath $control)){[void](New-Item -ItemType Directory -Path $control -Force -ErrorAction Stop)}
+    [void](Assert-CatDeskRecoveryContainedPath $rootPath $control 'release-pair control')
+    $lease=Assert-CatDeskRecoveryContainedPath $rootPath (Join-Path $control 'stopped-owner.lock') 'release-pair lifecycle lease' -AllowMissingLeaf
+    return [IO.File]::Open($lease,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+}
+
+function Test-CatDeskStoppedReconciliationStartupReady {
+    param([string]$Root,[System.IO.FileStream]$HeldLifecycleLease=$null)
+    try{
+        $rootPath=Resolve-CatDeskRecoveryRoot $Root
+        $control=Join-Path $rootPath '.catdesk\release-pair-control'
+        $lease=Join-Path $control 'stopped-owner.lock'
+        # A typed internal lease lets the executing lifecycle inspect metadata
+        # without mistaking its own exclusive handle for a competing owner.
+        # No public CLI parameter can provide or synthesize this handle.
+        if($null -ne $HeldLifecycleLease){
+            if(-not $HeldLifecycleLease.CanRead -or -not $HeldLifecycleLease.CanWrite -or $HeldLifecycleLease.SafeFileHandle.IsClosed -or
+                -not ([IO.Path]::GetFullPath($HeldLifecycleLease.Name)).Equals([IO.Path]::GetFullPath($lease),[StringComparison]::OrdinalIgnoreCase)){return $false}
+        }elseif(Test-Path -LiteralPath $lease){
+            [void](Assert-CatDeskRecoveryContainedPath $rootPath $lease 'release-pair lifecycle lease')
+            $probe=[IO.File]::Open($lease,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+            $probe.Dispose()
+        }
+        if(-not(Test-Path -LiteralPath $control)){return $true}
+        [void](Assert-CatDeskRecoveryContainedPath $rootPath $control 'release-pair control')
+        $entries=@(Get-ChildItem -LiteralPath $control -Force -ErrorAction Stop)
+        if($entries.Count -gt 128){return $false}
+        $jsonNames=@('preflight.json','authorization.json','claim.json','transaction.json','serving-pending.json','job-release.json','quiescence.json','result.json','reconciled-release.json','stopped-owner.json','stopped-recovery-exit.json','qualification.json','stopped-quiescence.json','qualified-stopped.json')
+        $outer=$null;$hasStopped=$false;$hasLegacy=$false;$hasAuxiliary=$false;$legacyPreparedOnly=$true
+        foreach($entry in $entries){
+            [void](Assert-CatDeskRecoveryContainedPath $rootPath $entry.FullName 'release-pair residual')
+            if($entry.Name -ceq 'stopped-owner.lock'){continue}
+            if($entry.PSIsContainer){if($entry.Name -ceq 'escrow'){$hasAuxiliary=$true;continue};return $false}
+            if($entry.Name -cnotin $jsonNames){
+                if($entry.Name -ceq 'worker-owner' -or $entry.Name -ceq 'qualification-config.toml' -or
+                    $entry.Name -cmatch '^(?:\.stopped-[a-f0-9]{32}\.tmp|[a-z-]+\.json\.(?:tmp|previous)\.interrupted-[a-f0-9]{32})$'){$hasAuxiliary=$true;continue}
+                return $false
+            }
+            if($entry.Length -lt 1 -or $entry.Length -gt 12288){return $false}
+            $record=ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($entry.FullName))
+            if($null -eq $record -or $record -is [array] -or -not $record.PSObject.Properties['schemaVersion']){return $false}
+            if($record.schemaVersion -isnot [int] -and $record.schemaVersion -isnot [long]){return $false}
+            if($record.schemaVersion -eq 2 -and $record.PSObject.Properties['mode'] -and $record.mode -ceq 'QUALIFIED_STOPPED'){$hasStopped=$true}
+            elseif($record.schemaVersion -eq 1 -and -not $record.PSObject.Properties['mode']){$hasLegacy=$true}
+            else{return $false}
+            if($entry.Name -cne 'preflight.json'){$legacyPreparedOnly=$false}
+            if($entry.Name -ceq 'authorization.json'){$outer=$record}
+        }
+        if($null -eq $outer){return (-not $hasStopped -and -not $hasAuxiliary -and (-not $hasLegacy -or $legacyPreparedOnly))}
+        if($outer.schemaVersion -eq 1){
+            $fields=@('schemaVersion','authorizationId','transactionId','expiresAtUnix','reviewedPreflightSha256','reviewedAuthorizationId','candidateRelativePath','candidateSha256','originalBinarySha256','originalSidecarFileSha256','originalSidecarValue','slotABinarySha256','slotASidecarFileSha256','slotAManifestSha256','originalPointerSha256','scriptSha256','recoveryHelperSha256','powershellSha256')
+            $names=@($outer.PSObject.Properties.Name)
+            if($names.Count -ne $fields.Count -or @($names|Where-Object{$_ -notin $fields}).Count){return $false}
+            return (-not $hasStopped)
+        }
+        if($hasLegacy){return $false}
+        [void](Get-CatDeskQualifiedStoppedAuthority $rootPath $outer.authorization.candidateSha256)
+        return $true
+    }catch{return $false}
+}
+
 function Get-CatDeskReviewedPromotionAuthority([string]$Root, $Canonical) {
     $rootPath = Resolve-CatDeskRecoveryRoot $Root
     if ($null -eq $Canonical -or [string]$Canonical.Hash -notmatch '^[a-f0-9]{64}$') { throw 'LKG_AUTHORITY_MISSING' }
@@ -287,7 +420,7 @@ function Get-CatDeskReviewedPromotionAuthority([string]$Root, $Canonical) {
         $path = Assert-CatDeskRecoveryContainedPath -Root $rootPath -Path $path -Label 'reviewed promotion authority'
         $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
         if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -lt 1 -or $item.Length -gt 2048) { throw 'invalid' }
-        $record = [IO.File]::ReadAllText($path) | ConvertFrom-Json -ErrorAction Stop
+        $record = ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($path))
         $required = @('schemaVersion','transactionId','authorizationId','stage','candidateHash','canonicalRelativePath','canonicalSha256')
         $names = @($record.PSObject.Properties.Name)
         if ($names.Count -ne $required.Count -or @($names | Where-Object { $_ -notin $required }).Count -ne 0) { throw 'invalid' }
@@ -332,7 +465,7 @@ function Get-CatDeskLkgAuthorityFailure([string]$Root) {
             if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
                 return 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED'
             }
-            $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json -ErrorAction Stop
+            $manifest = ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($manifestPath))
             if ([string]$manifest.source -eq 'operational_verified') {
                 $legacySlots++
                 continue

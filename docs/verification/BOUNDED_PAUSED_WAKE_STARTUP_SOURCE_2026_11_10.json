@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-10T07:56:53.256959+00:00",
+  "classification": "SOURCE_AND_NATIVE_FIXTURE_QUALIFICATION_ONLY",
+  "sourceBaseCommit": "4dc35f5256a11a90e463db87293a6fb64ba4c7e9",
+  "implementationFilesSha256": {
+    "wake/src/runtime.rs": "2051899b1243c1d225955607068c49a6240c78dee6a64eaaaf8aaa4145f052e8",
+    "wake/src/development_runtime.rs": "b236e4f5359f634b8cc96766ed35d176a01753a169f81ededac6fd83073b92ea",
+    "wake/src/lib.rs": "f4f7aa29f4e081253b7bf58d58608e122b4ae2f5555f806b9fb532b8a345f811",
+    "src/operator_facade.rs": "a1c2ebcc9f3398e26f9809725b2a1ce7185d182479924257e599bb6c4818b1a8"
+  },
+  "behavior": {
+    "explicitCommand": "operator web-dev-runtime run-paused --max-runtime-seconds <1..180>",
+    "requiresStoppedBeforeLaunch": true,
+    "selectedHostCapabilityBeforeControlMutation": true,
+    "retainsExistingSelectionAndInstallLeases": true,
+    "usesExistingForegroundGateAndContainedJob": true,
+    "startupTaskRetryOnlyOnFirstRunningIteration": true,
+    "pausedDoesNotDiscoverScheduleRetryOrSend": true,
+    "normalRunAndStartBehaviorPreserved": true
+  },
+  "verification": {
+    "distinctPassingTests": 38,
+    "wakeAndNativeFixtureCases": 31,
+    "rootCliCases": 7,
+    "formattingRootAndWake": "PASS",
+    "strictClippyRootAndWake": "PASS",
+    "sourcePins": 231,
+    "sourceMismatches": 0,
+    "productionPreservationPins": 6,
+    "productionPreservationMismatches": 0,
+    "covered": [
+      "PAUSED heartbeat preserves SUBMITTING witness and expired LOGIN attention bytes",
+      "Explicit RUNNING performs the existing startup retry once",
+      "Older Host capability refusal occurs before control mutation",
+      "STOPPED and finite budget are mandatory",
+      "Spawn failure stops and releases the retained leases",
+      "Existing foreground owner drains descendants on natural exit and owner death",
+      "Closed CLI refuses extra path/root arguments"
+    ]
+  },
+  "retainedFailures": [
+    {
+      "phase": "initial-harness",
+      "reason": "Root package has a binary target; helper incorrectly selected --lib. Wake/fmt/Clippy stages passed and unchanged inputs retained."
+    },
+    {
+      "phase": "corrected-cli-cold-compile",
+      "reason": "Compilation exceeded 110-second stage budget before any test binary started. Owned tree retired and zero known compiler processes verified; no source or production changes."
+    }
+  ],
+  "runtime": {
+    "actualNewPausedHostStarted": false,
+    "browserStarts": 0,
+    "messagesSent": 0,
+    "productionSelectionChanged": false,
+    "protectedSigningOrInstallAuthorityCreated": false,
+    "directWebEditVerifySelfWakeAccepted": false
+  },
+  "next": "Build this exact published source, qualify two finite actual PAUSED Host starts through the existing development owner, then use genuine working evidence for the existing reviewed release procedure. Rollback B remains separate."
+}

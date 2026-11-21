@@ -1,0 +1,74 @@
+{
+  "observedUtc": "2026-11-02T10:48:46.199460+00:00",
+  "classification": "TESTED_SOURCE",
+  "baseSourceCommit": "2d38336da04d97a6367e0613bc07b3aa0ee9b19f",
+  "sourceInputs": [
+    {
+      "path": "src/operator_web_review.rs",
+      "gitBlob": "eebb5394aab9eb7de9c7b5f2564af59e7d008bb0",
+      "sha256": "b6ce1ec3e791a7ef1a87e675b4b8ae47d7c54938ebf04abe42ba449b813ba3b5"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "gitBlob": "ed09573be34352571bad0efca26b2d4871b4f3a2",
+      "sha256": "5d0e2156ec0d5a1c2d0de8bac6f0000f80eb0270751e88dc130086e4788d63dd"
+    },
+    {
+      "path": "wake/src/runtime_snapshot.rs",
+      "gitBlob": "bd7a8b633b6922c72ec7a0781da70324c9e9d8a8",
+      "sha256": "54ccaaa8221d79bedf57a28cc7652e9e4d77e4b46e27aee16a51e43ee36b0aea"
+    }
+  ],
+  "problem": "Confirmed SENT review diagnosis incorrectly entered SUBMITTING-only reconciliation and refused SCOPED_RECONCILE_DELIVERY_INVALID.",
+  "implementation": [
+    "Existing review diagnose selects phase through read-only Store access.",
+    "SENT uses the existing bounded diagnosed snapshot reader, exact receipt/project/target validation and project work lease.",
+    "Only closed diagnostics and validated UI telemetry are projected; no response, snapshot, composer or conversation URL.",
+    "SNAPSHOT_VERIFIED describes the observed body only, without changing response timers, task completion or review authority.",
+    "SUBMITTING retains existing historical-dispatch reconciliation and no-replay checks.",
+    "Existing snapshot diagnostic-code sanitizer is reused, including review body validation failures."
+  ],
+  "verification": {
+    "newWindowsCases": {
+      "passed": 4,
+      "failed": 0,
+      "seconds": 17.92
+    },
+    "existingSentReadCase": {
+      "passed": 1,
+      "failed": 0,
+      "seconds": 4.31
+    },
+    "existingUnknownSubmissionReconciliation": {
+      "passed": 7,
+      "failed": 0,
+      "seconds": 0.35
+    },
+    "snapshotDiagnosticVocabulary": {
+      "passed": 1,
+      "failed": 0
+    },
+    "distinctCases": 13,
+    "strictAllTargetClippy": "PASS",
+    "rustfmt": "PASS",
+    "diffCheck": "PASS"
+  },
+  "verifiedInvariants": [
+    "Exact valid current USER exchange is required; historical failed assistant text does not contaminate it.",
+    "Current load failure, missing assistant, duplicate USER, timeout and authentication failure remain unverified.",
+    "Foreign project and corrupt receipt refuse before snapshot callback.",
+    "Unknown submission does not enter the receipt-based reader or acquire fabricated receipt evidence.",
+    "Binding/configuration, original delivery, timer, project registry and work-ledger bytes stay unchanged.",
+    "Private adapter failures are reduced to closed codes; unknown strings remain SOURCE_SNAPSHOT_FAILED."
+  ],
+  "liveAcceptance": "OPEN_MATCHED_DEVELOPMENT_BUILD_AND_BOUNDED_DIAGNOSIS_NEXT",
+  "installedAcceptance": "OPEN",
+  "independentReleaseAuthority": false,
+  "protectedProductionChanges": 0,
+  "browserStarts": 0,
+  "messagesSent": 0,
+  "pendingReviewB": "SENT_RESPONSE_UNVERIFIED_NO_REPLAY",
+  "reviewCSubmitted": false,
+  "originalRecordedGrantDeadlinePassed": true,
+  "nextTask": "Build this exact published source into a separate development package, qualify it using existing package procedures, then perform at most one bounded no-send diagnosis of the retained SENT request. Do not resend, finalize under an expired lease, or infer production/source authority."
+}

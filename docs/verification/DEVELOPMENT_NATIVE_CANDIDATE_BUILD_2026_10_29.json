@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T01:57:41.617786+00:00",
+  "activityDateLocal": "2026-10-29",
+  "timezone": "America/New_York",
+  "classification": "BUILD_ONLY_NOT_RUNTIME_QUALIFIED_SELECTED_OR_PROMOTED",
+  "sourceCommit": "3d1726ffbd1789259ac5298acf23fba417ee399d",
+  "implementationCommit": "f9679fab27dc265cb1b48601fa0fbeaae9a206fb",
+  "sourceBranch": "codex/web-rollover-oct17",
+  "cleanSourceAtBuildStart": true,
+  "cleanSourceAtBuildEnd": true,
+  "command": "cargo build --release --bin catdesk",
+  "profile": "NORMAL_OPTIMIZED_RELEASE",
+  "exitCode": 0,
+  "elapsedCompilerReportedSeconds": 573,
+  "artifactFilename": "catdesk.exe",
+  "artifactBytes": 37758464,
+  "artifactSha256": "58b9e1615b9416459e9079f2ea2eb4c496be324758b34ecdbe25fbb0eb2300d3",
+  "exactReadOnlyCopyRetained": true,
+  "cargoLockBlobSha256": "67ff350031722796083d0abf8fc537394b332045445c7528664e3a57b27e0f8a",
+  "rustc": [
+    "rustc 1.97.0 (2d8144b78 2026-07-07)",
+    "binary: rustc",
+    "commit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3",
+    "commit-date: 2026-07-07",
+    "host: x86_64-pc-windows-msvc",
+    "release: 1.97.0",
+    "LLVM version: 22.1.6"
+  ],
+  "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
+  "buildLogSha256": "1b771576f17216ae2bcdb56c3741158f5d5180c3ce926ba69a6fad5597258f5b",
+  "localQualificationReference": "docs/verification/REGISTRATION_PREPARATION_2026_10_29.json",
+  "preservation": {
+    "pinnedCriticalFilesUnchanged": 6,
+    "oldBuildOwnersRemaining": 0,
+    "scope": "Selected six baseline files and exact prior build-owner identities, not a new full-machine inventory",
+    "productionOrSelectedPackageChanged": false,
+    "browserWakeTunnelOrRecurringOwnersStarted": 0
+  },
+  "notEstablished": [
+    "Runtime health",
+    "Selected package acceptance",
+    "Real native provider execution through the candidate",
+    "Actual ChatGPT Web caller/two-conversation acceptance",
+    "Protected production promotion authority",
+    "Independent build attestation",
+    "Reproducible-byte rebuild",
+    "Hosted exact-source CI"
+  ],
+  "nextAction": "Qualify this retained candidate through existing bounded development lifecycle. Do not rebuild solely because later documentation commits advance HEAD."
+}

@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T21:34:58Z",
+  "maturity": "CONTROLLED_LOCAL_NATIVE_PARTIAL",
+  "productionChanged": false,
+  "canonicalV5ConnectionChanged": false,
+  "selectedDevelopmentPackageChanged": false,
+  "originalTaskOrGrantChanged": false,
+  "originalTaskReplayed": false,
+  "newTunnelPluginOrDaemonCreated": false,
+  "setupOrSecurityRepairPerformed": false,
+  "readiness": {
+    "scope": "EXISTING_CODEX_APP_SERVER_0_169_ONLY_NOT_ORIGINAL_VERIFIER_HEALTH",
+    "status": "ready",
+    "httpUpgrade": "101",
+    "handshakeVerified": true,
+    "initializeSucceeded": true,
+    "expectedHomeVerified": true,
+    "daemonUnchanged": true,
+    "proxyExitCode": 0,
+    "streamsClosed": true,
+    "startedUtc": "2026-11-15T21:08:19.319875+00:00",
+    "finishedUtc": "2026-11-15T21:08:19.484798+00:00",
+    "owner": {
+      "containment": "KILL_ON_JOB_CLOSE",
+      "startedUtc": "2026-11-15T21:08:18.7789664+00:00",
+      "schemaVersion": 1,
+      "timedOut": false,
+      "workerSha256": "e865561ba7db69f714d8834a948c723ac7658bd716921588a3e3ce77a10ae6f3",
+      "maximumSeconds": 45,
+      "terminationFailed": false,
+      "exitCode": 0,
+      "finishedUtc": "2026-11-15T21:08:19.4957737+00:00"
+    },
+    "protocolSource": "https://learn.chatgpt.com/docs/app-server"
+  },
+  "corrections": [
+    {
+      "case": "EARLIER_READINESS_PROBES",
+      "finding": "Raw JSONL sent to the Unix control socket without its required WebSocket HTTP upgrade; their initialize timeouts did not establish sandbox readiness."
+    },
+    {
+      "case": "STANDALONE_NATIVE_NOOP_FIXTURES",
+      "finding": "Their explicit none rules differed from actual command policy, which deliberately omits read-deny rules due to known legacy interference. Timeout probes are not qualification of the actual runner."
+    },
+    {
+      "case": "REAL_OWNER_CMD_CANARY",
+      "finding": "Fixed cmd /c diagnostic returned command syntax error; not the original interpreter spawn error."
+    },
+    {
+      "case": "REAL_OWNER_SYSTEM_LOOKUP_INITIAL_ASSERTION",
+      "finding": "Actual exit 0, expected system image observed after path-separator normalization, cleanup proved. Initial assertion used mixed separators and falsely failed. Corrected source must be requalified.",
+      "receiptSha256": "bcac265f07d28825c5af24b365056d657be4226a1dddabe0a841af85b7662174"
+    }
+  ],
+  "preservationObservation": {
+    "scope": "READONLY_EXACT_PRIOR_FIXTURE_DENY_ROOTS",
+    "observedUtc": "2026-11-15T21:27:13.4860465+00:00",
+    "readDenyAcesObserved": 0,
+    "sampledRootCount": 2,
+    "inheritedDeleteChildDenyOnly": true,
+    "retainedNativeDenyPrincipalCount": 0,
+    "aclRepairPerformed": false
+  },
+  "originalVerifier": {
+    "status": "PRESERVED_FAILED_RECEIPT",
+    "exitCode": 1,
+    "elapsedMs": 2424,
+    "preparationMs": 677,
+    "cleanupProved": true,
+    "reason": "CreateProcessAsUserW access denied reported",
+    "retryPerformed": false
+  },
+  "interpreterAccessObservations": {
+    "scope": "CORRELATION_ONLY_NOT_EFFECTIVE_TOKEN_ACCESS",
+    "sandboxAccountsFoundEnabledUnlocked": 2,
+    "approvedInterpreterCoveredByCachedMarkerReadRoot": false,
+    "interpreterBuiltinUsersOrEveryoneReadExecuteAce": false,
+    "systemImageBuiltinUsersOrEveryoneReadExecuteAce": true,
+    "causalRootEstablished": false
+  },
+  "qualificationChecks": [
+    {
+      "exitCode": 0,
+      "finishedUtc": "2026-11-15T21:30:43.0952530+00:00",
+      "startedUtc": "2026-11-15T21:29:25.7294917+00:00",
+      "arguments": [
+        "test",
+        "--locked",
+        "--offline",
+        "--bin",
+        "catdesk",
+        "project_task_command::"
+      ],
+      "name": "command-module"
+    },
+    {
+      "exitCode": 0,
+      "finishedUtc": "2026-11-15T21:30:45.3527859+00:00",
+      "startedUtc": "2026-11-15T21:30:43.1220466+00:00",
+      "arguments": [
+        "test",
+        "--locked",
+        "--offline",
+        "--bin",
+        "catdesk",
+        "project_task_command::windows::tests::native_system_lookup_uses_actual_command_owner",
+        "--",
+        "--ignored",
+        "--nocapture"
+      ],
+      "name": "actual-native-owner"
+    },
+    {
+      "exitCode": 101,
+      "finishedUtc": "2026-11-15T21:30:46.5758187+00:00",
+      "startedUtc": "2026-11-15T21:30:45.3571052+00:00",
+      "arguments": [
+        "test",
+        "--locked",
+        "--offline",
+        "--bin",
+        "catdesk",
+        "project_task_command::windows::tests::native_python_version_uses_actual_command_owner",
+        "--",
+        "--ignored",
+        "--nocapture"
+      ],
+      "name": "approved-python-version"
+    },
+    {
+      "exitCode": 0,
+      "finishedUtc": "2026-11-15T21:31:15.2349592+00:00",
+      "startedUtc": "2026-11-15T21:30:46.5779668+00:00",
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "name": "full-clippy"
+    },
+    {
+      "exitCode": 0,
+      "finishedUtc": "2026-11-15T21:31:20.4874076+00:00",
+      "startedUtc": "2026-11-15T21:31:15.2365266+00:00",
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "name": "format"
+    }
+  ],
+  "acceptance": "No original verification, Git checkpoint, Web-origin edit, task self-Wake, protected promotion or full multi-project acceptance is claimed.",
+  "sourceCommit": "cb0d29c4f194fbb959f4fcfb0ad27b9cdb354977",
+  "qualificationOwner": {
+    "workerSha256": "da3814cc2604d21471d5dd3b244cb9a4c4de0f9d827b8e12de01f3da7e93ff50",
+    "maximumSeconds": 600,
+    "terminationFailed": false,
+    "startedUtc": "2026-11-15T21:29:25.4405989+00:00",
+    "finishedUtc": "2026-11-15T21:31:20.5166425+00:00",
+    "containment": "KILL_ON_JOB_CLOSE",
+    "exitCode": 0,
+    "timedOut": false,
+    "schemaVersion": 1
+  },
+  "actualSystemLookup": {
+    "cleanupProved": true,
+    "elapsedMs": 1440,
+    "exitCode": 0,
+    "expectedOutputObserved": true,
+    "failureDiagnostic": null,
+    "nativeCliSha256": "2692c8c7bb2cf8b0aefe638741fc90236f4b824c59578ce84994f9de58200993",
+    "privateReceiptSha256": "3da326ab4bf84b2f4dafa219c63180565635898fa371995768d043e04d79bb56",
+    "timedOut": false
+  },
+  "approvedInterpreterVersionOnly": {
+    "cleanupProved": true,
+    "elapsedMs": 651,
+    "exitCode": 1,
+    "expectedOutputObserved": false,
+    "failureDiagnostic": {
+      "basis": "REPORTED_PROCESS_OUTPUT",
+      "layer": "NATIVE_SANDBOX",
+      "reason": "SPAWN_ACCESS_DENIED_REPORTED",
+      "retryAuthorized": false,
+      "schemaVersion": 1,
+      "targetExecution": "UNVERIFIED"
+    },
+    "nativeCliSha256": "2692c8c7bb2cf8b0aefe638741fc90236f4b824c59578ce84994f9de58200993",
+    "privateReceiptSha256": "4c57d52c8aa4f70af73662a06dd968bd53e2b58ca8df91b62f76bafc27d6e346",
+    "timedOut": false
+  },
+  "qualificationStatus": "SYSTEM_LOOKUP_PASSED_APPROVED_INTERPRETER_LAUNCH_FAILED",
+  "deterministicCommandTestsPassed": 5,
+  "defaultIgnoredLiveProbes": 2,
+  "checksInterpretation": "Ordinary command tests, strict Clippy and formatting pass. Explicit system lookup passes. Explicit approved-interpreter version qualification fails; owner exit 0 does not hide that test exit 101.",
+  "nextAction": "Qualify interpreter image/dependency read access using disposable owned resources and the existing sandbox. Do not modify the original install, frozen profile, task/grant or managed security settings, or repeat unchanged probes."
+}

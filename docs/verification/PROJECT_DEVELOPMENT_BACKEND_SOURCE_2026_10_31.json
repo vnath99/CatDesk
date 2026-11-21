@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T10:52:00.937185+00:00",
+  "classification": "TESTED_SOURCE_FIXED_PROJECT_DEVELOPMENT_LISTENERS_NOT_WEB_ACCEPTANCE",
+  "sourceBaseCommit": "fb0f247a472ea3383ceaf23f183f4397f53f629b",
+  "filesSha256": {
+    "src/operator_development_backend.rs": "bf39630debd09c16b955371bd2f0df20607542afb05ea178ef1bb69a134211f9",
+    "src/operator_development_project.rs": "b9143a7d6038cab4be3b4fbc40ec4f4a5a6b054dcfe1b0f73f7a5c968ddb9570",
+    "src/operator_facade.rs": "eb0c76dc742593dff3e06ee2e30094b9306ae12e7576b6ec53592a8288d59a3e",
+    "wake/src/development_runtime.rs": "6d46804b0655d13b528d644871937420be8c6c3547184eac4f574b2da303fb04"
+  },
+  "implementation": {
+    "existingSelectedPackageJobOwnerAndProjectRouterReused": true,
+    "newBrowserOwnerSchedulerOrRegistry": false,
+    "command": "operator web-dev-runtime run-project-backend",
+    "projectIdentity": "EXACT_EXISTING_REGISTRY_TARGET_GENERATION_AND_DIGEST",
+    "defaultAccess": "READ_ONLY",
+    "assignedAccess": "EXISTING_EXPLICIT_LINKED_WORKTREE_CONTRACT_AND_NATIVE_QUEUE_CAPABILITIES",
+    "maximumRuntimeSeconds": 180,
+    "bindHost": "127.0.0.1",
+    "port": "EPHEMERAL_ONLY_NEVER_3200",
+    "tunnelAndWebAuto": "DISABLED",
+    "assignmentFilePinnedUntilChildTreeExit": true,
+    "unknownScopeRefusedBeforeSelectionRecoveryOrStateInitialization": true,
+    "centralAndIndependentProjectsMayShareImmutableImage": true,
+    "packageMutationAndRecoveryRequireExclusiveProjectLease": true,
+    "oneProjectStartupFailureCanRotateSiblingsPackage": false,
+    "legacyReadyFramePreserved": true,
+    "existingSupervisorTaskDispatcherAlreadySupportedFullNativeExecution": true,
+    "productionAuthorityCreated": false
+  },
+  "tests": {
+    "distinctPassingCases": 57,
+    "newCases": 5,
+    "counts": {
+      "root-backend": 7,
+      "root-parser": 1,
+      "wake-selection": 49
+    },
+    "steps": [
+      {
+        "name": "root-backend",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::development_backend",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "db4a99f9a5ff473084d96dd78d55068f11ef789ba77bdfc7a9324a0b3d1b2c3e"
+      },
+      {
+        "name": "root-parser",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "development_project_backend_cli_preserves_fixed_scope",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "27e2f2c0c6f7e4f0bad9c6eff9ecf4c5b42d64b2e183882739796002ba965372"
+      },
+      {
+        "name": "wake-selection",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "development_runtime::tests::",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "7754293b2976ac1667eeda9b8e80bd0297786ed07fb4da43d016c86b27d13c22"
+      },
+      {
+        "name": "root-clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "9a3a9542cc648c9ae5e6776004de184a912e37473c35bb20c654bcd496c5ec4d"
+      },
+      {
+        "name": "wake-clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "a57b80dd7e850d2cb1b5c2e170cb8fca6347466328d44264159d8786dd0fae22"
+      },
+      {
+        "name": "root-format",
+        "command": [
+          "cargo",
+          "fmt",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "wake-format",
+        "command": [
+          "cargo",
+          "fmt",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "elapsedSeconds": 105.141,
+    "maximumOwnerSeconds": 520,
+    "owner": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    }
+  },
+  "retainedFailures": {
+    "initialVisibilityCompileFailureSha256": "1b04a9c086b5f72b3aed696106c284a7f9e97f68a1f59e69601c2f880b2155eb",
+    "centralCoexistenceConflictFoundDuringSourceReviewAndCorrectedBeforeProcessQualification": true,
+    "intermediateQualifiedResultsRetained": true
+  },
+  "preservation": {
+    "pinsChecked": 5121,
+    "pinChanges": 0,
+    "browserProviderBackendWakeOrOfficialStarts": 0,
+    "messagesSentOrHeldCallsRetried": 0,
+    "realProjectBindingsNativeSessionsAndProtectedInstallationChanged": false,
+    "selectedDevelopmentPackageChanged": false
+  },
+  "acceptance": {
+    "source": "PASS",
+    "actualConcurrentOwnedProcesses": "OPEN",
+    "actualTwoWebCoding": "OPEN",
+    "newSourceProductionAuthority": "OPEN"
+  },
+  "nextExecutableTask": "BUILD_EXACT_COMMIT_CONTROLLER_AND_QUALIFY_PARALLEL_FIXED_PROJECT_LISTENERS_IN_DISPOSABLE_LOOPBACK_RUNTIME",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}

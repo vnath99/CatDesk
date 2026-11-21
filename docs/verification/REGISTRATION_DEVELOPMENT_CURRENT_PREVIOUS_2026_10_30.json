@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T11:26:24.595388+00:00",
+  "classification": "NORMAL_OPTIMIZED_CANDIDATE_AND_ACTUAL_DISPOSABLE_DEVELOPMENT_CURRENT_PREVIOUS_RECOVERY",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "8020c7041859656bb4ca475c7cb937354efe4279",
+  "implementationCommit": "d7985f8c9034a583653dc047465113a7603257c1",
+  "build": {
+    "command": "cargo build --release --bin catdesk",
+    "reason": "Rust registration implementation changed; this was not a documentation-only rebuild",
+    "exitCode": 0,
+    "elapsedSeconds": 430.687,
+    "normalOptimizedProfile": true,
+    "cleanSourceAtStart": true,
+    "cleanSourceAtEnd": true,
+    "artifactSha256": "0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06",
+    "artifactBytes": 37753344,
+    "exactReadOnlyCopyRetained": true,
+    "previousQualifiedCopyUnchanged": true,
+    "buildLogSha256": "f0d33181f9ec36ae40f66ae7ce23a06c67eb45ff22c3fe2688e8caaeccd42963",
+    "cargoLockNormalizedGitBlobSha256": "67ff350031722796083d0abf8fc537394b332045445c7528664e3a57b27e0f8a",
+    "cargoLockWorkingCopySha256": "2533e7de0170581cb7f1f7eb740540feb20d14ed1de7b3a877952ff31af3f6bb",
+    "cargoLockDifference": "CRLF_ONLY_NORMALIZED_BYTES_EQUAL",
+    "toolchain": [
+      "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "binary: rustc",
+      "commit-hash: 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3",
+      "commit-date: 2026-07-07",
+      "host: x86_64-pc-windows-msvc",
+      "release: 1.97.0",
+      "LLVM version: 22.1.6"
+    ],
+    "cargo": "cargo 1.97.0 (c980f4866 2026-06-30)",
+    "reproducibleByteRebuildClaimed": false
+  },
+  "selection": {
+    "scope": "Only the previously prepared disposable test runtime; real LIVE selection and protected installation unchanged",
+    "currentAppSha256": "0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06",
+    "previousAppSha256": "58b9e1615b9416459e9079f2ea2eb4c496be324758b34ecdbe25fbb0eb2300d3",
+    "previousSourceCommit": "3d1726ffbd1789259ac5298acf23fba417ee399d",
+    "localEvidenceAuthority": "LOCAL_OPERATOR_PROVIDED_ROOT_SELF_REVIEW",
+    "protectedPromotionOrIndependentAttestationAuthorityCreated": false,
+    "supportedCommands": [
+      "operator web-dev-runtime record-verification --input-file <local-evidence>",
+      "operator web-dev-runtime update-package --package <reviewed-test-package>",
+      "operator web-dev-runtime run-backend --max-runtime-seconds <bound>"
+    ],
+    "automaticRecoveryCommand": "Normal run-backend selected and restored the recorded verified previous package after current image became unavailable",
+    "currentAndPreviousVerificationAtEnd": "OPERATOR_RECORDED_AND_RETAINED_PACKAGE_VERIFIED"
+  },
+  "tests": {
+    "elapsedSeconds": 80.656,
+    "maximumOuterSeconds": 180,
+    "actualMissingNativeInitializationDiagnostic": "CODEX_REGISTRATION_NATIVE_INITIALIZATION_REQUIRED",
+    "newNativeThreadOrTurnCreated": false,
+    "controlledFailure": "Move only the disposable runtime current-image copy to a held test path while stopped; preserve exact original bytes",
+    "normalStartupRecoveredVerifiedPrevious": true,
+    "heldImageRestoredExactly": true,
+    "healthyCurrentReselectedAndRestarted": true,
+    "backends": [
+      {
+        "label": "new-current",
+        "maximumRuntimeSeconds": 15,
+        "expectedSha256": "0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06",
+        "actualSha256": "0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-30T11:25:21.631668+00:00"
+      },
+      {
+        "label": "automatic-previous-recovery",
+        "maximumRuntimeSeconds": 15,
+        "expectedSha256": "58b9e1615b9416459e9079f2ea2eb4c496be324758b34ecdbe25fbb0eb2300d3",
+        "actualSha256": "58b9e1615b9416459e9079f2ea2eb4c496be324758b34ecdbe25fbb0eb2300d3",
+        "recovery": "PACKAGE_PREVIOUS_RESTORED_STOPPED",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-30T11:26:12.922019+00:00"
+      },
+      {
+        "label": "healthy-current-restart",
+        "maximumRuntimeSeconds": 10,
+        "expectedSha256": "0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06",
+        "actualSha256": "0b4240d1c125bedd68f7778134ad6dd39f35753a6dc0e28395a74d1c8e37fb06",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-30T11:26:24.567190+00:00"
+      }
+    ]
+  },
+  "preservation": {
+    "realCriticalStatePinsUnchanged": 12,
+    "scopedRegistryWakeTaskStatePinsUnchanged": 15,
+    "nonUsageDevelopmentConfigUnchanged": true,
+    "accountingChangesPreserved": true,
+    "remainingTestOwnedProcesses": 0,
+    "cleanupObservedUtc": "2026-10-30T11:28:32.0371899Z",
+    "buildOwnerTerminatedCleanly": true,
+    "testOwnerTerminatedCleanly": true,
+    "browserWakeTunnelOrRecurringStarts": 0,
+    "actualChatGPTWebCalls": 0,
+    "nativeModelTurns": 0,
+    "scope": "Selected pinned records and test-owned process identities; not a claim of hashing all machine files"
+  },
+  "notEstablished": [
+    "Protected production promotion of this candidate",
+    "Independent release attestation",
+    "Actual ChatGPT Web caller or two-conversation coding acceptance",
+    "Normal unattended operation",
+    "Hosted exact-source CI"
+  ],
+  "remainingDependencies": [
+    "Existing connector429 observation and retained-profile inspection are unchanged; neither was retried"
+  ],
+  "nextAction": "Use this already qualified candidate for the next authorized serving/Web acceptance stage when its ingress/profile prerequisites change; do not rebuild for later documentation-only commits."
+}

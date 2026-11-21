@@ -1,0 +1,69 @@
+{
+  "observedUtc": "2026-11-02T06:20:28.436369+00:00",
+  "sourceCommit": "6544f6b20aff7eb8ca13f58bd212b5ea6e5d3234",
+  "classification": "QUALIFIED_DEVELOPMENT_PACKAGE_AND_REAL_STOPPED_REGISTRY_TRANSFER_NOT_INSTALLED_OR_NATIVE_ACCEPTANCE",
+  "buildSeconds": 39.875,
+  "qualificationSeconds": 45.031,
+  "artifacts": {
+    "CatDeskBinagotchy.exe": {
+      "sha256": "6aadcc717872ac90fa4e53a9c6d41a1ab2a7840c6aaa49a892222806f52bce5a",
+      "bytes": 75149824
+    },
+    "CatDeskWakeHost.exe": {
+      "sha256": "51bfd4a7c5d5631e900089b50bcd20c74c35c29282d7a9fd7dd6e4bc1b6ec1e3",
+      "bytes": 3697152
+    },
+    "adapter.py": {
+      "sha256": "710e2e4538ea061a64f0fa935ad3766a3d75c419fb5b2240b9137c5326ed26de",
+      "bytes": 65389
+    },
+    "wake_bridge.py": {
+      "sha256": "f12ce34f99456a17f9787975aab2721a02e2fce771a980f97df92ec5c78a9fc4",
+      "bytes": 211996
+    }
+  },
+  "previousVerifiedControllerSha256": "92867fcb7455aa1f54b6908b8ef235d93d2fef224b8ce2f489f5379fa0d65e49",
+  "previousArtifactPreserved": true,
+  "rollbackCompatibility": "The previous strict controller cannot read a ledger containing unusedMessagesFromGrant. Preserve it and all history; do not remove transfer fields or downgrade that project ledger to make an older binary read it. Production uses a separate unchanged canonical ledger.",
+  "finiteHealth": {
+    "maximumRuntimeSeconds": 15,
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "toolCount": 79,
+    "registeredProjectsRead": true,
+    "ownerExitCode": 0,
+    "readersClosed": true,
+    "ownedTreeExitProved": true,
+    "endpointClosed": true
+  },
+  "preservation": {
+    "oldPackageMismatches": 0,
+    "projectOrJournalMismatches": 0,
+    "authenticatedProfileIdentityPreserved": true,
+    "developmentHostStopped": true,
+    "loginMarkerPresent": false
+  },
+  "realAuthorizationTransfer": {
+    "observedUtc": "2026-11-02T06:17:35.353401+00:00",
+    "passed": true,
+    "sameManagedSourceClaim": true,
+    "oldAuthorizationCountPreserved": 23,
+    "oldWorkRecordsPreserved": 38,
+    "onlyOneNewExplicitTransferGrant": true,
+    "completedReviewIdentityExcluded": true,
+    "exactOriginalIdentityAndWireBytesRetained": true,
+    "originalExpiryAndLimitsRetained": true,
+    "eligiblePreflights": 7,
+    "browserStartsByAuthorization": 0,
+    "authorizationIsNotSourceAcceptance": true,
+    "producerAuthority": false
+  },
+  "sourceReviewTargetCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "controllerSourceIsNotInheritedReviewAuthority": true,
+  "protectedInstallationChanged": false,
+  "nativeProjectTasksStarted": 0,
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "nextReadyTask": "Finish the same C52 source review through its exact never-submitted checkpoint identities; retain separate independent review and release requirements for the later transfer increment. Installed first-chat/two-Web coding remains open."
+}

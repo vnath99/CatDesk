@@ -1,0 +1,501 @@
+{
+  "schemaVersion": 1,
+  "dateUtc": "2026-11-04",
+  "baseCommit": "fbc73630caeb0e867c4247600fa437190a615eb0",
+  "classification": "TESTED_SOURCE_MOCKS_AND_BOUNDED_SYNTHETIC_WINDOWS_FILESYSTEM_ONLY",
+  "sourceSha256": {
+    "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+    "scripts/catdesk-dev-lane-local-target.ps1": "3aef37d44d1dba1904f0332daa3f4cb799afc25ef9ebb96c4e005deeb461047a",
+    "scripts/test-catdesk-dev-lane-local-target.ps1": "2003f3b8164b56c9b3b779342512b0d54ce1a51b2902787c494c2a51330b5502",
+    "scripts/test-catdesk-dev-lane-storage.ps1": "dadd8806b9516e3701b773144c8e2dd2e4c2ce5d06191bb16d51bef8a216bf33",
+    "scripts/test-catdesk-dev-local-target.ps1": "b8c092acc1d299c41894ebae5f4cdc5a6ce4a3033984a30773423058bba55fa0"
+  },
+  "legacyFacadeCanonicalSha256": "cbe089734a5c7fdedc7951abf19d5210b5ddec81d15e69bf8c85ca656e1356bd",
+  "historicalNormalizerDigestsUnchanged": true,
+  "unchangedWarningTestSha256": "8794b78d86d8d8858e1992e75e18484fbbd1db713d31c47fd4864a5fe7aa6f25",
+  "finalMockRun": {
+    "startedUtc": "2026-11-04T11:14:44.0339511+00:00",
+    "finishedUtc": "2026-11-04T11:14:45.4111896+00:00",
+    "host": "PowerShell Core 7.6.5",
+    "mode": "Mock",
+    "passed": 337,
+    "managedDefinitionCompilations": 2,
+    "nativeEntries": 0,
+    "bridgeNativeEntries": 0,
+    "rootStateInputsSynthetic": true,
+    "fixtureRootCreated": false,
+    "filesystemFixtures": 0,
+    "realCargoRuns": 0,
+    "registeredTargetsCreated": 0,
+    "privateReceiptSha256": "138d1d685ea2fcc877e02a5be97df4cb45f0cefb588ca292ec0cf3de23172e21",
+    "sourceSha256": {
+      "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+      "scripts/catdesk-dev-lane-local-target.ps1": "3aef37d44d1dba1904f0332daa3f4cb799afc25ef9ebb96c4e005deeb461047a",
+      "scripts/test-catdesk-dev-lane-local-target.ps1": "2003f3b8164b56c9b3b779342512b0d54ce1a51b2902787c494c2a51330b5502"
+    },
+    "bindingBasis": "Exact three current source hashes in retained337 receipt; root journal tests use synthetic BCL values and in-memory stderr only. No filesystem mode/parent observation/root creation."
+  },
+  "compatibility": {
+    "storageCoreCases": 36,
+    "plannerCoreCases": 37,
+    "plannerNativeCases": 0,
+    "warningCoreCases": 130,
+    "realCargoInvocations": 0,
+    "realVolumeQueries": 0,
+    "storageOriginalRoundTripSha256": "dc95643829f2a11b5fe4fa3c337647f943015c83c783a065344f95cef7e99a18"
+  },
+  "preparationAndTestHistory": [
+    {
+      "event": "Initial draft-write command refused by PowerShell parser due to nested here-string terminators.",
+      "scope": "Before Python/file writes; clean Git and absent new helper independently confirmed."
+    },
+    {
+      "event": "Initial mock run failed the complete legacy facade reconstruction assertion.",
+      "cause": "Test normalizer omitted one trailing newline from its literal branch.",
+      "correction": "Exact comparison to the published Git blob proved product bytes unchanged; fixed literal normalization, retained original expected SHA."
+    },
+    {
+      "event": "Intermediate 119-check and later 145-check mock/managed-definition runs passed.",
+      "scope": "Earlier test variants only; do not relabel as final 152-check source evidence."
+    },
+    {
+      "event": "First storage result summary selected nonexistent passed fields and displayed nulls although the test exited 0.",
+      "correction": "Read actual schema; subsequent bounded readback/run returned passedCases=36 and the unchanged original round-trip hash."
+    },
+    {
+      "event": "152-check source passed before the separately reviewed single-job policy exception.",
+      "scope": "Preserved with original source hashes and receipt; final exception variant passed 168 checks."
+    },
+    {
+      "event": "Independent review found stale historical source pins copied into finalMockRun metadata.",
+      "priorProofSha256": "d02e2a0dc92fd04e1c6f7cafc235190acc0bb200c38590a69b1c917b43b63d1d",
+      "correction": "Read and checksum-verified the retained actual 168-check receipt; corrected only its final-run source binding and exact timestamps. Historical 152-check evidence and six nonproof paths were unchanged. No rerun or relabeling."
+    },
+    {
+      "event": "Independent source review required exact-owned guard finalization, FINALIZING persistence, observed rustc execution binding and same-handle single-link control policy.",
+      "priorProofSha256": "2e67d8f4703a0049b88c1ed6a18ce98f8c6d9733b0f413152744391909af3e12",
+      "correction": "Changed only helper/test/docs/proof. One new304-check pure/mock/managed-definition run; unchanged compatibility suites not repeated. The168 and152 source/run bindings remain historical."
+    },
+    {
+      "event": "Source-clear304 helper retained unchanged while filesystem-fixture source was added only to the existing test/docs/proof.",
+      "scope": "Initial fixture-source mock variant passed306 with two managed definitions and zero native entries; its private receipt a19f9d02b40328222142903421dda3fdd4bc2206d76a5e070e2f092a05a98564 remains historical."
+    },
+    {
+      "event": "Added a pure one-shot fixture attempt gate before any parent metadata observation.",
+      "scope": "Current309 mock/managed-definition result and literal default298 result bind current test bytes. The gate was tested as pure state only; no FilesystemFixture mode ran."
+    },
+    {
+      "event": "Added explicit absolute-local/non-OneDrive fixture parent policy before metadata observation.",
+      "scope": "Meaningful native-fixture path safety change; final source passed316 mock/managed-definition checks and305 literal no-flags checks. Earlier309/298 results retain old test hashes; no actual filesystem mode ran."
+    },
+    {
+      "event": "Independent fixture review found that generic catch or failing finally could lose a root known only to success JSON.",
+      "priorProofSha256": "662740ad263d4153160a555ebd7b6ccee404a51b679c4ca3d4d5a791c7a7035f",
+      "correction": "Test-only monotonic attempt/root state and sanitized precreate/post-readback markers added without new native API. New337/305 results bind new2003 test bytes; prior316/305 c11 variant preserved unchanged."
+    },
+    {
+      "event": "Initial11:23 start cutoff elapsed before all reviews; no controller, preparation or fixture submitted and that window expired unused.",
+      "scope": "Later test used distinct fresh post11:30 financial/source/resource admission; no expired ACK reuse."
+    }
+  ],
+  "mockCoverage": [
+    "cold verify null image and exact nine receipt keys",
+    "selected build image required without legacy fallback",
+    "build/test target argv and clippy separator placement; fmt unchanged",
+    "process-local incremental and cwd restoration",
+    "stable physical-workspace key across source/lock changes",
+    "independent workspace under sibling lease hold",
+    "same-workspace lease refusal",
+    "immutable START/OUTCOME and restart reconciliation",
+    "unknown/interrupted execution; failed START/OUTCOME/pointer/guard publication",
+    "old success pointer plus orphan START",
+    "bounded immediate names/records, before 257th record read",
+    "metadata/registration/state refusal",
+    "public nonoptable flag refusal and actual inherited-policy early refusal before native initialization",
+    "exact single-job opt-in exception and negative values/name-case; offline=true permitted",
+    "FINALIZING before exact-owned guard finalization and terminal pointer after it",
+    "guard absence after uncertain finalization/final pointer still holds on restart",
+    "foreign guard leaf preserved in the model; actual disposition behavior unqualified",
+    "observed rustcPath set during every Run and caller RUSTC restored on every path",
+    "shared production pointer/journal binding with missing/mismatched pairs",
+    "pure single-link/delete-pending/directory policy; actual FILE_STANDARD_INFO query unqualified"
+  ],
+  "filesystemContract": {
+    "markerMaximumUtf8Bytes": 8192,
+    "maximumImmediateJournalRecords": 256,
+    "maximumImmediateNamespaceOrWorkspaceEntries": 256,
+    "targetRecursion": false,
+    "staticMarkerImmutable": true,
+    "startAndOutcomeImmutable": true,
+    "pointerIsEvidenceAuthority": false,
+    "leaseVerification": "Actual same exclusive handle; no second metadata open.",
+    "newDirectoryRegistration": "Positive create then retained resident/nonreparse/canonical/owner/volume/full-ID readback.",
+    "unknownOutcome": "Persistent guard/orphan/unknown HOLD; no automatic clearing, retry, lease steal or pruning.",
+    "commandReturnMeaning": "Observed ordinary command return only, never whole-Job or output-EOF proof.",
+    "guardFinalization": "Retain CREATE_NEW exclusive guard handle with DELETE access but without creation-time delete-on-close. Same-handle FileDispositionInfo with one-byte BOOLEAN; single close attempt, no path deletion or raw-close retry.",
+    "terminalOrdering": "Immutable OUTCOME, then durable FINALIZING pointer, exact-owned guard finalization, then terminal pointer. Finalization/final-pointer uncertainty remains HOLD even if the guard leaf is absent.",
+    "controlFileLinks": "Same-held-handle FILE_STANDARD_INFO must report one link, not delete-pending and not directory before control-record JSON reads/writes. Not applied to toolchain files or Cargo outputs."
+  },
+  "actualFilesystemQualification": true,
+  "actualCargoQualification": false,
+  "registeredCacheInitialized": false,
+  "targetAdoptionOrMigration": false,
+  "newProcessRunner": false,
+  "productionActions": false,
+  "wakeActions": false,
+  "generalGoalResumed": false,
+  "remainingGates": [
+    "reviewed publication of exact seven source/documentation paths",
+    "new bounded existing-owner admission for actual journaled facade build -UseLocalTarget with process-local jobs=1/offline=true",
+    "first registered-cache build, image receipt and cost measurement; synthetic fixture is not that acceptance"
+  ],
+  "installedBackendOrWebAcceptanceClaimed": false,
+  "preSingleJobExceptionMockRun": {
+    "startedUtc": "2026-11-04T10:18:31.7270454+00:00",
+    "finishedUtc": "2026-11-04T10:18:32.5755367+00:00",
+    "host": "PowerShell Core 7.6.5",
+    "passed": 152,
+    "managedDefinitionCompilations": 1,
+    "nativeEntries": 0,
+    "filesystemFixtures": 0,
+    "realCargoRuns": 0,
+    "registeredTargetsCreated": 0,
+    "privateReceiptSha256": "11604d3f7ba3bc2dead6a073696d7c493952867d87ed3ee5613e3ddaf232fbb4",
+    "sourceSha256": {
+      "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+      "scripts/catdesk-dev-lane-local-target.ps1": "a16959d3df60b197c4909c67c27b24f0610cf359f3eaa6dd8f53faeddd90a120",
+      "scripts/test-catdesk-dev-lane-local-target.ps1": "dbd38af4298f3720f71436976e7dd5c35b02f7ee65694e57641c3df0eab0d64c",
+      "scripts/test-catdesk-dev-lane-storage.ps1": "dadd8806b9516e3701b773144c8e2dd2e4c2ce5d06191bb16d51bef8a216bf33",
+      "scripts/test-catdesk-dev-local-target.ps1": "b8c092acc1d299c41894ebae5f4cdc5a6ce4a3033984a30773423058bba55fa0"
+    }
+  },
+  "environmentPolicyException": {
+    "scope": "Opt-in helper only; inherited environment is not mutated.",
+    "allowed": "Exact uppercase CARGO_BUILD_JOBS with exact string value 1.",
+    "refused": "Other CARGO_BUILD_* names including empty values; jobs empty/null/0/2/noncanonical/type/name-case variants.",
+    "offline": "CARGO_NET_OFFLINE=true permitted; every Cargo operation retains explicit --offline, without fallback.",
+    "newPureCases": 16,
+    "defaultAndV1GuardsUnchanged": true
+  },
+  "preOwnedGuardCompilerBindingMockRun": {
+    "startedUtc": "2026-11-04T10:21:46.8725470+00:00",
+    "finishedUtc": "2026-11-04T10:21:47.9293673+00:00",
+    "host": "PowerShell Core 7.6.5",
+    "passed": 168,
+    "managedDefinitionCompilations": 1,
+    "nativeEntries": 0,
+    "filesystemFixtures": 0,
+    "realCargoRuns": 0,
+    "registeredTargetsCreated": 0,
+    "privateReceiptSha256": "23286ebd853b9cf4849de5389054959cd4d1e98c497cb3412b7367cb5419bd1e",
+    "sourceSha256": {
+      "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+      "scripts/catdesk-dev-lane-local-target.ps1": "3da5954ea2cd0aa4becea2801720d4f1d4b8ccaf6bac0650d5456391ccdaa008",
+      "scripts/test-catdesk-dev-lane-local-target.ps1": "0cd46426c86988764773cd022d122c06590c1c0e77587372c1d650b1a198c8a6"
+    },
+    "bindingBasis": "Exact three source hashes captured in retained final 168-check private receipt after that run; independently compared with frozen current files and top-level source map. Compatibility files have separate test evidence, not run-local source pins."
+  },
+  "compilerBinding": {
+    "source": "Observed rustcPath is included in Facts and assigned to process-local RUSTC before Cargo.",
+    "restoration": "Caller absent/empty/value restored on every finally path, including metadata refusal, interrupted commands and publication failure.",
+    "scope": "Pure/mock selected-path and restoration observations; complete toolchain/DLL provenance and actual Cargo invocation remain unqualified."
+  },
+  "bindingCoverage": {
+    "sharedPurePolicy": "Production OpenSession and fake Begin call the same Get-DevLaneLocalBinding. Twelve cases include missing/mismatched pointer/journal pair and scope.",
+    "nativeOpenSessionQualified": false,
+    "nativeFilesystemQualified": false,
+    "hardlinkFixtureRun": false
+  },
+  "preFilesystemFixtureSourceMockRun": {
+    "startedUtc": "2026-11-04T10:37:58.0121731+00:00",
+    "finishedUtc": "2026-11-04T10:37:59.3103775+00:00",
+    "host": "PowerShell Core 7.6.5",
+    "passed": 304,
+    "managedDefinitionCompilations": 1,
+    "nativeEntries": 0,
+    "filesystemFixtures": 0,
+    "realCargoRuns": 0,
+    "registeredTargetsCreated": 0,
+    "privateReceiptSha256": "98dccc470d0d1c6b3ebd41ee64fceb461de4a45bbe4b3bf2353f60c4d8e9408c",
+    "sourceSha256": {
+      "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+      "scripts/catdesk-dev-lane-local-target.ps1": "3aef37d44d1dba1904f0332daa3f4cb799afc25ef9ebb96c4e005deeb461047a",
+      "scripts/test-catdesk-dev-lane-local-target.ps1": "b24d04625275cc2597d2dbe7829781ee6faa76a778625f62f139af01389d7a2e"
+    },
+    "bindingBasis": "Exact three post-run source hashes from checksum-verified retained304 receipt; independent current-byte comparison. Native constructor/control-file operations were not entered."
+  },
+  "literalDefaultRun": {
+    "startedUtc": "2026-11-04T11:14:45.7317741+00:00",
+    "finishedUtc": "2026-11-04T11:14:46.6545745+00:00",
+    "passed": 305,
+    "managedDefinitionCompilations": 0,
+    "nativeTypeLoaded": false,
+    "fixtureBridgeTypeLoaded": false,
+    "fixtureRootCreated": false,
+    "realCargoRuns": 0,
+    "privateReceiptSha256": "fd74e9ea87adbd161f2d59b55d4b731eb219ec89e0f1ed85e680bb25fad43185",
+    "sourceSha256": {
+      "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+      "scripts/catdesk-dev-lane-local-target.ps1": "3aef37d44d1dba1904f0332daa3f4cb799afc25ef9ebb96c4e005deeb461047a",
+      "scripts/test-catdesk-dev-lane-local-target.ps1": "2003f3b8164b56c9b3b779342512b0d54ce1a51b2902787c494c2a51330b5502"
+    }
+  },
+  "filesystemFixtureSource": {
+    "implemented": true,
+    "executed": true,
+    "admitted": true,
+    "controllerQualified": true,
+    "script": "scripts/test-catdesk-dev-lane-local-target.ps1",
+    "scriptSha256": "2003f3b8164b56c9b3b779342512b0d54ce1a51b2902787c494c2a51330b5502",
+    "productionHelperSha256": "3aef37d44d1dba1904f0332daa3f4cb799afc25ef9ebb96c4e005deeb461047a",
+    "bridgeTemplateSha256": "287cf2a83d9a3e2e1090c9f7e75b408ca797edc0c032b2ad6472b0e407936c05",
+    "mode": "FilesystemFixture",
+    "preinitialization": "-Mode FilesystemFixture -PrepareDefinitionsOnly, in the same fresh qualified host before final controller resource/time/source gates; compiles metadata, production filesystem and fixed hardlink bridge definitions without entering them.",
+    "entry": "-Mode FilesystemFixture only after separate admission. It refuses absent preinitialized definitions and nonzero prior native entries; the bridge claims its one-shot gate before parent observation. Any attempted fixture consumes that host even if no root was created.",
+    "default": "Mock; no filesystem/root entry. Literal no-flags default also leaves both native types unloaded.",
+    "sameProductionFunctions": [
+      "Open-DevLaneLocalSession",
+      "Start-DevLaneLocalOperation",
+      "Complete-DevLaneLocalOperation"
+    ],
+    "facts": "Injected synthetic source/tool provenance and actual identities of owned fixture workspaces; never calls production Get-DevLaneLocalFacts.",
+    "parent": "Existing KnownFolder LocalAppData/Temp canonical resident nonreparse owner/volume/identity ancestry pinned before positive unique-root creation; absence or alias refusal never repairs parent. Pure policy also rejects non-absolute paths and OneDrive path components before parent metadata observation; seven cases tested without native entry.",
+    "maximumRoots": 1,
+    "maximumSerialCases": 12,
+    "implementedCases": 10,
+    "maximumDirectoriesReserved": 128,
+    "maximumFilesReserved": 256,
+    "maximumRecordBytesReserved": 2097152,
+    "perRecordUtf8Maximum": 8192,
+    "cooperativeElapsedBudgetMilliseconds": 20000,
+    "allocationScope": "Fixture artifact reservation bounds, not actual NTFS allocation, volume delta or CLR/OS overhead. No kernel-call deadline claimed.",
+    "cases": [
+      "creation/reopen IDs, pointer replacement with static markers pinned, immutable history",
+      "same-handle lease conflict and independent workspace",
+      "old successful pointer plus orphan START",
+      "missing pointer/journal pair",
+      "mismatched pointer/journal pair",
+      "unregistered partial initialization",
+      "retained CREATE_NEW guard identity and exact-owned-handle finalization",
+      "FINALIZING with persistent guard",
+      "FINALIZING after exact guard finalization and absent leaf",
+      "two hardlinks between own fixture leaves refused before JSON read"
+    ],
+    "hardlink": "Bridge accepts only generated-root name shape and fixed own hardlinks/original.json to alias.json leaves; parent held by the fixture metadata scope. No external data.",
+    "retention": "Preserve entire bounded evidence tree, including deliberate HOLD artifacts. No recursive cleanup, path deletion or arbitrary move; only production exact-owned guard finalization and normal own pointer replacement.",
+    "failure": "Release own handles in finally, retain evidence, consume one-shot attempt, HOLD/no retry or replacement. Inner result requires controller-confirmed host exit before runtime qualification.",
+    "remaining": "This single fixture admission is consumed; no retry, cleanup or follow-up runtime authorized. Separately reviewed journaled ordinary build remains pending.",
+    "attemptRootProtocol": {
+      "scope": "Monotonic BCL state in the same qualified host; survives script case/catch/finally errors, not a claim of persistence after host loss.",
+      "accessor": "[CatDesk.DevLaneCacheFixtureV1.Bridge]::GetRootState()",
+      "snapshotFields": [
+        "Phase",
+        "RelativeRootName",
+        "ParentPhysicalIdentity",
+        "CreatedRootPhysicalIdentity"
+      ],
+      "phases": [
+        "NO_ROOT_INTENT",
+        "CREATION_OUTCOME_UNKNOWN",
+        "CREATED_IDENTITY_VERIFIED"
+      ],
+      "beforeCreate": "Record validated relative generated-root name and already pinned Temp physical identity BEFORE the first root create. An intent with no verified created ID always means creation UNKNOWN, never not-created.",
+      "afterReadback": "Record actual created root physical identity only after positive create plus production metadata/owner/volume readback.",
+      "immutability": "One intent and one created-identity transition; no reset/reuse/replacement. Prior snapshots immutable; attempt claim still precedes parent metadata.",
+      "stderr": "Fixed bounded FILESYSTEM_FIXTURE_ROOT_STATE JSON before create and after readback; fields schemaVersion/mode/phase/relativeRootName/parentPhysicalIdentity/createdRootPhysicalIdentity/cleanupAuthorized=false. No path/SID/content. Retain as private controller evidence, never publish actual runtime identities.",
+      "prepareOutput": "FILESYSTEM_DEFINITIONS_PREPARED_ONLY: nativeEntries=0, fixtureRootCreated=false, fixtureAttempts=0, rootState NO_ROOT_INTENT with null name/parent/created IDs. Preparation refuses a nonempty journal.",
+      "failureHandling": "Controller catch/finally can read the BCL snapshot even when case/handle disposal throws. Root intent/identity never grants cleanup; preserve UNKNOWN and no retry/replacement.",
+      "pureCoverage": "21 added BCL/in-memory-marker checks; synthetic names/IDs only. No actual root or native API exercised."
+    },
+    "admissionConsumed": true,
+    "activeAdmission": false
+  },
+  "preFixtureParentPolicyMockRun": {
+    "startedUtc": "2026-11-04T10:57:34.5068517+00:00",
+    "finishedUtc": "2026-11-04T10:57:35.6453716+00:00",
+    "host": "PowerShell Core 7.6.5",
+    "mode": "Mock",
+    "passed": 309,
+    "managedDefinitionCompilations": 2,
+    "nativeEntries": 0,
+    "bridgeNativeEntries": 0,
+    "fixtureRootCreated": false,
+    "filesystemFixtures": 0,
+    "realCargoRuns": 0,
+    "registeredTargetsCreated": 0,
+    "privateReceiptSha256": "a23b8763f65dabc0460179576c50972095935c9ce471363889d4a6ecd123e76a",
+    "sourceSha256": {
+      "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+      "scripts/catdesk-dev-lane-local-target.ps1": "3aef37d44d1dba1904f0332daa3f4cb799afc25ef9ebb96c4e005deeb461047a",
+      "scripts/test-catdesk-dev-lane-local-target.ps1": "694cb15d618e327f17cfeca1a6fe845dc6f81348ef7df974d3955b4f31a15830"
+    },
+    "bindingBasis": "Exact three post-run source hashes from retained309 receipt; compared with frozen current bytes. Only mock mode and inert managed definition compilation ran."
+  },
+  "preFixtureParentPolicyDefaultRun": {
+    "startedUtc": "2026-11-04T10:58:19.2813757+00:00",
+    "finishedUtc": "2026-11-04T10:58:20.1424322+00:00",
+    "passed": 298,
+    "managedDefinitionCompilations": 0,
+    "nativeTypeLoaded": false,
+    "fixtureBridgeTypeLoaded": false,
+    "fixtureRootCreated": false,
+    "realCargoRuns": 0,
+    "privateReceiptSha256": "33449c480eab68043485c83329f3a1ec86faf42f642a508fb8de3a12793975ab",
+    "sourceSha256": {
+      "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+      "scripts/catdesk-dev-lane-local-target.ps1": "3aef37d44d1dba1904f0332daa3f4cb799afc25ef9ebb96c4e005deeb461047a",
+      "scripts/test-catdesk-dev-lane-local-target.ps1": "694cb15d618e327f17cfeca1a6fe845dc6f81348ef7df974d3955b4f31a15830"
+    }
+  },
+  "preRootIntentProtocolMockRun": {
+    "startedUtc": "2026-11-04T11:02:28.1370166+00:00",
+    "finishedUtc": "2026-11-04T11:02:29.4925824+00:00",
+    "host": "PowerShell Core 7.6.5",
+    "mode": "Mock",
+    "passed": 316,
+    "managedDefinitionCompilations": 2,
+    "nativeEntries": 0,
+    "bridgeNativeEntries": 0,
+    "fixtureRootCreated": false,
+    "filesystemFixtures": 0,
+    "realCargoRuns": 0,
+    "registeredTargetsCreated": 0,
+    "privateReceiptSha256": "209f0ca62401625373ae1ce2a60e9f54612c344a770f2fdc68423d7674cd4bf9",
+    "sourceSha256": {
+      "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+      "scripts/catdesk-dev-lane-local-target.ps1": "3aef37d44d1dba1904f0332daa3f4cb799afc25ef9ebb96c4e005deeb461047a",
+      "scripts/test-catdesk-dev-lane-local-target.ps1": "c11b86df097debe8dc140636836c8cb073b2937427b0a0ec7c88db2fa884fa11"
+    },
+    "bindingBasis": "Exact current three source pins captured by retained316 receipt; pure path policy plus mock mode and two inert managed definitions only. FilesystemFixture mode was not invoked."
+  },
+  "preRootIntentProtocolDefaultRun": {
+    "startedUtc": "2026-11-04T11:02:29.8199936+00:00",
+    "finishedUtc": "2026-11-04T11:02:30.7110337+00:00",
+    "passed": 305,
+    "managedDefinitionCompilations": 0,
+    "nativeTypeLoaded": false,
+    "fixtureBridgeTypeLoaded": false,
+    "fixtureRootCreated": false,
+    "realCargoRuns": 0,
+    "privateReceiptSha256": "9827a1a5aa0f7872ed89b66350c6a8570aef12465c5b9fd880d97c6478eaa199",
+    "sourceSha256": {
+      "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+      "scripts/catdesk-dev-lane-local-target.ps1": "3aef37d44d1dba1904f0332daa3f4cb799afc25ef9ebb96c4e005deeb461047a",
+      "scripts/test-catdesk-dev-lane-local-target.ps1": "c11b86df097debe8dc140636836c8cb073b2937427b0a0ec7c88db2fa884fa11"
+    }
+  },
+  "actualFilesystemQualificationScope": "Ten bounded synthetic Windows filesystem cases only; no registered cache or Cargo build.",
+  "boundedActualFilesystemRun": {
+    "scope": "TESTED_CONTROLLED_WINDOWS_FILESYSTEM_FIXTURE_ONLY",
+    "startedUtc": "2026-11-04T11:34:21.0833002+00:00",
+    "prepareStartedUtc": "2026-11-04T11:34:21.1715501+00:00",
+    "prepareFinishedUtc": "2026-11-04T11:34:21.8941849+00:00",
+    "submittedUtc": "2026-11-04T11:34:21.9258872+00:00",
+    "finishedUtc": "2026-11-04T11:34:22.5222688+00:00",
+    "controllerSha256": "2e39481ef48b77666f31363b955b0bfcff64dd5e3d2812268383444b0c89784a",
+    "host": "Fresh PowerShell Core 7.6.5 tool host; direct same-process fixture, no child executor.",
+    "hostSha256": "362a356ce7f0940ec74f73a8fc2c990a2cc24a38a11c90bbd8eca947110ad139",
+    "sourceSha256": {
+      "scripts/catdesk-dev-lane.ps1": "f2802e947eb73aec8f8e8765b402c3836c32fcd1bbc4fecc1797a4c16dd22921",
+      "scripts/catdesk-dev-lane-local-target.ps1": "3aef37d44d1dba1904f0332daa3f4cb799afc25ef9ebb96c4e005deeb461047a",
+      "scripts/test-catdesk-dev-lane-local-target.ps1": "2003f3b8164b56c9b3b779342512b0d54ce1a51b2902787c494c2a51330b5502"
+    },
+    "metadataAdapterSha256": "c645c347a0458097e8daff036e971a3a7168f4dffcebbc7223fe267db1f6ffb6",
+    "privateReceiptSha256": {
+      "V2_FS_NATIVE_20261104_1134.start.json": "3751d8f5dde950bd0bee39a6b59fe62a545a778760827632df169c5aabb5ec60",
+      "V2_FS_NATIVE_20261104_1134.submitted.json": "622d238c65b407f091011825805b91a638f970f6ac9cec962b9d5bd0f9aed45d",
+      "V2_FS_NATIVE_20261104_1134.outcome.json": "a84e87587c21cdf0cd9b542e0fd6638934c2e7e64cd585e14b26504cbf73d79e"
+    },
+    "toolHostExit": {
+      "status": "completed",
+      "exitCode": 0,
+      "durationMilliseconds": 1616,
+      "basis": "Source owner independently read the coordinator app command-execution record for the exact controller invocation. Inner outcome JSON alone does not prove host exit.",
+      "coordinatorReportedPreciseElapsedSeconds": 1.6169024
+    },
+    "resourceGate": {
+      "observedUtc": "2026-11-04T11:34:13.201908+00:00",
+      "sha256": "00006d965d78d00bf2d4b11c69fb796549874dc7faba49b583bba1faffbf097d",
+      "availablePhysicalBytes": 12184727552,
+      "availableVolumeBytes": 192766758912,
+      "minimumPhysicalBytes": 4294967296,
+      "minimumVolumeBytes": 68719476736,
+      "scope": "Tiny filesystem fixture only; not benchmark or Cargo admission."
+    },
+    "financialAckUtc": "2026-11-04T11:31:54Z",
+    "sourceAckUtc": "2026-11-04T11:32:01.4358363Z",
+    "preparation": {
+      "fixtureAttempts": 0,
+      "bridgeNativeEntries": 0,
+      "productionFileMethodEntries": 0,
+      "Phase": "NO_ROOT_INTENT",
+      "RelativeRootName": null,
+      "ParentPhysicalIdentity": null,
+      "CreatedRootPhysicalIdentity": null
+    },
+    "result": {
+      "schemaVersion": 1,
+      "classification": "BOUNDED_SYNTHETIC_FILESYSTEM_FIXTURE_ONLY",
+      "passed": 10,
+      "cases": [
+        "creation_reopen_ids_pointer_replacement_and_immutable_history",
+        "same_handle_lease_conflict_and_independent_workspace",
+        "old_success_pointer_with_orphan_start_holds",
+        "missing_pointer_pair_holds",
+        "mismatched_pointer_pair_holds",
+        "unregistered_partial_initialization_holds",
+        "retained_created_guard_identity_and_exact_handle_finalization",
+        "finalheld_finalizing_pointer_holds",
+        "finalabsent_finalizing_pointer_holds",
+        "owned_two_link_control_records_refused_before_json_read"
+      ],
+      "evidencePreserved": true,
+      "maximumDirectories": 128,
+      "directoriesReserved": 39,
+      "maximumFiles": 256,
+      "filesReserved": 84,
+      "maximumWrittenBytes": 2097152,
+      "writtenBytesReserved": 26362,
+      "elapsedMilliseconds": 547,
+      "nativeEntries": 523,
+      "bridgeNativeEntries": 1,
+      "projectSourceOrToolBodiesInspected": false,
+      "realCargoRuns": 0,
+      "childProcessesCreated": 0,
+      "registeredCacheInitialized": false,
+      "productionOrWakeActions": false,
+      "absoluteKernelDeadlineClaimed": false,
+      "controllerMustProveHostExit": true
+    },
+    "rootEvidence": {
+      "intentUnknownThenVerifiedCreatedMarkersObserved": true,
+      "finalPhase": "CREATED_IDENTITY_VERIFIED",
+      "fixtureAttempts": 1,
+      "actualNameAndParentAndRootIdentitiesRetainedPrivately": true,
+      "entireEvidenceTreePreserved": true,
+      "cleanupPerformed": false
+    },
+    "counters": "523 production file-method entries and one bridge hardlink entry; individual Win32 API calls were not counted.",
+    "limitations": [
+      "Synthetic return codes only; no real Cargo or source compilation.",
+      "Registered LocalAppData cache initialization and actual source/tool metadata path remain unqualified.",
+      "No actual power-loss or stuck-I/O fault injection; planned HOLD cases are controlled synthetic states.",
+      "Lease conflict and independent workspaces are serial fixture observations, not general parallel Web acceptance.",
+      "No whole-Job, descendant lifecycle, absolute kernel deadline, installed backend or Wake claim."
+    ],
+    "admissionConsumed": true,
+    "sourceHoldReleased": true,
+    "retries": 0,
+    "nextRuntimeAuthorized": false
+  },
+  "nextOrdinaryBuildProposal": {
+    "status": "PROPOSAL_ONLY_NOT_ADMITTED",
+    "entry": "Existing catdesk-dev-lane.ps1 build -UseLocalTarget through the already reviewed bounded build owner, after publication and new exact source/resource/financial admission.",
+    "environment": "Caller sets CARGO_BUILD_JOBS=1 and CARGO_NET_OFFLINE=true only for its operation and restores them; helper binds/restores RUSTC and incremental=0. Existing fixed locked/offline build argv plus selected target; no manual check path.",
+    "priorEvidence": "Retained reviewed development-build receipt reports77.11s and command maxima160/90s. That existing-target observation does not predict the new cold single-job target.",
+    "proposedBudgetForReview": "One cold build, proposed maximum900s only if the existing qualified controller supports that bound and an independent-project quiet window covers it. No new Job/output runner.",
+    "proposedResourceFloorsForReview": "Fresh at least8GiB available RAM and128GiB volume headroom, no active conflicting compiler/regression, with bounded existing-owner observation. These are conservative proposed admission values, not measured cold-build peaks or policy changes.",
+    "costEvidence": "Record source/target identity, START/OUTCOME, selected image hash, elapsed duration and background-inclusive volume/RAM observations. New-cache cost is separate from reclaimed space.",
+    "failure": "No retry/adoption after timeout or unknown. Preserve START/HOLD, exact failure and owned state; no fingerprint, release, tunnel, old-target or cache cleanup changes."
+  }
+}

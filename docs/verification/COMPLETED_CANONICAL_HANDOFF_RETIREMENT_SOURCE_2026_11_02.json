@@ -1,0 +1,62 @@
+{
+  "observedUtc": "2026-11-02T01:08:05.027518+00:00",
+  "scope": "TESTED_SOURCE_NOT_INSTALLED_OR_RELEASE_AUTHORITY",
+  "concreteBlocker": "The normal promotion helper treats a retained completed prior-canonical handoff as UNSAFE for a different candidate. No new promotion preflight or CONFIRM was attempted.",
+  "implementation": {
+    "existingComponent": "promotion_retirement",
+    "newRegistryOrRecoveryFramework": false,
+    "priorCompletedRetirementJournalModified": false,
+    "mutation": "one exact handle-bound native rename of a verified completed canonical handoff to its digest-named history file",
+    "durableRecovery": "the original completed-promotion journal and archived authority remain unchanged; the exact archive destination witnesses a lost-response completion",
+    "inspectionCommand": "operator release-pair inspect-completed-handoff --transaction-id <original-id> --expected-receipt-sha256 <frozen-receipt-sha256>",
+    "retirementCommand": "operator release-pair retire-completed-handoff --transaction-id <original-id> --expected-receipt-sha256 <frozen-receipt-sha256> --expected-evidence-sha256 <inspection-evidence-sha256>",
+    "availability": "NEW SOURCE ONLY; requires genuine source review and a separately qualified administrative controller before protected use"
+  },
+  "requiredChecks": [
+    "Original expired local-backend-only completed promotion, archived exact authority/claim/result/owner and unchanged retirement journal.",
+    "Independently validated producer/snapshot and completed canonical promotion receipt.",
+    "Actual trusted installed pair, stopped canonical/candidate/listener and no release helper.",
+    "Exact schema-4 authenticated completed canonical handoff: workspace/image/hash/profile/port plus validated timestamps and absence or verified reuse of historical owners.",
+    "Existing mutation and public lifecycle leases, retained canonical EXE/fingerprint handles, frozen receipt and evidence digests.",
+    "No overwrite of a foreign destination, new latest handoff or ambiguous duplicate location."
+  ],
+  "sourceSha256": {
+    "src/promotion_retirement.rs": "e4721de67a54e533891733c23b6135856952fc2a54b24fc7d254e0158c34e934",
+    "src/operator_facade.rs": "570d969518c9e712d689e40ce87a6f35113467cd8d13f79664e4d799839b344c",
+    "src/main.rs": "bcb8fd4a3338b0e00ed43f028dd27d20fcc15fa19e3b5be42873cc27380b6b9d"
+  },
+  "verification": {
+    "focusedCompletedHandoffTests": {
+      "passed": 4,
+      "basis": "completed tool session 94237 after correcting the Windows canonical-root failure"
+    },
+    "retirementRegressionEntries": {
+      "passed": 27,
+      "includesTwoFixtureHelperEntries": true
+    },
+    "legacyCompletedPromotionCli": {
+      "passed": 1
+    },
+    "releaseDiagnosticPrivacy": {
+      "passed": 1
+    },
+    "strictAllTargetClippy": "PASS",
+    "rustfmtAndDiffCheck": "PASS",
+    "actualWindowsRenameFixtures": "PASS",
+    "protectedInstalledReceiptTransition": "NOT_RUN_REVIEW_AND_QUALIFICATION_REQUIRED"
+  },
+  "preservedFailure": "Initial focused run passed three cases and failed canonical-root containment due to verbatim Windows path normalization; production validator was corrected, then focused and shared regressions passed. Initial formatting/parser mistakes and original tool evidence remain in the private audit history.",
+  "installedState": {
+    "sameTrustedC254Serving": true,
+    "newPayloadInstalled": false,
+    "protectedHandoffBytesUnchanged": true,
+    "completedRetirementJournalUnchanged": true,
+    "checkedProjectBindingFilesUnchanged": true,
+    "existingTunnelPreserved": true,
+    "recurringWakeHost": "STOPPED",
+    "testOwnedProcessesRemaining": 0
+  },
+  "nextExecutableTask": "Independent cumulative current-source review carrying forward the accepted e6 scope and inspecting the three Rust deltas plus the separately published two-file PowerShell diagnostic delta; then qualify an administrative controller, retire the exact completed receipt through the supported new path, and promote the retained attested payload.",
+  "operatorActionRequired": false,
+  "goal": "ACTIVE"
+}

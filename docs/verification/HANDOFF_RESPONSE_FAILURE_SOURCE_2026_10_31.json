@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-31T09:16:11.848179+00:00",
+  "classification": "TESTED_SOURCE_HANDOFF_ERROR_CARD_AND_OBSERVER_GUARD_PROPAGATION_NOT_INSTALLED_ACTION_ACCEPTANCE",
+  "sourceBaseCommit": "ae74f5594c7d0ad18fb06e7613f81bef613539c5",
+  "sourceFilesSha256": {
+    "src/operator_web_auto.rs": "51dd7619a9b2b9f0323ce16b8241c5e8e1479f5e9c7eb33fa66595b0160b83e2",
+    "src/operator_web_observe.rs": "ade7b446bdd891541ca3f50a65db8e5c8562ff7d8595f2152cc948b186f59b4f",
+    "src/operator_web_rollover.rs": "c167e2e0f8960c07aa7f5cd9604ad79dbdc4bba4a865e6d69a748a149e890962"
+  },
+  "changes": {
+    "existingLiteralAssistantPlaceholderClassifierShared": true,
+    "newHandoffRefusal": "WEB_HANDOFF_SOURCE_RESPONSE_FAILED",
+    "refusalBeforeContextBindingIntentCreationAndQueuePublication": true,
+    "historicalFailuresAndUsefulExplanationsRemainUsable": true,
+    "incompleteOrUserLatestMessageStillRequiresAssistantResponse": true,
+    "newClickRetryRegenerateReloadOrUserSend": false,
+    "bestEffortReceiptStorageCannotSwallowCallerGuardError": true,
+    "oneShotCancellationOrOwnershipFailurePropagatedExactly": true,
+    "independentReceiptFailureRemainsBestEffort": true,
+    "cancellationBeforeAndDuringCaptureTested": true,
+    "newOwnerSchedulerOrJournal": false
+  },
+  "tests": {
+    "distinctPassingCases": 91,
+    "newErrorCardCases": 2,
+    "expandedExistingCancellationCase": true,
+    "suites": [
+      {
+        "suite": "rollover-final",
+        "passed": 58,
+        "logSha256": "785d24f356e2bb40ad648c9d98836aeb31f33c763b813b2667bd642ab2f0a8d7"
+      },
+      {
+        "suite": "observe",
+        "passed": 9,
+        "logSha256": "0e5ba2730583a7767588c5d04911cee93f5af01753f521964ceb7d946c11b713"
+      },
+      {
+        "suite": "auto",
+        "passed": 17,
+        "logSha256": "bd712428dd166fab8266766a91f6b3a90c66207b524836fa021048c433aa31b9"
+      },
+      {
+        "suite": "receipts",
+        "passed": 7,
+        "logSha256": "5616f58b25022819cc6691b64643d99cc917449c76aa55c101339de1853e78fb"
+      }
+    ],
+    "rootStrictClippyAllTargets": true,
+    "warningsDenied": true,
+    "clippyLogSha256": "f455e20f173cd2c20f751acd2529f54e2d1be25dc7a360b8e78a6ae3cc9fcfcd",
+    "format": "PASS"
+  },
+  "failuresRetained": {
+    "initialErrorCardRegression": {
+      "passed": 1,
+      "failed": 1,
+      "logSha256": "53af4574cd30420e2b4d60c0515fd505ba0e8873d89412b29ccf6bb46e4d4d04"
+    },
+    "broaderSuiteExposedSwallowedGuardFailure": {
+      "passed": 57,
+      "failed": 1,
+      "logSha256": "32966693bdf0d10df3123eeb35ab055cff494073f33678f329c89905da64b472"
+    },
+    "resolution": "SOURCE_GUARD_ERROR_NOW_PROPAGATES_AND_CANCELLATION_TEST_COVERS_PHASES_AND_ONE_SHOT_FAILURE"
+  },
+  "preservation": {
+    "criticalPinsUnchanged": 5107,
+    "profileState": "PROFILE_QUIESCENT",
+    "hostStopped": true,
+    "existingBindingsHistoriesReceiptsAndNativeOwnershipUnchanged": true,
+    "protectedInstallationChanged": false,
+    "selectedPackageChanged": false,
+    "browserWakeOfficialOrRecurringStarts": 0,
+    "providerMessages": 0,
+    "heldTaskToolRetries": 0
+  },
+  "acceptance": {
+    "source": "PASS",
+    "newInstalledErrorCardHandoffRefusal": "NOT_EXERCISED",
+    "genericAssistantLoadErrorRetry": "UNSUPPORTED_NO_UNIQUE_QUALIFIED_RETRY_AUTHORITY",
+    "fullNativeTwoWebCoding": "OPEN",
+    "currentSourceIndependentReleaseAuthority": "OPEN"
+  },
+  "nextExecutableTask": "INSPECT_EXISTING_TASK_ATTRIBUTED_DOM_TOOL_CALL_METADATA_PATH_FOR_READONLY_CAUSAL_EVIDENCE_WITHOUT_REPLAY_OR_RAW_ARGUMENT_EXPORT",
+  "operatorActionRequiredNow": false,
+  "goal": "ACTIVE"
+}

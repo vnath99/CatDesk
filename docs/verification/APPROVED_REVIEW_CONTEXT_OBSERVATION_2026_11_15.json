@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-16T01:38:56.316414+00:00",
+  "maturity": "CONTROLLED_LIVE",
+  "status": "APPROVED_CONTEXT_OBSERVATION_QUALIFIED_ORIGINAL_DELIVERY_STILL_UNKNOWN",
+  "authoritySourceCommit": "c4921aa2bfd9ce5660d56c6fcbf890095c4a712c",
+  "diagnosticSourceCommit": "8657bd00dca887c7f6911718641f262647a42ac6",
+  "selectedPackageOrProductionOrCanonicalConnectionChanged": false,
+  "originalConsentMatchesRetainedHistoricalSha256": true,
+  "nativePreflight": {
+    "browserOwnerVerified": false,
+    "browserStarted": false,
+    "contractHash": "fnv1a64:f41066fe9e6bf47f",
+    "nativeApprovalVerified": true,
+    "preflightOnly": true,
+    "projectId": "catdesk",
+    "requestSha256": "5c32bc04c02ff4e583112e059b101b43cd2ec03b8de235dd76b0b20a30073e66",
+    "reviewSessionId": "nov14-independent-d22-workspace-review",
+    "reviewTurn": 1,
+    "reviewVerdictOrProducerAuthorityCreated": false,
+    "sendAttempted": false,
+    "stateVersion": 4,
+    "status": "NATIVE_REVIEW_CONTEXT_VERIFIED_BROWSER_NOT_STARTED",
+    "targetSha256": "145af5ee495f4b1cc8d65b348e7800377d0f29265ee8a7c4b4cb6b34b62f77a5",
+    "taskId": "nov14-d22-workspace-source-assessment",
+    "wakeBindingAuthority": false,
+    "workflowSha256": "8adeda5864b06c4c9c422c0f42a68d37edcc685066a835c14b0ced0b7e64a0be"
+  },
+  "initialObservation": {
+    "startedUtc": "2026-11-16T01:04:07.885600+00:00",
+    "finishedUtc": "2026-11-16T01:04:43.705045+00:00",
+    "imageSha256": "123978005a1ba157ec97b218f1fa4ed8c76d8b4c2e3e1d3c06303956d1bac3b7",
+    "finalState": "EXACT_EDITOR_AMBIGUOUS",
+    "frozenObservation": {
+      "basis": "FROZEN_REQUEST_DOM_ONLY_NOT_DELIVERY_RECEIPT",
+      "deliveryReceiptProven": false,
+      "matchingUserCount": 0,
+      "messageDigest": "0111c318c7c03aec2ec2d026746a49df172ece515a3acdfe3c28c0aafba391e3",
+      "resendAuthorized": false,
+      "responseState": "EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN",
+      "stable": true
+    },
+    "preservation": {
+      "pinsChecked": 1724,
+      "pinMismatches": 0,
+      "pinSetUnchanged": true,
+      "profileIdentitiesUnchanged": true,
+      "taskInventoryUnchanged": true,
+      "missingSeedPathsUnchanged": true,
+      "passed": true
+    },
+    "originalNativeReviewUnchanged": true,
+    "originalFrozenBatchUnchanged": true,
+    "nativeStateAfter": {
+      "state": "WAITING_FOR_CHATGPT",
+      "lastEventSequence": 4,
+      "providerTurnCount": 1,
+      "active": true
+    }
+  },
+  "finalObservation": {
+    "startedUtc": "2026-11-16T01:24:36.451573+00:00",
+    "finishedUtc": "2026-11-16T01:25:11.897935+00:00",
+    "sourceCommit": "8657bd00dca887c7f6911718641f262647a42ac6",
+    "imageSha256": "d2e514cbe2ea2fd383e9719c7c5fa074429f27371bd7a8825d58229a4f01727d",
+    "workflowSha256": "8adeda5864b06c4c9c422c0f42a68d37edcc685066a835c14b0ced0b7e64a0be",
+    "sessionId": "nov14-independent-d22-workspace-review",
+    "contractHash": "fnv1a64:f41066fe9e6bf47f",
+    "turn": 1,
+    "submissions": 0,
+    "nativeProviderStarts": 0,
+    "approvalCreated": false,
+    "reviewVerdictOrProducerAuthorityCreated": false,
+    "preflightExitCode": 0,
+    "nativeContextVerified": true,
+    "originalStateVersion": 4,
+    "observationExitCode": 0,
+    "finalState": "EXACT_EDITOR_AMBIGUOUS",
+    "frozenObservation": {
+      "basis": "FROZEN_REQUEST_DOM_ONLY_NOT_DELIVERY_RECEIPT",
+      "deliveryReceiptProven": false,
+      "matchingUserCount": 0,
+      "messageDigest": "0111c318c7c03aec2ec2d026746a49df172ece515a3acdfe3c28c0aafba391e3",
+      "resendAuthorized": false,
+      "responseState": "EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN",
+      "stable": true
+    },
+    "browserObservation": {
+      "assistant": "PRESENT",
+      "composer": "UNKNOWN",
+      "document": "COMPLETE",
+      "editor": "AMBIGUOUS",
+      "exchange": "UNATTRIBUTED",
+      "generation": "IDLE",
+      "history": "PRESENT",
+      "recovery": "OBSERVATION_ONLY",
+      "route": "EXACT"
+    },
+    "submissionObservation": {
+      "composerBytes": 0,
+      "composerClass": "UNAVAILABLE",
+      "composerStructure": {
+        "nodesExamined": 0,
+        "reason": "EDITOR_AMBIGUOUS",
+        "schemaVersion": 1
+      },
+      "coverage": "VISIBLE_BOUNDED_ONLY",
+      "expectedUserCount": 0,
+      "lastUserMatches": false,
+      "legacyAvailable": false,
+      "legacyMatchesExpected": null,
+      "readersAgree": null,
+      "stable": true,
+      "trustedMatches": 0,
+      "turnsAfter": 0
+    },
+    "targetAuthority": "ORIGINAL_APPROVED_REVIEW_NOT_WAKE_BINDING",
+    "ownedTreeExited": true,
+    "preservation": {
+      "pinsChecked": 1724,
+      "pinMismatches": 0,
+      "pinSetUnchanged": true,
+      "profileIdentitiesUnchanged": true,
+      "taskInventoryUnchanged": true,
+      "missingSeedPathsUnchanged": true,
+      "passed": true
+    },
+    "originalNativeReviewUnchanged": true,
+    "originalFrozenBatchUnchanged": true,
+    "loginMarkerPresent": false,
+    "nativeStateAfter": {
+      "state": "WAITING_FOR_CHATGPT",
+      "lastEventSequence": 4,
+      "providerTurnCount": 1,
+      "active": true
+    },
+    "requestSha256": "5c32bc04c02ff4e583112e059b101b43cd2ec03b8de235dd76b0b20a30073e66"
+  },
+  "profileProcessesRemaining": 0,
+  "owner": {
+    "terminationFailed": false,
+    "maximumSeconds": 180,
+    "finishedUtc": "2026-11-16T01:25:12.6725402+00:00",
+    "exitCode": 0,
+    "startedUtc": "2026-11-16T01:24:23.9646298+00:00",
+    "timedOut": false,
+    "containment": "KILL_ON_JOB_CLOSE",
+    "workerSha256": "c927ca01f8c643be6272c76f6f15841d031d56cbd940b37d27e12ddb95e5707b",
+    "schemaVersion": 1
+  },
+  "qualification": {
+    "authorityContextRustTestsPassed": 7,
+    "finalDiagnosticRustTestsPassed": 6,
+    "finalProbeTestsPassed": 60,
+    "strictWorkspaceClippyPassed": true,
+    "formatPassed": true,
+    "bridgeUnchangedPrior143TestsPreserved": true
+  },
+  "originalSenderEvidence": {
+    "sendCalls": 1,
+    "toolReturnedIsError": false,
+    "returnedOnlyThreadId": true,
+    "actualTurnHandleAvailable": false,
+    "retainedSnapshotPredatesRequest": true,
+    "outcome": "UNKNOWN_DELIVERY_NO_REPLAY",
+    "upstreamCauseEstablished": false
+  },
+  "interpretation": {
+    "nativeReviewApprovalMissing": false,
+    "freshMatchingUserObserved": false,
+    "visibleBoundedExpectedUserCount": 0,
+    "visibleBoundedTrustedMatches": 0,
+    "composerOrDraftEmptinessProven": false,
+    "editorAmbiguityExplainsOriginalPlatformSendFailure": false,
+    "reviewResponseOrVerdictObtained": false,
+    "newMessageOrNativeCallRetryAuthorized": false,
+    "installedWebEditCheckpointSelfWakeAcceptance": "OPEN"
+  },
+  "nextPrerequisites": {
+    "d22Review": "Definitive original platform delivery evidence or a separately explicit supported recovery disposition; no further unchanged browser probes, resend, equivalent request or conditional frozen followup.",
+    "f7Review": "Existing exact review-start decision remains separate; no self-approval, regenerated candidate or repeated ask.",
+    "protectedWakeMigration": "Coherent physical state and purpose-bound authority remain unproven; no collector rerun or signature request.",
+    "independentWork": "Qualify existing persistent supervisor startup ownership through supported read-only source/configuration evidence; do not enable or restart recurring services."
+  },
+  "documentationRepair": {
+    "CATDESK_PROJECT_HANDOFF.md": {
+      "encodingLinesRestoredFromCleanAncestor": 1,
+      "duplicatePublicationParagraphsRemoved": 1
+    },
+    "CATDESK_MILESTONES.md": {
+      "encodingLinesRestoredFromCleanAncestor": 3,
+      "duplicatePublicationParagraphsRemoved": 1
+    }
+  }
+}

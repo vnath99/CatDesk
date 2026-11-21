@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-14T22:35:56.444257+00:00",
+  "sourceIntegration": "6f3b45ba25d44435a106dd12b0c80eed00d61413",
+  "sourcePR": 9,
+  "goalState": "ACTIVE",
+  "scope": "BOUNDED_DEVELOPMENT_RECOVERY_AND_ONE_NEW_INITIALIZATION_ATTEMPT",
+  "orphanCleanup": {
+    "originalDay": "2026-11-08",
+    "exactDriversStopped": 3,
+    "ownedConsoleHostsExited": 3,
+    "originalParentsGone": true,
+    "browserDebuggerNotListening": true,
+    "otherProcessesStopped": 0,
+    "initialCleanupPreflightRefusedConsoleChildren": true
+  },
+  "developmentRecovery": {
+    "preflightPassed": true,
+    "transitionPassed": true,
+    "originalAuthorityRetained": true,
+    "onlyUnprotectedExclusionRootListChanged": true,
+    "protectedWrites": 0,
+    "packageUpgrade": false,
+    "retainedSourceCommit": "0d6c1074e1fae3cd1fa3fdd8abe2937cd881a99d",
+    "preservationPins": 1685
+  },
+  "historicalCanaryInspection": {
+    "state": "WEB_WORK_ROLLOVER_PENDING",
+    "browserStarted": false,
+    "messagesSent": 0,
+    "oldIntentUnchanged": true
+  },
+  "newCanary": {
+    "projectId": "catdesk-wake-turn-canary-nov14",
+    "taskId": "nov14-wake-two-turn-1",
+    "intentId": "nov14-wake-turn-init-1",
+    "initializationAttempts": 1,
+    "phase": "SUBMITTING",
+    "progress": "SEND_ATTEMPTED",
+    "error": "BOOTSTRAP_OUTCOME_UNKNOWN",
+    "userAppendOutcome": "UNKNOWN",
+    "receiptPresent": false,
+    "destinationVerified": false,
+    "bindingCommitted": false,
+    "fileExecutionGranted": false,
+    "nativeCalls": 0,
+    "replayPermitted": false,
+    "existingRegistrationsUnchanged": true,
+    "existingWakeTargetsUnchanged": true,
+    "originalTaskJournalsPreserved": true,
+    "expectedChangedRecords": [
+      "New initialization journal",
+      "Shared browser-admission journal for the new intent"
+    ],
+    "ownerStaticCountersCorrectedPrivately": true
+  },
+  "processCleanup": {
+    "boundedOwnerExited": true,
+    "profileOwnerState": "PROFILE_QUIESCENT",
+    "loginMarkerRemains": false,
+    "recurringAutomationEnabled": false
+  },
+  "sourceFindings": {
+    "specificPostSubmitReasonDiscarded": true,
+    "candidateUrlNotPersistedBeforeFinalReceipt": true,
+    "cooperativeBootstrapReloadsWithoutWaitingForResponseCompletion": true,
+    "exactCauseOfThisUnknownOutcome": "UNRECOVERED_NOT_INFERRED"
+  },
+  "remainingAcceptance": {
+    "freshTwoTurnWake": "OPEN",
+    "directWebEditVerifyGitSelfWake": "OPEN",
+    "serialTwoProjectExecution": "OPEN",
+    "layeredRecovery": "PARTIAL",
+    "contextRollover": "PRIOR_EVIDENCE_RETAINED_NEW_GOAL_OPEN"
+  },
+  "nextExecutableTask": "Repair cooperative response lifecycle and bounded initialization readback in the existing adapter/runtime/journal; preserve the exact SEND_ATTEMPTED intent without resend",
+  "operatorAction": "NONE_REQUESTED_WHILE_INDEPENDENT_SOURCE_RECOVERY_WORK_REMAINS",
+  "privateEvidenceSha256": {
+    "postCleanupPreflight": "a6618c1b0351dc5a38c650ff2cebf390aba156d68388724ae928d4d84bbe70ff",
+    "transition": "638a575f95690d6d25daccc0b6c96560b1643eb4549e66d091f1b84e66a308aa",
+    "cleanup": "3edb20d2564843ea5c7c4ca3d7e84ac3b2ede6fd7d426d7242b7010201640694",
+    "initializationAttempt": "ca06874675a16ecd87ab98aab973cb13335189e5ec63560cd60956a0aa0fbc58",
+    "counterCorrection": "5ec0fcee8ad136daa9231ec20032578f3428998b7bd8c98c0d38ea493bbe62be",
+    "postTestQuiescence": "4ce17bdeb420d312de43ac3cc44982ede7c40ac6dadfe4751e0eb1aa4ebbc1ca"
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-10T04:27:35.893725+00:00",
+  "classification": "BOUNDED_DEVELOPMENT_LIVE_TEST_NOT_INSTALLED_MVP_ACCEPTANCE",
+  "sourceCommit": "27c58b372a8143345800809cd1e92a10d7652993",
+  "developmentControllerSha256": "0a0c4e42cf6c63c0cfa78619f6d1ba5a1ea43f7741c1d5607bb8bde4a18374d1",
+  "developmentBuild": {
+    "passed": true,
+    "ownerElapsedSeconds": 58.0577205,
+    "protectedPinsMismatch": 0,
+    "compilerProcessesRemaining": 0,
+    "protectedInstallationOrSelectionChanged": false
+  },
+  "boundedServing": {
+    "supervisorStates": [
+      "RECOVERED",
+      "MONITORING_COMPLETE"
+    ],
+    "authStatuses": [
+      401,
+      401,
+      200
+    ],
+    "toolCatalogStatus": 200,
+    "toolCount": 102,
+    "centralTaskToolPublished": true,
+    "servingHashMatchesCanonical": true,
+    "existingTunnelOwnerReady": true,
+    "newTunnelOrAuthenticationChanges": false,
+    "cleanupVerified": true,
+    "chatgptConnectorRequestVerifiedDuringThisTest": false,
+    "persistentSupervisorStartupPolicyQualified": false,
+    "interpretation": "Finite loopback and existing-owner readiness evidence; no new ChatGPT tool request was reached because invitation delivery was unproven."
+  },
+  "initialInvitation": {
+    "attempts": 1,
+    "maximumInternalSeconds": 120,
+    "errorCode": "SCOPED_REVIEW_TIMEOUT",
+    "durablePhase": "ATTENTION",
+    "submissionWitnessCreated": false,
+    "receiptCreated": false,
+    "timerCreated": false,
+    "originalMessageOutcome": "UNKNOWN_PRESERVED_NO_REPLAY",
+    "ownerElapsedSeconds": 147.2269854,
+    "preservationPins": 1601,
+    "preservationMismatches": 0,
+    "sourceTaskRecreated": false,
+    "executionGrantIssued": false,
+    "actualCodeEditsOrVerification": false,
+    "resent": false
+  },
+  "readonlyFollowup": {
+    "attempts": 1,
+    "passed": true,
+    "ownerElapsedSeconds": 41.3868728,
+    "finalState": "EXACT_DRAFT_PRESENT",
+    "composerClass": "EXACT",
+    "composerBytes": 716,
+    "composerStructure": "PLAIN",
+    "readersAgree": true,
+    "stable": true,
+    "matchingVisibleUserTurns": 0,
+    "coverage": "VISIBLE_BOUNDED_ONLY",
+    "originalNoSendProved": false,
+    "retryAuthorized": false,
+    "receiptCreated": false,
+    "stateChanged": false,
+    "preservationPins": 1632,
+    "preservationMismatches": 0,
+    "testOwnedProcessesRemaining": 0,
+    "endpointClosedAfterTest": true
+  },
+  "retainedPhaseEvidence": {
+    "conversationReadyAfterStartSeconds": 14,
+    "timeoutAfterStartSeconds": 120,
+    "laterStageRetained": false,
+    "exactTimeoutCauseEstablished": false
+  },
+  "installedPathFinding": {
+    "installedAdapterUsesLegacyPerCharacterTyping": true,
+    "typesBeforeNativeSubmissionFence": true,
+    "typingTimeoutBoundsElementSelectionOnly": true,
+    "totalTypingDeadlineEnforced": false,
+    "minimumDeliberateTypingDelaySecondsForThisMessage": 30.072,
+    "additionalCdpTimeKnown": false,
+    "newSourceNativeTextEntryInstalled": false,
+    "freshGuiAppliesAdapterUpgrade": false
+  },
+  "allProjectBindingsPreserved": true,
+  "nativeSessionsPreserved": true,
+  "historicalUnknownRequestsReplayed": false,
+  "recurringAutomationEnabled": false,
+  "manualSelfWakeDelivered": false,
+  "actualWebCodingAccepted": false,
+  "installedAcceptance": false,
+  "fullMvpComplete": false,
+  "remainingDependency": "Qualified fenced browser adapter installation through existing trusted release path; current broker is unprovisioned and its service transaction path is incomplete",
+  "operatorAuthenticationRequiredByLatestObservation": false
+}

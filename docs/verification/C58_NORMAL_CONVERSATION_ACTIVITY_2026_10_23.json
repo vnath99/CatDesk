@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C58_NORMAL_CONVERSATION_ACTIVITY_READBACK",
+  "observedUtc": "2026-10-24T02:38:15.2828429+00:00",
+  "localDate": "2026-10-23_America_New_York",
+  "sourceCommit": "799b1e420dbc5372399a8475176d25539212b026",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "NORMAL_EXECUTABLE_READ_ONLY_PRESERVED_REAL_CONTEXT_METADATA",
+  "sourceHashes": [
+    {
+      "sha256": "56b31695852eb5ed5e5624e585b8b246037464afbc0ee8a588efa31599b92ce0",
+      "path": "src/mcp.rs"
+    },
+    {
+      "sha256": "2f8f25eb5d34d1586a01851f0bbef27019832c528740f70e487580f6c5e90c2d",
+      "path": "src/web_conversation_context.rs"
+    }
+  ],
+  "build": {
+    "elapsedSeconds": 378.4512771,
+    "imageSha256": "ed5ac8cd3e42c462c74170ea5df1eaebad284e4a09b69a7c5c07670d04c38334",
+    "ownedJobClosed": true,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "startedUtc": "2026-10-24T02:30:31.4628177+00:00",
+    "imageBytes": 34873344,
+    "exitCode": 0,
+    "maximumSeconds": 600,
+    "finishedUtc": "2026-10-24T02:36:49.9127589+00:00"
+  },
+  "normal": {
+    "currentRowsChecked": 9,
+    "allCommandOwnersExited": true,
+    "checks": [
+      "normal-central-status-verifies-nine-pairs-and-activity-for-sixteen-independent-current-and-historical-ledgers",
+      "nine-separate-normal-context-readers-match-durable-event-times-without-cross-project-attribution",
+      "cold-normal-status-retry-retains-original-event-observation-times-and-paired-generation-scope"
+    ],
+    "retainedContextLedgers": 16,
+    "elapsedSeconds": 8.576909,
+    "commandCount": 11,
+    "maximumSeconds": 180,
+    "centralHistoryRowsChecked": 16,
+    "finishedUtc": "2026-10-24T02:37:55.2830201+00:00",
+    "comparison": "Independently calculated maximum retained observedAtUnix per exact project/generation/conversation digest, compared with context and central CLI readers.",
+    "pairedProjects": 9,
+    "timestampTrust": "Observed event metadata only; not authenticated clock, worker heartbeat, or completed work.",
+    "startedUtc": "2026-10-24T02:37:46.7061249+00:00"
+  },
+  "preservation": {
+    "completedC50AndOtherCanaries": "PRESERVED_NOT_REPLAYED",
+    "contextLedgersRead": 16,
+    "packageSelectionChanged": false,
+    "newMessages": 0,
+    "runtimeRecordsChecked": 266,
+    "changedRuntimeRecords": 0,
+    "scopedOwners": 0,
+    "productionModified": false,
+    "nativeActions": 0,
+    "browserWakeRecurringStarts": 0,
+    "selectedDevelopment": "C56_V68_C55_STOPPED_UNCHANGED",
+    "pairedProjects": 9
+  },
+  "acceptance": {
+    "criticalBrowserCrash": "OPEN",
+    "normalActivity": "PASS_REAL_PRESERVED_METADATA_READERS",
+    "actualParallelWebCodingBC": "OPEN",
+    "C57Source": "PASS_24_TESTS_AND_STRICT_GATES_PRESERVED",
+    "fullOctoberMilestone": "OPEN",
+    "protectedRuntime": "NOT_QUALIFIED",
+    "selectedOrInstalledC57": "NOT_QUALIFIED",
+    "actualNewWebToolCalls": 0,
+    "unattendedOperation": "NOT_ACTIVATED_OR_ACCEPTED",
+    "fullRuntimeRestart": "OPEN"
+  },
+  "nextTask": "Prepare a fresh isolated browser paired-commit interruption canary using the existing bounded creation/recovery path. Establish a supported fresh source and exact attempt ownership before any browser action; preserve all existing bindings and completed canaries. Live Web B/C still awaits supported serving-backend/official-runtime startup ownership."
+}

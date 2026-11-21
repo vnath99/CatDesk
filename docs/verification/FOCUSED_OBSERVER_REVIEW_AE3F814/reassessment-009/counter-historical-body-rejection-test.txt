@@ -1,0 +1,15 @@
+#[test]
+fn historical_response_protocol_is_separate_from_current_turn_and_rejects_text() {
+    let value = serde_json::json!({"stage":"RESPONSE_COMPLETE","eventId":format!("wake-intent-{}","c".repeat(64)),"targetGeneration":1,
+        "targetDigest":"a".repeat(64),"messageDigest":"b".repeat(64),"diagnosticReason":"COMPLETE"});
+    let row = format!("PROBE:HISTORY_RESPONSE:{value}");
+    assert_eq!(historical_response_observation(&row), Some(value.clone()));
+    assert!(sent_response_observation(&row).is_none());
+    assert_eq!(sanitized_rows(&row), [row]);
+    let mut unsafe_value = value;
+    unsafe_value["body"] = serde_json::json!("PRIVATE_CONTEXT");
+    assert!(
+        historical_response_observation(&format!("PROBE:HISTORY_RESPONSE:{unsafe_value}"))
+            .is_none()
+    );
+}

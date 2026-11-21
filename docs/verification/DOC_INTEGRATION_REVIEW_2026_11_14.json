@@ -1,0 +1,60 @@
+{
+  "observedUtc": "2026-11-14T17:59:33.923208+00:00",
+  "scope": "PR5_DOCUMENTATION_INTEGRATION_ONLY",
+  "reviewedHead": "24de77bfd74b327c04fda076087cda46ebfddc13",
+  "reviewedBase": "5d51a1dd9d176f94ac8e1ec04f44d6c91d18d4e5",
+  "originalChangedFiles": [
+    ".gitattributes",
+    "CATDESK_ACTIVITY_LOG.md",
+    "CATDESK_IMPORTANT_COMMANDS.md",
+    "CATDESK_MILESTONES.md",
+    "CATDESK_PROJECT_HANDOFF.md",
+    "CATDESK_TICKETS.md",
+    "README.md",
+    "docs/activity/2026-11.md",
+    "docs/archive/PRE_CONSOLIDATION_2026_11_14.md",
+    "docs/orchestrator/ARCHITECTURE_DOCUMENT_INDEX.md",
+    "docs/orchestrator/CANONICAL_CURRENT_ARCHITECTURE.md",
+    "docs/orchestrator/CATDESK_IMPORTANT_COMMANDS.md",
+    "docs/orchestrator/CATDESK_PROJECT_HANDOFF.md",
+    "docs/orchestrator/tickets/DOC_CONTINUITY_2026_11_14.md",
+    "docs/verification/DOCUMENTATION_ACCEPTANCE_2026_11_14.json",
+    "docs/verification/DOCUMENTATION_QUALIFICATION_2026_11_14.json",
+    "docs/verification/DOCUMENT_INVENTORY_2026_11_14.csv",
+    "docs/verification/LOCAL_DOCUMENT_BOUNDARIES_2026_11_14.json",
+    "docs/verification/READONLY_CONTROLLER_CLEANUP_2026_11_14.json",
+    "docs/verification/REPOSITORY_RECONCILIATION_2026_11_14.json",
+    "docs/verification/REPOSITORY_RECONCILIATION_2026_11_14.md",
+    "docs/verification/WIDGET_RESOURCE_DIAGNOSTIC_2026_11_14.json",
+    "scripts/catdesk-dev-lane.ps1",
+    "scripts/catdesk_docs.py",
+    "tests/test_catdesk_docs.py"
+  ],
+  "history": {
+    "publishedArchiveBlobsVerified": 7,
+    "compatibilityBodiesUnchanged": true,
+    "originalChronologyReachable": true
+  },
+  "runtimeApplicationFilesChanged": false,
+  "developerHook": "Only a Python documentation check is added before unchanged Rust commands; primary older facade will not be copied over",
+  "maintenanceReview": {
+    "genuineDefect": "Malformed event/evidence types could escape the structured refusal path",
+    "correction": "Strict JSON field-type preflight; no document mutation on refusal",
+    "focusedTestsPassed": 22
+  },
+  "githubChecks": {
+    "requiredBranchProtection": "HTTP404_BRANCH_NOT_PROTECTED",
+    "hostedChecks": "NONE_REPORTED; LOCAL_VERIFICATION_USED",
+    "mergeable": true,
+    "adminOverride": false
+  },
+  "primaryPlan": "Review a documentation-only backport from the exact primary code baseline; preserve untracked files, runtime bytes and journals; do not switch primary to integration",
+  "excludedWork": [
+    "architecture semantic review",
+    "diagrams",
+    "UI",
+    "Wake",
+    "native dispatch",
+    "release promotion"
+  ]
+}

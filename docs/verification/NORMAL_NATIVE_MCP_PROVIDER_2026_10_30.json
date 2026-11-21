@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T11:10:03.5114839Z",
+  "classification": "ACTUAL_CANDIDATE_LOOPBACK_MCP_NORMAL_NATIVE_CODING_DISPOSABLE_PROJECT",
+  "branch": "codex/web-rollover-oct17",
+  "candidateBuildSourceCommit": "3d1726ffbd1789259ac5298acf23fba417ee399d",
+  "candidateSha256": "58b9e1615b9416459e9079f2ea2eb4c496be324758b34ecdbe25fbb0eb2300d3",
+  "registrationSourceCommit": "d7985f8c9034a583653dc047465113a7603257c1",
+  "candidateRebuiltForThisTest": false,
+  "scope": {
+    "backend": "Disposable selected development runtime, loopback only",
+    "nativeWorkspace": "Fresh test-owned Rust project with its own persisted native thread",
+    "workAuthorization": "Existing project registry, immutable assignment/key, frozen native task selection and journal",
+    "deliveryEvidence": "Explicit synthetic local receipt in disposable scope only",
+    "actualChatGPTWebCalls": 0,
+    "backendMaximumSeconds": 120,
+    "nativeTurnMaximumSeconds": 60,
+    "outerOwnerMaximumSeconds": 180
+  },
+  "capabilities": {
+    "foreignProjectDispatch": "REFUSED",
+    "scopedStatusBeforeAndAfter": "PASS",
+    "acceptedNativeCodingTurns": 1,
+    "nativeDispatchHttpRequestsIncludingRefusalTests": 3,
+    "refusedDispatchRequests": 2,
+    "nativeJobState": "NATIVE_EXITED_ZERO",
+    "nativeOutcome": "NATIVE_EXIT_ZERO",
+    "nativeExitCode": 0,
+    "actualModel": "gpt-6.1-sol",
+    "actualReasoningEffort": "medium",
+    "sameInitializedNativeThread": true,
+    "nativeProcessTreeExitProven": true,
+    "duplicateRefusal": "PROJECT_TASK_CALL_ALREADY_COMPLETED",
+    "onlyAssignedNativeSourceChanged": true,
+    "task": "Implement and test project-ID normalization in the disposable Rust fixture",
+    "independentUnitTestsPassed": 6,
+    "independentCargoFormatCheck": "PASS",
+    "independentStrictOfflineClippy": "PASS"
+  },
+  "harnessAccounting": {
+    "originalHarnessExitCode": 1,
+    "originalFailurePreserved": true,
+    "reason": "An overly specific duplicate-refusal assertion expected PROJECT_TASK_CALL_RECORDED_NO_REPLAY. The saved actual response correctly refused with PROJECT_TASK_CALL_ALREADY_COMPLETED.",
+    "resolution": "Read-only receipt/response reconciliation plus separate independent source verification. No further native dispatch or provider turn was performed.",
+    "originalResultSha256": "0a1730d8bf7f5bff6afc401bc7f979ed9d6c41cc9bfb04d9805feda8edab916c"
+  },
+  "cleanupAndPreservation": {
+    "naturalBackendExitCode": 0,
+    "elapsedSeconds": 122.64,
+    "outputReadersClosed": true,
+    "backendOwnedTreeExitProved": true,
+    "endpointClosed": true,
+    "testGrantRevocationExitCode": 0,
+    "remainingTestOwnedProcesses": 0,
+    "protectedRealStatePinsUnchanged": 12,
+    "peerAndIsolatedWorkspacePinsUnchanged": 5,
+    "realProjectBindingsChanged": false,
+    "existingNativeSessionsResumed": 0,
+    "browserWakeTunnelOrRecurringStarts": 0,
+    "protectedInstallationOrExistingDevelopmentSelectionChanged": false
+  },
+  "notEstablished": [
+    "Actual ChatGPT Web origin of this MCP request",
+    "Two independent ChatGPT Web coding conversations",
+    "Installed production acceptance or promotion of this candidate/source",
+    "Normal unattended operation",
+    "Hosted exact-source CI"
+  ],
+  "remainingWebDependencies": [
+    "Previously reported connector HTTP429; not retried without changed evidence",
+    "Existing authenticated profile inspection after HOME_CHECK:EDITOR_MISSING; no inference of expired authentication"
+  ],
+  "nextAction": "Resume genuine two-conversation Web coding through supported existing owners once the distinct connector/profile prerequisites change. Preserve completed canaries, native sessions and all real bindings."
+}

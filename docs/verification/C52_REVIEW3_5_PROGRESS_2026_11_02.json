@@ -1,0 +1,110 @@
+{
+  "observedUtc": "2026-11-02T07:15:37.310288+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_PARTIAL_PUBLIC_SOURCE_REVIEWS_NOT_NATIVE_CODING",
+  "sourceCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "controllerSourceCommit": "6544f6b20aff7eb8ca13f58bd212b5ea6e5d3234",
+  "sameManagedClaim": true,
+  "retainedSourcePaths": 86,
+  "acceptedBaselineUnchangedBlobs": 78,
+  "changedSourcePaths": 6,
+  "newSourcePaths": 2,
+  "reviews": [
+    {
+      "reviewNumber": 3,
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "c77acf07f7e3b77cc04aca76b4a5f5d968815821277b84653c79155c0ef64c9c",
+      "singleExactUserReceipt": true,
+      "completedResponseRead": true,
+      "coordinatorClosed": true,
+      "taskCorrelatedCalls": 9,
+      "inspectedPaths": [
+        "src/operator_web_onboarding.rs",
+        "src/operator_web_rollover.rs"
+      ],
+      "inspectedRanges": [
+        "src/operator_web_onboarding.rs:421-723",
+        "src/operator_web_rollover.rs:27-48,577-597"
+      ],
+      "reportedOutputTruncated": false,
+      "noConcreteDefectReported": true,
+      "cumulativeSourceAccepted": false,
+      "observedContextProxyAfterAccounting": 35654,
+      "duplicateContextImportChangedLedger": false
+    },
+    {
+      "reviewNumber": 4,
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "8986756740fab869510f8eb603c8d0c433c5421bc913c3ae049f8703cf95c56d",
+      "singleExactUserReceipt": true,
+      "completedResponseRead": true,
+      "coordinatorClosed": true,
+      "taskCorrelatedCalls": 9,
+      "inspectedPaths": [
+        "src/operator_web_rollover.rs",
+        "src/web_rollover_admission.rs",
+        "wake/adapter.py"
+      ],
+      "inspectedRanges": [
+        "src/operator_web_rollover.rs:2696-2716,3962-3994",
+        "src/web_rollover_admission.rs:10-69,358-421",
+        "wake/adapter.py:32-52,162-249"
+      ],
+      "reportedOutputTruncated": false,
+      "noConcreteDefectReported": true,
+      "cumulativeSourceAccepted": false,
+      "observedContextProxyAfterAccounting": 49355,
+      "duplicateContextImportChangedLedger": false
+    },
+    {
+      "reviewNumber": 5,
+      "verdict": "REVIEWED_PARTIAL",
+      "responseSha256": "4160ffa057a4aba1057ad526c049a407f445ff09b377687bb254590092bd5040",
+      "singleExactUserReceipt": true,
+      "completedResponseRead": true,
+      "coordinatorClosed": true,
+      "taskCorrelatedCalls": 9,
+      "inspectedPaths": [
+        "wake/adapter.py",
+        "wake/src/runtime.rs"
+      ],
+      "inspectedRanges": [
+        "wake/adapter.py:338-358,582-644",
+        "wake/src/runtime.rs:1913-1958,2061-2300"
+      ],
+      "reportedOutputTruncated": false,
+      "noConcreteDefectReported": true,
+      "cumulativeSourceAccepted": false,
+      "observedContextProxyAfterAccounting": 66137,
+      "duplicateContextImportChangedLedger": false
+    }
+  ],
+  "totalCorroboratedCallsThisSlice": 27,
+  "allCompletedReviewsIncluding1And2": 5,
+  "totalCorroboratedCallsIncluding1And2": 47,
+  "context": {
+    "generation": 7,
+    "latestObservedProxy": 66137,
+    "toolArgumentTokens": 1836,
+    "toolResultTokens": 61632,
+    "triggerTokens": 72000,
+    "configuredBudgetTokens": 96000,
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "rawTextPersisted": false,
+    "separateProcessDedupVerified": true
+  },
+  "currentWork": "Checkpoint6 started once after checkpoint5 accounting. Read its original attempt/result and receipt before further actions; do not replay. Checkpoints7 and8 remain unsent. Reconcile traffic and handoff policy before checkpoint7.",
+  "preservation": {
+    "completedStageOwnersExitedWithoutTimeout": true,
+    "allCompletedStagePinsMatch": true,
+    "nativeProjectTaskStarts": 0,
+    "productionChanges": 0,
+    "bindingChanges": 0,
+    "recurringAutomationStarted": false,
+    "finalProcessInventory": "NOT_RUN_WHILE_CHECKPOINT6_IS_ACTIVE"
+  },
+  "sourceAcceptance": false,
+  "producerAuthority": false,
+  "operatorActionRequiredForCurrentBoundedReview": false
+}

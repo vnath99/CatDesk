@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T03:58:50.211479+00:00",
+  "classification": "REAL_MCP_PLAN_EXTENSION_AND_EXISTING_SCOPED_REVIEW_PREFLIGHT",
+  "sourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "fullCodePaths": 90,
+  "sameNativeReportClaim": true,
+  "originalExpiryPreserved": true,
+  "frozenFollowups": [
+    3,
+    4
+  ],
+  "standingScopedAuthorizationRecorded": true,
+  "initialPreflightActuallyPerformed": [
+    3
+  ],
+  "laterReviewRunRepeatsAuthoritativePreflight": true,
+  "authorizationElapsedSeconds": 21.235,
+  "followupMessagesSent": 0,
+  "newNativeClaims": 0,
+  "nativePlan": {
+    "supportedApiReadAndUpdateReturnedStructuredResponses": true,
+    "planRequired": true,
+    "priorPlanPreserved": true,
+    "exactStoredUtf8BytesMatchExpectedPlan": true,
+    "v5ResponseTextDiffersAtTwoUnicodeHeadingCharacters": true,
+    "originalResponseEvidencePreserved": true,
+    "rootCauseEstablished": false,
+    "wholeDecodedResponseNotBlindlyWrittenBack": true,
+    "authenticationConnectionOrApplicationGuardChanged": false
+  },
+  "cleanup": {
+    "observedUtc": "2026-11-03T03:58:49.7507885Z",
+    "testOwnedProcesses": 0,
+    "existingTrustedBackendAndTunnelPreserved": true,
+    "sharedWakeHostStopped": true,
+    "processActions": 0
+  },
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "installedTwoWebCodingAcceptance": false,
+  "operatorActionRequired": false,
+  "nextAction": "Deliver frozen continuity checkpoint3 once, then observe/read/resolve/corroborate and account actual traffic; continue concrete authority checkpoint4 on this same source claim."
+}

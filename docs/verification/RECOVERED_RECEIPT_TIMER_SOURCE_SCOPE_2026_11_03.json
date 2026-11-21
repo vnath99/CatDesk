@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T15:46:04.028502+00:00",
+  "sourceCommit": "dade085c7feffb1464baf807c6cfc3812a647cf9",
+  "priorCandidateSourceCommit": "a23a52a5fc5cb9bc2d2a5ff64bbd037f92f0a176",
+  "priorDeclaredCodePaths": 90,
+  "fullDeclaredCodePaths": 91,
+  "addedExistingCodePath": "wake/src/store_reobserve.rs",
+  "unchangedPriorScopeReference": "docs/verification/GUIDANCE_FIXED_SOURCE_SCOPE_2026_11_03.json",
+  "unchangedPriorScopeGitBlob": "382db2d0924f445075e88ce6d0475ab9b2e9b739",
+  "counts": {
+    "UNCHANGED_ACCEPTED": 71,
+    "CHANGED_EXISTING": 18,
+    "NEW": 2
+  },
+  "identicalFullCodeBlobsComparedWithPriorCandidate": 86,
+  "changedCodeBlobs": [
+    [
+      "src/operator_web_review.rs",
+      "92887e9db66bc5f2e27e1a9894f44c66f45456fe",
+      "2bece3459f408c67687fbd509841e643e6270563"
+    ],
+    [
+      "wake/src/runtime.rs",
+      "ed09573be34352571bad0efca26b2d4871b4f3a2",
+      "8f352acecaa5e06ebee923d2cc3a3967c2c61fdb"
+    ],
+    [
+      "wake/src/runtime_reobserve.rs",
+      "e6018abf836d0b11cc2eb1ac8ec3e169200f69cd",
+      "f41fc927ec9be8bec840f7dc7dee38d4db9602f7"
+    ],
+    [
+      "wake/src/runtime_review_reconcile.rs",
+      "856a08b1107cff16a59f2c183b7b99b4413410b4",
+      "efc8000b9911b1e5d01f26a2111da8db325f010b"
+    ],
+    [
+      "wake/src/store_reobserve.rs",
+      "67a82c7cd12160e3c796bac6d34cad5e51b7e9bc",
+      "de822ef92dd22bad472cd99bf7eff763a2f6c8e5"
+    ]
+  ],
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "activeNativeClaimStillFrozenToPrior90": true,
+  "required": "Current91 scope and all five delta files require genuine applicable source review before production producer authority."
+}

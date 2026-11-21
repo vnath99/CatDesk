@@ -1,0 +1,68 @@
+{
+  "observedUtc": "2026-11-02T08:16:12.733780+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_NOT_INSTALLED_NATIVE_OR_UNATTENDED_ACCEPTANCE",
+  "qualifiedSourceCommit": "c1223edf580b3b388183216d327fd3297eeb87c2",
+  "independentManagedReviewTargetCommit": "c52e9ef75490381becabaaf027f98f2845f1a183",
+  "developmentQualification": {
+    "controllerSha256": "2e623e3cc08c274f778a6d74a805332fd21966de70eff81daaf94894ecef2cd0",
+    "previousControllerSha256": "6aadcc717872ac90fa4e53a9c6d41a1ab2a7840c6aaa49a892222806f52bce5a",
+    "elapsedSeconds": 42.813,
+    "unauthorizedStatus": 401,
+    "initializeStatus": 200,
+    "catalogStatus": 200,
+    "scopedToolCount": 79,
+    "registeredProjectsRead": true,
+    "ownedTreeExitProved": true,
+    "endpointClosed": true,
+    "oldArtifactAndProjectJournalMismatches": 0,
+    "independentSourceOrReleaseAuthority": false
+  },
+  "originalEvidence": {
+    "refusalPreserved": "WEB_HANDOFF_GIT_STATE_INVALID",
+    "sourceResponseSha256": "5863469ea7db7774fd263612b5871db1b475171783908d0f6ad5cd996ff29006",
+    "sourceResponseUtf8Bytes": 3297,
+    "nativeGitFieldsRemainUnknown": true,
+    "completedHandoffRequestResent": false,
+    "sourceResponseRewritten": false,
+    "initialPrivateWrapperPathFailureBeforeProductCommandPreserved": true
+  },
+  "liveRecovery": {
+    "sameIntentAndCompletedSourceRecollected": true,
+    "collectionSeconds": 97.609,
+    "sourceGeneration": 7,
+    "replacementGeneration": 8,
+    "creationSeconds": 141.344,
+    "actualIssuedUrlIndependentlyVerified": true,
+    "exactBootstrapUserReceiptVerified": true,
+    "bootstrapResponseCompleted": true,
+    "liveSourceRecheckVerified": true,
+    "registryAndWakePaired": true,
+    "predecessorPreserved": true,
+    "oneContinuationDelivered": true,
+    "continuationCompletedAndRead": true,
+    "continuationResponseBytes": 1021,
+    "continuationResponseSha256": "6172962bccbae32e646b85d422104f68ceb22a4ed2bb57f13a3e55ca51314b79",
+    "normalNativeTaskExecutionAccepted": false,
+    "nativeExecutionScopeGap": "CANONICAL_VERSUS_CONTROLLED_REGISTRY",
+    "siblingProjectsWorkspaceAndNativeOwnerPreserved": true,
+    "originalPolicyRestored": true
+  },
+  "cleanup": {
+    "testOwnedProcesses": 0,
+    "trustedInstalledBackendRetained": true,
+    "soleExpectedListener": true,
+    "originalTunnelRetained": true,
+    "recurringWakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "productionAuthenticationAndNativeSessionChanges": 0
+  },
+  "remaining": [
+    "Genuine cumulative C52 source review; original checkpoints7 and8 are unsent.",
+    "Later transfer and evidence-only validation increments need their own genuine source authority.",
+    "Canonical first-conversation and two-Web native editing acceptance.",
+    "Existing reviewed Wake publication source integration, not merely service provisioning.",
+    "Installed independent wake/rollover and unattended/reboot qualification.",
+    "Full three-metric T-0484 accounting, uncertainty and calibration; later CD-P7 clients."
+  ],
+  "operatorActionRequired": false
+}

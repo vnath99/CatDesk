@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-29T00:40:39.253117+00:00",
+  "localDate": "2026-10-28",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "344ff8167e38c9bee59deffbe0bb9b20f679f5a7",
+  "remoteSourceShaVerified": true,
+  "ci": "UNVERIFIED_ZERO_EXACT_COMMIT_CHECKS_AND_RUNS",
+  "classification": "TESTED_SOURCE_AND_ACTUAL_NATIVE_CLIENT_LOOPBACK_FIXTURE_NOT_OFFICIAL_RUNTIME_RECOVERY",
+  "sourceChanges": {
+    "files": [
+      "scripts/setup-secure-mcp.ps1",
+      "scripts/test-secure-mcp-bearer-forwarding.ps1"
+    ],
+    "option": "ForwardLocalMcpBearer",
+    "defaultChanged": false,
+    "requiresExistingProcessBearer": true,
+    "invalidTokenRefused": true,
+    "conflictingHeaderPolicyRefused": true,
+    "secretInArguments": false,
+    "parentEnvironmentChanged": false,
+    "existingRouteValidationRetained": true,
+    "canonicalHelperInstalled": false
+  },
+  "tests": {
+    "coreChecks": 17,
+    "windowsPowerShellChecks": 17,
+    "existingRouteAndMigrationRegressionCore": "PASS",
+    "existingRouteAndMigrationRegressionWindows": "PASS",
+    "actualOwnedChildOnBothHosts": true,
+    "evidenceDigests": [
+      {
+        "name": "secure-mcp-bearer-forwarding-core.private.log",
+        "sha256": "54c89320dccdbf4630c2fd1167e51ba8ce7f89cbed49e405a5a6148f0c4dfcd4"
+      },
+      {
+        "name": "secure-mcp-bearer-forwarding-windows.private.log",
+        "sha256": "18efc2a0faeb8f586799c63b5ea8a52f0de35967253568fa4966d988398a2d23"
+      },
+      {
+        "name": "secure-mcp-route-forwarding-core.private.log",
+        "sha256": "605b9f344bfa4483229736673443ea90cc5c29ab64eed56935d3c60c93d752a7"
+      },
+      {
+        "name": "secure-mcp-route-forwarding-windows.private.log",
+        "sha256": "605b9f344bfa4483229736673443ea90cc5c29ab64eed56935d3c60c93d752a7"
+      }
+    ]
+  },
+  "actualNativeClient": {
+    "sha256": "fcc85a69ec0ad82518e4f8964f60c45e31787957782a0fc9c1b0c44e82d61b9b",
+    "loopbackFixtureSeconds": 2.907,
+    "nativeCommandBoundSeconds": 2,
+    "outerJobBoundSeconds": 30,
+    "mcpBearerObserved": true,
+    "distinctMcpAndControlOrigins": true,
+    "mcpBearerObservedAtControlOrigin": false,
+    "expectedOwnedNativeTimeoutAndStop": true,
+    "serversExited": true,
+    "outerTimedOut": false,
+    "terminationFailed": false,
+    "resultSha256": "b558dedde32e66f7e13df77f07e651798cb983114885abefd71733ae379b5b66",
+    "containmentSha256": "64d903d3909d663d621232d5f5fa23c31ecf2daa2c08d76267ece01af09d81d0",
+    "earlierDiagnostics": {
+      "doctorModes": [
+        "environment",
+        "explicit-header-flags"
+      ],
+      "doctorExitCode": 0,
+      "doctorBearerObserved": false,
+      "doctorIsNotBearerForwardingProof": true,
+      "earlierFiveSecondRuntimeLogLimitExceeded": true,
+      "earlierLogLimitRunCountedAsPass": false
+    }
+  },
+  "preservation": {
+    "officialRuntimeStarts": 0,
+    "officialProfileChanges": 0,
+    "productionAuthenticationChanges": 0,
+    "tunnelChanges": 0,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "projectBindingChanges": 0,
+    "nativeSessionActions": 0,
+    "remainingFixtureOwners": 0,
+    "port3200Owners": 0,
+    "installedSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+    "defaultConfigSha256": "e29effbbdf836ed04fb21eb2dc88cfccddd0952473fc39757be2f89e75cd0c03"
+  },
+  "remaining": {
+    "managedRuntimeConnectEnvironmentHandoff": "UNVERIFIED_NOT_EXECUTED",
+    "officialRuntimeRecovery": "NOT_EXECUTED_EXISTING_OWNER_REQUIRED",
+    "connector": "UNCHANGED_LAST_HTTP_429_NOT_REPROBED",
+    "controlRegistryScope": "CANONICAL_AND_CONTROLLED_SCOPES_PRESERVED",
+    "realTwoConversationWebCoding": "OPEN",
+    "unattendedServing": "OPEN"
+  },
+  "goal": "ACTIVE"
+}

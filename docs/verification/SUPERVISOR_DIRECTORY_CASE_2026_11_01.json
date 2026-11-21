@@ -1,0 +1,115 @@
+{
+  "date": "2026-11-01",
+  "observedUtc": "2026-11-01T12:31:04.074114+00:00",
+  "classification": "ACTUAL_WINDOWS_MULTIPROCESS_SUPERVISOR_GUARD_SOURCE_QUALIFICATION_NOT_INSTALLED_ACCEPTANCE",
+  "sourceCommit": "4fb0285c340402f333b6b71d4212b0edb1c4000c",
+  "previousFrozenReviewSource": "2876ea3e2b4a094307b06ff35801ee4dce2606bf",
+  "defect": "Resolve-Path preserves caller casing. Hashing that string admitted separate named singleton guards for differently cased spellings of the same workspace. A separate Windows process reproduced the duplicate reservation before the fix.",
+  "implementation": [
+    "The existing supervisor resolves exact directory components to their stored spelling before deriving its canonical mutex ID. Directory names are not indiscriminately case-folded.",
+    "The existing public facade reads only that exact identity function through a validated regular helper file AST, avoiding duplicate algorithms, script parameter rebinding and top-level supervisor execution.",
+    "Existing scheduled-task names, Run value names and launch arguments retain the original input-spelling identity. No persistence record is renamed or rewritten by this patch.",
+    "A new owner retains both canonical and matching legacy reservations when they differ, and releases a newly held canonical reservation if the matching legacy reservation is occupied.",
+    "Public monitor detection recognizes both current canonical and matching legacy mutex names."
+  ],
+  "actualWindowsGuardCases": [
+    "Competing process using uppercase workspace spelling refused while the first guard is retained.",
+    "Independent workspace can acquire its own guard while the first is retained.",
+    "Natural owner release permits a later lowercase-spelling owner.",
+    "New owner retains the original namespace against a matching legacy caller.",
+    "Matching legacy owner prevents a new monitor.",
+    "Refused compatibility acquisition leaves no canonical mutex reservation behind.",
+    "Normal canonical spelling retains its previous singleton name."
+  ],
+  "tests": {
+    "beforeFix": {
+      "actualCrossProcessDuplicateReproduced": true,
+      "fixtureExitCode": 1,
+      "logSha256": "8bdcafeb8f5819c61958630b4a0f9f37db6b24a175a6e4d5b8bc79b0bb915813"
+    },
+    "powerShell7": {
+      "version": "7.6.5",
+      "passed": true,
+      "elapsedSeconds": 6.562,
+      "runs": [
+        {
+          "script": "scripts/test-catdesk-autostart-supervisor.ps1",
+          "exitCode": 0,
+          "logSha256": "514b86c9c4d2770b85ad1fb4bb0c3de216f852040ba2596b716984faa62ad6ad"
+        },
+        {
+          "script": "scripts/test-catdesk-lifecycle.ps1",
+          "exitCode": 0,
+          "logSha256": "3ea79f3f05d93eca7652b5084284cb09acb77725374a7ffafd590ac1e0108147"
+        }
+      ]
+    },
+    "windowsPowerShell": {
+      "version": "5.1.26100.9711",
+      "passed": true,
+      "elapsedSeconds": 5.046,
+      "runs": [
+        {
+          "script": "scripts/test-catdesk-autostart-supervisor.ps1",
+          "exitCode": 0,
+          "logSha256": "514b86c9c4d2770b85ad1fb4bb0c3de216f852040ba2596b716984faa62ad6ad"
+        },
+        {
+          "script": "scripts/test-catdesk-lifecycle.ps1",
+          "exitCode": 0,
+          "logSha256": "3ea79f3f05d93eca7652b5084284cb09acb77725374a7ffafd590ac1e0108147"
+        }
+      ]
+    },
+    "preservedIntermediateFailures": [
+      "The first Windows PowerShell child check detected progress-stream noise; suppressing only progress output allowed the actual guard assertion to run.",
+      "The initial Get-Item-based spelling lookup passed in PowerShell 7 but still allowed duplicate guards in Windows PowerShell 5.1. Exact component resolution corrected the actual launcher-host incompatibility."
+    ],
+    "processOwnership": "Existing qualified kill-on-close test owner; each guard child has a ten-second exit deadline and explicit cleanup. All owner results prove exit without timeout or termination failure.",
+    "persistenceCompatibility": "Lifecycle fixtures verify equal canonical IDs for case aliases while preserving legacy Task/Run names and original arguments; no actual Task Scheduler or Run value was changed."
+  },
+  "reviewScope": {
+    "fullCodePathsRelativeToTrustedBase": 84,
+    "changedSinceFrozenReview": [
+      "catdesk.ps1",
+      "scripts/catdesk-autostart-supervisor.ps1",
+      "scripts/test-catdesk-autostart-supervisor.ps1",
+      "scripts/test-catdesk-lifecycle.ps1"
+    ],
+    "unchangedGitBlobs": 80,
+    "newPatchCoveredByPreviousAuthority": false,
+    "independentReviewAndSupportedScopeReconciliationRequired": true,
+    "supersededManagedReviewTargetsPreviousFrozenSource": true,
+    "supersededReviewState": "CANCELLED",
+    "supersededReviewStateVersion": 5,
+    "supportedCancellationVerified": true,
+    "preexistingPinnedFilesPreserved": 4819,
+    "preservationMismatches": 0,
+    "historicalEventsPrefixPreserved": true,
+    "acceptedReportArtifactPresent": false,
+    "newManagedReviewClaimCreated": false
+  },
+  "limits": [
+    "This proves selected real Windows mutex ownership and local fixture lifecycle behavior, not actual installed daemon recovery, persistence after reboot or two-Web coding acceptance.",
+    "The fix addresses case variants of a directory path; it does not establish identity equivalence for junctions, different network aliases or other redirected paths.",
+    "Matching legacy reservations are retained. Cross-spelling coexistence with an already running pre-fix monitor remains unqualified; use the existing qualified owner lifecycle before rolling out an updated persistent monitor.",
+    "Public autostart disable removes owned persistence entries; it is not proof that an existing monitor exited. No monitor stop procedure or protected service operation was bypassed here.",
+    "This defect has not been established as the cause of the historical backend shutdown.",
+    "The selected qualified development package and trusted production C254 executable remain unchanged; no new EXE was built, promoted or fingerprinted."
+  ],
+  "preservation": {
+    "productionChanges": 0,
+    "persistenceChanges": 0,
+    "backendStarts": 0,
+    "browserStarts": 0,
+    "projectBindingChanges": 0,
+    "nativeSessionActions": 0,
+    "testOwnedProcessesAfterCleanup": 0,
+    "trustedServingOwnerPreserved": true
+  },
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "operatorActionRequired": false,
+  "nextExecutableTask": "Use the existing bounded context/handoff workflow before further large Web review traffic, then claim a source-exact current review through supported procedures. Carry forward all prior reports and 80 unchanged Git blobs without inheriting acceptance.",
+  "supersessionObservedUtc": "2026-11-01T12:39:50.624988+00:00"
+}

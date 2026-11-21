@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C103_EXISTING_VERSIONED_STORE_ROLLBACK_CURRENT_IMAGE_FAILURE",
+  "observedUtc": "2026-10-24T14:24:02.8100315+00:00",
+  "recordedUtc": "2026-10-24T14:26:20.8848860+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "c2f531e6e8318af14e7d79d303b118e93d155036",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_STORAGE_PRIMITIVE_AND_DISPOSABLE_FIXTURES_NOT_STARTUP_OR_INSTALLED_ACCEPTANCE",
+  "implementation": {
+    "path": "src/user_worker_release.rs",
+    "sha256": "691114bbe2a19e15df96fd5c0801bd57bec9beca9b5b0460054b6294c367ebeb",
+    "existingApi": "UserWorkerReleaseStoreV1::rollback",
+    "defect": "FULL_CURRENT_EXECUTABLE_VALIDATION_BLOCKED_RESTORING_INTACT_RETAINED_PREDECESSOR",
+    "fix": "RETAIN_CURRENT_MANIFEST_IDENTITY_AND_FULL_PREDECESSOR_VALIDATION_WITHOUT_REQUIRING_HEALTHY_RETIRING_EXECUTABLE",
+    "currentManifestStrict": true,
+    "predecessorManifestAndImageStrict": true,
+    "staleGenerationRefused": true,
+    "atomicSelectorReused": true,
+    "failedCurrentImagePreserved": true,
+    "untrustedFailedCurrentNotMadeRollbackPredecessor": true,
+    "newRegistryOrJournalOrAuthorityType": false,
+    "activationAndReadbackRemainStrict": true,
+    "newProductionMutatorExposed": false,
+    "automaticStartupIntegration": false
+  },
+  "causalRed": {
+    "expectedExitCode": 101,
+    "observedExitCode": 101,
+    "test": "rollback_retires_damaged_or_missing_current_image_using_intact_predecessor",
+    "exactOldFailureVerified": true,
+    "seconds": 41.4149352,
+    "sourceSha256": "e07a0b824e302324910b7ea0df55d00f4c6555786d492b92e2daba57f13f1613"
+  },
+  "finalGates": {
+    "actualCargoFilter": "user_worker_release::tests",
+    "retainedRunnerExecutionLabel": "web-operator-regressions",
+    "moduleTestsPassed": 18,
+    "failed": 0,
+    "ignored": 0,
+    "newRegressionTests": 2,
+    "newScenarioFixtures": 7,
+    "sourceFrozen": true,
+    "steps": [
+      {
+        "summary": [
+          "test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 1673 filtered out; finished in 0.28s"
+        ],
+        "exitCode": 0,
+        "causalFailureVerified": true,
+        "expectedExitCode": 0,
+        "elapsedSeconds": 20.9655942,
+        "name": "web-operator-regressions"
+      },
+      {
+        "summary": [],
+        "exitCode": 0,
+        "causalFailureVerified": true,
+        "expectedExitCode": 0,
+        "elapsedSeconds": 15.4135423,
+        "name": "strict-clippy"
+      },
+      {
+        "summary": [],
+        "exitCode": 0,
+        "causalFailureVerified": true,
+        "expectedExitCode": 0,
+        "elapsedSeconds": 3.0594108,
+        "name": "format"
+      }
+    ],
+    "seconds": 39.4522726,
+    "maximumSeconds": 600,
+    "strictWorkspaceAllTargetsAllFeaturesClippy": "PASS",
+    "format": "PASS",
+    "priorFormattingOnlyFailurePreserved": true,
+    "coverage": [
+      "DAMAGED_CURRENT_IMAGE_RETIRES_TO_EXACT_PREDECESSOR",
+      "MISSING_CURRENT_IMAGE_RETIRES_TO_EXACT_PREDECESSOR",
+      "COLD_STORE_REOPEN_AND_NO_FAILED_VERSION_OSCILLATION",
+      "DAMAGED_OR_MISSING_PREDECESSOR_REFUSES_WITHOUT_SELECTOR_CHANGE",
+      "DAMAGED_OR_MISSING_CURRENT_MANIFEST_REFUSES_WITHOUT_SELECTOR_CHANGE",
+      "NO_PREDECESSOR_REFUSES_WITHOUT_SELECTOR_CHANGE",
+      "EXISTING_TAMPERED_COMMITTED_BINDING_AND_STALE_CAS_REFUSALS_PRESERVED"
+    ],
+    "actualProcessCrash": "NOT_TESTED",
+    "independentLiveReleaseApprovalCreated": false
+  },
+  "preservation": {
+    "runtimeRecords": 306,
+    "historicalFiles": 55,
+    "changedFiles": 0,
+    "queueCount": 0,
+    "scopedOwners": 0,
+    "controls": "BOTH_STOPPED",
+    "selectedDevelopment": "V76_UNCHANGED",
+    "protectedInstallationChanged": false,
+    "signedArtifactsChanged": false,
+    "bindingsHistoriesAndNativeSessionsChanged": false,
+    "browserWakeRecurringStarts": 0,
+    "officialRuntimeActions": 0,
+    "connectorCalls": 0,
+    "completedCanariesReplayed": 0,
+    "legacyMechanismsRetired": 0
+  },
+  "acceptance": {
+    "existingVersionedRollbackPrimitive": "PASS_SOURCE",
+    "realIndependentlyQualifiedPreviousRelease": "NOT_ESTABLISHED_BY_SYNTHETIC_MANIFESTS",
+    "normalDeveloperStartupFallback": "NOT_INTEGRATED_OR_QUALIFIED",
+    "protectedRecovery": "NOT_EXECUTED",
+    "actualWebCodingBC": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "remoteSourceCi": "PENDING_EXACT_SHA_READBACK_AFTER_PUBLICATION",
+    "fullOctoberMilestone": "OPEN"
+  },
+  "nextTask": "Connect independently qualified source/build/working-health evidence and the existing rollback adapter to normal isolated developer backend startup. Test that composed startup before retiring any legacy mechanism. Preserve the October27 protected-operator boundary and prioritize actual two-conversation Web coding once its serving path is available."
+}

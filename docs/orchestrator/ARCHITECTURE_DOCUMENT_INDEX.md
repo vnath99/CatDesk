@@ -6,17 +6,26 @@ actions. Status is reconciled from the milestone tracker and current plan.
 
 ## CURRENT
 
-| Artifact | Role | Use |
-| --- | --- | --- |
-| [`CANONICAL_CURRENT_ARCHITECTURE.md`](CANONICAL_CURRENT_ARCHITECTURE.md) | Current architecture/security model and text runtime diagram | Primary design, ownership, trust-boundary, recovery, and non-ownership reference. |
-| [`CATDESK_PROJECT_HANDOFF.md`](CATDESK_PROJECT_HANDOFF.md) | Current continuity handoff and text continuation diagram | Start here when resuming work or selecting an eligible ticket. |
-| [`CATDESK_MILESTONES.md`](../../CATDESK_MILESTONES.md) | Current milestone/acceptance authority | Resolves whether a design or acceptance boundary is open. |
-| [`.catdesk/current_plan.md`](../../.catdesk/current_plan.md) | Current operating state and next-safe-work authority | Read before every continuation; it may park live or operator-only action. |
-| [`.catdesk/todo.md`](../../.catdesk/todo.md) | Durable ticket queue | Select only a currently eligible scoped item. |
+The five root documents are the only primary continuity references:
 
-The two CURRENT text diagrams intentionally omit route IDs, tunnel IDs,
-credentials, browser state, and ChatGPT URLs. There is no current graphical
-architecture diagram whose pixels are authority.
+| Artifact | Primary responsibility |
+| --- | --- |
+| [Project handoff](../../CATDESK_PROJECT_HANDOFF.md) | Rapid resumption and next action |
+| [Milestones](../../CATDESK_MILESTONES.md) | Long-term scope and acceptance dashboard |
+| [Commands](../../CATDESK_IMPORTANT_COMMANDS.md) | Verified operational/developer syntax |
+| [Activity](../../CATDESK_ACTIVITY_LOG.md) | Chronological audited actions |
+| [Tickets](../../CATDESK_TICKETS.md) | Compact status/evidence index |
+
+The November 14 consolidation design is the primary architecture reference:
+
+| Artifact | Design responsibility |
+| --- | --- |
+| [Architecture](../architecture/CATDESK_ARCHITECTURE.md) | Direct Web loop, serial MVP and future boundaries |
+| [Components](../architecture/CATDESK_COMPONENTS.md) | Existing implementation and ownership map |
+| [Release and recovery](../architecture/CATDESK_RELEASE_AND_RECOVERY.md) | Layer diagnosis and supported recovery boundaries |
+| [Security](../architecture/CATDESK_SECURITY_MODEL.md) | Project scope, no-replay and trust boundaries |
+
+These documents describe design, not installed acceptance or runtime grants. [Prior canonical architecture](CANONICAL_CURRENT_ARCHITECTURE.md) remains retained technical/history evidence. Local `.catdesk/current_plan.md`, `.catdesk/session.md` and `.catdesk/todo.md` retain native runtime compatibility and original journals; they are not competing master documentation and may be absent in a clone. Old handoff/commands below their compatibility notices are HISTORICAL. [Inventory/migration](../verification/REPOSITORY_RECONCILIATION_2026_11_14.md).
 
 ## SUPERSEDED
 

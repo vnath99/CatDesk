@@ -145,6 +145,27 @@ pub fn runtime_capability_manifest() -> Value {
         "product": "CatDesk",
         "contractSchemaVersion": AUTONOMOUS_DEVELOPMENT_CONTRACT_SCHEMA_VERSION,
         "commandProfiles": command_profiles,
+        "directChatgpt": {
+            "mode": "chatgpt_web_direct_autonomous",
+            "primaryProvider": "chatgpt-web",
+            "primaryModel": "conversation-selected",
+            "routineProvider": "none",
+            "routineModel": "none",
+            "nativeProviderLaunch": false,
+            "claimAndFinalizationRequired": true,
+        },
+        "authorizationBoundaries": {
+            "declarativeOnly": true,
+            "draftCreationNeedsContractStartApproval": false,
+            "draftCreationStartsExecution": false,
+            "validationGrantsExecution": false,
+            "directClaimNeedsExactContractApproval": true,
+            "routineSourceWorkNeedsProtectedPromotion": false,
+            "scopeAndPlatformChecksStillApply": true,
+            "externalSubmissionsNeedSeparateAuthority": true,
+            "protectedReleaseChecksUnchanged": true,
+            "platformPolicyOverrideSupported": false,
+        },
     })
 }
 
@@ -318,6 +339,39 @@ pub enum ContractPolicyError {
     Idempotency(String),
 }
 
+impl ContractPolicyError {
+    /// Closed diagnostics only: never echo paths, credentials or caller text,
+    /// and never turn a preparation prerequisite into execution authority.
+    pub fn safe_reason_code(&self) -> &'static str {
+        match self {
+            Self::Validation(message)
+                if message == "allowed path must be an existing directory" =>
+            {
+                "AUTONOMY_DRAFT_ALLOWED_DIRECTORY_REQUIRED"
+            }
+            Self::Validation(message) if message == "forbidden path must exist" => {
+                "AUTONOMY_DRAFT_FORBIDDEN_PATH_REQUIRED"
+            }
+            Self::Validation(message)
+                if message == "allowed path escapes workspace"
+                    || message == "completion artifact is outside approved paths" =>
+            {
+                "AUTONOMY_CONTRACT_SCOPE_DENIED"
+            }
+            Self::Validation(message)
+                if message == "autonomous contract enables a prohibited operation or fallback" =>
+            {
+                "AUTONOMY_CONTRACT_PROHIBITED_OPERATION"
+            }
+            Self::Validation(_) => "AUTONOMY_CONTRACT_INVALID",
+            Self::Denied(_) => "AUTONOMY_CONTRACT_SCOPE_DENIED",
+            Self::Lease(_) => "AUTONOMY_CONTRACT_LEASE_DENIED",
+            Self::Approval(_) => "AUTONOMY_CONTRACT_APPROVAL_REQUIRED",
+            Self::Idempotency(_) => "AUTONOMY_CONTRACT_REPLAY_DENIED",
+        }
+    }
+}
+
 impl AutonomousDevelopmentContractV1 {
     pub fn validate(&self) -> Result<(), ContractPolicyError> {
         if self.schema_version != AUTONOMOUS_DEVELOPMENT_CONTRACT_SCHEMA_VERSION {
@@ -334,7 +388,9 @@ impl AutonomousDevelopmentContractV1 {
         }
         if !matches!(
             self.mode.as_str(),
-            "chatgpt_web_codex_autonomous" | "chatgpt_web_qwen_autonomous"
+            "chatgpt_web_codex_autonomous"
+                | "chatgpt_web_qwen_autonomous"
+                | "chatgpt_web_direct_autonomous"
         ) || self.objective.trim().is_empty()
             || self.objective.len() > 8_000
         {
@@ -368,18 +424,34 @@ impl AutonomousDevelopmentContractV1 {
                 "autonomous contract enables a prohibited operation or fallback".into(),
             ));
         }
-        if self.provider_policy.primary_provider != "codex-cli"
-            || self.provider_policy.routine_provider != "ollama"
-        {
-            return Err(ContractPolicyError::Validation(
-                "autonomous contract provider selection is unsupported".into(),
-            ));
-        }
-        if required_effort(&self.provider_policy.primary_model).is_none() {
-            return Err(ContractPolicyError::Validation(
-                "autonomous Codex implementation work requires a supported exact model profile"
-                    .into(),
-            ));
+        if self.is_direct_chatgpt() {
+            // A Web conversation selects its own model. Do not label direct
+            // work as an observed Sol/Terra native turn or configure a hidden
+            // native fallback merely to satisfy legacy contract fields.
+            if self.provider_policy.primary_provider != "chatgpt-web"
+                || self.provider_policy.primary_model != "conversation-selected"
+                || self.provider_policy.routine_provider != "none"
+                || self.provider_policy.routine_model != "none"
+            {
+                return Err(ContractPolicyError::Validation(
+                    "direct ChatGPT contract requires its explicit provider and no native fallback"
+                        .into(),
+                ));
+            }
+        } else {
+            if self.provider_policy.primary_provider != "codex-cli"
+                || self.provider_policy.routine_provider != "ollama"
+            {
+                return Err(ContractPolicyError::Validation(
+                    "autonomous contract provider selection is unsupported".into(),
+                ));
+            }
+            if required_effort(&self.provider_policy.primary_model).is_none() {
+                return Err(ContractPolicyError::Validation(
+                    "autonomous Codex implementation work requires a supported exact model profile"
+                        .into(),
+                ));
+            }
         }
         if self.autonomy_lease.expires_at_unix <= self.autonomy_lease.issued_at_unix
             || self.autonomy_lease.maximum_total_elapsed_seconds == 0
@@ -432,6 +504,10 @@ impl AutonomousDevelopmentContractV1 {
 
     pub fn starts_on_routine_provider(&self) -> bool {
         self.mode == "chatgpt_web_qwen_autonomous"
+    }
+
+    pub fn is_direct_chatgpt(&self) -> bool {
+        self.mode == "chatgpt_web_direct_autonomous"
     }
 
     pub fn decision_hash(&self) -> Result<String, ContractPolicyError> {
@@ -813,11 +889,68 @@ fn validate_slug(value: &str, label: &str) -> Result<(), ContractPolicyError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use uuid::Uuid;
 
-    fn contract() -> AutonomousDevelopmentContractV1 {
+    #[test]
+    fn preparation_diagnostics_distinguish_prerequisites_from_security_denials() {
+        let cases = [
+            (
+                ContractPolicyError::Validation(
+                    "allowed path must be an existing directory".into(),
+                ),
+                "AUTONOMY_DRAFT_ALLOWED_DIRECTORY_REQUIRED",
+            ),
+            (
+                ContractPolicyError::Validation("forbidden path must exist".into()),
+                "AUTONOMY_DRAFT_FORBIDDEN_PATH_REQUIRED",
+            ),
+            (
+                ContractPolicyError::Validation("allowed path escapes workspace".into()),
+                "AUTONOMY_CONTRACT_SCOPE_DENIED",
+            ),
+            (
+                ContractPolicyError::Validation(
+                    "autonomous contract enables a prohibited operation or fallback".into(),
+                ),
+                "AUTONOMY_CONTRACT_PROHIBITED_OPERATION",
+            ),
+            (
+                ContractPolicyError::Denied("private caller detail".into()),
+                "AUTONOMY_CONTRACT_SCOPE_DENIED",
+            ),
+            (
+                ContractPolicyError::Lease("private caller detail".into()),
+                "AUTONOMY_CONTRACT_LEASE_DENIED",
+            ),
+            (
+                ContractPolicyError::Approval("private caller detail".into()),
+                "AUTONOMY_CONTRACT_APPROVAL_REQUIRED",
+            ),
+            (
+                ContractPolicyError::Idempotency("private caller detail".into()),
+                "AUTONOMY_CONTRACT_REPLAY_DENIED",
+            ),
+            // Error text alone is not proof of a platform-policy refusal.
+            (
+                ContractPolicyError::Validation("blocked by policy; private caller detail".into()),
+                "AUTONOMY_CONTRACT_INVALID",
+            ),
+        ];
+        for (error, expected) in cases {
+            assert_eq!(error.safe_reason_code(), expected);
+            assert!(!error.safe_reason_code().contains("private"));
+        }
+        let boundaries = runtime_capability_manifest()["authorizationBoundaries"].clone();
+        assert_eq!(boundaries["draftCreationNeedsContractStartApproval"], false);
+        assert_eq!(boundaries["validationGrantsExecution"], false);
+        assert_eq!(boundaries["directClaimNeedsExactContractApproval"], true);
+        assert_eq!(boundaries["platformPolicyOverrideSupported"], false);
+        assert_eq!(boundaries["protectedReleaseChecksUnchanged"], true);
+    }
+
+    pub(crate) fn contract() -> AutonomousDevelopmentContractV1 {
         let root = std::env::temp_dir().join(format!("catdesk-adc-{}", Uuid::new_v4()));
         std::fs::create_dir_all(root.join("src")).expect("workspace");
         AutonomousDevelopmentContractV1 {
@@ -933,6 +1066,43 @@ mod tests {
             contract.decision_hash().expect("hash"),
             restored.decision_hash().expect("hash")
         );
+    }
+
+    #[test]
+    fn direct_chatgpt_mode_has_honest_provider_identity_and_no_native_fallback() {
+        let legacy = contract();
+        let legacy_hash = legacy.decision_hash().unwrap();
+        let mut direct = legacy.clone();
+        direct.mode = "chatgpt_web_direct_autonomous".into();
+        direct.provider_policy.primary_provider = "chatgpt-web".into();
+        direct.provider_policy.primary_model = "conversation-selected".into();
+        direct.provider_policy.routine_provider = "none".into();
+        direct.provider_policy.routine_model = "none".into();
+        direct.validate().expect("explicit direct ChatGPT contract");
+        assert_ne!(direct.decision_hash().unwrap(), legacy_hash);
+        for (provider, model) in [
+            ("codex-cli", "gpt-6.1-sol"),
+            ("chatgpt-web", "gpt-6.1-sol"),
+            ("chatgpt-web", "gpt-5.6-terra"),
+        ] {
+            let mut wrong = direct.clone();
+            wrong.provider_policy.primary_provider = provider.into();
+            wrong.provider_policy.primary_model = model.into();
+            assert!(
+                wrong.validate().is_err(),
+                "must not claim an unobserved native profile"
+            );
+        }
+        let mut fallback = direct.clone();
+        fallback.provider_policy.routine_provider = "ollama".into();
+        assert!(fallback.validate().is_err());
+        let mut implicit = direct.clone();
+        implicit.mode = legacy.mode.clone();
+        assert!(
+            implicit.validate().is_err(),
+            "native modes retain native provider requirements"
+        );
+        assert_eq!(legacy.decision_hash().unwrap(), legacy_hash);
     }
 
     #[test]

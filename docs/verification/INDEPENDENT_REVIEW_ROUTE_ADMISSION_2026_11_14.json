@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-14",
+  "task": "nov14-independent-review-route-admission",
+  "sourceBase": "25574e707cacd2a67b26ac09b708c2d16caa3abd",
+  "newObservations": {
+    "originalBugProject": {
+      "openRequests": 1,
+      "assignedTaskPresent": true,
+      "selectedStoreTargetAbsent": true,
+      "retainedTargetMatchesRegistry": true,
+      "retainedGeneration": 1,
+      "retainedDeliveryPhase": "SUBMITTING",
+      "retainedReason": "SCOPED_REVIEW_TIMEOUT",
+      "receiptPresent": false,
+      "disposition": "PRESERVE_UNKNOWN_NO_REPLAY"
+    },
+    "originalByovdProject": {
+      "openRequests": 1,
+      "assignedTaskPresent": true,
+      "selectedStoreTargetAbsent": true,
+      "retainedTargetMatchesRegistry": true,
+      "retainedGeneration": 1,
+      "retainedDeliveryPhase": "ATTENTION",
+      "retainedReason": "SCOPED_REVIEW_TIMEOUT",
+      "receiptPresent": false,
+      "disposition": "PRESERVE_UNKNOWN_NO_REPLAY"
+    },
+    "wake2": {
+      "currentRegistryTargetPresent": false,
+      "targetPresentInEitherKnownStore": false,
+      "currentWebWorkLedgerPresent": false,
+      "historicalReviewScopeIsDifferent": true,
+      "disposition": "NO_ALIAS_INFERENCE_OR_BINDING_CHANGE"
+    },
+    "operatorSuppliedOptionalConversation": {
+      "boundedReadOnlyDesktopInspection": true,
+      "returnedState": "idle",
+      "currentlyRegisteredDestination": false,
+      "v5ConnectionEstablishedByThisRead": false,
+      "messageSent": false
+    },
+    "qualifiedSourceWorktree": {
+      "commit": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+      "tree": "b3cefeeb74dc0e8763b50adb5929d35cdb94857c",
+      "clean": true,
+      "declaredReportAbsent": true
+    }
+  },
+  "actualV5Calls": {
+    "runtimeCapabilities": "SUCCESS_DIRECT_CHATGPT_MODE_ADVERTISED",
+    "sourceBoundDraftCreate": "REFUSED",
+    "error": "autonomous contract workspace must match the MCP workspace",
+    "errorCode": "INVALID_ARGUMENT",
+    "reason": "The existing central MCP serves the canonical checkout; the frozen review requires the isolated source checkout.",
+    "sourceGuardPrecedesSessionCreation": true,
+    "draftSessionCreated": false,
+    "approvalOrClaimAttempted": false
+  },
+  "decisions": [
+    "Do not repair a target merely to route a new review around an existing OPEN request.",
+    "Do not interpret a missing selected-store delivery or timed-out attempt as proof that no message was sent.",
+    "Historical Wake2 review registration is a distinct scope and does not authorize guessing a current uppercase-project binding.",
+    "A new destination alone does not solve source-bound native contract admission; do not request premature message approval.",
+    "Keep the rejected prospective successor file private and unadmitted; preserve the original expired contract and approvals.",
+    "Do not substitute the canonical carrier workspace or switch the serving workspace/tunnel to make admission pass."
+  ],
+  "nextExecutableTask": "Inspect and reuse the retained source-bound local review-admission procedure that created the isolated source DRAFT, including its bounded owner and genuine reviewer/output requirements. No start approval, report transcription, ACK or producer authority may be inferred.",
+  "tests": {
+    "sourceTestsRepeated": false,
+    "prior143PassingTestsPreserved": true,
+    "newSourceImplementation": false,
+    "evidenceType": "READ_ONLY_STATE_AND_ONE_PRE_CREATION_REFUSAL"
+  },
+  "preservation": {
+    "messagesSent": 0,
+    "tasksDispatchedOrReplayed": 0,
+    "projectOrWakeBindingsChanged": 0,
+    "grantsFencesAndOriginalContractsChanged": 0,
+    "reviewApprovalsOrVerdictsCreated": 0,
+    "browserWakeOrProductionLifecycleOperations": 0,
+    "signaturesOrInstallations": 0
+  },
+  "phase1Accepted": false,
+  "goalComplete": false,
+  "recordedUtc": "2026-11-14T15:30:38.197775+00:00"
+}

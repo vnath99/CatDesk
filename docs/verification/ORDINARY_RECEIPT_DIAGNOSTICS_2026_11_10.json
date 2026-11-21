@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-10T04:04:11.132704+00:00",
+  "classification": "SOURCE_QUALIFIED_NOT_INSTALLED_OR_LIVE_ACCEPTANCE",
+  "sourceBaseCommit": "581009fd269005fd98df6a1023da5fc183d8069d",
+  "qualificationSha256": "52b415b24c9430253cde039aba9cb77a085af96b8eaf641e3426f6884d338c79",
+  "sourceFiles": [
+    {
+      "path": "src/main.rs",
+      "sha256": "b7b9f4c88cde1f4ecb5280097d043ce48bd0cf1df32253cce10bd058ccbf0dbc",
+      "bytes": 299953
+    },
+    {
+      "path": "src/web_work_delivery.rs",
+      "sha256": "71fc1c73a138063263e43fa8782c4ab5f84f1b20591892f998bfcebe9194cb3b",
+      "bytes": 30216
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "0cdd1fa97883a1d5db2ae98f162e25ca161e54604afa018a2d5d66f95f774bac",
+      "bytes": 322882
+    },
+    {
+      "path": "wake/src/runtime_readiness.rs",
+      "sha256": "4be16ac2d48a88e880f930d123d381602274ec492ce9aa9618f5368ef794de9a",
+      "bytes": 55977
+    },
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "61215f9a40c162a0431b9315e7ec631b61bfe4ac6ffcaa98cee120af034c95ce",
+      "bytes": 300088
+    },
+    {
+      "path": "scripts/wake_readiness_visual_probe.py",
+      "sha256": "a83a1e4dcb7052eaa027d09e2051a5fa128ef1d62419ec14c558955a33b9df4a",
+      "bytes": 36469
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "sha256": "4f863204fb1f1d360872c12a7a5c5859e1d64b11f9ff41735106d8ef4f49324b",
+      "bytes": 174231
+    },
+    {
+      "path": "tests/test_wake_readiness_probe.py",
+      "sha256": "64de720763ba703a1e3b624fec5c62db3635a6faf2a32c44590d76ca918b651b",
+      "bytes": 68597
+    }
+  ],
+  "changes": [
+    "Retain content-free authoritative ordinary receipt refusal diagnostics while preserving CLI exit2 and unknown-outcome/no-CAS semantics",
+    "Share a shortening-only receipt observation deadline across browser startup, readiness and proof; retain native90s bound and legacy default60s",
+    "Preserve12 exact existing assignment/contract/command/worktree refusal categories without permitting arbitrary PROJECT_ codes"
+  ],
+  "passingChecks": [
+    {
+      "command": "cargo test -p catdesk --bin catdesk ordinary_receipt_refusal -- --nocapture",
+      "exitCode": 0,
+      "startedUtc": "2026-11-10T04:01:12.1644078+00:00",
+      "finishedUtc": "2026-11-10T04:02:02.9276336+00:00",
+      "elapsedSeconds": 50.7577421,
+      "testsPassed": 3
+    },
+    {
+      "command": "cargo test -p catdesk --bin catdesk project_assignment_error_codes -- --nocapture",
+      "exitCode": 0,
+      "startedUtc": "2026-11-10T04:02:02.9450139+00:00",
+      "finishedUtc": "2026-11-10T04:02:03.4050220+00:00",
+      "elapsedSeconds": 0.4599333,
+      "testsPassed": 1
+    },
+    {
+      "command": "cargo test -p catdesk-wake receipt_failure_diagnosis -- --nocapture",
+      "exitCode": 0,
+      "startedUtc": "2026-11-10T04:02:03.4068229+00:00",
+      "finishedUtc": "2026-11-10T04:02:11.5095139+00:00",
+      "elapsedSeconds": 8.1026245,
+      "testsPassed": 2
+    },
+    {
+      "command": "python -m unittest discover -s tests -p test_wake_bridge.py -k submitting_reconciliation -v",
+      "exitCode": 0,
+      "startedUtc": "2026-11-10T04:00:28.0034431+00:00",
+      "finishedUtc": "2026-11-10T04:00:28.4322649+00:00",
+      "elapsedSeconds": 0.4248916,
+      "testsPassed": 6
+    },
+    {
+      "command": "python -m unittest discover -s tests -p test_wake_readiness_probe.py -v",
+      "exitCode": 0,
+      "startedUtc": "2026-11-10T04:00:28.0042360+00:00",
+      "finishedUtc": "2026-11-10T04:00:28.9409815+00:00",
+      "elapsedSeconds": 0.9330756,
+      "testsPassed": 53
+    },
+    {
+      "command": "python -m unittest discover -s wake/tests -p test_adapter.py -v",
+      "exitCode": 0,
+      "startedUtc": "2026-11-10T04:00:28.0034669+00:00",
+      "finishedUtc": "2026-11-10T04:00:41.1782789+00:00",
+      "elapsedSeconds": 13.1707854,
+      "testsPassed": 47
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets -- -D warnings",
+      "exitCode": 0,
+      "startedUtc": "2026-11-10T04:02:11.5109575+00:00",
+      "finishedUtc": "2026-11-10T04:02:30.7388761+00:00",
+      "elapsedSeconds": 19.2278405,
+      "testsPassed": null
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exitCode": 0,
+      "startedUtc": "2026-11-10T04:02:30.7403324+00:00",
+      "finishedUtc": "2026-11-10T04:02:34.2837316+00:00",
+      "elapsedSeconds": 3.5433348,
+      "testsPassed": null
+    }
+  ],
+  "finalFocusedRustTestsPassed": 6,
+  "finalPythonTestsPassed": 106,
+  "retainedEarlierFullBridgeAttempt": {
+    "resultSha256": "124428ccda472361d20b68f21db2483f4b8bcc4c032c53c61d40dc23e6adf083",
+    "logSha256": "830f49e61d9bb8b462da321d2e7b1d9be9d2986de6acbc448fa9f158e3a267b9",
+    "testsRun": 130,
+    "testsPassed": 129,
+    "failures": 1,
+    "exitCode": 1,
+    "failure": "New test expected generic SUBMIT_RECEIPT_UNPROVEN instead of existing zero-match SUBMIT_CLEARED_NO_APPEND; expectation corrected without relabelling original failure",
+    "naturalExit": true,
+    "matchingProcessesAtStopQuery": 0,
+    "processesStopped": 0,
+    "finalQualificationUsesAffectedReconciliationCases": true
+  },
+  "peerDeadlineFinding": {
+    "finding": "Reject a second stable sample whose timestamp reaches the shortened deadline",
+    "resolvedBeforeFinalChecks": true,
+    "newNegativeTest": "test_submitting_reconciliation_rechecks_deadline_at_final_stable_sample"
+  },
+  "privacy": "No raw browser rows, message bodies, drafts, URLs, credentials or unknown error strings in the new refusal envelope",
+  "positiveReceiptCommitUnchanged": true,
+  "refusalExitCode": 2,
+  "noProofMeansFailedSend": false,
+  "originalUnknownReplayed": false,
+  "candidateBuiltBySourceChecks": false,
+  "installedAcceptance": false,
+  "liveRecoveryDemonstrated": false,
+  "producerAuthority": false,
+  "actualWebEditVerified": false,
+  "actualManualSelfWakeVerified": false,
+  "fullMvpComplete": false
+}

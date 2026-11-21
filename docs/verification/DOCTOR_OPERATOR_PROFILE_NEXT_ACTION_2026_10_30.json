@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T20:45:58.019727+00:00",
+  "classification": "SOURCE_DIAGNOSTIC_ADVICE_CORRECTION_NOT_BROWSER_OR_INSTALLED_ACCEPTANCE",
+  "sourceBaseCommit": "f827a4c0b700b5a0877d988e99dcd7e3dbf45443",
+  "problem": "KNOWN_BROWSER_REFUSALS_RECOMMENDED_THE_SAME_AUTOMATED_READINESS_DIAGNOSTIC",
+  "change": {
+    "codes": [
+      "HOME_EDITOR_MISSING",
+      "BROWSER_TARGET_MISSING",
+      "BROWSER_DRAFT_UNKNOWN"
+    ],
+    "nextDiagnostic": "operator web-dev-runtime login --project-id <registered-project>",
+    "uninspectedFirstDiagnosticPreserved": true,
+    "retainedReadyDoesNotRequestLogin": true,
+    "importedEvidenceRemainsUnverifiedAdvisory": true,
+    "browserActionPerformed": false
+  },
+  "tests": {
+    "assertionsPerShell": 84,
+    "powerShell7": "PASS",
+    "windowsPowerShell51": "PASS",
+    "ps51ModuleEnvironmentScopedToChildInvocation": true,
+    "logSha256": {
+      "ps7": "132a7ca0ca0f6068df31fabbcff81b9a4f8a769fcd00b9c106962f8559c36923",
+      "ps51": "132a7ca0ca0f6068df31fabbcff81b9a4f8a769fcd00b9c106962f8559c36923"
+    }
+  },
+  "operatorProcedure": {
+    "existingQualifiedLauncherHashVerified": true,
+    "registeredProjectId": "byovd",
+    "existingWorkspaceAndProfileReused": true,
+    "singleCopyPasteCommand": true,
+    "preserveDraftsAndUnknownSends": true,
+    "safeExit": "SAME_TERMINAL_ENTER_ONCE_WAIT_LOGIN_WINDOW_CLOSED_UNVERIFIED",
+    "newBrowserProfileCreated": false,
+    "procedureExecutedByAgent": false
+  },
+  "preservation": {
+    "protectedPinsUnchanged": 131,
+    "connectorEvidencePreserved": true,
+    "projectBindingsChanged": 0,
+    "browserWakeTunnelStarts": 0,
+    "recurringAutomationChanges": 0,
+    "producerReviewAuthorityChanged": false,
+    "privatePriorInstructionsPreserved": true
+  },
+  "remainingTaskPolicy": "RECORD_EXTERNAL_GATES_ONCE_RESUME_ON_OPERATOR_RESULT_OR_CHANGED_EVIDENCE_NO_REPEATED_UNCHANGED_AUDITS",
+  "remaining": [
+    "Existing registered-profile operator inspection",
+    "Authenticated project-task ingress and two genuine Web coding conversations",
+    "Genuine current-source managed review/ACK/snapshot/controlled-producer authority"
+  ],
+  "goal": "ACTIVE"
+}

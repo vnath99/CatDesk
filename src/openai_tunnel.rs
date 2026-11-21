@@ -1107,6 +1107,7 @@ pub async fn connect_official_runtime(
     alias: &str,
     tunnel_id: &str,
     local_mcp_url: &str,
+    mcp_auth_token: Option<&str>,
 ) -> Result<String, OpenaiTunnelError> {
     if !credential_environment_present(|name| std::env::var_os(name)) {
         return Err(OpenaiTunnelError::Unsupported(
@@ -1114,7 +1115,7 @@ pub async fn connect_official_runtime(
         ));
     }
     let command = build_runtime_connect_command(path, alias, tunnel_id, local_mcp_url)?;
-    run_client_command_vec(path, &command.args).await
+    run_client_command_vec(path, &command.args, mcp_auth_token).await
 }
 
 pub async fn official_runtime_status(
@@ -1130,6 +1131,7 @@ pub async fn official_runtime_status(
             alias.into(),
             "--json".into(),
         ],
+        None,
     )
     .await?;
     let mut status = parse_runtime_status_json(alias, &output)?;
@@ -1149,6 +1151,7 @@ pub async fn stop_official_runtime(path: &Path, alias: &str) -> Result<String, O
             alias.into(),
             "--yes".into(),
         ],
+        None,
     )
     .await
 }
@@ -1161,6 +1164,7 @@ pub async fn remove_official_runtime(
     run_client_command_vec(
         path,
         &["runtimes".into(), "rm".into(), alias.into(), "--yes".into()],
+        None,
     )
     .await
 }
@@ -1479,15 +1483,102 @@ async fn run_client_command<const N: usize>(
     command_output_to_string(output)
 }
 
-async fn run_client_command_vec(path: &Path, args: &[String]) -> Result<String, OpenaiTunnelError> {
+const RUNTIME_MCP_AUTHORIZATION_ENV: &str = "CATDESK_TUNNEL_MCP_AUTHORIZATION";
+const RUNTIME_MCP_AUTHORIZATION_REFERENCE: &str =
+    "Authorization: env:CATDESK_TUNNEL_MCP_AUTHORIZATION";
+
+fn configure_runtime_mcp_auth(
+    command: &mut Command,
+    args: &[String],
+    token: Option<&str>,
+    environment: impl Fn(&str) -> Option<OsString>,
+) -> Result<(), OpenaiTunnelError> {
+    let Some(token) = token else { return Ok(()) };
+    if !crate::server::valid_mcp_auth_token(token) {
+        return Err(OpenaiTunnelError::Unsupported(
+            "LOCAL_MCP_AUTH_TOKEN_INVALID".into(),
+        ));
+    }
+    // Only the already validated local MCP target of a connect command may
+    // receive this credential. Status/stop/remove and control-plane requests
+    // must not gain an Authorization argument or a different target.
+    let targets: Vec<_> = args
+        .windows(2)
+        .filter(|pair| pair[0] == "--mcp-server-url")
+        .map(|pair| pair[1].as_str())
+        .collect();
+    if args.first().map(String::as_str) != Some("runtimes")
+        || args.get(1).map(String::as_str) != Some("connect")
+        || targets.len() != 1
+    {
+        return Err(OpenaiTunnelError::Unsupported(
+            "LOCAL_MCP_AUTH_SCOPE_INVALID".into(),
+        ));
+    }
+    validate_local_mcp_url_for_runtime(targets[0])?;
+    for key in ["MCP_EXTRA_HEADERS", "MCP_DISCOVERY_EXTRA_HEADERS"] {
+        if environment(key)
+            .is_some_and(|value| !value.is_empty() && value != RUNTIME_MCP_AUTHORIZATION_REFERENCE)
+        {
+            return Err(OpenaiTunnelError::Unsupported(
+                "LOCAL_MCP_AUTH_HEADER_CONFLICT".into(),
+            ));
+        }
+    }
+    // Reuse the explicit Secure MCP helper's qualified child-only bridge.
+    // No parent environment, profile, connection, argument or log mutation.
+    command.env(RUNTIME_MCP_AUTHORIZATION_ENV, format!("Bearer {token}"));
+    command.env("MCP_EXTRA_HEADERS", RUNTIME_MCP_AUTHORIZATION_REFERENCE);
+    command.env(
+        "MCP_DISCOVERY_EXTRA_HEADERS",
+        RUNTIME_MCP_AUTHORIZATION_REFERENCE,
+    );
+    Ok(())
+}
+
+fn redact_runtime_mcp_auth_output(
+    mut output: std::process::Output,
+    token: Option<&str>,
+) -> std::process::Output {
+    if let Some(token) = token {
+        // Even an unexpected native-client echo must not reach returned status
+        // or errors. The credential never enters the command-line arguments.
+        let escaped_token = serde_json::to_string(token).ok().and_then(|encoded| {
+            encoded
+                .get(1..encoded.len().saturating_sub(1))
+                .map(str::to_owned)
+        });
+        for bytes in [&mut output.stdout, &mut output.stderr] {
+            let mut text = String::from_utf8_lossy(bytes).replace(token, "<redacted>");
+            if let Some(escaped) = &escaped_token {
+                text = text.replace(escaped, "<redacted>");
+            }
+            *bytes = text.into_bytes();
+        }
+    }
+    output
+}
+
+async fn run_client_command_vec(
+    path: &Path,
+    args: &[String],
+    mcp_auth_token: Option<&str>,
+) -> Result<String, OpenaiTunnelError> {
     let mut command = command_for_path(path);
+    configure_runtime_mcp_auth(&mut command, args, mcp_auth_token, |key| {
+        std::env::var_os(key)
+    })?;
     append_client_args(&mut command, path, args.iter().map(String::as_str));
     let output = tokio::time::timeout(COMMAND_TIMEOUT, command.output())
         .await
         .map_err(|_| OpenaiTunnelError::Command("client command timed out".into()))?
         .map_err(|error| OpenaiTunnelError::Command(error.to_string()))?;
-    command_output_to_string(output)
+    command_output_to_string(redact_runtime_mcp_auth_output(output, mcp_auth_token))
 }
+
+#[cfg(test)]
+#[path = "openai_tunnel_runtime_auth_tests.rs"]
+mod runtime_auth_tests;
 
 fn command_for_path(path: &Path) -> Command {
     let mut command = if cfg!(windows)

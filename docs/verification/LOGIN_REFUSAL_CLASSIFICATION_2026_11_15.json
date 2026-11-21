@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T01:13:48.631027+00:00",
+  "sourceCommit": "cf5ea47b5d22f041b1bb68cfc5466785bc7a30e0",
+  "scope": "SOURCE_TESTED_FAILURE_CLASSIFICATION_NO_NEW_BROWSER_OR_PACKAGE_SELECTION",
+  "change": "A retained explicit Home login notice plus independent Home navigation history now maps the generic navigation refusal to LOGIN_OR_PROFILE_REQUIRED",
+  "preserved": [
+    "Original task/intent/record and unknown-send fence",
+    "Draft and active-generation refusals take precedence",
+    "Missing history or uncertain notice remains unproven",
+    "No send, binding or receipt authority from diagnostic facts"
+  ],
+  "checks": {
+    "adapterConversationInitialization": {
+      "tests": 160,
+      "passed": true
+    },
+    "initializationAfterAdditionalDraftGuardTest": {
+      "tests": 29,
+      "passed": true
+    },
+    "countsOverlap": true
+  },
+  "liveQualification": {
+    "newBrowserRuns": 0,
+    "newPackageSelections": 0,
+    "installedMappingAccepted": false,
+    "selectedDevelopmentSource": "843c11a7cf49c1eaf8b0bde174dca35ce40bcc94",
+    "priorLiveEvidence": "VERIFIED_TAB_READBACK_2026_11_15.json"
+  },
+  "independentInspection": {
+    "projectScopedManualWake": "EXISTING_EXPLICIT_GRANT_ROUTE",
+    "publicTimerStart": "DEFAULT_CATDESK_TARGET_ONLY",
+    "timerAcceptedForOtherProjects": false,
+    "sourceEvidence": [
+      "src/mcp.rs:handle_turn_timer",
+      "src/web_task_dispatch.rs:wake.manual_end_turn",
+      "src/project_mcp_task.rs:journal_manual_wake"
+    ]
+  },
+  "next": "Authenticate same existing development profile, prove owned cleanup, then recover original candidate without replay; qualify project-bound timer bookkeeping through existing authority before multi-project acceptance"
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-15T03:41:40.478446+00:00",
+  "documentationSource": "f5d535e5fd81d36948d06e159c5d1de27c4a9687",
+  "observerSource": "f7f1dedeb2584469e252969f195c43c5b4d3aa6a",
+  "scope": "EXISTING_SUPPORTED_NO_SEND_ROLLOVER_STATUS_ONLY",
+  "phase": "QUARANTINED",
+  "operatorDisposition": {
+    "complete": true,
+    "status": "ABANDONED_UNKNOWN_NO_REPLAY",
+    "providerOutcome": "UNKNOWN",
+    "replayAllowed": false,
+    "originalJournalPreserved": true
+  },
+  "sourceValidation": "Existing native status checks original record/handoff hashes and the immutable disposition/completion digest chain",
+  "importantDistinctions": {
+    "quarantinedJournalPreservedByDesign": true,
+    "terminalDispositionIsNotSuccessfulProviderSubmission": true,
+    "originalSourceTaskRemainsFenced": true,
+    "normalNewTaskLeaseAndSourceReceiptNotQualifiedByThisStatus": true,
+    "currentOpenWorkIsDistinctFromAbandonedSourceTask": true
+  },
+  "effects": {
+    "newMessages": 0,
+    "browserOrWakeStarts": 0,
+    "quarantineTransitionRepeated": false,
+    "bindingOrGrantChanges": 0,
+    "releaseOrSigningAuthorityCreated": false
+  },
+  "goalComplete": false
+}

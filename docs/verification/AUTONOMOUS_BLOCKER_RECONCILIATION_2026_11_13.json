@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-14T01:47:30.722305+00:00",
+  "userFacingDateZone": "America/New_York",
+  "documentationParent": "60199ec752de584bd62cedcfb868a968672c41b6",
+  "purpose": "Fresh read-only reconciliation requested by the autonomous-blocker handoff; no unchanged periodic retry",
+  "operatorComparison": {
+    "sha256": "60a4e4b50fbeb1a603646bc0ddeb6de2e434f642147ebd1c40fe12aa28f6a7f5",
+    "reviewedComparisonAndAllPinnedDependenciesMatch": true,
+    "requiredContext": "64-bit PowerShell 7.2 or newer, elevated, same approved operator account",
+    "currentPowerShellVersion": "7.6.9",
+    "currentAccountMatchesApprovedOperator": true,
+    "accountLocalAdministratorMembershipVerified": true,
+    "currentTokenElevated": false,
+    "executedInWrongContext": false,
+    "elevationRequestedOrImpersonationAttempted": false,
+    "existingConnectedToolsProvideNoVerifiedElevatedOperatorComparisonOwner": true,
+    "firstOperatorAction": "Open 64-bit PowerShell 7 as Administrator under the existing approved account and run the hash-checked comparison command provided privately.",
+    "expectedSuccessState": "OPERATOR_VIEW_MATCHES_RETAINED_STATE_PROPOSAL_EXPIRED",
+    "expectedProposalExpired": true,
+    "expectedReadyForPurposeSigning": false,
+    "comparisonIsReadOnly": true,
+    "matchDoesNotAuthorizeSigningOrInstallation": true
+  },
+  "wakeHostObservation": {
+    "method": "Existing qualified development Host status against the observed retained store; not a promoted or installed replacement",
+    "observerSha256": "9f60c8cecb9d41e2ebdde1f8655f800c38c142cbd4a8874e5311f41bfa725f1d",
+    "nativeStatusExitCode": 0,
+    "nativeStatusHost": "STOPPED",
+    "nativeStatusPid": 0,
+    "hostLeaseAvailableAtObservation": true,
+    "leaseAcquiredAndReleasedByExistingStatusOnly": true,
+    "rawStoredStatusHost": "RUNNING",
+    "rawStatusTimestampUtc": "2026-10-15T04:59:48+00:00",
+    "storedDesiredControl": "RUNNING",
+    "pendingReviewedInstallHandoffInObservedView": false,
+    "classification": "UNOWNED_RUNNING_INTENT_WITH_STALE_STATUS_IN_OBSERVED_VIEW",
+    "originalShutdownCauseEstablished": false,
+    "intendedElevatedViewVerified": false,
+    "controlChanged": false,
+    "locksDeletedOrForceCleared": false,
+    "scopeLimit": "This is current lease evidence in the Codex-observed store, not proof that it is the intended elevated protected view. No authority to stop another owner or rewrite intent follows."
+  },
+  "viewReconciliation": {
+    "observedCurrentFileMatchesFrozenOperatorObservation": true,
+    "observedControlFileMatchesFrozenOperatorObservation": false,
+    "observedConfigFileMatchesFrozenOperatorObservation": false,
+    "independentDevelopmentStatusError": "DEV_PRODUCTION_ROOT_MISMATCH",
+    "developmentStatusIsReadOnly": true,
+    "recordedIdentitiesRewritten": false,
+    "dependencyConclusion": "The current control/config observations differ from the frozen intended-operator state. Resolving protected-view identity precedes any control recovery; backend source integrity is independently healthy."
+  },
+  "canonicalDiagnosis": {
+    "command": "diagnose",
+    "state": "DEGRADED",
+    "primaryLayer": "LOCAL_DAEMON",
+    "nextAction": "RUN_RECOVER",
+    "layers": [
+      {
+        "layer": "LIFECYCLE_ENGINE",
+        "state": "READY",
+        "gate": "READY"
+      },
+      {
+        "layer": "CANONICAL_RELEASE",
+        "state": "READY",
+        "gate": "READY"
+      },
+      {
+        "layer": "RECOVERY_AUTHORITY",
+        "state": "NOT_REQUIRED",
+        "gate": "NOT_REQUIRED"
+      },
+      {
+        "layer": "LOCAL_MCP_CONFIG",
+        "state": "READY",
+        "gate": "READY"
+      },
+      {
+        "layer": "LOCAL_DAEMON",
+        "state": "FAILED",
+        "gate": "LOCAL_MCP_LISTENER_MISSING"
+      },
+      {
+        "layer": "LOCAL_MCP_PROTOCOL",
+        "state": "NOT_REQUIRED",
+        "gate": "UPSTREAM_FAILED"
+      },
+      {
+        "layer": "WAKE_RUNTIME",
+        "state": "READY",
+        "gate": "READY"
+      },
+      {
+        "layer": "OFFICIAL_RUNTIME",
+        "state": "FAILED",
+        "gate": "RUNTIME_STATUS_NOT_READY"
+      },
+      {
+        "layer": "CODEX_CLI",
+        "state": "READY",
+        "gate": "READY"
+      }
+    ]
+  },
+  "retainedArtifacts": {
+    "installedBackendSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "canonicalFingerprintMatches": true,
+    "d22CandidateSha256": "625feffdd31dfaa33a22c15f91b4b5d1560074be71eedcc0586e771b79896ab1",
+    "candidateSourceCommit": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+    "candidateRebuiltOrExecuted": false,
+    "sourceBoundWorkConsentReceived": true,
+    "originalLeaseExpired": true,
+    "contractRemainsUnclaimed": true,
+    "independentVerdictOrProducerAuthority": false
+  },
+  "brokerObservation": {
+    "fixedServiceQuery": "ObjectNotFound",
+    "fixedBrokerImageQuery": "ObjectNotFound",
+    "fixedProtectedNamespaceQuery": "ObjectNotFound",
+    "enrollmentPerformed": false,
+    "newKeysOrSignatures": 0
+  },
+  "directWebSubset": {
+    "installedAssignedTaskTools": [
+      "read",
+      "search",
+      "patch.preview",
+      "patch.apply",
+      "patch.compare",
+      "diff.actual",
+      "verify.command"
+    ],
+    "installedScopedGitCheckpointAvailable": false,
+    "equallyScopedInstalledReplacementProved": false,
+    "genericServingWorkspaceGitToolNotUsedAsWorktreeBypass": true,
+    "freshTaskOrGrantCreated": false,
+    "actualWebEditCheckpointSelfWakeAccepted": false,
+    "historicalOperationsReplayed": false
+  },
+  "workstreams": {
+    "backendSourceReadinessDiagnostic": "SOURCE_TESTED_NOT_INSTALLED",
+    "existingCanonicalBackend": "INSTALLED_PRIOR_BOUNDED_LIVE_ACCEPTANCE_PRESERVED_CURRENT_SERVING_STOPPED",
+    "d22BackendCandidate": "BUILT_REVIEW_AND_PRODUCER_BLOCKED",
+    "operatorRootComparison": "BLOCKED_NON_ELEVATED_CODEX_CONTEXT",
+    "protectedWakeMigration": "BLOCKED_FIRST_OPERATOR_COMPARISON_THEN_SEPARATE_EXISTING_AUTHORITY_GATES",
+    "independentReviewExecution": "BLOCKED_VIEW_CONTROL_ADMISSION_AND_EXPIRED_LEASE",
+    "directWebMvp": "BLOCKED_CONTROL_SCOPE_AND_INSTALLED_CHECKPOINT"
+  },
+  "boundedReadOnlyOwner": {
+    "startedUtc": "2026-11-14T01:36:57.3750791+00:00",
+    "finishedUtc": "2026-11-14T01:37:04.4152143+00:00",
+    "maximumSeconds": 120,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "preservationPins": 1685,
+    "preservationMismatches": 0,
+    "taskInventoryUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "browserWakeBackendTunnelStarts": 0,
+    "messagesSent": 0
+  },
+  "retainedDiagnosticCorrections": [
+    "An initial PowerShell inventory query failed parsing before execution; corrected syntax only.",
+    "The first private record checked a nonexistent transaction filename. Correct source path reviewed-install-handoff.json was independently checked absent; the first field is not handoff authority."
+  ],
+  "proofHashes": {
+    "result": "a504e19542d6667d51a4135d485ffb5a7156f6e7eeab7be727249fa221c8fea6",
+    "owner": "433007115609d982399cf8dd296f667210f42e0b86cf6a972fd1bf8f3867bf45",
+    "operatorContext": "0ef398bf83637aa6d5f12eb7af71454ea08171a612eee534b0e6df3bf0d9460f",
+    "supplementalState": "8a8c8ec652b3e2892b5f868e3378087e93eaefa200d2d35b59eed9c8c0f5ba3c",
+    "privateActionableOperatorCommand": "4c7a77c7d107027a8ba372da9a99bff6487a251a0aac227ab46f5b5b4f50e14b"
+  },
+  "sourceCodeChanged": false,
+  "regressionsRepeated": false,
+  "connectorDiscoveryRetried": false,
+  "newApprovalRequested": false,
+  "protectedStateChanged": false,
+  "overallGoalComplete": false
+}

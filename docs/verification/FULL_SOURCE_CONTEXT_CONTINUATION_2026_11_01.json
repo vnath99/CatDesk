@@ -1,0 +1,128 @@
+{
+  "recordedUtc": "2026-11-01T16:40:00.296549+00:00",
+  "scope": "Bounded controlled Web review and natural observed-pressure continuation; not installed production or two-project native coding acceptance",
+  "runtimeSourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "priorPublishedInputsCommit": "22e9a26a94c4d26ea2ec0d7f207ad886ce400f40",
+  "managedReview": {
+    "sameActiveReportOnlyClaim": true,
+    "changedCodePaths": 84,
+    "verdict": "REVIEWED_PARTIAL",
+    "cumulativeSourceAccepted": false,
+    "reportFinalized": false,
+    "producerAuthority": false
+  },
+  "firstSourceCheckpoint": {
+    "exactUserReceipt": true,
+    "completedResponseVerified": true,
+    "taskTimedSourceCalls": 9,
+    "sourceLogMatches": true,
+    "responseSha256": "eee72a6d6e14cd203f5069cef53e33ec2962df3a3d7cf592f56f2b12b104eff8",
+    "combinedDisplayTruncated": true,
+    "comprehensiveInspectionClaimed": false
+  },
+  "smallerVisibilityCheckpoint": {
+    "observedUtc": "2026-11-01T16:07:13.029467+00:00",
+    "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+    "lines": "601-745",
+    "sourceOutputBytes": 7872,
+    "reviewerReportsCompleteVisibility": true,
+    "firstCodeWitnessMatches": true,
+    "internalCodeWitnessMatches": true,
+    "lastPhysicalLineWitnessMatches": true,
+    "lastRequestedPhysicalLineIsBlank": true,
+    "lastNonblankDefinitionWasNotRequested": true,
+    "exactResponseSha256": "a116e567dc98e743fceb38d4e2f7d9ef3b01765974c10f0c6153a83077f4f786",
+    "qualification": "Task-attributable source inspection and visibility evidence, not formal proof of comprehension, full-file review or source acceptance.",
+    "sourceAccepted": false,
+    "producerAuthority": false
+  },
+  "contextPressure": {
+    "generation": 3,
+    "knownMcpCalls": 1,
+    "observations": 2,
+    "observedTokenProxy": 72030,
+    "observedToolArgumentTokens": 1375,
+    "observedToolResultTokens": 67514,
+    "coverageKnown": false,
+    "pressureAssessment": "UNKNOWN_OR_INCOMPLETE",
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "duplicateImportChangedLedger": false,
+    "separateCliProcessesReopenedDurableLedger": true,
+    "rawTextPersisted": false
+  },
+  "thresholds": {
+    "configuredBudgetTokens": 96000,
+    "safetyHeadroomTokens": 24000,
+    "triggerTokens": 72000,
+    "lowered": false,
+    "incompleteHistoryGuardUsedForThisRollover": false
+  },
+  "rollover": {
+    "triggerReason": "OBSERVED_PRESSURE",
+    "sourceGeneration": 3,
+    "replacementGeneration": 4,
+    "handoffRequestExactReceipt": true,
+    "sourceResponseComplete": true,
+    "handoffStructuredAndPrepared": true,
+    "sourceHandoffSha256": "c2f2edd4efc12626e2913e7084e0b06a1bc5cd9aabe5fff7e008fc8ce611a55d",
+    "replacementUrlIndependentlyVerified": true,
+    "bootstrapExactReceipt": true,
+    "sourceSnapshotRecheckedBeforeBind": true,
+    "registryWakePairVerified": true,
+    "predecessorPreserved": true,
+    "continuationExactResponseVerified": true,
+    "continuationResponseSha256": "0206ea2bd2947d47635a3adc66782027891cbf7cdb0098002a8a62b2446ce9aa",
+    "originalPolicyRestored": true,
+    "priorCanariesReplayed": false
+  },
+  "preservation": {
+    "allStagePinMismatches": 0,
+    "siblingProjectsPreserved": true,
+    "workspaceAndNativeOwnerPreserved": true,
+    "authenticatedProfileIdentityPreserved": true,
+    "testOwnedProcessesRemaining": 0,
+    "trustedInstalledBackendRetained": true,
+    "sharedWakeHostStopped": true,
+    "recurringAutomationEnabled": false,
+    "nativeSessionActions": 0,
+    "productionChanges": 0
+  },
+  "qualificationLevels": {
+    "sourceTests": "Existing qualified results retained; no repetition claimed",
+    "isolatedLiveBrowser": "Observed-pressure source handoff, replacement and continuation",
+    "protectedProductionUpgrade": "NOT_PERFORMED",
+    "twoWebProjectNativeEdits": "OPEN",
+    "unattendedSupervisorRecovery": "OPEN"
+  },
+  "retainedPreparationFailure": {
+    "failure": "Private preflight expected a materialized token field instead of computed event-ledger estimate",
+    "stage": "Before preparing runtime operation",
+    "messages": 0,
+    "runtimeChanges": 0,
+    "correction": "Use qualified generation-matched idempotent import evidence; controller independently evaluates actual trigger"
+  },
+  "initialReplacementObservation": {
+    "exitCode": 2,
+    "reason": "RESPONSE_TARGET_DRIFT",
+    "phaseAfter": "RESPONSE_PENDING",
+    "exactReceiptRetained": true,
+    "oldBindingPreservedAtStop": true,
+    "followup": "Existing receipt-based completion probe; no new-chat creation or bootstrap submission"
+  },
+  "continuationWorkResult": {
+    "connectionResponded": true,
+    "taskResumed": false,
+    "reason": "Connected canonical native-bound registry remains distinct from the controlled generation-4 project scope; replacement correctly stopped on contradiction",
+    "normalProjectAuthorityTransferred": false,
+    "nextEligibleWork": "Separately scoped administrative public-source review under the same independently established report-only claim"
+  },
+  "remaining": [
+    "Genuine cumulative current-source suitability review and accepted report",
+    "Existing ACK, snapshot, reviewed-build producer and guarded promotion",
+    "Correct connector control scope without overwriting native ownership",
+    "Two real independent Web project edits and native verification with refusal tests",
+    "Installed persistent supervisor restart/recovery acceptance"
+  ],
+  "operatorActionRequiredForNextEligibleReview": false
+}

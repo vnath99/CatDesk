@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-03T12:24:02.595371+00:00",
+  "classification": "TESTED_CONTROLLED_LIVE_EXECUTION_WITH_MODEL_VISIBILITY_LIMIT_AND_SCOPED_REPLAN",
+  "sourceCommit": "38be1c8a221dc6ef37ea8e977cd6ed956439947d",
+  "checkpoint": 5,
+  "verdict": "REVIEWED_PARTIAL",
+  "responseSha256": "1ea653ba68b8721275e49f0d26e5ff85781531d7070b8960c0cca6123aa974f5",
+  "exactUserReceiptAndCompleteResponseVerified": true,
+  "coordinatorClosed": true,
+  "plannedSourceReads": 21,
+  "executedSourceReads": 20,
+  "executedGitCallsIncludingManifest": 21,
+  "modelReportsOutputTruncated": true,
+  "allFrozenInputsExecuted": false,
+  "nativeExecutionLogsDoNotEstablishCompleteModelVisibility": true,
+  "missingSourceRange": "src/supervisor_lifecycle.rs:644-651",
+  "context": {
+    "generation": 4,
+    "knownArgumentObservations": 21,
+    "toolResultObservationsImported": 0,
+    "unknownResultVisibilityCalls": 21,
+    "fullNativeResultLogsNotCountedAsUniqueContext": true,
+    "observedProxyTokens": 40245,
+    "toolArgumentTokens": 3099,
+    "toolResultTokensUnchanged": 33816,
+    "repeatImportByteIdempotent": true,
+    "coverageKnown": false,
+    "originAuthenticated": false,
+    "providerContextExact": false,
+    "rawTextPersisted": false
+  },
+  "meterGap": "Current store has a dedicated UNKNOWN_ATTACHMENT kind but no distinct unknown tool-result visibility event. This case is preserved explicitly in evidence, without pretending tool output is an attachment or importing full logged results as visible. Full T-0484 acceptance remains open.",
+  "supportedPlanReplacement": {
+    "onlyNeverSubmittedRequestsRevoked": [
+      6,
+      7,
+      8,
+      9
+    ],
+    "completed5AndAllHistoricalGrantsPreserved": true,
+    "spentQuotaRefunded": false,
+    "quiescentReportOnlyClaimCancelled": true,
+    "nativeProviderThreadAbsent": true,
+    "reportAbsent": true,
+    "oldEventPrefixAndOtherNativeFilesPreserved": true,
+    "originalAbsoluteExpiryExtended": false,
+    "projectGoalPaused": false,
+    "productionChanges": 0,
+    "newAuthorityCreatedByCancellation": false
+  },
+  "replacementCandidateInputs": [
+    {
+      "path": "docs/verification/CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_1_2026_11_03.json",
+      "sha256": "1d4dc5bd692720a454016ff80681db2da531608b632bc676f846fe1738bd7415",
+      "manifestUtf8Bytes": 4135,
+      "sourceCommands": 10,
+      "rawSourceBytes": 20645
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_2_2026_11_03.json",
+      "sha256": "9c6e4acaf3d8309108a9afc500ccf577babacfefe0a9616201e767c532707fc5",
+      "manifestUtf8Bytes": 4125,
+      "sourceCommands": 10,
+      "rawSourceBytes": 22647
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_3_2026_11_03.json",
+      "sha256": "ec586436d1603b3d52db6dd82f082555026ffc84bdbfc59f3fd51e0024d598aa",
+      "manifestUtf8Bytes": 4139,
+      "sourceCommands": 10,
+      "rawSourceBytes": 22444
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_4_2026_11_03.json",
+      "sha256": "692f5f1303cd49414cfe3b65226b195ee9b22706b552015991a5fc6d5f8c8a93",
+      "manifestUtf8Bytes": 3220,
+      "sourceCommands": 7,
+      "rawSourceBytes": 22252
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_5_2026_11_03.json",
+      "sha256": "9359aec0a149bde50e3425688fdd22b89dede13a2aba2918d4ef9ea2abe04978",
+      "manifestUtf8Bytes": 4124,
+      "sourceCommands": 10,
+      "rawSourceBytes": 23018
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_6_2026_11_03.json",
+      "sha256": "96c1f7f8e50f8c9cc8a005c51ce089b4ab3c03690f265de76fd312595e1b3758",
+      "manifestUtf8Bytes": 3741,
+      "sourceCommands": 9,
+      "rawSourceBytes": 23546
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_7_2026_11_03.json",
+      "sha256": "b597d543ec66a5caf73eef6cfe60e391a059663301c3bfc940292792353a4a86",
+      "manifestUtf8Bytes": 3764,
+      "sourceCommands": 9,
+      "rawSourceBytes": 21307
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_8_2026_11_03.json",
+      "sha256": "9b8e33f3805eb9195d8fee858df47a78a94ed791e6b66bc02a8bea9af073f112",
+      "manifestUtf8Bytes": 3795,
+      "sourceCommands": 9,
+      "rawSourceBytes": 23776
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_9_2026_11_03.json",
+      "sha256": "88288331fa6836e979b18c0c0709b78692b60710e20f24092d4bd0666fd016e5",
+      "manifestUtf8Bytes": 2925,
+      "sourceCommands": 6,
+      "rawSourceBytes": 21699
+    },
+    {
+      "path": "docs/verification/CURRENT_38BE_BOUNDED_DEPENDENCY_INPUTS_10_2026_11_03.json",
+      "sha256": "6071ee87730ab311d8f8aee6461a117666b356fc2ce953dfbccb186246007d23",
+      "manifestUtf8Bytes": 2660,
+      "sourceCommands": 5,
+      "rawSourceBytes": 15057
+    }
+  ],
+  "sourceRangesDropped": 0,
+  "replacementMaximumSourceReadsPerMessage": 10,
+  "replacementMaximumRawSourceBytesPerMessage": 24000,
+  "replacementOutputContract": "Emit only stdout/stderr/exitCode, at most2 results per orchestration call with output budget8000; do not aggregate the whole batch or duplicate metadata. Stop and report tool-limit/truncation.",
+  "same90SourceScopeAndOriginalExpiryRequired": true,
+  "replacementRequestsNotYetSent": true,
+  "sourceAccepted": false,
+  "producerAuthority": false,
+  "installedTwoWebCodingAcceptance": false,
+  "operatorActionRequired": false
+}

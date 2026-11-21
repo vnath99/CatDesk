@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "preparedUtc": "2026-11-01T18:09:40.844997+00:00",
+  "classification": "IMMUTABLE_PUBLIC_SOURCE_REVIEW_INPUTS_NOT_COMPLETED_INSPECTION_OR_RELEASE_AUTHORITY",
+  "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+  "fullDeclaredCodePaths": 84,
+  "scopeReduced": false,
+  "group": "BACKEND_PRODUCTION_A",
+  "reads": [
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 1,
+      "lastLine": 120,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 1,120 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 5751,
+      "sha256": "209a52c1d0522369a4436cb2df45916cc280da54590a441f5bb5ab2e9966363c"
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 121,
+      "lastLine": 240,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 121,240 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 5937,
+      "sha256": "2bb1687994ad11131bc22c55b71ae1819cee3ccd461336a0e72a868e670c9521"
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 241,
+      "lastLine": 360,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 241,360 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 5842,
+      "sha256": "151d98490f7462ffc91968467b412f6269d63a39ed7fda256b5ceb1d71a99ce7"
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 361,
+      "lastLine": 480,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 361,480 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 7654,
+      "sha256": "9b61faa333d923d6d06cbcfcea8cd25a6ee98d3e9f7a22a399cc9ce08380ac34"
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 481,
+      "lastLine": 600,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 481,600 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 5336,
+      "sha256": "5342cfb7ee0d6f5eae12f2f1375f9b913fd2c40a3d7be08223870582853e1948"
+    },
+    {
+      "path": "src/operator_installed_backend.rs",
+      "sourceCommit": "6e97db1fdaaf91f9d6393997e930023a387f0403",
+      "firstLine": 601,
+      "lastLine": 720,
+      "purpose": "CURRENT_COMPLETE_PRODUCTION_IMPLEMENTATION",
+      "command": "git --no-optional-locks --no-pager blame -s --no-show-name -L 601,720 6e97db1fdaaf91f9d6393997e930023a387f0403 -- src/operator_installed_backend.rs",
+      "bytes": 6405,
+      "sha256": "9b5cd2f83b75dc5a6cae77f0c1ce930f9631f0ced6264cb2a0b4e96a2440225c"
+    }
+  ],
+  "totalCodeOutputBytes": 36925,
+  "maximumCodeReadBytes": 7800,
+  "protocol": {
+    "tools": "v5 run_command timeout10000/include_full_output=true; execute code commands sequentially",
+    "review": "Assess source suitability; retain earlier partial evidence and remaining scope; report truncation, confirmed defects and concrete neededReads",
+    "response": "JSON at most4000 UTF-8 bytes so the existing durable source-handoff reader can retain the task",
+    "safeguards": "No native execution, writes, authentication, bindings, production operations, C49 or uncertain-message replay"
+  },
+  "coverageLimits": "Complete current backend production is split contiguously across A/B. Other groups show changed test lines and their prior replaced/deleted ranges. Earlier partial references remain limited; no full-file acceptance or test execution is inferred.",
+  "sourceAccepted": false,
+  "producerAuthority": false
+}

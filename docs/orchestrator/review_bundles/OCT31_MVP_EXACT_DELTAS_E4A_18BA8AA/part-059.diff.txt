@@ -1,0 +1,191 @@
++                app: Arc::new(Mutex::new(app)),
++                devtools: None,
++                ui_events: tx,
++                mcp_auth_token: auth.map(str::to_owned),
++                fixture_snapshot: None,
++            };
++            let mut headers = HeaderMap::new();
++            if let Some(token) = auth {
++                headers.insert(
++                    header::AUTHORIZATION,
++                    format!("Bearer {token}").parse().unwrap(),
++                );
++            }
++            let response = post_mcp(
++                State(state.clone()),
++                headers.clone(),
++                tool_call_body(TRANSPORT_STATUS_TOOL, json!({})),
++            )
++            .await;
++            assert_eq!(response.status(), StatusCode::OK);
++            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
++            assert!(!String::from_utf8_lossy(&body).contains(token));
++            let value: Value = serde_json::from_slice(&body).unwrap();
++            let readiness = &value["result"]["structuredContent"]["centralProjectExecution"];
++            assert_eq!(readiness["blocker"], json!(expected_blocker));
++            assert_eq!(readiness["connectionReady"], expected_blocker.is_none());
++            assert_eq!(readiness["bearerConfigured"], auth.is_some());
++            assert_eq!(readiness["taskGrantRequired"], true);
++            assert_eq!(readiness["executionAuthorized"], false);
++            assert_eq!(readiness["providerConversationVerified"], false);
++            assert_eq!(readiness["installedWebAcceptance"], "UNVERIFIED");
++            let list = post_mcp(
++                State(state),
++                headers,
++                Bytes::from(
++                    serde_json::to_vec(
++                        &json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
++                    )
++                    .unwrap(),
++                ),
++            )
++            .await;
++            let list: Value =
++                serde_json::from_slice(&to_bytes(list.into_body(), usize::MAX).await.unwrap())
++                    .unwrap();
++            let advertised = list["result"]["tools"]
++                .as_array()
++                .unwrap()
++                .iter()
++                .any(|tool| tool["name"] == crate::web_task_dispatch::TOOL);
++            assert_eq!(advertised, readiness["connectionReady"].as_bool().unwrap());
++            assert!(!root.join("never-written.toml").exists());
++            assert!(!root.join(".catdesk/project-mcp-tasks").exists());
++            std::fs::remove_dir_all(root).unwrap();
++        }
++        let invalid =
++            central_dispatch_readiness(Some("invalid"), Mode::Computer, ToolMode::MultiTools);
++        assert_eq!(invalid["blocker"], "WEB_TASK_CENTRAL_AUTH_REQUIRED");
++        assert_eq!(invalid["connectionReady"], false);
++    }
++
+     #[tokio::test]
+     async fn native_mcp_auth_absent_hides_central_tools_and_refuses_direct_and_cached_calls() {
+         let root = unique_temp_path("native-auth-absent");
+@@ -2214,7 +2342,10 @@ async fn post_mcp(
+     let mut response_json: Option<Value> = if is_transport_status_tool_call(&req) {
+         let payload = {
+             let app = s.app.lock().await;
+-            app.transport_status_payload()
++            let mut payload = app.transport_status_payload();
++            payload["centralProjectExecution"] =
++                central_dispatch_readiness(s.mcp_auth_token.as_deref(), mode, tool_mode);
++            payload
+         };
+         Some(
+             serde_json::to_value(mcp::JsonRpcResponse::success(
+diff --git a/src/wake_protocol_client.rs b/src/wake_protocol_client.rs
+index 710035a778d8e0c0b091db4c6e5dfe19b8404cb6..093e4767e4180d686a8144e1bef500c69faf34e4 100644
+--- a/src/wake_protocol_client.rs
++++ b/src/wake_protocol_client.rs
+@@ -213,13 +213,25 @@ fn registered_publication_context(
+         project,
+     )
+     .map_err(|_| "WAKE_PROJECT_NOT_REGISTERED".to_string())?;
++    registered_publication_context_for_scope(&scope)
++}
++
++fn registered_publication_context_for_scope(
++    scope: &crate::delegated::autonomy_projects::ResolvedProjectScopeV1,
++) -> Result<(Store, Activation, String, String), String> {
++    let control_workspace = &scope.control_workspace;
++    if !selected(control_workspace) {
++        return Err("WAKE_OWNER_NOT_SELECTED".into());
++    }
+     let registered_url = scope
+         .project
+         .chatgpt_target_url
++        .clone()
+         .ok_or("TARGET_NOT_CONFIGURED")?;
+     let registered_sha256 = scope
+         .project
+         .chatgpt_target_sha256
++        .clone()
+         .ok_or("TARGET_NOT_CONFIGURED")?;
+     let root = wake_root_for_workspace(control_workspace)?;
+     let activation: Activation = read(&root.join("activation.json"))?;
+@@ -255,6 +267,31 @@ pub(crate) fn preflight_registered_invitation(
+     Ok(())
+ }
+ 
++/// Caller holds the existing registration lock. All Git work was done during
++/// scope preparation; retain exact controller/project and fresh Wake checks.
++pub(crate) fn preflight_prepared_invitation(
++    prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
++    expected: &Target,
++) -> Result<(), String> {
++    prepared
++        .revalidate_registration()
++        .map_err(|_| "WAKE_PROJECT_REGISTRATION_CHANGED")?;
++    let scope = prepared.scope();
++    let (store, activation, url, digest) = registered_publication_context_for_scope(scope)?;
++    if publication_target(
++        &store,
++        &activation,
++        &scope.project.project_id,
++        &url,
++        &digest,
++        catdesk_wake::store::now(),
++    )? != *expected
++    {
++        return Err("WAKE_PROJECT_TARGET_CHANGED".into());
++    }
++    Ok(())
++}
++
+ pub(crate) fn publish_registered_scoped_review(
+     control_workspace: &Path,
+     project: &str,
+@@ -275,6 +312,33 @@ pub(crate) fn publish_registered_scoped_review(
+     )
+ }
+ 
++/// The explicit task grant authorizes only this fixed continuation template.
++/// Queue admission neither starts Wake/browser nor proves delivery or work.
++pub(crate) fn publish_registered_manual_wake(
++    prepared: &crate::delegated::autonomy_projects::PreparedProjectScopeV1,
++    request_id: &str,
++    task_id: &str,
++    expected: &Target,
++    intent: catdesk_wake::store::WakeIntent<'_>,
++) -> Result<Event, String> {
++    let scope = prepared.scope();
++    let control_workspace = &scope.control_workspace;
++    let project = &scope.project.project_id;
++    if intent.purpose != catdesk_wake::protocol::WakePurpose::ManualEndTurn
++        || !catdesk_wake::protocol::valid_id(request_id)
++        || !catdesk_wake::protocol::valid_id(task_id)
++    {
++        return Err("WEB_TASK_MANUAL_WAKE_ARGUMENTS_INVALID".into());
++    }
++    preflight_prepared_invitation(prepared, expected)?;
++    let message = format!(
++        "CatDesk manual continuation. Project: {project} Request: {request_id} Task: {task_id} Source event: {} Source turn: {} Continue this project's unfinished authorized task using its existing handoff and current grants. Preserve task ownership and reconcile unknown outcomes before further execution.",
++        intent.source_event_id, intent.source_turn_id
++    );
++    let store = Store::open(&wake_root_for_workspace(control_workspace)?)?;
++    store.produce_expected_wake(project, &message, expected, intent)
++}
++
+ fn publication_target(
+     store: &Store,
+     activation: &Activation,
+diff --git a/src/web_review_work.rs b/src/web_review_work.rs
+index fa34a0cd560835de3424f3fc1cbef064db4424a6..c3b6e1c02dc0e5ec0cb8f204d2bc7de6e51208ad 100644
+--- a/src/web_review_work.rs
++++ b/src/web_review_work.rs
+@@ -64,6 +64,54 @@ fn require_stopped(store: &Store) -> Result<(), String> {
+     Ok(())
+ }
+ 
++// Caller retains the registered project lease, registry lock and stopped host
++// lease. This prepares only the original reserved event; it cannot send/refund.
++fn prepare_retry(
++    store: &Store,
++    ledger: &WorkLedger,
++    project: &str,
++    grant_id: &str,
++    identity: &ReviewMessageIdentity,
++    expected: &protocol::Target,
++    message: &str,
++) -> Result<Value, String> {

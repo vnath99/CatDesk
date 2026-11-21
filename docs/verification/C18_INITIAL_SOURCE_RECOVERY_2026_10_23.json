@@ -1,0 +1,117 @@
+{
+  "recordedUtc": "2026-10-23T08:36:06.8381513Z",
+  "localDate": "2026-10-23",
+  "task": "C18-INITIAL-SOURCE-RECOVERY-AND-DOM-GUARDS",
+  "classification": "SOURCE_AFFECTED_REGRESSIONS_AND_PROPOSED_READER_LIVE_RECOVERY",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "c1540a31ed3a83983476e549db4b69ab7918667b",
+  "sourceFiles": [
+    {
+      "sha256": "cce1997077c1278c125940fc43f702b5f6486d5c996a034bbbb9863e25968e90",
+      "path": "scripts/wake_bridge.py"
+    },
+    {
+      "sha256": "6e730dfc30ed0ff73a5913f372369d77540db9c4759a54ba6b767a7e96fd973e",
+      "path": "tests/test_wake_bridge_current_dom.py"
+    }
+  ],
+  "implementation": {
+    "conflictingNestedIdentitiesRetained": true,
+    "emptyAssistantBodyComplete": false,
+    "separateSiblingTurnsRetained": true,
+    "logicalNestedRoleCounting": true,
+    "selectedPackageChanged": false,
+    "unknownSubmissionAutomaticallyResent": false,
+    "textBasedDeduplication": false,
+    "targetUrlRulesRelaxed": false
+  },
+  "tests": {
+    "affectedTestsPassed": 86,
+    "focusedRedReproduced": true,
+    "currentDom": 20,
+    "independentAdapterAndBootstrap": 66,
+    "maximumSeconds": 180,
+    "newDomCases": 4,
+    "broaderBridgeSuite": "UNQUALIFIED_TWO_180_SECOND_TIMEOUTS",
+    "broaderSuitePassClaim": false,
+    "ci": "UNVERIFIED",
+    "checks": [
+      {
+        "label": "affected-current-dom",
+        "finishedUtc": "2026-10-23T08:31:44.9519784Z",
+        "logSha256": "f3cef581a0f1ea247a013f809f978e4a3ad8197466cbad29b11c623f766c2e2a",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T08:31:41.4842217Z"
+      },
+      {
+        "label": "independent-wake-adapter-bootstrap",
+        "finishedUtc": "2026-10-23T08:31:46.2657959Z",
+        "logSha256": "e54dabe1c73d9903d9e8793cf837906f9a64eb311eedb3255f38304da7e6fc81",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T08:31:44.9678733Z"
+      }
+    ],
+    "allPythonSuitePassClaim": false
+  },
+  "live": {
+    "rawScreenshotsOrTranscriptsPublished": false,
+    "proposedReaderUsed": true,
+    "sourceChatsRegistered": 0,
+    "canonicalUrlConfirmedInFreshBrowser": true,
+    "confirmedSourceAssistantReplies": 1,
+    "confirmedSourceUserMessages": 1,
+    "resendCalls": 0,
+    "secondSeedAttempted": false,
+    "existingRuntimeRecordsChecked": 139,
+    "unattendedAcceptance": false,
+    "privateScreenshotVisuallyInspected": true,
+    "sourceUrlObtainedFromProviderSearch": true,
+    "secondSourceCreated": false,
+    "originalUncertainJournalPreserved": true,
+    "nativeSessionsChanged": false,
+    "installedProductionAcceptance": false,
+    "sourceSeedSendAttempts": 1,
+    "changedExistingRuntimeRecords": 0,
+    "exactSeedAndReplyVerified": true,
+    "originalFiveBindingsChanged": false
+  },
+  "sequence": {
+    "unknownOlderCanariesReconciled": false,
+    "observedSearch": "ONE_EXACT_MARKER_RESULT_WITH_SEARCH_DECORATIONS",
+    "bodyObservation": "EMPTY_MOUNTED_ASSISTANT_BODY_LATER_HYDRATED",
+    "firstSearch": "SEARCH_CONTROL_LABEL_UNAVAILABLE_NO_QUERY",
+    "recentCandidateRead": "NO_EXACT_MATCH_NO_RESEND",
+    "initialRefusal": "BOOTSTRAP_URL_INVALID_AFTER_DURABLE_SEND_ATTEMPT",
+    "oldReceiptReader": "NESTED_USER_DOM_COUNT_3_SEMANTIC_USER_1",
+    "proposedReader": "ONE_USER_ONE_ASSISTANT_EXACT_REPLY_FRESH_BROWSER"
+  },
+  "cleanup": {
+    "ownedProcessesAfterCompletedAttempts": 0,
+    "wakeHostWorkerStarts": 0,
+    "originalBindingsChanged": false,
+    "allTestsAndBrowsersBounded": true,
+    "completedCanaryReplayed": false,
+    "recurringStarts": 0,
+    "originalControls": "BOTH_STOPPED",
+    "maximumLiveSecondsPerAttempt": 180
+  },
+  "external": {
+    "retry": false,
+    "connectorCalls": 1,
+    "connectorHttpStatus": 429,
+    "settingsChanged": false,
+    "tunnelChanged": false,
+    "connectorErrorCode": "UNAVAILABLE",
+    "connectorObservationUtc": "2026-10-23T07:53:32Z"
+  },
+  "acceptance": {
+    "fullMilestone": "PARTIAL",
+    "actualInterruptionRecoveryH": "OPEN_INITIAL_SEED_IS_NOT_ROLLOVER_ACCEPTANCE",
+    "initialSourceAlpha": "CREATED_ONCE_READ_ONLY_RECOVERY_VERIFIED_NOT_REGISTERED",
+    "initialSourceBeta": "FROZEN_UNATTEMPTED",
+    "selectedRuntime": "C17_V52_STOPPED_WITHOUT_C18_DOM_PATCH",
+    "actualSimultaneousRolloverG": "OPEN_NOT_STARTED",
+    "actualPendingRolloverRestartI": "OPEN"
+  },
+  "nextTask": "Create the second frozen source seed once with a reviewed driver that captures post-send URL diagnostics, preserving original payload/request identity. Reconcile unknown outcomes read-only; register only independently verified unique source URLs. Qualify C18 matched package before real simultaneous rollovers. Isolate the broader Python-suite timing gate separately."
+}

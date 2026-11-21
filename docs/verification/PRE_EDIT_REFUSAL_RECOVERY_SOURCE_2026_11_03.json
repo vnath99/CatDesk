@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-03T17:18:45.307758+00:00",
+  "classification": "TESTED_SOURCE_NOT_INSTALLED_OR_WEB_RECOVERY",
+  "sourceCommit": "f9f379f32de7494b923587604350f6279ecd862e",
+  "sourceDeltaPaths": [
+    "scripts/wake_bridge.py",
+    "src/web_work.rs",
+    "wake/adapter.py",
+    "wake/src/runtime.rs",
+    "wake/src/runtime_review_reconcile.rs",
+    "wake/src/runtime_scoped_review.rs",
+    "wake/src/store.rs",
+    "wake/tests/test_adapter.py",
+    "wake/tests/test_new_conversation.py"
+  ],
+  "change": "The existing qualified bridge emits a strictly bounded before-input refusal; the cooperative source-review adapter binds it to event/project/target/message and the live host persists it under its lease. Exact retirement preserves evidence and never permits retry.",
+  "requiredForRetirement": [
+    "New terminal native proof; never inferred from legacy reason or later empty DOM",
+    "Exact event/project/target/message/host owner and original submission marker",
+    "Historical scoped dispatch authorization in existing WorkLedger",
+    "Stopped and quiescent host, no receipt or acceptance timer",
+    "CAS and crash-resumable delivery/archive/queue transaction"
+  ],
+  "retirementResult": {
+    "phase": "STALE",
+    "reason": "PRE_EDIT_REFUSED_NO_SEND",
+    "receiptCreated": false,
+    "retryAllowed": false,
+    "quotaRefunded": false,
+    "submissionMarkerPreserved": true,
+    "proofPreserved": true,
+    "nativeTaskCompletionVerified": false
+  },
+  "verification": {
+    "nativeEditorAndRolloverPython": 85,
+    "adapterPython": 46,
+    "storeSubmissionRecoveryRust": 15,
+    "scopedRuntimeRust": 19,
+    "diagnosisReconciliationRust": 14,
+    "coordinatorRust": 5,
+    "distinctCases": 184,
+    "newCaseFunctions": 9,
+    "rootAndWakeStrictAllTargetClippyPassed": true,
+    "rootAndWakeFmtPassed": true
+  },
+  "failuresPreserved": [
+    "Python generated-script f-string braces",
+    "Rust fixture u32 counter type",
+    "Coordinator fixture authorization order"
+  ],
+  "legacyHeld16": {
+    "newNativeWitnessAbsent": true,
+    "phase": "SUBMITTING",
+    "coordinator": "OPEN",
+    "receiptPresent": false,
+    "newWitnessBackfilled": false,
+    "retired": false,
+    "retried": false,
+    "furtherFrozen17To22Dispatched": false,
+    "remainingPrerequisite": "A supported reviewed legacy disposition based on adequate original outcome evidence; current source cannot retroactively prove the old transaction."
+  },
+  "installedProductionChanged": false,
+  "selectedDevelopmentPackageChanged": false,
+  "newBrowserOperations": 0,
+  "nativeSessionOrProjectBindingChanges": 0,
+  "sourceAcceptedForProduction": false,
+  "producerAuthority": false,
+  "hostedCiClaimed": false,
+  "finalProcessInventory": {
+    "observedUtc": "2026-11-03T17:18:47.6119359Z",
+    "testOwnedProcesses": 0,
+    "wakeHostStopped": true,
+    "loginMarkerPresent": false,
+    "trustedCanonicalListenerPreserved": true,
+    "existingOfficialTunnelProcessPreserved": true,
+    "newConnectorReadinessClaimed": false,
+    "processActions": 0,
+    "queriesAreNotAtomic": true
+  }
+}

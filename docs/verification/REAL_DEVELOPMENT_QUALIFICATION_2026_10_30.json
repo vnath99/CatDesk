@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-10-30T13:45:10.747250+00:00",
+  "classification": "ACTUAL_EXISTING_REAL_DEVELOPMENT_PACKAGE_AND_LOOPBACK_MCP_NOT_PROTECTED_PRODUCTION_OR_CHATGPT_WEB",
+  "branch": "codex/web-rollover-oct17",
+  "buildSourceCommit": "68b65bbc044587e621a7ac15093e70df503e459f",
+  "currentArtifactSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+  "previousHealthVerifiedArtifactSha256": "df0cab8196c889b72fa3fd3c7dc0b5c1ccc1b202897d8c161655ce7a0593496b",
+  "operation": {
+    "existingDevelopmentSelectionChanged": true,
+    "protectedC254Changed": false,
+    "elapsedSeconds": 38.844,
+    "outerLimitSeconds": 180,
+    "boundedBackendLifetimesSeconds": [
+      20,
+      15
+    ],
+    "healths": [
+      {
+        "label": "new-real-development-current",
+        "maximumRuntimeSeconds": 20,
+        "expectedSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+        "actualSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "packageId": "1.0.0-dev.85-8c39353cc8dffff6a48ca4d80f665d39f70b90a52515f737722daaee6bb81f3b",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-30T13:38:00.674246+00:00"
+      },
+      {
+        "label": "real-development-healthy-restart",
+        "maximumRuntimeSeconds": 15,
+        "expectedSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+        "actualSha256": "b322bd6131f146e1dfeb36a7d0ac66cd5c49cbcd7c2910b430d119f05f6ba31c",
+        "recovery": "CURRENT_PACKAGE_VERIFIED",
+        "packageId": "1.0.0-dev.85-8c39353cc8dffff6a48ca4d80f665d39f70b90a52515f737722daaee6bb81f3b",
+        "unauthorizedStatus": 401,
+        "initializeStatus": 200,
+        "catalogStatus": 200,
+        "toolCount": 79,
+        "registeredProjectsRead": true,
+        "ownerExitCode": 0,
+        "readersClosed": true,
+        "ownedTreeExitProved": true,
+        "endpointClosed": true,
+        "observedUtc": "2026-10-30T13:38:16.950361+00:00"
+      }
+    ],
+    "currentVerification": "OPERATOR_RECORDED",
+    "previousVerification": "OPERATOR_RECORDED_PACKAGE_RETAINED",
+    "hostStopped": true,
+    "newProductionAuthorityCreated": false,
+    "recordAuthority": "LOCAL_OPERATOR_PROVIDED_SOURCE_TESTS_INCREMENTAL_NATIVE_ADVICE_AND_OBSERVED_HEALTH",
+    "realRuntimeFaultInjectionPerformed": false,
+    "earlierDisposableRecoveryEvidence": "docs/verification/STATUS_DISPATCH_DEVELOPMENT_RELEASE_2026_10_30.json"
+  },
+  "preservation": {
+    "originalProjectBindings": 5,
+    "allPairedTargetBindings": 10,
+    "pairedUrlsDigestsGenerationsUnchanged": true,
+    "criticalPinsUnchanged": 6,
+    "statePinsUnchanged": 200,
+    "retainedPreviousPackageFilesUnchanged": 7,
+    "profileIdentityPreserved": true,
+    "nonUsageConfigurationUnchanged": true,
+    "usageAccountingRetained": true,
+    "unknownWebRequestsAndRolloverHistoryPreserved": true,
+    "remainingTestOwnedProcesses": 0,
+    "cleanupScope": "EXACT_REAL_DEVELOPMENT_RUNTIME_AND_QUALIFIED_CONTROLLER_IMAGES",
+    "actualChatGPTWebCalls": 0,
+    "nativeModelTurns": 0,
+    "originalNativeSessionsResumedOrInterrupted": 0,
+    "browserWakeTunnelOrRecurringStarts": 0
+  },
+  "managedNativeEligibilityCorrection": {
+    "schemaProviderNeutral": true,
+    "solManagedLaunchCurrentlyQualified": false,
+    "gates": [
+      "WRITABLE_WORKSPACE_OVERLAPS_HOST_AUTHORITY",
+      "DEDICATED_OS_ISOLATION_UNPROVEN_EVEN_FOR_DISJOINT_PATHS"
+    ],
+    "actualWindowsBoundaryTestPassed": true,
+    "boundaryTestLogSha256": "46356a5c3056b12330bab87c7c5fba538bac1ff44a73a851af7f762a43b61e82",
+    "newManagedSessionOrLaunchAttempted": false,
+    "ordinaryNativeQueueAdviceDoesNotCreateProducerAuthority": true,
+    "supersedesOperationalInference": "docs/verification/RELEASE_ROUTE_NATIVE_ADVICE_2026_10_30.json"
+  },
+  "retainedBrowserEvidence": {
+    "observedUtc": "2026-10-30T13:21:21.758393+00:00",
+    "scope": "SEPARATE_PREVIOUS_BOUNDED_INSPECTION_NOT_REPEATED_FOR_PACKAGE_UPDATE",
+    "finalState": "HOME",
+    "targetTabObservation": "TARGET_TAB_DRIFT",
+    "homeGuard": "EDITOR_MISSING",
+    "authenticationVerified": false,
+    "computerUseCapture": "STOPPED_URL_CONFIDENCE_POLICY_BEFORE_CONTENT",
+    "uiInputs": 0,
+    "messagesSent": 0,
+    "criticalPinsUnchanged": 12,
+    "metadataPinsUnchanged": 197,
+    "profileIdentityPreserved": true,
+    "ownedCleanupPassed": true
+  },
+  "pinnedApiInspection": {
+    "package": "seleniumbase",
+    "version": "4.51.5",
+    "classification": "LOCAL_SOURCE_INSPECTION_NO_BROWSER_OR_NETWORK",
+    "tabGetCurrentUrl": "await evaluate(window.location.href)",
+    "evaluateByValue": "remote_object.value",
+    "selectedWrapperGetCurrentUrl": "self.page.evaluate(window.location.href)",
+    "dataShapeDefectEstablished": false,
+    "targetComparisonOrDraftGuardRelaxed": false,
+    "sourceSha256": {
+      "tab.py": "2c4f2f994f9d881a5ce80a15fa96000708e98599811362c2fd251fb13b219893",
+      "sb_cdp.py": "1466674c1c480e43f84d5f87a17898e7b49b4dbfc215fa0a4c4649230c4813dc"
+    }
+  },
+  "acceptance": {
+    "A": "PASS_REGISTRATION_AND_REAL_DEVELOPMENT_CONTROL_SCOPE",
+    "B": "OPEN_TWO_GENUINE_WEB_CALLERS",
+    "C": "OPEN_GENUINE_WEB_SIBLING_CODING",
+    "D": "CONTROLLED_ROUTING_RECEIPTS_RETAINED_CURRENT_UNATTENDED_ROUTING_OPEN",
+    "E": "CONTROLLED_CONTEXT_HANDOFF_RETAINED_CONTINUOUS_OBSERVER_PARTIAL",
+    "F": "CONTROLLED_ROLLOVER_PASS_GENUINE_RESUMED_MCP_CODING_OPEN",
+    "G": "CONTROLLED_TWO_PROJECT_ROLLOVER_PASS_NOT_REPLAYED",
+    "H": "PARTIAL_CRITICAL_LIVE_PHASES",
+    "I": "CURRENT_DEVELOPMENT_SELECTION_BINDINGS_RESTART_PASS_FULL_WEB_CONTINUITY_OPEN",
+    "J": "PASS_CURRENT_BOUNDED_OWNERS_CLEANED"
+  },
+  "limitations": [
+    "This is the actual existing development runtime, not a disposable copy; protected C254 remains unchanged",
+    "No actual Web-origin tool call, independent Web coding, current protected feature promotion or unattended operation was proved",
+    "Connector was not retried; the last reported upstream429 and the stopped official serving owner remain separate dependencies",
+    "Managed Sol review is currently policy-blocked despite its provider-neutral review schema; no guard/model substitution/import was used",
+    "No browser was reopened during the development update and no completed canary or ambiguous request was replayed"
+  ],
+  "privateEvidenceSha256": {
+    "runtimeResult": "400f5af20e50270501d017cc3c4f26d3515d0448277ba29a6927e83a22a8cbb0",
+    "owner": "2a8ad82c5a00a0751822c87c4f49a492fe765f307c55e483be841fd3912fce84",
+    "cleanup": "4497d9eb7af3161860c60ef6bdefc88d4b49e034da68ceff629ca57fbdf76d02",
+    "eligibilityAndBrowser": "6e51b803ddb8e6d62b9b29e010a34610bf89b8e9efa13334410911f4af43fa86"
+  }
+}

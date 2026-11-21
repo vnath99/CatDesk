@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "purpose": "PARTIAL_SOURCE_REVIEW_ONLY_NOT_RELEASE_AUTHORITY",
+  "batchId": "b024",
+  "baseCommit": "e4a99a8b6913c3db689a216f4ae4e0a7f6fff612",
+  "sourceCommit": "549817859c94f56a7696f998848d8ace429b1663",
+  "patchBytes": 33401,
+  "sourcePaths": [
+    "wake/tests/test_adapter.py",
+    "wake/tests/test_new_conversation.py"
+  ],
+  "units": [
+    {
+      "unitId": "u114",
+      "path": "wake/tests/test_adapter.py",
+      "skipLines": 0,
+      "takeLines": 277,
+      "bytes": 19973,
+      "sha256": "4ef68b3377b77530fabb6c35cb6614ec706b548b1e002c1b7bb4dbdf55852119",
+      "baseBlob": "0e14ea83732dd8ad276b441b871da0b5102a6ab5",
+      "targetBlob": "7d2fdd9979ad870779e7fb4472aba6a5513e486f"
+    },
+    {
+      "unitId": "u115",
+      "path": "wake/tests/test_adapter.py",
+      "skipLines": 277,
+      "takeLines": 85,
+      "bytes": 5888,
+      "sha256": "84e46394d5120d94c55c5b86a469107f4915239cc151ecc1035bea3001efa678",
+      "baseBlob": "0e14ea83732dd8ad276b441b871da0b5102a6ab5",
+      "targetBlob": "7d2fdd9979ad870779e7fb4472aba6a5513e486f"
+    },
+    {
+      "unitId": "u116",
+      "path": "wake/tests/test_new_conversation.py",
+      "skipLines": 0,
+      "takeLines": 117,
+      "bytes": 7540,
+      "sha256": "25ac2bbb0457a2c43fef7f2a5d0880a10785da6329dbfbea7da3fef2020806d7",
+      "baseBlob": "eb9bae7c05beeb66897998f4cc234762373f5d98",
+      "targetBlob": "08b9c7502308981b4470161dc187b27b87595f9e"
+    }
+  ],
+  "cumulativeSourceAccepted": false,
+  "requiredReplyMarker": "NOV01_GIT_SOURCE_BATCH_ONLY",
+  "requiredReplyFields": [
+    "marker",
+    "sourceCommit",
+    "batchId",
+    "verdict",
+    "findings",
+    "inspectedUnitIds",
+    "inspectedPaths",
+    "limitations",
+    "cumulativeSourceAccepted"
+  ],
+  "permittedVerdicts": [
+    "REVIEWED_BATCH",
+    "FAIL",
+    "INCONCLUSIVE"
+  ]
+}

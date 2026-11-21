@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('install', 'start', 'status', 'diagnose', 'recover', 'stop', 'autostart', 'wake')]
+    [ValidateSet('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake')]
     [string]$Command,
     [Parameter(Position = 1)]
     [string]$AutostartAction = '',
@@ -12,6 +12,11 @@ param(
     [string]$ExpectedBuildSha256 = '',
     [string]$BuildFingerprintPath = '',
     [int]$ReadyTimeoutSeconds = 180,
+    [switch]$BackendOnly,
+    [string]$ObservationFile = '',
+    [string]$ProjectWorkspace = '',
+    [string]$WakeRoot = '',
+    [switch]$Human,
     [hashtable]$TestSeams = @{}
 )
 
@@ -24,7 +29,8 @@ $ErrorActionPreference = 'Stop'
 # facade-relative defaults only after parameter binding has completed.
 if ([string]::IsNullOrWhiteSpace($Workspace)) { $Workspace = $PSScriptRoot }
 if ([string]::IsNullOrWhiteSpace($BuildFingerprintPath)) {
-    $BuildFingerprintPath = Join-Path $PSScriptRoot 'target\release\catdesk.exe.sha256'
+    if ($Command -eq 'doctor') { $BuildFingerprintPath = Join-Path $Workspace 'target\release\catdesk.exe.sha256' }
+    else { $BuildFingerprintPath = Join-Path $PSScriptRoot 'target\release\catdesk.exe.sha256' }
 }
 $script:LifecycleSeams = $TestSeams
 $engineExpectedPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'scripts\start-catdesk-stack.ps1'))
@@ -48,12 +54,14 @@ try {
     $facadeExpectedBuildSha256 = $ExpectedBuildSha256
     $facadeBuildFingerprintPath = $BuildFingerprintPath
     $facadeReadyTimeoutSeconds = $ReadyTimeoutSeconds
-    . $enginePath -Workspace $facadeWorkspace -ConfigPath $facadeConfigPath -ExpectedBuildSha256 $facadeExpectedBuildSha256 -BuildFingerprintPath $facadeBuildFingerprintPath -ReadyTimeoutSeconds $facadeReadyTimeoutSeconds
+    $facadeBackendOnly = [bool]$BackendOnly
+    . $enginePath -Workspace $facadeWorkspace -ConfigPath $facadeConfigPath -ExpectedBuildSha256 $facadeExpectedBuildSha256 -BuildFingerprintPath $facadeBuildFingerprintPath -ReadyTimeoutSeconds $facadeReadyTimeoutSeconds -BackendOnly:$facadeBackendOnly
     $Workspace = $facadeWorkspace
     $ConfigPath = $facadeConfigPath
     $ExpectedBuildSha256 = $facadeExpectedBuildSha256
     $BuildFingerprintPath = $facadeBuildFingerprintPath
     $ReadyTimeoutSeconds = $facadeReadyTimeoutSeconds
+    $BackendOnly = $facadeBackendOnly
 } catch {
     [pscustomobject][ordered]@{ command = $Command; state = 'STATUS_UNAVAILABLE'; detail = 'stage=LIFECYCLE_INITIALIZATION' } |
         ConvertTo-Json -Compress
@@ -150,7 +158,7 @@ function Get-LifecycleLocalMcpReadinessResult {
         'READY', 'LOCAL_MCP_LISTENER_MISSING', 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH',
         'LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH', 'LOCAL_MCP_RESPONSE_TIMEOUT',
         'LOCAL_MCP_RESPONSE_UNAVAILABLE', 'LOCAL_MCP_RESPONSE_INVALID',
-        'LOCAL_MCP_PROTOCOL_UNREADY'
+        'LOCAL_MCP_PROTOCOL_UNREADY', 'LOCAL_MCP_AUTH_TOKEN_INVALID', 'LOCAL_MCP_AUTH_SCOPE_INVALID'
     )) { throw 'local MCP readiness gate is invalid' }
     return [pscustomobject]@{ Ready = [bool]$observed.Ready; Gate = $gate }
 }
@@ -289,27 +297,76 @@ function Get-LifecycleSha256Hex {
     }
 }
 
+function Get-AutostartSupervisorWorkspaceId {
+    param([string]$Root, [string]$Supervisor)
+    $file = Get-Item -LiteralPath $Supervisor -Force -ErrorAction Stop
+    if ($file -isnot [IO.FileInfo] -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'autostart supervisor is unavailable' }
+    # Read only the existing owner's identity function, avoiding its script
+    # parameter block and any top-level monitor action in this facade's scope.
+    $tokens = $null; $errors = $null
+    $ast = [Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors)
+    $definitions = @($ast.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-SupervisorWorkspaceId' }, $true))
+    if ($errors.Count -ne 0 -or $definitions.Count -ne 1) { throw 'autostart supervisor identity is unavailable' }
+    $reader = [scriptblock]::Create($definitions[0].Extent.Text + "`nGet-SupervisorWorkspaceId -Root `$args[0]")
+    $identity = & $reader $Root
+    if ($identity -isnot [string] -or $identity -cnotmatch '^[0-9a-f]{16}$') { throw 'autostart supervisor identity is unavailable' }
+    return $identity
+}
+
 function Get-AutostartDefinition {
+    param([bool]$LocalOnly = [bool]$BackendOnly)
     $root = (Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
+    $directory = Get-Item -LiteralPath $root -Force -ErrorAction Stop
+    if ($directory -isnot [IO.DirectoryInfo]) { throw 'autostart workspace is not a directory' }
+    # Preserve existing task/Run names and arguments. Only the singleton's
+    # directory identity is independent of caller casing.
     $workspaceId = (Get-LifecycleSha256Hex $root).Substring(0, 16)
     $supervisor = Join-Path $PSScriptRoot 'scripts\catdesk-autostart-supervisor.ps1'
     if (-not (Test-Path -LiteralPath $supervisor -PathType Leaf)) { throw 'autostart supervisor is unavailable' }
+    $supervisorWorkspaceId = Get-AutostartSupervisorWorkspaceId -Root $root -Supervisor $supervisor
     $powershellHost = Get-AutostartPowerShellHost
     $arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Workspace "{1}"' -f $supervisor, $root
     $monitorArguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Workspace "{1}" -InitialDelaySeconds 0' -f $supervisor, $root
+    if ($LocalOnly) { $arguments += ' -BackendOnly'; $monitorArguments += ' -BackendOnly' }
     $runKeyName = "CatDesk.Autostart.$workspaceId"
     [pscustomobject]@{
         TaskPath = '\'
         TaskName = $runKeyName
         WorkspaceId = $workspaceId
+        SupervisorWorkspaceId = $supervisorWorkspaceId
         Execute = $powershellHost
         Arguments = $arguments
         MonitorArguments = $monitorArguments
+        BackendOnly = $LocalOnly
         UserId = (Get-AutostartCurrentUser)
         RunKeyPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
         RunKeyName = $runKeyName
         RunKeyValue = ('"{0}" {1}' -f $powershellHost, $arguments)
     }
+}
+
+function Get-AutostartRegistration {
+    $definition = Get-AutostartDefinition
+    $alternate = Get-AutostartDefinition -LocalOnly:(-not $BackendOnly)
+    $task = Get-AutostartTask -Definition $definition
+    $runValue = Get-OwnedAutostartRunKeyValue -Definition $definition
+    $taskOwned = Test-OwnedAutostartTask -Task $task -Definition $definition
+    $runOwned = Test-OwnedAutostartRunKey -Value $runValue -Definition $definition
+    $alternateTaskOwned = Test-OwnedAutostartTask -Task $task -Definition $alternate
+    $alternateRunOwned = Test-OwnedAutostartRunKey -Value $runValue -Definition $alternate
+    $conflict = ''
+    if (($taskOwned -or $runOwned) -and ($alternateTaskOwned -or $alternateRunOwned)) {
+        $conflict = 'AUTOSTART_SCOPE_CONFLICT'
+    } elseif ($alternateTaskOwned -or $alternateRunOwned) {
+        $definition = $alternate
+        $taskOwned = $alternateTaskOwned
+        $runOwned = $alternateRunOwned
+    }
+    if (($null -ne $task -and -not $taskOwned) -or
+        (-not [string]::IsNullOrWhiteSpace([string]$runValue) -and -not $runOwned)) {
+        if (-not $conflict) { $conflict = 'AUTOSTART_CONFLICT' }
+    }
+    [pscustomobject]@{ Definition = $definition; TaskOwned = $taskOwned; RunOwned = $runOwned; Conflict = $conflict }
 }
 
 function Get-AutostartPowerShellHost {
@@ -491,9 +548,13 @@ function Test-AutostartSupervisorRunning {
         param($expected)
         $handle = $null
         try {
-            if ([Threading.Mutex]::TryOpenExisting("Local\CatDesk.Autostart.$($expected.WorkspaceId)", [ref]$handle)) {
-                $handle.Dispose()
-                return $true
+            $ids = @($expected.WorkspaceId)
+            if ($expected.PSObject.Properties['SupervisorWorkspaceId']) { $ids += $expected.SupervisorWorkspaceId }
+            foreach ($id in ($ids | Select-Object -Unique)) {
+                if ([Threading.Mutex]::TryOpenExisting("Local\CatDesk.Autostart.$id", [ref]$handle)) {
+                    $handle.Dispose()
+                    return $true
+                }
             }
         } catch {}
         if ($null -ne $handle) { try { $handle.Dispose() } catch {} }
@@ -501,11 +562,29 @@ function Test-AutostartSupervisorRunning {
     }
 }
 
+function New-AutostartSupervisorProcessStartInfo {
+    param($Definition)
+    $info = [Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = $Definition.Execute
+    $info.Arguments = $Definition.MonitorArguments
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    # The persisted owner is Windows PowerShell. Inheriting PowerShell 7's
+    # module path can select Core-only built-ins and make ordinary commands
+    # unavailable. Let the child initialize its host-appropriate module path;
+    # do not change the parent environment or the registered command identity.
+    $info.EnvironmentVariables.Remove('PSModulePath')
+    return $info
+}
+
 function Start-AutostartSupervisor {
     param($Definition)
     Invoke-LifecycleSeam -Name 'AutostartSupervisorStart' -Arguments @($Definition) -Default {
         param($expected)
-        Start-Process -FilePath $expected.Execute -ArgumentList $expected.MonitorArguments -WindowStyle Hidden -ErrorAction Stop | Out-Null
+        $process = [Diagnostics.Process]::Start((New-AutostartSupervisorProcessStartInfo -Definition $expected))
+        if ($null -eq $process) { throw 'autostart supervisor did not start' }
+        $process.Dispose()
     }
 }
 
@@ -544,21 +623,40 @@ function Unregister-OwnedAutostartTask {
 function Invoke-AutostartLifecycle {
     if ($AutostartAction -notin @('enable', 'status', 'disable')) { throw 'autostart requires enable, status, or disable' }
     try {
-        $definition = Get-AutostartDefinition
-        $task = Get-AutostartTask -Definition $definition
-        $taskOwned = Test-OwnedAutostartTask -Task $task -Definition $definition
-        $runValue = Get-OwnedAutostartRunKeyValue -Definition $definition
-        $runOwned = Test-OwnedAutostartRunKey -Value $runValue -Definition $definition
-        $taskConflict = ($null -ne $task -and -not $taskOwned)
-        $runConflict = (-not [string]::IsNullOrWhiteSpace([string]$runValue) -and -not $runOwned)
-        if ($taskConflict -or $runConflict) { Write-LifecycleStatus 'AUTOSTART_CONFLICT'; return }
+        $registration = Get-AutostartRegistration
+        if ($registration.Conflict) { Write-LifecycleStatus $registration.Conflict; return }
+        $definition = $registration.Definition
+        $taskOwned = $registration.TaskOwned
+        $runOwned = $registration.RunOwned
+        # Status observes either exact existing scope. Enabling must never
+        # convert it implicitly; explicit backend-only removal cannot remove a
+        # broader full-stack registration. Default disable removes its exact
+        # existing known definition, as before.
+        if (($taskOwned -or $runOwned) -and $definition.BackendOnly -ne [bool]$BackendOnly -and
+            ($AutostartAction -ceq 'enable' -or ($AutostartAction -ceq 'disable' -and $BackendOnly))) {
+            Write-LifecycleStatus 'AUTOSTART_SCOPE_CONFLICT'; return
+        }
+        $scopeDetail = if ($definition.BackendOnly) { 'scope=BACKEND_ONLY' } else { 'scope=FULL_STACK' }
         switch ($AutostartAction) {
             'status' {
-                if ($taskOwned -or $runOwned) { Write-LifecycleStatus 'AUTOSTART_ENABLED'; return }
+                if ($taskOwned -or $runOwned) {
+                    if (Test-AutostartSupervisorRunning -Definition $definition) { Write-LifecycleStatus 'AUTOSTART_ENABLED' $scopeDetail }
+                    else { Write-LifecycleStatus 'AUTOSTART_REGISTERED_MONITOR_STOPPED' $scopeDetail }
+                    return
+                }
+                if (Test-AutostartSupervisorRunning -Definition $definition) {
+                    Write-LifecycleStatus 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE'; return
+                }
                 Write-LifecycleStatus 'AUTOSTART_DISABLED'; return
             }
             'enable' {
                 if (-not $taskOwned -and -not $runOwned) {
+                    # Disable only removes persistence. A surviving monitor
+                    # has no independently established scope and must exit
+                    # before a new registration can label or reuse its guard.
+                    if (Test-AutostartSupervisorRunning -Definition $definition) {
+                        Write-LifecycleStatus 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE'; return
+                    }
                     $taskRegistered = $false
                     try {
                         Register-OwnedAutostartTask -Definition $definition
@@ -584,11 +682,16 @@ function Invoke-AutostartLifecycle {
                 # before reporting ENABLED, so a subsequent daemon-loss drill cannot
                 # strand control between registration and the next logon.
                 Ensure-AutostartSupervisorRunning -Definition $definition
-                Write-LifecycleStatus 'AUTOSTART_ENABLED'; return
+                Write-LifecycleStatus 'AUTOSTART_ENABLED' $scopeDetail; return
             }
             'disable' {
                 if ($taskOwned) { Unregister-OwnedAutostartTask -Definition $definition }
                 if ($runOwned) { Unregister-OwnedAutostartRunKey -Definition $definition }
+                # Removing persistence does not stop the live owner or prove
+                # quiescence. Reuse the same warning as enable's refusal.
+                if (Test-AutostartSupervisorRunning -Definition $definition) {
+                    Write-LifecycleStatus 'AUTOSTART_UNREGISTERED_MONITOR_ACTIVE'; return
+                }
                 Write-LifecycleStatus 'AUTOSTART_DISABLED'; return
             }
         }
@@ -604,12 +707,16 @@ function Invoke-CanonicalRecovery {
     # canonical release pair. Do not require canonical identity here: the
     # recovery engine first reconciles an interrupted reviewed promotion or a
     # persistent last-known-good pair, then revalidates identity before launch.
-    $raw = @(Invoke-LifecycleSeam -Name 'Recovery' -Arguments @($enginePath, $Workspace, $ConfigPath, $ExpectedBuildSha256, $BuildFingerprintPath, $ReadyTimeoutSeconds, $RequestedCommand) -Default {
-        param($engine, $root, $config, $expected, $manifest, $timeout, $requested)
+    $raw = @(Invoke-LifecycleSeam -Name 'Recovery' -Arguments @($enginePath, $Workspace, $ConfigPath, $ExpectedBuildSha256, $BuildFingerprintPath, $ReadyTimeoutSeconds, $RequestedCommand, [bool]$BackendOnly) -Default {
+        param($engine, $root, $config, $expected, $manifest, $timeout, $requested, $backend)
         # Both public start and recover use the same proven, release-only engine.
-        & $engine -Mode recover -Workspace $root -ConfigPath $config -ExpectedBuildSha256 $expected -BuildFingerprintPath $manifest -ReadyTimeoutSeconds $timeout -Execute
+        & $engine -Mode recover -Workspace $root -ConfigPath $config -ExpectedBuildSha256 $expected -BuildFingerprintPath $manifest -ReadyTimeoutSeconds $timeout -BackendOnly:$backend -Execute
     })
     $result = Get-LifecycleRecoveryResult -Raw $raw
+    if ($BackendOnly -and $null -ne $result -and $result.State -eq 'LOCAL_BACKEND_READY') {
+        Write-LifecycleStatus 'LOCAL_BACKEND_READY' 'scope=LOCAL_BACKEND_ONLY; Wake, GUI and official runtime not examined or started'
+        return
+    }
     if ($null -ne $result -and $result.State -eq 'LKG_AUTHORITY_MISSING') {
         Write-LifecycleStatus 'LKG_AUTHORITY_MISSING'
         return
@@ -655,7 +762,7 @@ function Get-LifecycleRecoveryResult {
         $state = [string]$parsed.State
         if ($parsed.PSObject.Properties['RecoverySource'] -and $parsed.RecoverySource -isnot [string]) { return $null }
         $source = if ($parsed.PSObject.Properties['RecoverySource']) { [string]$parsed.RecoverySource } else { '' }
-        if ($state -cnotin @('CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'RECOVERY_READY', 'LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED', 'TRANSPORT_VERIFICATION_FAILED')) {
+        if ($state -cnotin @('LOCAL_BACKEND_READY', 'CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'RECOVERY_READY', 'LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED', 'TRANSPORT_VERIFICATION_FAILED')) {
             return $null
         }
         if ($parsed.PSObject.Properties['Gate'] -and $parsed.Gate -isnot [string]) { return $null }
@@ -671,8 +778,11 @@ function Get-LifecycleRecoveryResult {
             'LOCAL_MCP_LISTENER_MISSING', 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH',
             'LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH', 'LOCAL_MCP_RESPONSE_TIMEOUT',
             'LOCAL_MCP_RESPONSE_UNAVAILABLE', 'LOCAL_MCP_RESPONSE_INVALID',
-            'LOCAL_MCP_PROTOCOL_UNREADY'
+            'LOCAL_MCP_PROTOCOL_UNREADY',
+            'LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED', 'LOCAL_MCP_AUTH_TOKEN_INVALID', 'LOCAL_MCP_AUTH_SCOPE_INVALID'
         )
+        if ($state -eq 'LOCAL_BACKEND_READY' -and -not $BackendOnly) { return $null }
+        if ($BackendOnly -and $state -in @('CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING')) { return $null }
         if ($state -eq 'TRANSPORT_VERIFICATION_FAILED') {
             if ($gate -cnotin $allowedGates) { return $null }
         } elseif ($state -eq 'CORE_CONNECTED_WAKE_PENDING') {
@@ -940,12 +1050,19 @@ function Invoke-CatDeskOnlyStop {
 }
 
 try {
+    if ($BackendOnly -and $Command -notin @('start', 'recover', 'autostart')) { throw 'BackendOnly is limited to start, recover and autostart' }
+    if ($Command -ne 'doctor' -and ($ObservationFile -or $ProjectWorkspace -or $WakeRoot -or $Human)) { throw 'doctor options require doctor' }
     switch ($Command) {
         'install' { Invoke-InstallPreparation }
         'start' { Invoke-CanonicalRecovery -RequestedCommand 'start' }
         'recover' { Invoke-CanonicalRecovery -RequestedCommand 'recover' }
         'status' { Get-NonMutatingStatus }
         'diagnose' { Invoke-LayeredDiagnosis }
+        'doctor' {
+            $doctorPath = Resolve-TrustedBootstrapHelperPath -Path (Join-Path $PSScriptRoot 'scripts/catdesk-doctor.ps1') -FailureMessage 'doctor helper unavailable'
+            . $doctorPath
+            Invoke-CatDeskDoctor -ObservationFile $ObservationFile -ProjectWorkspace $ProjectWorkspace -WakeRoot $WakeRoot -Human:$Human
+        }
         'stop' { Invoke-CatDeskOnlyStop }
         'autostart' { Invoke-AutostartLifecycle }
         'wake' { Invoke-WakePolicyLifecycle }
