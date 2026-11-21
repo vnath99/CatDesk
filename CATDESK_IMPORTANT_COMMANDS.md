@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 21 fixed verification.** For the first installed work cycle, use the assignment’s `verify-docs` profile through the scoped task dispatcher. In the disposable qualification, `python.exe -I -B scripts/catdesk_docs.py check` passed under the managed offline Windows sandbox with Git metadata read-only. Use the actual task’s successful verification call ID for `git.checkpoint` after qualified installation and delivery. [Dated evidence](docs/verification/WEB_FIXED_DOCS_SANDBOX_2026_11_21.json).
+
 **After first-broker provisioning.** The exact reviewed Host can run `install-broker preflight` for read-only broker, policy and same-state readback. An initial selection that uses the 06d fallback requires the existing signed `install-broker submit --approval-file <signed V3 approval>` path. Wait for exact qualifying candidate, previous-working and reconstruction receipts and the approved service owner before submitting. The existing `submit-local` command refuses reconstruction. The current first-broker command remains valid within its existing scope and expiry. [Dated evidence](docs/verification/EXACT_WAKE_SELECTION_INTAKE_2026_11_21.json).
 
 ## November 21, 16:57 UTC — Current operator procedure; older packets are expired

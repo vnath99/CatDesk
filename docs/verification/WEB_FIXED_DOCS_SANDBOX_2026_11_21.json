@@ -1,0 +1,62 @@
+{
+  "observedUtc": "2026-11-21T17:10:32.251453+00:00",
+  "scope": "DISPOSABLE_FIXED_DOC_VERIFICATION_THROUGH_OFFLINE_NATIVE_SANDBOX",
+  "taskDraftSha256": "ac2f7e3f3c4f00171f479b63bfe4f6e7f84ce4fb976bb0a98e6ad2469e18241e",
+  "baseCommit": "ac112e8c05c29566163dce8f6fb1f77f06a26a51",
+  "profile": "verify-docs",
+  "maxSeconds": 30,
+  "nativeCliSha256": "cefea4ffee1fff04983a99c0dda99944d8b380e891e740a28b32f4b815a6e0b7",
+  "gitMetadataReadOnly": true,
+  "networkEnabled": false,
+  "includeManagedConfig": true,
+  "code": 0,
+  "result": "PASS",
+  "streamsClosed": true,
+  "checkerErrors": [],
+  "internalLinksChecked": 521,
+  "stdoutSha256": "54ce797bb49ba5812eaeb0bc4bc429322d3cceeeb6ba66de1fa92d6d239018b1",
+  "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "worktreePostimageUnchanged": true,
+  "originalTaskCheckoutUnchanged": true,
+  "createdGitCheckpoint": false,
+  "taskGrantsCreated": 0,
+  "nativeModelCalls": 0,
+  "releaseWrites": 0,
+  "browserStarts": 0,
+  "wakeRequests": 0,
+  "schemaVersion": 1,
+  "developmentCommit": "232c2add89f17b3b5acf908f1d8ee177d3f38223",
+  "managedCli": {
+    "oldPinRefusedBeforeFixtureCreationOrSandboxStart": true,
+    "currentOpenAiAuthenticodeVerified": true,
+    "currentBinaryPinnedBeforeLaunch": true
+  },
+  "fixture": {
+    "kind": "DISPOSABLE_LOCAL_CLONE_WITH_SINGLE_DOC_POSTIMAGE",
+    "scopedFile": "CATDESK_IMPORTANT_COMMANDS.md",
+    "realAssignmentWorkspaceReadOnlyBaselinePassed": true,
+    "disposableCloneRetained": true,
+    "cleanupCommandRunnerRejection": "blocked by policy before execution",
+    "processInventoryMatches": 0
+  },
+  "owner": {
+    "scope": "EXISTING_KILL_ON_JOB_CLOSE_TEST_HARNESS",
+    "exited": true,
+    "streamsClosed": true,
+    "maximumOwnerSeconds": 65
+  },
+  "backendCompatibility": {
+    "installedSource": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "installedSourceExposesManualEndTurn": true,
+    "installedSourceExposesScopedCheckpoint": false,
+    "preparedBackendSource": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+    "preparedBackendSourceExposesManualEndTurnAndCheckpoint": true,
+    "candidateWakeSource": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "checkpointModuleGitBlobMatchesBothCandidates": "434fad84f7b197721f13624e1199d222f9729bd8",
+    "headlessProducerAndInstalledPairQualificationStillRequired": true,
+    "d22CompiledSourceEvidenceRetained": true,
+    "d22OriginalUnknownDeliveryReplayed": false
+  },
+  "sandboxTestCreatesCatDeskTaskVerificationReceipt": false,
+  "installedWebCycleAccepted": false
+}
