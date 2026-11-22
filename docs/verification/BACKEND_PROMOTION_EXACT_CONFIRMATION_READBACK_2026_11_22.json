@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T12:20:08.7795690Z",
+  "scope": "WINDOWS_NATIVE_REPEATED_REVIEWED_PROMOTION_CONFIRMATION",
+  "sourceCommit": "37ae571a09a37aedb05f82b77e85967fd13c7d53",
+  "baselineCommit": "13f959eaed764600a35942816f271192acd196c6",
+  "regression": {
+    "priorExactRepeatRefusedAfterSourcePairCheck": "REVIEWED_PROMOTION_SOURCE_PAIR_UNPROVEN",
+    "exactPendingRepeat": "CLAIMED_PENDING_UNPROVEN",
+    "exactTerminalRepeat": "PROMOTION_COMPLETED",
+    "originalAuthorizationBytesPreserved": true,
+    "originalClaimBytesPreserved": true,
+    "originalResultBytesPreserved": true,
+    "wrongTokenRefused": true,
+    "conflictingClaimRefused": true,
+    "unboundResultRefused": true,
+    "unboundResultMintedNoClaim": true,
+    "noWorkerOwnerCreated": true
+  },
+  "behavior": {
+    "exactTokenAndCandidateStillRequired": true,
+    "existingClaimMustMatchOriginalAuthorization": true,
+    "orphanResultOrWorkerMarkerRequiresReconciliation": true,
+    "returnsPendingOrTerminalEvidenceWithoutStartingAnotherWorker": true,
+    "freshPromotionKeepsReviewProducerAndSourcePairChecks": true,
+    "actualRecordedHealthNotInferredFromHistoricalCompletion": true
+  },
+  "tests": {
+    "windowsNativeReleasePassed": 60,
+    "windowsNativeReleaseFailed": 0,
+    "clippyAllTargetsWithWarningsDenied": "PASS",
+    "format": "PASS",
+    "diffCheck": "PASS"
+  },
+  "limits": "The regression used real disposable Windows files and exercised the public confirmation function. Its promotion authority, claim and result are isolated fixtures. No production claim or actual reviewed promotion was executed.",
+  "productionActions": 0,
+  "installedPromotionAccepted": false,
+  "installedRollbackAccepted": false,
+  "webCycleAccepted": false
+}

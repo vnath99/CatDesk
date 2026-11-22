@@ -1230,3 +1230,11 @@ Evidence: [docs/verification/BACKEND_ROLLBACK_POST_PROBE_OWNER_2026_11_22.json](
 Agent: Codex. Source: 297595d87505073ecceafe7afb11b9fadf4ff965. Outcome: partial. The exact installed and frozen compatible backend images both refused the read-only one-hash resolver without state writes. The facade now identifies the legacy response before candidate launch. The original authenticated reviewed promotion remains the path for this candidate after review and attestation.. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and use the existing authenticated reviewed promotion for this legacy candidate. Verify installed startup and rollback, and confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/BACKEND_PROMOTION_LEGACY_RESOLVER_PROTOCOL_2026_11_22.json](docs/verification/BACKEND_PROMOTION_LEGACY_RESOLVER_PROTOCOL_2026_11_22.json); command: scripts/test-catdesk-lifecycle.ps1 and exact legacy binary probes; exit 0; SHA-256 6107d226526b3edd9933f7b02a7443991b59146212138ddc4123477e06773ae0.
+
+<!-- catdesk-activity:backend-exact-promotion-confirmation-20261122 sha256:77c30b7759b2e98032c79c00c635cddaa0a6fd4fb5794bdd1f24d12fa747c050 -->
+
+## 2026-11-22T12:20:08Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 37ae571a09a37aedb05f82b77e85967fd13c7d53. Outcome: partial. Native promotion confirmation now reads the exact consumed transaction before publishing any authorization. The Windows regression preserved the original claim, authorization and result while refusing conflicting or unbound records. Sixty release tests passed.. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and use the existing authenticated reviewed promotion for this legacy candidate. Verify installed startup and rollback, and confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/BACKEND_PROMOTION_EXACT_CONFIRMATION_READBACK_2026_11_22.json](docs/verification/BACKEND_PROMOTION_EXACT_CONFIRMATION_READBACK_2026_11_22.json); command: cargo test --locked --offline --bin catdesk daemon_reload::; exit 0; SHA-256 dcb9dc9523d5bf7d63600dedc9d008de1f7e7d0b483979db350de57d63dfc17c.
