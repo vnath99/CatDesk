@@ -136,8 +136,15 @@ pub(crate) enum OperatorAction {
         expected_current_target_sha256: String,
     },
     ReviewedBuild(ReviewedBuildOperatorAction),
-    PromoteReviewedBackend { candidate_sha256: String },
-    ResolveReviewedBackendPromotion { candidate_sha256: String },
+    PromoteReviewedBackend {
+        candidate_sha256: String,
+    },
+    ResolveReviewedBackendPromotion {
+        candidate_sha256: String,
+    },
+    ObserveReviewedBackendPromotion {
+        candidate_sha256: String,
+    },
     ReleasePair(ReleasePairOperatorAction),
     RepairWakeBridgeEnvironment,
     CoreHostAcceptancePreflight,
@@ -328,18 +335,23 @@ pub(crate) fn parse_operator_action(
         Some("wake-target") => parse_wake_target_action(&args),
         Some("designated-chat-target") => parse_designated_chat_target_action(&args),
         Some("reviewed-build") => parse_reviewed_build_action(&args),
-        Some(action @ ("promote" | "promote-resolve")) if args.len() == 3
-            && args[2].len() == 64
-            && args[2].bytes().all(|byte| byte.is_ascii_hexdigit()) =>
+        Some(action @ ("promote" | "promote-resolve" | "promote-result"))
+            if args.len() == 3
+                && args[2].len() == 64
+                && args[2].bytes().all(|byte| byte.is_ascii_hexdigit()) =>
         {
             let candidate_sha256 = args[2].to_ascii_lowercase();
-            Ok(Some(if action == "promote-resolve" {
-                OperatorAction::ResolveReviewedBackendPromotion { candidate_sha256 }
-            } else {
-                OperatorAction::PromoteReviewedBackend { candidate_sha256 }
+            Ok(Some(match action {
+                "promote-resolve" => {
+                    OperatorAction::ResolveReviewedBackendPromotion { candidate_sha256 }
+                }
+                "promote-result" => {
+                    OperatorAction::ObserveReviewedBackendPromotion { candidate_sha256 }
+                }
+                _ => OperatorAction::PromoteReviewedBackend { candidate_sha256 },
             }))
         }
-        Some("promote" | "promote-resolve") => {
+        Some("promote" | "promote-resolve" | "promote-result") => {
             Err("operator promote requires one full artifact SHA-256".into())
         }
         Some("release-pair") => parse_release_pair_action(&args),
@@ -1277,7 +1289,8 @@ pub(crate) async fn execute_operator_action(
             #[cfg(windows)]
             {
                 let release = crate::reviewed_build::active_reviewed_promotion_candidate(
-                    workspace, &candidate_sha256,
+                    workspace,
+                    &candidate_sha256,
                 )?;
                 Ok(json!({
                     "state":"PROMOTION_CANDIDATE_RESOLVED",
@@ -1291,11 +1304,24 @@ pub(crate) async fn execute_operator_action(
                 Err("reviewed backend promotion requires Windows".into())
             }
         }
+        OperatorAction::ObserveReviewedBackendPromotion { candidate_sha256 } => {
+            #[cfg(windows)]
+            {
+                crate::daemon_reload::observe_local_reviewed_promotion(workspace, &candidate_sha256)
+                    .map_err(|_| "REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY".into())
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = candidate_sha256;
+                Err("REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY".into())
+            }
+        }
         OperatorAction::PromoteReviewedBackend { candidate_sha256 } => {
             #[cfg(windows)]
             {
                 crate::delegated::autonomy_supervisor::promote_active_backend(
-                    workspace, &candidate_sha256,
+                    workspace,
+                    &candidate_sha256,
                 )
             }
             #[cfg(not(windows))]
@@ -3655,10 +3681,17 @@ mod tests {
         );
         for args in [
             vec!["operator", "promote"],
-            vec!["operator", "promote", "56aa9912fe790bc50084329aa4932b02c0bbfc4e"],
+            vec![
+                "operator",
+                "promote",
+                "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+            ],
             vec!["operator", "promote", "./target/release/catdesk.exe"],
             vec!["operator", "promote", &digest, "--force"],
             vec!["operator", "promote-resolve", &digest, "--workspace"],
+            vec!["operator", "promote-result"],
+            vec!["operator", "promote-result", "./target/release/catdesk.exe"],
+            vec!["operator", "promote-result", &digest, "--workspace"],
         ] {
             assert!(parse_operator_action(args.into_iter().map(str::to_string)).is_err());
         }

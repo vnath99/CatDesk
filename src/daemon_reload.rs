@@ -836,13 +836,7 @@ pub fn run_reviewed_promotion_worker(args: ReviewedPromotionWorkerArgsV1) -> Res
         &reviewed_promotion_claim_path(&workspace),
         "reviewed promotion claim",
     )?;
-    if claim.schema_version != 1
-        || claim.state != "CLAIMED_PENDING"
-        || claim.authorization_id != authorization.authorization_id
-        || claim.claim_id != authorization.claim_id
-        || claim.transaction_id != authorization.transaction_id
-        || claim.candidate_relative_path != authorization.candidate_relative_path
-    {
+    if !promotion_claim_matches(&claim, &authorization) {
         return Err("reviewed promotion claim is unavailable".into());
     }
     let attestation = validate_producer_attestation(
@@ -991,26 +985,123 @@ pub fn reviewed_promotion_result(
         return Ok(None);
     }
     let result: ReviewedPromotionResultV1 = read_bounded_json(&path, "reviewed promotion result")?;
-    if result.schema_version != 1
-        || !matches!(
-            result.state.as_str(),
-            "PROMOTION_COMPLETED" | "PROMOTION_FAILED_OR_AMBIGUOUS"
-        )
-        || result.candidate_sha256.len() != 64
-        || result.transaction_id.len() != 32
-        || !result
-            .transaction_id
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit())
-        || result
-            .serving_state
-            .as_deref()
-            .is_some_and(|state| !matches!(state, "STOPPED_AFTER_BOUNDED_OWNER" | "UNVERIFIED"))
-        || (result.serving_state.is_some() && result.state != "PROMOTION_COMPLETED")
-    {
+    if !valid_promotion_result(&result) {
         return Err("reviewed promotion result is malformed".into());
     }
     Ok(Some(result))
+}
+
+fn valid_promotion_result(result: &ReviewedPromotionResultV1) -> bool {
+    result.schema_version == 1
+        && matches!(
+            result.state.as_str(),
+            "PROMOTION_COMPLETED" | "PROMOTION_FAILED_OR_AMBIGUOUS"
+        )
+        && result.candidate_sha256.len() == 64
+        && result
+            .candidate_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        && result.transaction_id.len() == 32
+        && result
+            .transaction_id
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        && result.serving_state.as_deref().is_none_or(|state| {
+            result.state == "PROMOTION_COMPLETED"
+                && matches!(state, "STOPPED_AFTER_BOUNDED_OWNER" | "UNVERIFIED")
+        })
+}
+
+fn promotion_claim_matches(
+    claim: &ReviewedPromotionClaimV1,
+    authorization: &ReviewedPromotionAuthorizationV1,
+) -> bool {
+    claim.schema_version == 1
+        && claim.state == "CLAIMED_PENDING"
+        && claim.authorization_id == authorization.authorization_id
+        && claim.claim_id == authorization.claim_id
+        && claim.transaction_id == authorization.transaction_id
+        && claim.candidate_relative_path == authorization.candidate_relative_path
+}
+
+/// Observe the active claimed promotion without creating a claim, acquiring a
+/// mutation lease, or requiring the canonical executable or daemon to be ready.
+#[cfg(windows)]
+pub(crate) fn observe_local_reviewed_promotion(
+    workspace: &Path,
+    expected_sha256: &str,
+) -> Result<serde_json::Value, String> {
+    use crate::windows_protected_fs::{
+        ProtectedDirectoryGuard, read_optional_relative_regular, read_relative_regular,
+    };
+    use serde_json::json;
+
+    const LABEL: &str = "reviewed promotion readback";
+    const UNVERIFIED: &str = "REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY";
+
+    let sha = normalize_sha256(expected_sha256)?;
+    let missing = || {
+        json!({
+            "state":"PROMOTION_RESULT_NOT_LOCATED_NO_RETRY", "candidateSha256":sha,
+            "readOnly":true
+        })
+    };
+    let workspace = canonical_directory(workspace, LABEL)?;
+    let mut control = ProtectedDirectoryGuard::acquire_read_only(&workspace, LABEL)?;
+    if !control.descend_optional_existing(".catdesk", LABEL)?
+        || !control.descend_optional_existing("promotion-control", LABEL)?
+    {
+        return Ok(missing());
+    }
+    let Some(claim) = read_optional_relative_regular(&control, "claim.json", 8192, LABEL)? else {
+        return Ok(missing());
+    };
+    let claim: ReviewedPromotionClaimV1 = serde_json::from_slice(&claim).map_err(|_| UNVERIFIED)?;
+    let authorization: ReviewedPromotionAuthorizationV1 = serde_json::from_slice(
+        &read_relative_regular(&control, "authorization.json", 8192, LABEL)?,
+    )
+    .map_err(|_| UNVERIFIED)?;
+    if authorization.schema_version != 1
+        || authorization.generation == 0
+        || !promotion_claim_matches(&claim, &authorization)
+        || authorization.transaction_id.len() != 32
+        || !authorization
+            .transaction_id
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(UNVERIFIED.into());
+    }
+    if authorization.candidate_sha256 != sha {
+        return Ok(missing());
+    }
+    let Some(result) = read_optional_relative_regular(&control, "result.json", 4096, LABEL)? else {
+        return Ok(json!({
+            "state":"PROMOTION_RESULT_PENDING_NO_RETRY", "candidateSha256":sha,
+            "authorizationGeneration":authorization.generation,
+            "transactionId":authorization.transaction_id, "readOnly":true
+        }));
+    };
+    let result: ReviewedPromotionResultV1 =
+        serde_json::from_slice(&result).map_err(|_| UNVERIFIED)?;
+    if !valid_promotion_result(&result)
+        || result.candidate_sha256 != sha
+        || result.transaction_id != authorization.transaction_id
+        || result.authorization_generation != authorization.generation
+        || (!authorization.local_backend_only && result.serving_state.is_some())
+        || (authorization.local_backend_only
+            && result.state == "PROMOTION_COMPLETED"
+            && result.serving_state.is_none())
+    {
+        return Err(UNVERIFIED.into());
+    }
+    Ok(json!({
+        "state":result.state, "candidateSha256":sha,
+        "authorizationGeneration":result.authorization_generation,
+        "transactionId":result.transaction_id, "recordedServingState":result.serving_state,
+        "readOnly":true
+    }))
 }
 
 #[cfg(windows)]
@@ -3510,6 +3601,102 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn routine_promote_result_reads_only_the_bound_native_records_offline() {
+        use crate::operator_facade::{execute_operator_action, parse_operator_action};
+
+        let root = temp_workspace("promotion-offline");
+        let mut authorization = sample_reviewed_promotion_authorization();
+        authorization.local_backend_only = true;
+        authorization.expires_at_unix = 0;
+        let digest = authorization.candidate_sha256.clone();
+        let run = |sha: &str| {
+            let action =
+                parse_operator_action(["operator", "promote-result", sha].map(str::to_owned))
+                    .unwrap()
+                    .unwrap();
+            execute_operator_action(action, &root)
+        };
+        assert_eq!(
+            run(&digest).await.unwrap()["state"],
+            "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
+        );
+        assert!(!root.join(".catdesk").exists());
+        let control = reviewed_promotion_control_dir(&root);
+        fs::create_dir_all(&control).unwrap();
+        let claim = ReviewedPromotionClaimV1 {
+            schema_version: 1,
+            authorization_id: authorization.authorization_id.clone(),
+            claim_id: authorization.claim_id.clone(),
+            transaction_id: authorization.transaction_id.clone(),
+            candidate_relative_path: authorization.candidate_relative_path.clone(),
+            state: "CLAIMED_PENDING".into(),
+        };
+        let mut result = ReviewedPromotionResultV1 {
+            schema_version: 1,
+            state: "PROMOTION_COMPLETED".into(),
+            authorization_generation: authorization.generation,
+            candidate_sha256: digest.clone(),
+            transaction_id: authorization.transaction_id.clone(),
+            serving_state: Some("STOPPED_AFTER_BOUNDED_OWNER".into()),
+        };
+        let result_path = reviewed_promotion_result_path(&root);
+        let auth_path = reviewed_promotion_authorization_path(&root);
+        let claim_path = reviewed_promotion_claim_path(&root);
+        atomic_json_write(&result_path, &result).unwrap();
+        // A bare receipt cannot identify an active attempt.
+        assert_eq!(
+            run(&digest).await.unwrap()["state"],
+            "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
+        );
+        fs::remove_file(&result_path).unwrap();
+        atomic_json_write(&auth_path, &authorization).unwrap();
+        atomic_json_write(&claim_path, &claim).unwrap();
+        let pending = run(&digest).await.unwrap();
+        assert_eq!(pending["state"], "PROMOTION_RESULT_PENDING_NO_RETRY");
+        assert_eq!(pending["transactionId"], authorization.transaction_id);
+        assert_eq!(
+            run(&"0".repeat(64)).await.unwrap()["state"],
+            "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
+        );
+        atomic_json_write(&result_path, &result).unwrap();
+        let before = [&auth_path, &claim_path, &result_path].map(|path| fs::read(path).unwrap());
+        let read = run(&digest.to_ascii_uppercase()).await.unwrap();
+        assert_eq!(read["state"], "PROMOTION_COMPLETED");
+        assert_eq!(read["recordedServingState"], "STOPPED_AFTER_BOUNDED_OWNER");
+        assert_eq!(read["authorizationGeneration"], authorization.generation);
+        assert_eq!(read["readOnly"], true);
+        assert_eq!(
+            [&auth_path, &claim_path, &result_path].map(|path| fs::read(path).unwrap()),
+            before
+        );
+        assert_eq!(fs::read_dir(&control).unwrap().count(), 3);
+        assert!(!root.join("target").exists());
+        for (transaction, generation) in [
+            ("9".repeat(32), authorization.generation),
+            (
+                authorization.transaction_id.clone(),
+                authorization.generation + 1,
+            ),
+        ] {
+            result.transaction_id = transaction;
+            result.authorization_generation = generation;
+            atomic_json_write(&result_path, &result).unwrap();
+            assert_eq!(
+                run(&digest).await.unwrap_err(),
+                "REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY"
+            );
+        }
+        fs::remove_file(&result_path).unwrap();
+        fs::create_dir(&result_path).unwrap();
+        assert_eq!(
+            run(&digest).await.unwrap_err(),
+            "REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
     fn sample_release_pair_authorization() -> ReleasePairReconcileAuthorizationV1 {
         ReleasePairReconcileAuthorizationV1 {
             schema_version: 1,
@@ -3534,13 +3721,10 @@ mod tests {
     }
 
     #[cfg(windows)]
-    #[test]
-    fn powershell_accepts_actual_rust_promotion_schema_and_rejects_stale_or_changed_proofs() {
+    fn sample_reviewed_promotion_authorization() -> ReviewedPromotionAuthorizationV1 {
         use crate::reviewed_source_snapshot::{
             ReviewedSourceBaselineObservationV1, ReviewedSourceCurrentOutputV1,
         };
-        use base64::Engine as _;
-        let root = temp_workspace("promotion-wire-schema");
         let expected = ReviewedSourceSnapshotExpectedV1 {
             session_id: "fixture-session".into(),
             project_id: "catdesk".into(),
@@ -3557,7 +3741,7 @@ mod tests {
                 sha256: None,
             }],
         };
-        let mut authorization = ReviewedPromotionAuthorizationV1 {
+        ReviewedPromotionAuthorizationV1 {
             schema_version: 1,
             generation: 1,
             authorization_id: "c".repeat(32),
@@ -3583,7 +3767,15 @@ mod tests {
             rustc_sha256: "c".repeat(64),
             snapshot_expected: expected,
             local_backend_only: false,
-        };
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn powershell_accepts_actual_rust_promotion_schema_and_rejects_stale_or_changed_proofs() {
+        use base64::Engine as _;
+        let root = temp_workspace("promotion-wire-schema");
+        let mut authorization = sample_reviewed_promotion_authorization();
         let legacy_wire = serde_json::to_value(&authorization).unwrap();
         assert!(legacy_wire.get("localBackendOnly").is_none());
         let mut local_profile = authorization.clone();

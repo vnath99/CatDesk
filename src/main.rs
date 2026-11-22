@@ -2969,13 +2969,24 @@ fn operator_release_pair_error_code(error: &str) -> &'static str {
 fn operator_promote_error_code(error: &str) -> &'static str {
     match error {
         "operator promote requires one full artifact SHA-256"
-        | "REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED" => "REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED",
-        "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD" => "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD",
-        "REVIEWED_PROMOTION_ACTIVE_ARTIFACT_MISMATCH" => "REVIEWED_PROMOTION_ACTIVE_ARTIFACT_MISMATCH",
+        | "REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED" => {
+            "REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED"
+        }
+        "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD" => {
+            "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD"
+        }
+        "REVIEWED_PROMOTION_ACTIVE_ARTIFACT_MISMATCH" => {
+            "REVIEWED_PROMOTION_ACTIVE_ARTIFACT_MISMATCH"
+        }
         "REVIEWED_PROMOTION_USE_ATTESTED_CANDIDATE_CONTROLLER" => {
             "REVIEWED_PROMOTION_USE_ATTESTED_CANDIDATE_CONTROLLER"
         }
-        "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED" => "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED",
+        "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED" => {
+            "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED"
+        }
+        "REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY" => {
+            "REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY"
+        }
         "REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED" => {
             "REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED"
         }
@@ -3008,7 +3019,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let operator_release_pair = args.first().is_some_and(|arg| arg == "operator")
         && args.get(1).is_some_and(|arg| arg == "release-pair");
     let operator_promote = args.first().is_some_and(|arg| arg == "operator")
-        && args.get(1).is_some_and(|arg| matches!(arg.as_str(), "promote" | "promote-resolve"));
+        && args.get(1).is_some_and(|arg| {
+            matches!(
+                arg.as_str(),
+                "promote" | "promote-resolve" | "promote-result"
+            )
+        });
     match operator_facade::parse_operator_action(args.clone()) {
         Ok(Some(action)) => {
             let workspace = std::env::current_dir()?;
