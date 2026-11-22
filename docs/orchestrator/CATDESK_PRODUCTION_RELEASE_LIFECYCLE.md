@@ -1150,9 +1150,15 @@ MCP readiness. A legacy or mismatched-profile receipt cannot qualify it.
 
 Disk promotion completion is separate from persistent serving. The local result
 records `servingState=STOPPED_AFTER_BOUNDED_OWNER` when the bounded owner is proved
-stopped, or `UNVERIFIED` when that proof is absent. Neither value proves a running
-backend. After a supporting release is genuinely promoted and its installed
-identity is verified, start it separately through the public lifecycle:
+stopped, or `UNVERIFIED` when that proof is absent. A supporting one-hash
+facade can observe an existing registered backend-only supervisor after it
+releases the backend. `LOCAL_BACKEND_READY` requires the exact selected release,
+a stable local process, rejection of anonymous access, and authenticated MCP.
+The wait window is capped at 90 seconds. This step starts no process and changes
+no registration. [Isolated qualification](../verification/ONE_HASH_PROMOTION_SERVING_READBACK_2026_11_22.json).
+
+If an eligible monitor is absent, use the public lifecycle for startup after
+independently confirming genuine promotion and exact installed identity:
 
 ```powershell
 .\catdesk.ps1 start -BackendOnly -ReadyTimeoutSeconds 60

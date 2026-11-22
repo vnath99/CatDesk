@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_ONE_HASH_FACADE_SERVING_READBACK_ON_A_DISPOSABLE_WINDOWS_BACKEND",
+  "sourceCommit": "dc3aa483f378265dee2ed4f6b37ad65e6e6b30e6",
+  "verifiedUtc": "2026-11-22T07:55:46Z",
+  "fixtureSha256": "ea3cdc28cf8af6119a52d136b6ff3d47157690e2737529d3f439338eee3705f0",
+  "fixture": {
+    "startedUtc": "2026-11-22T07:55:07.861430Z",
+    "finishedUtc": "2026-11-22T07:55:27.589820Z",
+    "artifactSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+    "observation": {
+      "command": "promote",
+      "state": "PROMOTION_COMPLETED",
+      "detail": "LOCAL_BACKEND_READY"
+    },
+    "anonymousStatus": 401,
+    "authenticatedStatusAfterFacadeExit": 200,
+    "exactWindowsListenerOwnerReadback": true,
+    "testBackendExitedNaturally": true,
+    "testListenerClosed": true,
+    "fixtureRemoved": true,
+    "fixtureOnly": [
+      "Native promotion response and selection authority",
+      "Autostart registration and active signal",
+      "Support for private headless listener mode"
+    ]
+  },
+  "sourceBehavior": {
+    "existingMonitorIsOnlyAWaitSignal": true,
+    "waitWindowCappedAtSeconds": 90,
+    "launchesNoBackendOrSupervisor": true,
+    "requiresExactCanonicalPairAndStableProcess": true,
+    "requiresAnonymousRejectionAndAuthenticatedMcp": true,
+    "pendingOrUnverifiedServingPreservesCompletedDiskResult": true
+  },
+  "regressionTests": {
+    "lifecycleWindowsPowerShell51AndPowerShell7": "PASS",
+    "bootstrapWindowsPowerShell51AndPowerShell7": "PASS",
+    "absentListenerAndOwnerDriftRefuseReadiness": true,
+    "anonymousAcceptanceAndMissingBearerRefuseReadiness": true
+  },
+  "productionPortUsed": false,
+  "protectedInstallationChanged": false,
+  "nativeSupervisorRegistrationChanged": false,
+  "installedAcceptance": false
+}

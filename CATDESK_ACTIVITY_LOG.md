@@ -974,3 +974,11 @@ Evidence: [docs/verification/BACKEND_ONLY_SUPERVISOR_REVIEWED_FALLBACK_2026_11_2
 Agent: CatDesk development. Source: ec8b587de852ca4ea36dd1b6485ee5f91a00a740. Outcome: partial. Startup, status and diagnosis now share the release fence. Both PowerShell hosts passed. A real Windows lease deferred the isolated supervisor. After release the supervisor restored the exact verified fallback and authenticated MCP. Next: Qualify installed promotion and rollback after the frozen backend receives eligible independent review and producer evidence. Verify the existing signed Wake V3 selection and qualify protected Wake receipt publication.
 
 Evidence: [docs/verification/RELEASE_STARTUP_AND_STATUS_OWNERSHIP_2026_11_22.json](docs/verification/RELEASE_STARTUP_AND_STATUS_OWNERSHIP_2026_11_22.json); command: Bounded Windows shared lease, public status, diagnosis, supervisor and restored MCP fixture; exit 0; SHA-256 890d476c6ce32bfeb3e33600f54b45f319f6cfc8ade27b755c3b90f3b9c3e400.
+
+<!-- catdesk-activity:one-hash-serving-readback-20261122T075546Z sha256:36ec162d3a45b30bb0c76e6658b5b9fe6a68d204d87880bcd01e58963cb4ef95 -->
+
+## 2026-11-22T07:55:46Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: dc3aa483f378265dee2ed4f6b37ad65e6e6b30e6. Outcome: partial. The one-hash facade can wait for an existing backend-only monitor then verify the exact selected daemon and authenticated MCP. A real isolated backend rejected anonymous access and answered after the facade exited. Protected promotion and monitor registration used fixture authority. Next: Qualify installed promotion and rollback after the frozen backend receives eligible independent review and producer evidence. Verify the existing signed Wake V3 selection and qualify protected Wake receipt publication.
+
+Evidence: [docs/verification/ONE_HASH_PROMOTION_SERVING_READBACK_2026_11_22.json](docs/verification/ONE_HASH_PROMOTION_SERVING_READBACK_2026_11_22.json); command: Bounded Windows one-hash facade and actual private-port authenticated MCP fixture; exit 0; SHA-256 13991ba17b787018623916fdb2326c24de3a48d46fc21ed767dd2f7cc8fc801a.
