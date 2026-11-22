@@ -2017,8 +2017,8 @@ pub(crate) mod tests {
             qualify_frozen_manual_wake_admission(Path::new(image), &f, &wake, &event, event_id)
                 .await;
         } else {
-            // Keep the transport and verification real. Only the first
-            // delivery receipt is synthetic, and the test must never send.
+            // Keep transport, verification and Git real. Browser effects
+            // are simulated only after the existing guarded submission fence.
             assert_eq!(
                 fs::read(wake.root().join("runtime/python.exe")).unwrap(),
                 b"inert fixture Python"
@@ -2027,7 +2027,8 @@ pub(crate) mod tests {
             let queue_path = wake.root().join("queue").join(format!("{event_id}.json"));
             let before = fs::read(&queue_path).unwrap();
             let assigned_file = f.task.join("src/lib.rs");
-            let mut changed = fs::read(&assigned_file).unwrap();
+            let verified_bytes = fs::read(&assigned_file).unwrap();
+            let mut changed = verified_bytes.clone();
             changed.extend_from_slice(b"\n// Unverified change after the queued Wake\n");
             fs::write(&assigned_file, changed).unwrap();
             assert_eq!(
@@ -2055,6 +2056,84 @@ pub(crate) mod tests {
                     .join(format!("submission-start-{event_id}.json"))
                     .exists()
             );
+            fs::write(&assigned_file, &verified_bytes).unwrap();
+            let interrupted =
+                crate::web_work::fixture_manual_submission_fence(&f.control, project).unwrap();
+            assert_eq!(interrupted["phase"], "SUBMITTING");
+            assert_eq!(interrupted["eventId"], event_id);
+            assert_eq!(interrupted["requestId"], "request-a");
+            assert_eq!(interrupted["taskCallId"], "end-turn");
+            let prior = wake.delivery(event_id).unwrap().unwrap();
+            assert!(prior.receipt.is_none());
+            assert!(wake.timer(event_id).unwrap().is_none());
+            let scope = resolve_registered_project_from_control_root(&f.control, project).unwrap();
+            let ledger =
+                crate::web_work_state::WorkLedger::open_read_only(&f.control, project).unwrap();
+            let record = ledger.record("request-a").unwrap().unwrap();
+            crate::project_mcp_task::require_journaled_manual_wake(&scope, &record, &prior)
+                .unwrap();
+            let receipt = Receipt {
+                schema_version: 1,
+                event_id: event_id.into(),
+                target_generation: prior.target.generation,
+                target_digest: prior.target.digest.clone(),
+                message_digest: prior.message_digest.clone(),
+                sent_utc: catdesk_wake::store::now(),
+                evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+            };
+            wake.reconcile_task_continuation_sent_expected(event_id, receipt.clone(), &prior)
+                .unwrap();
+            let resolution = json!({"projectId":project,"requestId":"request-a",
+                "expectedTargetGeneration":prior.target.generation,"expectedTargetSha256":prior.target.digest,
+                "outcome":"completed","summary":"Fixture continuation completed"});
+            assert_eq!(
+                crate::web_work::resolve(&f.control, resolution.clone()).unwrap_err(),
+                "WEB_WORK_CONTINUATION_PENDING"
+            );
+
+            // This is a fresh authenticated MCP call under the original grant,
+            // with the checkpoint at the exact current HEAD on the new turn.
+            let next_read = request(&f, "after-self-wake", "read", json!({"path":"src/lib.rs"}));
+            let answer = rpc(next_read.clone()).await;
+            expect_success(&answer);
+            assert!(
+                answer["result"]["structuredContent"]["payload"]
+                    .to_string()
+                    .contains("{ 42 }")
+            );
+            assert_eq!(
+                rpc(next_read).await["error"]["message"],
+                "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+            );
+            let run = crate::delegated::contracts::RunId::new("task-fixture").unwrap();
+            let journal = crate::delegated::journal::DelegatedJournal::open(
+                &f.control
+                    .join(".catdesk/project-mcp-tasks")
+                    .join(project)
+                    .join("task-fixture/journal"),
+            )
+            .unwrap();
+            let calls = journal.load_tool_calls(&run).unwrap();
+            assert_eq!(
+                calls["after-self-wake"].status,
+                crate::delegated::journal::ToolCallStatus::Completed
+            );
+            assert_eq!(calls["after-self-wake"].tool_name, "read");
+            assert_eq!(fs::read(&assigned_file).unwrap(), verified_bytes);
+            assert_eq!(fs::read(f.native.join("src/lib.rs")).unwrap(), original);
+            assert_eq!(
+                crate::web_work::deliver_next_manual_wake(&f.control, project).unwrap_err(),
+                "WEB_TASK_MANUAL_WAKE_NO_PENDING_INTENT"
+            );
+            // The fixture's assistant response completes only this bound timer.
+            wake.complete_timer(event_id).unwrap();
+            assert_eq!(
+                wake.delivery(event_id).unwrap().unwrap().receipt,
+                Some(receipt)
+            );
+            let closed = crate::web_work::resolve(&f.control, resolution).unwrap();
+            assert_eq!(closed["phase"], "CLOSED");
+            assert_eq!(closed["taskCompletionVerified"], false);
         }
         drop(client);
         if let Some((stop, server)) = local_server {
@@ -2091,7 +2170,7 @@ pub(crate) mod tests {
             );
         } else {
             println!(
-                "development backend: authenticated edit, sandbox verification, Git checkpoint, queued manual Wake held after worktree change, listener and fixture cleanup"
+                "development backend: authenticated edit, sandbox verification, Git checkpoint, guarded Wake fence, simulated receipt and response, authenticated same-task next read, listener and fixture cleanup"
             );
         }
     }

@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — qualify same-task continuation on private loopback.** With both `CATDESK_FROZEN_BACKEND_TEST_*` variables unset, run the existing opt-in `cached_http_checkpoint_precedes_manual_wake` test. The development branch uses the Windows command sandbox, real Git and the original task journal, with simulated browser receipts and completion. [Verification](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).
+
 **November 22 — recover a missing timer for a proven delivery.** On supporting development builds, `operator web review reobserve` can restore a missing timer for the original `SENT` event when the current target and original submission witness match. The restored timer starts from the committed receipt. Only a fresh exact response observation can complete it. [Verification](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).
 
 **November 22 — reconcile an interrupted task-issued self-Wake.** Supporting development builds accept `operator web review reconcile-submission --project-id <project> --event-id <original-manual-wake-event>`. It observes the exact conversation using the existing bounded browser owner. A committed receipt requires the original submission witness, exact task-journal identity and fresh USER proof. Observe the response timer separately. [Verification](docs/verification/MANUAL_WAKE_RECEIPT_RECOVERY_2026_11_22.json).

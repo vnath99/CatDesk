@@ -190,6 +190,35 @@ fn finish_delivery_result(mut result: Value, request_id: &str, call_id: &str) ->
 }
 
 #[cfg(all(test, windows))]
+pub(crate) fn fixture_manual_submission_fence(
+    workspace: &Path,
+    project: &str,
+) -> Result<Value, String> {
+    deliver_with_sender(
+        workspace,
+        project,
+        Selection::Next,
+        |wake, event, target, before, keep, handoff| {
+            before(event, target)?;
+            let owner = wake.host_lock()?;
+            wake.claim(event, &owner)?;
+            // End the inert sender at the same durable cut as an interrupted
+            // browser adapter. No browser or USER submission runs in this test.
+            let delivery = wake.transition(
+                &event.event_id,
+                owner.owner(),
+                catdesk_wake::store::Phase::Submitting,
+                None,
+                None,
+            )?;
+            handoff(event, target)?;
+            keep()?;
+            Ok(json!({"phase":delivery.phase,"eventId":event.event_id}))
+        },
+    )
+}
+
+#[cfg(all(test, windows))]
 mod tests {
     use super::*;
     use catdesk_wake::store::{Phase, Receipt, WakeIntent};

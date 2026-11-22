@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T21:44:08.0222822Z",
+  "scope": "WINDOWS_DEVELOPMENT_LOOPBACK_SAME_TASK_CONTINUATION",
+  "baseline": "bcdd6d248b5fdc4f463b89eff2e4c0c7bccf187e",
+  "command": "cargo test --offline --locked --bin catdesk -- web_task_dispatch::tests::cached_http_checkpoint_precedes_manual_wake --exact --ignored --test-threads=1 --nocapture",
+  "result": {
+    "passed": 1,
+    "failed": 0,
+    "testSeconds": 41.34,
+    "actualAuthenticatedLoopbackMcp": true,
+    "actualWindowsSandboxVerifierPassedAndCleanupProved": true,
+    "actualScopedEditAndGitCheckpoint": true,
+    "nativeModelCalls": 0,
+    "guardedSelfWakeHandoffReachedExactSubmissionFence": true,
+    "receiptAndAssistantResponseSimulated": true,
+    "originalReceiptRecoveryAndTimerPathExercised": true,
+    "actualNextReadUnderOriginalAssignmentAndGrant": true,
+    "nextReadReturnedVerifiedCheckpointContent": true,
+    "nextReadJournaledOnce": true,
+    "duplicateReadAndWakeSelectionRefused": true,
+    "closureWaitedForExactResponseTimer": true
+  },
+  "preservation": {
+    "sourceWorkspaceBytesUnchanged": true,
+    "listenerClosed": true,
+    "ownedFixtureRemoved": true,
+    "wakeBrowsersStarted": 0,
+    "messagesSent": 0,
+    "productionMutations": 0,
+    "originalTasksReplayed": 0
+  },
+  "installedAcceptance": {
+    "canonicalV5Invoked": false,
+    "liveChatGPTWebContinuationProved": false
+  }
+}

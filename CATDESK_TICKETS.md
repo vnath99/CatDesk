@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** The loopback fixture now verifies the next scoped read and durable tool journal after simulated self-Wake recovery. Duplicate call and duplicate Wake selection are refused, and closure waits for the exact response timer. [Verification](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** Timer preparation failure preserves the original submitting event and replay fence. A prior exact receipt with a missing timer can recover it through the existing response observer. [Verification](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** Receipt recovery now includes an exact journaled task-issued manual Wake whose submission is unresolved. A recovered USER receipt leaves response completion as a separate observation. [Verification](docs/verification/MANUAL_WAKE_RECEIPT_RECOVERY_2026_11_22.json).

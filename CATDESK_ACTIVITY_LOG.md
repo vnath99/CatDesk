@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 21:44 UTC — exercise the same task on both sides of a self-Wake.** The isolated Windows loopback fixture now covers the guarded Wake handoff, exact receipt recovery and a fresh authenticated MCP read of the checkpoint under the original assignment. [Evidence](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).
+
 **2026-11-22 21:39 UTC — close the receipt-to-timer interruption gap.** Exact receipt reconciliation now prepares the response timer before committing delivery. The existing response observer can restore a missing timer from an earlier exact receipt and its original submission witness. [Evidence](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).
 
 **2026-11-22 21:33 UTC — extend exact receipt recovery to a task-issued self-Wake.** The existing recovery command now selects the original manual Wake through its completed task-journal call and can record a fresh exact USER receipt. The signed-in OneDrive cloud Desktop and recycle bin supplied no original Git backing. [Evidence](docs/verification/MANUAL_WAKE_RECEIPT_RECOVERY_2026_11_22.json).

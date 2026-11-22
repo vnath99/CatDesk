@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 4:44 p.m. EST.** The current development version exercises the original assignment across the guarded manual Wake fence, simulated receipt recovery and one authenticated next-turn file read. Installed acceptance still needs genuine conversation delivery and same-task continuation, with the frozen review and original workspace prerequisites. [Verification](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).
+
 **November 22, 4:39 p.m. EST.** Exact receipt reconciliation prepares the timer inside the existing Wake transaction. For an earlier committed receipt with a missing timer, the existing reobserve command can restore it from the exact submission witness before observing a response. [Verification](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).
 
 **November 22, 4:33 p.m. EST.** A task-issued manual Wake can now use the existing proof-only submission recovery. The original receipt CAS and no-replay witness are reused. The signed-in OneDrive recycle bin was empty and the cloud Desktop had one item with no Projects folder. Recover the original common Git store and linked-worktree records from another authoritative backup. [Verification](docs/verification/MANUAL_WAKE_RECEIPT_RECOVERY_2026_11_22.json).
