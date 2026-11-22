@@ -878,3 +878,11 @@ Evidence: [docs/verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json](
 Agent: Codex. Source: 90e26478ee84dcdbda9171ef8a8d514843dfaa47. Outcome: partial. The unchanged first Wake V3 selection wrapper passed its relocated read-only preflight. The enrolled account matched, the broker was stopped, all 894 original pins matched, and no attempt or signature was created. Next: Run the original one-time purpose signing and selection in the enrolled Administrator session. Retain the original bootstrap witness for post-selection readback and continue the separate backend review.
 
 Evidence: [docs/verification/WAKE_RELOCATED_FIRST_SELECTION_PREFLIGHT_2026_11_22.json](docs/verification/WAKE_RELOCATED_FIRST_SELECTION_PREFLIGHT_2026_11_22.json); command: Exact relocated V3 wrapper in VerifyInputsOnly mode and original pin readback; exit 0; SHA-256 1460543f5d11ab1a573903bfae4c19a318099b663c03436ae1221f363580123e.
+
+<!-- catdesk-activity:nov22-interrupted-promotion-public-status sha256:2954238dd56baf5d27061e41412c54c72b8b7f8480e71dcf99288777f6213837 -->
+
+## 2026-11-22T06:18:35Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 053d4cb738b5b0a142fd149665ae83e026007f6f. Outcome: partial. The development status command now reports interrupted promotion before probing or reporting readiness. Both PowerShell editions passed with a real disposable release pair and journal. Installed qualification remains open. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
+
+Evidence: [docs/verification/INTERRUPTED_PROMOTION_PUBLIC_STATUS_2026_11_22.json](docs/verification/INTERRUPTED_PROMOTION_PUBLIC_STATUS_2026_11_22.json); command: scripts/test-catdesk-lifecycle.ps1 in PowerShell 7 and Windows PowerShell 5.1; exit 0; SHA-256 c01aaeccbdbc42d4bff65108ea9685df3acac75f6f7f1749611f9a2a581e7824.

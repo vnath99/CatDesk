@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "scope": "WINDOWS_PUBLIC_STATUS_WITH_DISPOSABLE_RELEASE_PAIR_AND_PROBE_SEAMS",
+  "verifiedUtc": "2026-11-22T06:18:35Z",
+  "sourceCommit": "053d4cb738b5b0a142fd149665ae83e026007f6f",
+  "observations": {
+    "beforeFix": "The new fixture reproduced READY with a pending promotion journal and a matching executable and fingerprint.",
+    "healthyWithoutJournal": "READY",
+    "journalAtEntry": "RECOVERY_AUTHORITY_REQUIRED",
+    "healthProbesAfterExistingJournal": 0,
+    "journalPublishedDuringWakeReadiness": "RECOVERY_AUTHORITY_REQUIRED",
+    "journalAndReleasePairPreserved": true,
+    "recoveryAndDiagnosis": "The existing startup and recovery authority checks passed the related canonical bootstrap regressions."
+  },
+  "tests": [
+    {
+      "script": "scripts/test-catdesk-lifecycle.ps1",
+      "powerShell7ExitCode": 0,
+      "windowsPowerShell51ExitCode": 0
+    },
+    {
+      "script": "scripts/test-start-catdesk-stack.ps1",
+      "powerShell7ExitCode": 0
+    },
+    {
+      "script": "scripts/test-catdesk-autostart-supervisor.ps1",
+      "powerShell7ExitCode": 0
+    },
+    {
+      "script": "scripts/test-catdesk-doctor.ps1",
+      "powerShell7ExitCode": 0,
+      "assertions": 213
+    }
+  ],
+  "qualificationNotes": "The lifecycle hosts passed when run serially. Parallel runs shared an existing monitor-mutex fixture keyed to the checkout. The new journal fixture uses a unique disposable workspace.",
+  "installedProductionActions": 0,
+  "installedAcceptance": false
+}

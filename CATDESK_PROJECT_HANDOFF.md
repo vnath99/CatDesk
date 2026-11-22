@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22 — status agrees with interrupted-promotion recovery.** Public status now checks the existing journal before probing health and again before reporting readiness. The disposable Windows fixture reproduced the old false READY and verified the refusal in both PowerShell editions. Installed qualification remains open. [Evidence](docs/verification/INTERRUPTED_PROMOTION_PUBLIC_STATUS_2026_11_22.json).
+
 **November 22 — first Wake selection preflight after relocation.** The unchanged hash-checked wrapper validated the relocated packet under the enrolled account with the broker stopped and fixed intake absent. All 894 original preservation pins matched. The independent post-selection observer still requires the original bootstrap witness at its recorded path. The existing one-time operator signature and elevated execution remain pending. [Evidence](docs/verification/WAKE_RELOCATED_FIRST_SELECTION_PREFLIGHT_2026_11_22.json).
 
 **November 22 — read a lost Wake broker response without resending.** The development controller reads the original V3 generation and exact request digest under the existing Windows ledger lock. The installed protected namespace returned `NOT_FOUND_NO_RETRY` for a deliberate sentinel lookup from a non-elevated account. The broker remained stopped. Tests exercised busy, incomplete, and complete records. [Evidence](docs/verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json).
@@ -372,5 +374,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Run the original one-time purpose signing and selection in the enrolled Administrator session. Retain the original bootstrap witness for post-selection readback and continue the separate backend review"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision"}
 ```

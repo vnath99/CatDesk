@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — status during an unfinished promotion.** If development `catdesk.ps1 status` reports `RECOVERY_AUTHORITY_REQUIRED`, check the original transaction with `catdesk.ps1 diagnose` and use its guarded reconciliation or rollback procedure. A matching executable and fingerprint can coexist with an unresolved journal. [Evidence](docs/verification/INTERRUPTED_PROMOTION_PUBLIC_STATUS_2026_11_22.json).
+
 **November 22 — relocated first Wake selection.** Use the local migration handoff for the checked operator command. The unchanged wrapper passed `-VerifyInputsOnly` after relocation and checks the signed state again before execution. Keep the original bootstrap envelope in place for the existing independent post-selection verifier. [Evidence](docs/verification/WAKE_RELOCATED_FIRST_SELECTION_PREFLIGHT_2026_11_22.json).
 
 **November 22 — read an exact Wake broker result.** The development controller supports `CatDeskWakeHost.exe install-broker result <generation> <request-sha256>`. Use the generation and SHA-256 of the exact original request bytes from the retained submission. `COMPLETE` reports recorded completion. `INCOMPLETE_NO_RETRY`, `NOT_FOUND_NO_RETRY`, and read failures require preservation of the original request. This command reads the fixed protected journal and starts no service. [Evidence](docs/verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json).
