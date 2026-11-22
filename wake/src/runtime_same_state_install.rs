@@ -12,6 +12,9 @@ use crate::{
         AdmittedSameStateLedgerLeaseV3, InstallPhaseV1,
         SameStateFailedCurrentImageV3 as FailedCurrentImageV3, SameStateLedgerAdmissionV3,
     },
+    install_broker_legacy_owner::{
+        LegacyOwnerDispositionV1, LegacyOwnerInventoryV1, inspect_legacy_owner_candidates,
+    },
     install_broker_offline_pins::OfflineObjectPinV2,
     install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedSameStateSelectionV3},
     install_broker_source::{
@@ -950,6 +953,13 @@ pub(crate) struct SameStateInstallResources<'p> {
 
 impl<'p> SameStateInstallResources<'p> {
     pub(crate) fn acquire(grant: PolicyVerifiedSameStateSelectionV3<'p>) -> Result<Self> {
+        Self::acquire_with_legacy_inventory(grant, inspect_legacy_owner_candidates)
+    }
+
+    fn acquire_with_legacy_inventory(
+        grant: PolicyVerifiedSameStateSelectionV3<'p>,
+        inspect_inventory: impl Fn() -> LegacyOwnerInventoryV1,
+    ) -> Result<Self> {
         grant.revalidate()?;
         let path = grant.pins_mut()?.root().to_owned();
         // Existing-only validation already ran; opening this same root cannot
@@ -1080,12 +1090,15 @@ impl<'p> SameStateInstallResources<'p> {
         // only known selector actors; it is not arbitrary launcher quarantine.
         let drain = Instant::now() + Duration::from_secs(10);
         loop {
-            let inventory = crate::install_broker_legacy_owner::inspect_legacy_owner_candidates();
-            if inventory.disposition!=crate::install_broker_legacy_owner::LegacyOwnerDispositionV1::NoMatchingNamedProcessInSnapshot || !inventory.processes.is_empty() {
+            let inventory = inspect_inventory();
+            if inventory.disposition != LegacyOwnerDispositionV1::NoMatchingNamedProcessInSnapshot
+                || !inventory.processes.is_empty()
+            {
                 #[cfg(test)]
                 eprintln!(
                     "legacy-owner fixture refused: {} ({} matching processes)",
-                    inventory.reason, inventory.processes.len()
+                    inventory.reason,
+                    inventory.processes.len()
                 );
                 return Err("WAKE_SAME_STATE_LEGACY_OWNER_UNPROVEN".into());
             }

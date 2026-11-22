@@ -252,8 +252,20 @@ fn classify(
 /// forensic and the result is never a `BrokerObservedStateV1` or an
 /// installation capability. Ancestor path traversal is not owner proof.
 pub fn inspect_legacy_owner_candidates() -> LegacyOwnerInventoryV1 {
-    let process_pins = process_candidates();
-    let root_pins = root_candidates();
+    inspect_candidates(PROCESS_NAME, root_candidates)
+}
+
+#[cfg(test)]
+pub(crate) fn inspect_fixture_owner_candidates(process_name: &str) -> LegacyOwnerInventoryV1 {
+    inspect_candidates(process_name, Vec::new)
+}
+
+fn inspect_candidates(
+    process_name: &str,
+    inspect_roots: impl FnOnce() -> Vec<RootPin>,
+) -> LegacyOwnerInventoryV1 {
+    let process_pins = process_candidates(process_name);
+    let root_pins = inspect_roots();
     let processes: Vec<LegacyProcessCandidateV1> = process_pins
         .as_ref()
         .map(|pins| pins.iter().map(ProcessPin::readback).collect::<Vec<_>>())
@@ -331,7 +343,7 @@ fn same_process_identity(
         && live
 }
 
-fn process_candidates() -> std::result::Result<Vec<ProcessPin>, ()> {
+fn process_candidates(process_name: &str) -> std::result::Result<Vec<ProcessPin>, ()> {
     let raw = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
     if raw.is_null() || raw == INVALID_HANDLE {
         return Err(());
@@ -349,7 +361,7 @@ fn process_candidates() -> std::result::Result<Vec<ProcessPin>, ()> {
             .position(|unit| *unit == 0)
             .unwrap_or(entry.exe_file.len());
         let name = String::from_utf16_lossy(&entry.exe_file[..end]);
-        if name.eq_ignore_ascii_case(PROCESS_NAME) {
+        if name.eq_ignore_ascii_case(process_name) {
             pids.push(entry.pid);
         }
         entry = ProcessEntry::default();

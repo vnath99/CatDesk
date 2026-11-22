@@ -2,6 +2,7 @@
 use super::*;
 use crate::install_broker_approval::{ArtifactV1, PackageManifestV1, same_state::*};
 use crate::install_broker_ledger::BrokerLedgerGuard;
+use crate::install_broker_legacy_owner::inspect_fixture_owner_candidates;
 use ed25519_dalek::SigningKey;
 use std::os::windows::{
     fs::OpenOptionsExt,
@@ -10,6 +11,17 @@ use std::os::windows::{
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT: AtomicU64 = AtomicU64::new(1);
+
+fn acquire_fixture_resources(
+    grant: PolicyVerifiedSameStateSelectionV3<'_>,
+) -> Result<SameStateInstallResources<'_>> {
+    // Fixture images are inert and never launched. Exercise the real process
+    // census without coupling disposable transactions to installed Wake.
+    let name = format!("catdesk-inert-wake-fixture-{}.exe", std::process::id());
+    SameStateInstallResources::acquire_with_legacy_inventory(grant, || {
+        inspect_fixture_owner_candidates(&name)
+    })
+}
 
 fn receipt(role: &str, payload: &SameStateRootSelectionApprovalV3) -> Value {
     let release = if role.starts_with("candidate-") {
@@ -605,8 +617,7 @@ fn same_state_local_user_enrolled_select_and_rollback_preserve_state() {
         let admission = guard
             .same_state_admission_v3(&digest(&request), 1000)
             .unwrap();
-        let resources =
-            SameStateInstallResources::acquire(fixture.grant(&admission, request)).unwrap();
+        let resources = acquire_fixture_resources(fixture.grant(&admission, request)).unwrap();
         let original = resources.grant().original_selection_bytes().unwrap();
         let mut ledger = guard
             .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -691,10 +702,9 @@ fn same_state_local_user_gives_current_a_working_fallback_under_exclusive_pins()
                 .same_state_admission_v3(&digest(&request), 1000)
                 .unwrap();
             let pins = fixture.observe(&admission, Some(id)).unwrap();
-            let resources = SameStateInstallResources::acquire(
-                fixture.grant_with_pins(&admission, request, pins),
-            )
-            .unwrap();
+            let resources =
+                acquire_fixture_resources(fixture.grant_with_pins(&admission, request, pins))
+                    .unwrap();
             let previous_dir = fixture
                 .state
                 .join("versions")
@@ -742,7 +752,7 @@ fn same_state_local_user_gives_current_a_working_fallback_under_exclusive_pins()
                     .same_state_admission_v3(&digest(&request), 1000)
                     .unwrap();
                 let resources =
-                    SameStateInstallResources::acquire(fixture.grant(&admission, request)).unwrap();
+                    acquire_fixture_resources(fixture.grant(&admission, request)).unwrap();
                 let original = resources.grant().original_selection_bytes().unwrap();
                 let mut ledger = guard
                     .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -786,8 +796,7 @@ fn earlier_signed_selection_supplies_its_exact_manual_rollback_qualification() {
         let admission = guard
             .same_state_admission_v3(&digest(&envelope), 1000)
             .unwrap();
-        let resources =
-            SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+        let resources = acquire_fixture_resources(fixture.grant(&admission, envelope)).unwrap();
         let original = resources.grant().original_selection_bytes().unwrap();
         let mut ledger = guard
             .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -889,8 +898,7 @@ fn earlier_signed_selection_supplies_its_exact_manual_rollback_qualification() {
         .unwrap();
     pins.require_protected_review_intake().unwrap();
     let resources =
-        SameStateInstallResources::acquire(fixture.grant_with_pins(&admission, request, pins))
-            .unwrap();
+        acquire_fixture_resources(fixture.grant_with_pins(&admission, request, pins)).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -930,7 +938,7 @@ fn same_state_local_user_can_update_after_completed_rollback() {
             .same_state_admission_v3(&digest(&request), 1000)
             .unwrap();
         let resources =
-            SameStateInstallResources::acquire(fixture.grant(&admission, request.clone())).unwrap();
+            acquire_fixture_resources(fixture.grant(&admission, request.clone())).unwrap();
         let original = resources.grant().original_selection_bytes().unwrap();
         let mut ledger = guard
             .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -993,8 +1001,7 @@ fn same_state_local_user_can_update_after_completed_rollback() {
     assert!(admission.resume_binding.is_none());
     let pins = fixture.observe(&admission, Some(previous_id)).unwrap();
     let resources =
-        SameStateInstallResources::acquire(fixture.grant_with_pins(&admission, request, pins))
-            .unwrap();
+        acquire_fixture_resources(fixture.grant_with_pins(&admission, request, pins)).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     assert_eq!(original, restored_raw);
     let mut ledger = guard
@@ -1051,8 +1058,7 @@ fn same_state_local_user_pointer_interruptions_resume_only_the_original_request(
                 .same_state_admission_v3(&digest(&request), 1000)
                 .unwrap();
             let resources =
-                SameStateInstallResources::acquire(fixture.grant(&admission, request.clone()))
-                    .unwrap();
+                acquire_fixture_resources(fixture.grant(&admission, request.clone())).unwrap();
             let original = resources.grant().original_selection_bytes().unwrap();
             let mut ledger = guard
                 .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -1098,8 +1104,7 @@ fn same_state_local_user_pointer_interruptions_resume_only_the_original_request(
                     .local_user_authorized()
             );
             let resources =
-                SameStateInstallResources::acquire(fixture.grant(&admission, request.clone()))
-                    .unwrap();
+                acquire_fixture_resources(fixture.grant(&admission, request.clone())).unwrap();
             let original = resources.grant().original_selection_bytes().unwrap();
             let mut ledger = guard
                 .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -1116,8 +1121,7 @@ fn same_state_local_user_pointer_interruptions_resume_only_the_original_request(
                 .same_state_admission_v3(&digest(&request), 1002)
                 .unwrap();
             assert_eq!(admission.install_generation, 1);
-            let resources =
-                SameStateInstallResources::acquire(fixture.grant(&admission, request)).unwrap();
+            let resources = acquire_fixture_resources(fixture.grant(&admission, request)).unwrap();
             let original = resources.grant().original_selection_bytes().unwrap();
             let mut ledger = guard
                 .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -1145,8 +1149,7 @@ fn same_state_local_user_unknown_pointer_is_preserved_after_interruption() {
     let admission = guard
         .same_state_admission_v3(&digest(&request), 1000)
         .unwrap();
-    let resources =
-        SameStateInstallResources::acquire(fixture.grant(&admission, request.clone())).unwrap();
+    let resources = acquire_fixture_resources(fixture.grant(&admission, request.clone())).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -1240,7 +1243,7 @@ fn same_state_real_files_signed_reconstruction_selects_stopped_and_preserves_sta
         .same_state_admission_v3(&digest(&envelope), 1000)
         .unwrap();
     let grant = fixture.grant(&admission, envelope);
-    let resources = SameStateInstallResources::acquire(grant).unwrap();
+    let resources = acquire_fixture_resources(grant).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -1305,6 +1308,45 @@ fn same_state_receipt_misrepresentation_refuses_before_intent() {
 }
 
 #[test]
+fn same_state_live_matching_process_refuses_before_intent() {
+    let mut fixture = Fixture::new();
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let envelope = fixture.signed(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&envelope), 1000)
+        .unwrap();
+    let grant = fixture.grant(&admission, envelope);
+    let image = std::env::current_exe().unwrap();
+    let name = image.file_name().unwrap().to_str().unwrap();
+    let inventory = inspect_fixture_owner_candidates(name);
+    assert!(
+        inventory
+            .processes
+            .iter()
+            .any(|process| process.pid == std::process::id()),
+        "the Windows census must find the running test executable"
+    );
+    assert_eq!(
+        SameStateInstallResources::acquire_with_legacy_inventory(grant, || {
+            inspect_fixture_owner_candidates(name)
+        })
+        .err()
+        .unwrap(),
+        "WAKE_SAME_STATE_LEGACY_OWNER_UNPROVEN"
+    );
+    assert_eq!(
+        std::fs::read(fixture.state.join("current.json")).unwrap(),
+        fixture.before
+    );
+    assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), 2);
+    fixture.preserved();
+    drop(guard);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
 fn same_state_existing_legacy_handoff_is_preserved_before_new_intent() {
     let mut fixture = Fixture::new();
     let handle = fixture.handle.try_clone().unwrap();
@@ -1329,7 +1371,7 @@ fn same_state_existing_legacy_handoff_is_preserved_before_new_intent() {
     .unwrap();
     let before = std::fs::read(&path).unwrap();
     assert_eq!(
-        SameStateInstallResources::acquire(grant).err().unwrap(),
+        acquire_fixture_resources(grant).err().unwrap(),
         "HOST_INSTALL_HANDOFF_CONFLICT"
     );
     assert_eq!(std::fs::read(path).unwrap(), before);
@@ -1607,8 +1649,7 @@ fn with_staged_publication(
     let envelope = fixture.signed(&guard);
     let envelope_sha = digest(&envelope);
     let admission = guard.same_state_admission_v3(&envelope_sha, 1000).unwrap();
-    let resources =
-        SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+    let resources = acquire_fixture_resources(fixture.grant(&admission, envelope)).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2063,8 +2104,7 @@ fn same_state_publication_collision_and_interruption_are_no_replay() {
     let envelope = fixture.signed(&guard);
     let envelope_sha = digest(&envelope);
     let admission = guard.same_state_admission_v3(&envelope_sha, 1000).unwrap();
-    let resources =
-        SameStateInstallResources::acquire(fixture.grant(&admission, envelope.clone())).unwrap();
+    let resources = acquire_fixture_resources(fixture.grant(&admission, envelope.clone())).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2080,8 +2120,7 @@ fn same_state_publication_collision_and_interruption_are_no_replay() {
     drop(ledger);
     let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
     let admission = guard.same_state_admission_v3(&envelope_sha, 1001).unwrap();
-    let resources =
-        SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+    let resources = acquire_fixture_resources(fixture.grant(&admission, envelope)).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2118,7 +2157,7 @@ fn same_state_rollback_real_damaged_current_selects_only_intact_previous() {
         .same_state_admission_v3(&digest(&envelope), 1000)
         .unwrap();
     let grant = fixture.grant(&admission, envelope);
-    let resources = SameStateInstallResources::acquire(grant).unwrap();
+    let resources = acquire_fixture_resources(grant).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2182,8 +2221,7 @@ fn same_state_rollback_missing_current_reports_supported_selector_absence_bounda
     let admission = guard
         .same_state_admission_v3(&digest(&envelope), 1000)
         .unwrap();
-    let resources =
-        SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+    let resources = acquire_fixture_resources(fixture.grant(&admission, envelope)).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2275,7 +2313,7 @@ fn same_state_rollback_failed_image_in_use_refuses_without_killing_or_intent() {
         .same_state_admission_v3(&digest(&envelope), 1000)
         .unwrap();
     assert_eq!(
-        SameStateInstallResources::acquire(fixture.grant(&admission, envelope))
+        acquire_fixture_resources(fixture.grant(&admission, envelope))
             .err()
             .unwrap(),
         "WAKE_OFFLINE_LAUNCH_IMAGE_UNAVAILABLE"
@@ -2306,8 +2344,7 @@ fn same_state_rollback_real_before_and_after_pointer_interruptions_resume_exactl
             .same_state_admission_v3(&digest(&envelope), 1000)
             .unwrap();
         let resources =
-            SameStateInstallResources::acquire(fixture.grant(&admission, envelope.clone()))
-                .unwrap();
+            acquire_fixture_resources(fixture.grant(&admission, envelope.clone())).unwrap();
         let original = resources.grant().original_selection_bytes().unwrap();
         let mut ledger = guard
             .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2331,8 +2368,7 @@ fn same_state_rollback_real_before_and_after_pointer_interruptions_resume_exactl
             .same_state_admission_v3(&digest(&envelope), 1001)
             .unwrap();
         let resources =
-            SameStateInstallResources::acquire(fixture.grant(&admission, envelope.clone()))
-                .unwrap();
+            acquire_fixture_resources(fixture.grant(&admission, envelope.clone())).unwrap();
         let original = resources.grant().original_selection_bytes().unwrap();
         let mut ledger = guard
             .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2347,8 +2383,7 @@ fn same_state_rollback_real_before_and_after_pointer_interruptions_resume_exactl
             .same_state_admission_v3(&digest(&envelope), 1002)
             .unwrap();
         assert_eq!(admission.install_generation, 1);
-        let resources =
-            SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+        let resources = acquire_fixture_resources(fixture.grant(&admission, envelope)).unwrap();
         let original = resources.grant().original_selection_bytes().unwrap();
         let mut ledger = guard
             .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2377,8 +2412,7 @@ fn same_state_rollback_resume_refuses_changed_failed_image_observation() {
     let admission = guard
         .same_state_admission_v3(&digest(&envelope), 1000)
         .unwrap();
-    let resources =
-        SameStateInstallResources::acquire(fixture.grant(&admission, envelope.clone())).unwrap();
+    let resources = acquire_fixture_resources(fixture.grant(&admission, envelope.clone())).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2394,8 +2428,7 @@ fn same_state_rollback_resume_refuses_changed_failed_image_observation() {
     let admission = guard
         .same_state_admission_v3(&digest(&envelope), 1001)
         .unwrap();
-    let resources =
-        SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+    let resources = acquire_fixture_resources(fixture.grant(&admission, envelope)).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2434,8 +2467,7 @@ fn same_state_rollback_complete_readback_retains_original_failed_image_diagnosti
     let admission = guard
         .same_state_admission_v3(&digest(&envelope), 1000)
         .unwrap();
-    let resources =
-        SameStateInstallResources::acquire(fixture.grant(&admission, envelope.clone())).unwrap();
+    let resources = acquire_fixture_resources(fixture.grant(&admission, envelope.clone())).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
@@ -2454,8 +2486,7 @@ fn same_state_rollback_complete_readback_retains_original_failed_image_diagnosti
     let admission = guard
         .same_state_admission_v3(&digest(&envelope), 1001)
         .unwrap();
-    let resources =
-        SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+    let resources = acquire_fixture_resources(fixture.grant(&admission, envelope)).unwrap();
     let original = resources.grant().original_selection_bytes().unwrap();
     let mut ledger = guard
         .begin_same_state_v3(resources.grant(), &admission, &original)
