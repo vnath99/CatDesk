@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 6:31 p.m. EST.** The wider signed and local same-state regression finished across bounded Windows runs. The local interruption test's measured 122.09 seconds include twelve deliberate launch-exclusion waits. The next release step remains an eligible fresh signed envelope under the existing authority, with the exact backend review and original shared Git store still required for installed Web acceptance. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
+
 **November 22, 6:23 p.m. EST.** Use the new source-level signed preflight for a separately authorized fresh Wake selection. It checks signature, generation, selection, artifacts and review receipts before a broker start. Preserve the closed V3 attempt and continue using the existing signed release workflow. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
 
 **November 22, 6:16 p.m. EST.** The development promotion facade bounds stored process output during capture. It continues draining the pipes within the existing owner deadlines and preserves the exact-result path for an exited candidate. Use the compatible authenticated release procedure for frozen `56aa9912` once review and producer evidence exist. [Evidence](docs/verification/PROMOTION_BOUNDED_NATIVE_OUTPUT_2026_11_22.json).

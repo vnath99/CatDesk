@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 22.** Closed the interrupted regression run for the fresh signed preflight change. All 32 same-state Windows cases passed across bounded runs. The existing launch-exclusion timing and release safeguards continue to apply. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
+
 **RELEASE-RECOVERY, November 22.** Fresh signed Wake selections now have a read-only native check before submission. It reuses the current protected policy, exact artifact and review checks, and existing replay ledger. A preflight result creates no release authority. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
 
 **RELEASE-RECOVERY, November 22.** Oversized native controller output can no longer grow the one-command promotion buffers. A resolved candidate runs once, and ambiguous output still requires the original result. The developer-cache normalization fixture has a separate baseline mismatch. [Evidence](docs/verification/PROMOTION_BOUNDED_NATIVE_OUTPUT_2026_11_22.json).

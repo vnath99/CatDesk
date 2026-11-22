@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 23:31 UTC — finish the broader Windows same-state Wake regression.** The previous aggregate limit cut into the deliberate launch-exclusion waits. The 22 unfinished cases passed under separate bounds, including the 122.09-second interrupted-selection and rollback case. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
+
 **2026-11-22 23:23 UTC — add read-only preflight for a fresh signed Wake selection.** The development controller verifies the enrolled operator, exact signature, prospective generation and retained candidate and fallback evidence. It uses the existing ledger read lock and creates no intent. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
 
 **2026-11-22 23:16 UTC — bound native output in one-command backend promotion.** Real Windows fixture controllers emitted a megabyte on stdout or stderr. The facade retained at most 4,096 stdout characters, discarded stderr content, and kept the original digest readback after an exited candidate. [Evidence](docs/verification/PROMOTION_BOUNDED_NATIVE_OUTPUT_2026_11_22.json).

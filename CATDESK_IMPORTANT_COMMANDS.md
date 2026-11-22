@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — time the same-state Wake fixtures per case.** The exact interruption fixture exercises twelve selection attempts. The existing launch-exclusion wait is ten seconds per attempt, so a 35-second per-case limit or a 180-second limit on the entire serial suite can interrupt a valid run. The unfinished cases passed with a 170-second per-case limit. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
+
 **November 22 — preflight a fresh signed Wake selection.** An enrolled operator can use a development controller containing this change with `install-broker preflight-signed-selection --approval-file <absolute-frozen-envelope>`. `WAKE_SIGNED_SELECTION_PREFLIGHT_ONLY` confirms the exact signed input and observed state at the reported time. Existing broker identity, transport, execution authority and final installed readback still apply. Keep the closed V3 request with its original evidence. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
 
 **November 22 — oversized output from one-command promotion.** Before candidate launch, an oversized resolver reply returns `REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT`. After an exited candidate, unreadable output uses one read of the exact original result. If the result remains unproved, use the existing result inspection procedure. The existing authority and installed-pair checks still apply. [Evidence](docs/verification/PROMOTION_BOUNDED_NATIVE_OUTPUT_2026_11_22.json).

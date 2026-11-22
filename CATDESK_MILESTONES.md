@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — complete the Windows same-state regression for fresh signed preflight.** All 32 existing and new cases now have passing fixture evidence. This includes selection, rollback, recovery after interruptions, and read-only preflight preservation. Installed acceptance remains open. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
+
 **November 22 — qualify the fresh signed Wake preflight in development.** A disposable native fixture verified the signed candidate and fallback without writing an intent. A tampered signature and missing review receipt each refused. Installed Wake selection and the first Web cycle remain open. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
 
 **November 22 — qualify bounded promotion reply handling in development.** The Windows PowerShell and PowerShell 7 lifecycle fixtures passed for huge stdout and stderr, exact-result observation and refusal with an inherited pipe still open. Installed promotion remains open. [Evidence](docs/verification/PROMOTION_BOUNDED_NATIVE_OUTPUT_2026_11_22.json).

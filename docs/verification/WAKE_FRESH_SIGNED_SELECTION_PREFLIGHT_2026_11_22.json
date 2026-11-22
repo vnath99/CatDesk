@@ -37,5 +37,22 @@
   "protectedWrites": 0,
   "newReleaseSignatures": 0,
   "installedSelectionAccepted": false,
-  "installedWebCycleAccepted": false
+  "installedWebCycleAccepted": false,
+  "broaderSuiteFollowup": {
+    "observedUtc": "2026-11-22T23:31:16Z",
+    "testedSourceCommit": "3e3d318cf5ff66a8c17a114094957a5ee62ab674",
+    "originalPassingCases": 8,
+    "separatelyVerifiedCases": 2,
+    "remainingCasesPassed": 22,
+    "totalPassingCases": 32,
+    "workerCount": 4,
+    "perCaseLimitSeconds": 170,
+    "fallbackWithExclusivePinsSeconds": 20.47,
+    "pointerInterruptionSeconds": 122.09,
+    "rollbackPointerInterruptionsSeconds": 60.92,
+    "reasonForEarlierBound": "Each admitted attempt holds launch exclusion during an intentional ten-second observation. The interruption fixture exercises twelve such attempts.",
+    "timeoutsInFinalBatch": 0,
+    "sourceChanges": 0,
+    "installedActions": 0
+  }
 }
