@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "scope": "WINDOWS_SOURCE_AND_DISPOSABLE_EXACT_RETIREMENT_ARCHIVE",
+  "verifiedUtc": "2026-11-22T05:24:57.8656303Z",
+  "sourceCommit": "eda236f8db78f17df1f61bf2b5e723cca653b722",
+  "testExecutableSha256": "195d7707df797bddeb86a33142bda637177b4d72842f5abf8b06f5dcbbf1aeea",
+  "normalEntryPoint": "catdesk.ps1 promote <artifact-sha256>",
+  "newBehavior": [
+    "Remeasure the next build and exact acknowledged independent review before predecessor retirement",
+    "Use the existing stopped lifecycle lease and archive journal for the terminal predecessor and its exact completed handoff",
+    "Resume only a previously prepared combined archive through the existing recorded moves",
+    "Continue through the ordinary reviewed preflight and confirm only after completed archival"
+  ],
+  "regression": {
+    "differentCompletedStoppedPredecessorSelected": true,
+    "sameArtifactDoesNotRetire": true,
+    "failedAndUnverifiedResultsDoNotRetire": true,
+    "unrelatedExplicitPendingRetirementRequiresItsOriginalProcedure": true,
+    "interruptedRealFilesystemMovesResumeAndBothArchivesVerify": true,
+    "completedArchiveDoesNotReplay": true
+  },
+  "tests": [
+    {"filter":"daemon_reload::","passed":53,"exitCode":0},
+    {"filter":"reviewed_promotion_authority_revalidates_completion_output_evidence","passed":1,"exitCode":0}
+  ],
+  "scopedRustfmtPassed": true,
+  "productionActions": 0,
+  "installedAcceptance": false,
+  "remaining": "Automatic archival still needs the existing expired terminal authority, exact completed handoff, independently verified current release, and stopped ownership. Installed qualification requires a genuinely reviewed candidate and the supported serving and rollback checks."
+}

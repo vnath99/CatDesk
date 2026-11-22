@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-22T05:24:57Z.** Let one-hash promotion invoke the existing archive journal for a verified stopped predecessor and its attributable completed handoff. Remeasure successor review before metadata moves. Resume an interrupted archive from its exact existing journal. Explicit and uncertain recovery routes retain their separately validated scope. [Windows fixture](../verification/ONE_HASH_COMPLETED_PREDECESSOR_ARCHIVE_2026_11_22.json).
+
 **Decision 2026-11-22T05:20:00Z.** Use the existing completed retirement archive as predecessor evidence for successive stopped promotions. Its selected hash must match the current release, and the next artifact and transaction require their own authority. Keep the exact-candidate retry rule for failed retirements and the existing handoff and stopped-health checks. [Windows release regression](../verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.json).
 
 **Decision 2026-11-22T05:17:15Z.** During stopped-source promotion, recognize the exact worker and its bound waiting controller using the existing process inventory. The canonical owner and every other candidate process remain disqualifying. Standalone retirement still requires stopped-state evidence and grants no process exemption. [Actual Windows process evidence](../verification/STOPPED_PROMOTION_PROCESS_IDENTITY_2026_11_22.json).

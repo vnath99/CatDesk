@@ -806,3 +806,11 @@ Evidence: [docs/verification/STOPPED_PROMOTION_PROCESS_IDENTITY_2026_11_22.json]
 Agent: Codex. Source: cf05fa1b840c0350cf35950249de3d2c83bd887e. Outcome: partial. A verified completed predecessor can support a different stopped release after guarded archival. Changed archives and unresolved handoffs refused in the Windows test and 52 native release tests passed. Next: Use the existing first Wake selection and independent backend review. Qualify successive protected promotion and retained rollback through the existing installed lifecycle.
 
 Evidence: [docs/verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.json](docs/verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.json); command: Native Windows retired predecessor and daemon reload suite; exit 0; SHA-256 7c7e755bbf341a59e8d915796583e45127376a3ad8b8a8600be33c44bc1a9f5d.
+
+<!-- catdesk-activity:nov22-one-hash-predecessor-archive sha256:7b9cd992f2c7140f4c1f1d74751d0f7c269aa1367ac4ddb03c474c11cc03647c -->
+
+## 2026-11-22T05:24:57.8656303Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: eda236f8db78f17df1f61bf2b5e723cca653b722. Outcome: partial. One-hash promotion can archive an eligible stopped predecessor and its exact handoff after revalidating successor review. Windows tests resumed the original archive after interruption. Next: Use the existing first Wake selection and independent backend review. Verify protected one-hash activation, persistent startup and retained rollback with genuine authority.
+
+Evidence: [docs/verification/ONE_HASH_COMPLETED_PREDECESSOR_ARCHIVE_2026_11_22.json](docs/verification/ONE_HASH_COMPLETED_PREDECESSOR_ARCHIVE_2026_11_22.json); command: Windows daemon reload suite and exact independent review remeasurement; exit 0; SHA-256 98ea02d086021f29ec6cc8684f60d0f0752a944cdd69b5bfeba0c24299ca9c9a.
