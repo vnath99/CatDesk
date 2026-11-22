@@ -37,6 +37,15 @@ pub(super) fn fair_round(
             blocked_projects.insert(event.project_id.clone());
             continue;
         }
+        // A task-owned self-Wake can only start through its scoped owner.
+        // Keep post-submit receipt reconciliation and response reads eligible.
+        if event.requires_scoped_manual_wake()?
+            && !delivery
+                .as_ref()
+                .is_some_and(|value| matches!(value.phase, Phase::Submitting | Phase::Sent))
+        {
+            continue;
+        }
         if delivery
             .as_ref()
             .is_some_and(|value| matches!(value.phase, Phase::Sent | Phase::Stale))
@@ -532,6 +541,100 @@ pub(super) mod tests {
         .unwrap();
         store.publish(&event).unwrap();
         event
+    }
+
+    #[test]
+    fn task_owned_manual_wake_is_never_scheduled_for_fresh_submission() {
+        let (store, lease) = fixture("manual-task-owner");
+        let target = &store.config().unwrap().targets["alpha"];
+        // Place the manual event before the ordinary work so the scheduler
+        // would select it if it still treated it as a background Wake.
+        let created_utc = now() - 5;
+        let intent = crate::store::WakeIntent {
+            purpose: WakePurpose::ManualEndTurn,
+            source_event_id: &format!("web-work-{}", digest("fixture task")),
+            source_turn_id: "finished-turn",
+            priority: 1,
+            ttl_seconds: 600,
+        };
+        let event = Event {
+            schema_version: PROTOCOL_VERSION,
+            event_id: intent.event_id("alpha").unwrap(),
+            project_id: "alpha".into(),
+            event_type: "engineering_attention".into(),
+            created_utc,
+            message: "Continue the fixture task".into(),
+            target_generation: target.generation,
+            audit_references: Vec::new(),
+        }
+        .with_wake_metadata(WakeMetadata {
+            purpose: intent.purpose,
+            source_event_id: intent.source_event_id.into(),
+            source_turn_id: intent.source_turn_id.into(),
+            priority: intent.priority,
+            expires_utc: created_utc + intent.ttl_seconds,
+        })
+        .unwrap();
+        store.publish(&event).unwrap();
+        let ordinary = ["alpha-1", "beta-1", "gamma-1"];
+        assert_eq!(ids(&store, None, &BTreeMap::new()), ordinary);
+        assert!(store.delivery(&event.event_id).unwrap().is_none());
+
+        store.claim(&event, &lease).unwrap();
+        assert_eq!(ids(&store, None, &BTreeMap::new()), ordinary);
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Attention,
+                None,
+                Some("BROWSER_ADAPTER_START_FAILED".into()),
+            )
+            .unwrap();
+        store.retry_pre_submit(&event.event_id).unwrap();
+        drop(lease);
+
+        let base = store.root().parent().unwrap();
+        let reopened = Store::open_scoped_for_test(store.root(), base).unwrap();
+        assert_eq!(ids(&reopened, None, &BTreeMap::new()), ordinary);
+        let lease = reopened.host_lock().unwrap();
+        reopened.claim(&event, &lease).unwrap();
+        let submitting = reopened
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let observable = [event.event_id.as_str(), "beta-1", "gamma-1"];
+        assert_eq!(ids(&reopened, None, &BTreeMap::new()), observable);
+        let receipt = Receipt {
+            schema_version: PROTOCOL_VERSION,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: submitting.message_digest,
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        reopened
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        let submitted = reopened
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Sent,
+                Some(receipt),
+                None,
+            )
+            .unwrap();
+        assert_eq!(ids(&reopened, None, &BTreeMap::new()), observable);
+        assert_eq!(reopened.delivery(&event.event_id).unwrap(), Some(submitted));
+        drop(lease);
+        std::fs::remove_dir_all(base).unwrap();
     }
 
     #[test]

@@ -8186,6 +8186,7 @@ impl SubmissionAdapter for Adapter {
 struct ScopedReviewGuard<'a> {
     deadline: Instant,
     review_event: bool,
+    manual_end_turn: bool,
     before_submit: &'a mut dyn FnMut(&crate::protocol::Event, &Target) -> Result<()>,
     keep_running: &'a dyn Fn() -> Result<()>,
 }
@@ -8225,6 +8226,11 @@ fn attempt_inner<A: SubmissionAdapter>(
         .map_or(review_event, |guard| guard.review_event != review_event)
     {
         return Err("SCOPED_REVIEW_EXPLICIT_GUARD_REQUIRED".into());
+    }
+    if d.event.requires_scoped_manual_wake()?
+        && !scoped.as_ref().is_some_and(|guard| guard.manual_end_turn)
+    {
+        return Err("SCOPED_MANUAL_WAKE_GUARD_REQUIRED".into());
     }
     if let Some(guard) = scoped.as_ref() {
         guard.check()?;

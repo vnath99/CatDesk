@@ -191,6 +191,15 @@ impl Event {
         Ok(())
     }
 
+    /// The reserved Web work source identifies manual Wakes that must pass
+    /// the task journal and grant checks before another USER message.
+    pub(crate) fn requires_scoped_manual_wake(&self) -> Result<bool> {
+        Ok(self.wake_metadata()?.is_some_and(|metadata| {
+            metadata.purpose == WakePurpose::ManualEndTurn
+                && metadata.source_event_id.starts_with("web-work-")
+        }))
+    }
+
     pub fn wake_metadata(&self) -> Result<Option<WakeMetadata>> {
         let mut fields = std::collections::BTreeMap::new();
         for reference in &self.audit_references {

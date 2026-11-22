@@ -621,6 +621,7 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
         let mut scoped = ScopedReviewGuard {
             deadline,
             review_event: review,
+            manual_end_turn: manual,
             before_submit: &mut timed_before_submit,
             keep_running: &guard,
         };
@@ -1841,7 +1842,7 @@ mod tests {
                 target,
                 crate::store::WakeIntent {
                     purpose: crate::protocol::WakePurpose::ManualEndTurn,
-                    source_event_id: "original-task-event",
+                    source_event_id: &format!("web-work-{}", crate::protocol::digest(project)),
                     source_turn_id: "finished-turn",
                     priority: 1,
                     ttl_seconds: 600,
@@ -1919,6 +1920,28 @@ mod tests {
             let admitted = fake.admitted.clone();
             let ack = fake.ack_count.clone();
             let handoffs = Cell::new(0);
+            {
+                let host = store.host_lock().unwrap();
+                let claimed = store.claim(&event, &host).unwrap();
+                let mut blocked_adapter = adapter(&event, &target);
+                let initial_frames = blocked_adapter.frames.len();
+                let mut status = local_status(&claimed);
+                assert_eq!(
+                    attempt_inner(
+                        &store,
+                        &host,
+                        &mut blocked_adapter,
+                        &claimed,
+                        &mut status,
+                        None
+                    )
+                    .unwrap_err(),
+                    "SCOPED_MANUAL_WAKE_GUARD_REQUIRED"
+                );
+                assert_eq!(blocked_adapter.frames.len(), initial_frames);
+                assert_eq!(blocked_adapter.ack_count.get(), 0);
+                assert_eq!(store.delivery(&event.event_id).unwrap(), Some(claimed));
+            }
             let mut handoff = |actual: &Event, actual_target: &Target| {
                 assert!(admitted.get());
                 assert_eq!(ack.get(), 0);
@@ -2333,6 +2356,7 @@ mod tests {
         let guard = ScopedReviewGuard {
             deadline: Instant::now() + Duration::from_millis(10),
             review_event: false,
+            manual_end_turn: false,
             before_submit: &mut before,
             keep_running: &keep,
         };
