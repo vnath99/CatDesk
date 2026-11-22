@@ -160,6 +160,10 @@ function Invoke-PublicLifecycle {
             }
             $state = $parsed.state
             if($localOnly -and $command -ceq 'recover' -and $state -ceq 'LOCAL_BACKEND_READY'){return 'CONNECTED_VERIFIED'}
+            if ($command -ceq 'recover' -and $state -ceq 'RELEASE_LIFECYCLE_BUSY') {
+                if ($parsed.detail -isnot [string] -or $parsed.detail -cne 'gate=RELEASE_LIFECYCLE_BUSY') { return 'ACTION_REQUIRED' }
+                return $state
+            }
             if ($command -eq 'recover' -and $state -ceq 'TRANSPORT_VERIFICATION_FAILED') {
                 if ($parsed.detail -isnot [string]) { return 'ACTION_REQUIRED' }
                 return Get-SupervisorRecoveryGateClass -Detail $parsed.detail
@@ -195,7 +199,7 @@ function Invoke-RecoveryBurst {
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
         $recovery = Invoke-PublicLifecycle -Root $Root -Action recover -BackendOnly:$BackendOnly
         if ($recovery -in @('CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'EXTERNAL_RUNTIME_VERIFICATION_FAILED',
-            'LOCAL_MCP_VERIFICATION_FAILED', 'ACTION_REQUIRED')) { return $recovery }
+            'LOCAL_MCP_VERIFICATION_FAILED', 'RELEASE_LIFECYCLE_BUSY', 'ACTION_REQUIRED')) { return $recovery }
         if ($attempt -lt $Attempts) {
             Wait-SupervisorDelay -Seconds $backoff
             $backoff = [Math]::Min($MaximumBackoff, $backoff * 2)
@@ -253,6 +257,16 @@ function Invoke-CatDeskAutostartSupervisor {
             # supervisor never compiles, provisions, or assumes ownership of
             # an externally started runtime.
             $recovery = Invoke-RecoveryBurst -Root $root -Attempts $MaximumAttempts -InitialBackoff $InitialBackoffSeconds -MaximumBackoff $MaximumBackoffSeconds -BackendOnly:$BackendOnly
+            if ($recovery -eq 'RELEASE_LIFECYCLE_BUSY') {
+                # Yield to the owner and recheck the listener before another
+                # recovery. No recovery burst runs while the lease is held.
+                Write-SupervisorState 'RELEASE_LIFECYCLE_BUSY'
+                $cycles++
+                if ($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles) {
+                    Wait-SupervisorDelay -Seconds ([Math]::Min($InitialBackoffSeconds, $HealthPollSeconds))
+                }
+                continue
+            }
             if ($recovery -eq 'CONNECTED_VERIFIED') {
                 Write-SupervisorState 'RECOVERED'
                 $cycles++

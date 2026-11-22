@@ -168,6 +168,20 @@ $detail = if ($parts.Count -eq 2) { $parts[1] } else { 'redacted' }
     Require (($publicCalls -join ',') -eq "status|$expectedWorkspace,recover|$expectedWorkspace,status|$expectedWorkspace") 'default public facade receives only status/recover and the resolved workspace identity'
     Require (([string]::Join(',', $delays)) -eq '15') 'default public facade transport pending uses ordinary health polling'
 
+    $delays.Clear()
+    [IO.File]::WriteAllText((Join-Path $workspace 'calls.log'), '')
+    [IO.File]::WriteAllLines((Join-Path $workspace 'states.txt'), [string[]]@(
+        'LOCAL_DAEMON_PENDING', 'RELEASE_LIFECYCLE_BUSY|gate=RELEASE_LIFECYCLE_BUSY',
+        'LOCAL_DAEMON_PENDING', 'CONNECTED_VERIFIED', 'READY'
+    ), [Text.UTF8Encoding]::new($false))
+    $handoff = States (Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 3 -InitialBackoffSeconds 2 -MaximumBackoffSeconds 3 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 3)
+    Require (($handoff -join ',') -ceq 'RELEASE_LIFECYCLE_BUSY,RECOVERED,READY,MONITORING_COMPLETE') 'supervisor resumes recovery after a fresh readiness sample'
+    $publicCalls = @([IO.File]::ReadAllLines((Join-Path $workspace 'calls.log')))
+    Require (($publicCalls -join ',') -ceq "status|$expectedWorkspace,recover|$expectedWorkspace,status|$expectedWorkspace,recover|$expectedWorkspace,status|$expectedWorkspace") 'contention ends the burst and recovery requires another listener observation'
+    Require (([string]::Join(',', $delays)) -ceq '2,15') 'contention uses short backoff and recovery returns to normal health polling'
+    [IO.File]::WriteAllText((Join-Path $workspace 'states.txt'), 'RELEASE_LIFECYCLE_BUSY|gate=RECOVERY_AUTHORITY_REQUIRED')
+    Require ((Invoke-PublicLifecycle -Root $expectedWorkspace -Action recover) -ceq 'ACTION_REQUIRED') 'busy state with an unrelated gate fails closed'
+
     $calls.Clear(); $delays.Clear()
     [IO.File]::WriteAllText((Join-Path $workspace 'calls.log'), '')
     [IO.File]::WriteAllLines((Join-Path $workspace 'states.txt'), [string[]]@('CORE_CONNECTED_WAKE_PENDING|gate=WAKE_RUNTIME_NOT_READY', 'READY'), [Text.UTF8Encoding]::new($false))

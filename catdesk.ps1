@@ -717,6 +717,10 @@ function Invoke-CanonicalRecovery {
         Write-LifecycleStatus 'LOCAL_BACKEND_READY' 'scope=LOCAL_BACKEND_ONLY; Wake, GUI and official runtime not examined or started'
         return
     }
+    if ($null -ne $result -and $result.State -ceq 'RELEASE_LIFECYCLE_BUSY') {
+        Write-LifecycleStatus 'RELEASE_LIFECYCLE_BUSY' 'gate=RELEASE_LIFECYCLE_BUSY'
+        return
+    }
     if ($null -ne $result -and $result.State -eq 'LKG_AUTHORITY_MISSING') {
         Write-LifecycleStatus 'LKG_AUTHORITY_MISSING'
         return
@@ -762,7 +766,7 @@ function Get-LifecycleRecoveryResult {
         $state = [string]$parsed.State
         if ($parsed.PSObject.Properties['RecoverySource'] -and $parsed.RecoverySource -isnot [string]) { return $null }
         $source = if ($parsed.PSObject.Properties['RecoverySource']) { [string]$parsed.RecoverySource } else { '' }
-        if ($state -cnotin @('LOCAL_BACKEND_READY', 'CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'RECOVERY_READY', 'LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED', 'TRANSPORT_VERIFICATION_FAILED')) {
+        if ($state -cnotin @('LOCAL_BACKEND_READY', 'CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'RECOVERY_READY', 'LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED', 'RELEASE_LIFECYCLE_BUSY', 'TRANSPORT_VERIFICATION_FAILED')) {
             return $null
         }
         if ($parsed.PSObject.Properties['Gate'] -and $parsed.Gate -isnot [string]) { return $null }
@@ -790,6 +794,7 @@ function Get-LifecycleRecoveryResult {
         } elseif ($gate) {
             return $null
         }
+        if ($state -ceq 'RELEASE_LIFECYCLE_BUSY' -and $source) { return $null }
         if ($source -and $source -notin @('LAST_KNOWN_GOOD', 'INTERRUPTED_PROMOTION')) { return $null }
         return [pscustomobject]@{ State = $state; RecoverySource = $source; Gate = $gate }
     } catch {

@@ -1252,7 +1252,12 @@ function Invoke-CanonicalStackBootstrap {
     $lease=$null
     try{
         try{$lease=Enter-CatDeskStoppedLifecycleLease -Root $root}catch{
-            Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'canonical lifecycle owner lease is unavailable'
+            $cause = $_.Exception.GetBaseException()
+            if ($cause -is [IO.IOException] -and $cause.HResult -eq [int]0x80070020) {
+                Write-RedactedStatus 'RELEASE_LIFECYCLE_BUSY' 'canonical lifecycle owner holds the Windows lease'
+            } else {
+                Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'canonical lifecycle owner lease is unavailable'
+            }
             return
         }
         Invoke-CanonicalStackBootstrapCore -StoppedLifecycleLease $lease

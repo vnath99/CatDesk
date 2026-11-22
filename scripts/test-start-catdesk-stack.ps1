@@ -342,7 +342,14 @@ try {
   # including its thrown-error and early-refusal paths. Plans do not create a
   # control directory just to obtain momentary, non-durable exclusion.
   $script:actions.Clear();$held=Enter-CatDeskStoppedLifecycleLease $root
-  try{$blockedLifecycle=Invoke-CanonicalStackBootstrap|ConvertFrom-Json;if($blockedLifecycle.State -cne 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' -or $script:actions.Count){throw 'executing lifecycle crossed a competing stopped lease'}}finally{$held.Dispose()}
+  try{$blockedLifecycle=Invoke-CanonicalStackBootstrap|ConvertFrom-Json;if($blockedLifecycle.State -cne 'RELEASE_LIFECYCLE_BUSY' -or $script:actions.Count){throw 'executing lifecycle did not defer at the competing stopped lease'}}finally{$held.Dispose()}
+  $blockedControlRoot=Join-Path $root 'invalid-lease-control'
+  [void][IO.Directory]::CreateDirectory($blockedControlRoot)
+  [IO.File]::WriteAllText((Join-Path $blockedControlRoot '.catdesk'), 'fixture')
+  $Workspace=$blockedControlRoot
+  $invalidLease=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
+  if($invalidLease.State -cne 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' -or $script:actions.Count){throw 'invalid lease namespace was treated as transient contention'}
+  $Workspace=$root
   function Get-ConfiguredLocalMcp {param($Path)Assert-FixtureLifecycleLeaseHeld $Workspace 'config';throw 'fixture bootstrap core failure'}
   try{Invoke-CanonicalStackBootstrap|Out-Null;throw 'fixture bootstrap failure was swallowed'}catch{if($_.Exception.Message -cne 'fixture bootstrap core failure'){throw}}
   Assert-FixtureLifecycleLeaseReleased $root

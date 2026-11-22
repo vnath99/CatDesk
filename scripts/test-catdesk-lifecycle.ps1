@@ -149,6 +149,20 @@ try {
     Require ($observedPublicInputs -contains "recovery:$realCanonicalRoot|$realConfig|$realHash|$realFingerprint|$realTimeout|start") 'start preserves every public lifecycle identity and timeout after helper loading'
     $actions.Clear()
 
+    $controlRoot = Join-Path $realCanonicalRoot '.catdesk\release-pair-control'
+    [void][IO.Directory]::CreateDirectory($controlRoot)
+    $leasePath = Join-Path $controlRoot 'stopped-owner.lock'
+    $ownedLease = [IO.File]::Open($leasePath, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    $publicRecovery = $realCanonical.Clone()
+    [void]$publicRecovery.Remove('Recovery')
+    try {
+        $busy = Invoke-FixtureFacade -Command 'recover' -Seams $publicRecovery -FixtureWorkspace $realCanonicalRoot -FixtureConfigPath $realConfig -FixtureBackendOnly | ConvertFrom-Json
+        Require ($busy.state -ceq 'RELEASE_LIFECYCLE_BUSY' -and $busy.detail -ceq 'gate=RELEASE_LIFECYCLE_BUSY') 'public backend recovery distinguishes a real Windows lease from missing authority'
+    } finally {
+        $ownedLease.Dispose()
+    }
+    Require ($actions.Count -eq 0 -and -not [IO.File]::Exists($realConfig)) 'lease contention did not invoke another lifecycle action or require a configuration file'
+
     # Use real file identity and hashing, with only the native child seam
     # simulated. This never launches a release controller or a backend.
     $attemptId = 'a' * 32
