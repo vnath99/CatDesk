@@ -501,8 +501,9 @@ fn require_delivery(
         && delivery.event.audit_references[0]
             .strip_prefix("catdesk-review-v1:")
             .is_some_and(|grant| grant.len() <= 128 && crate::protocol::valid_id(grant));
+    let manual_receipt = mode == Mode::Receipt && delivery.exact_task_manual_wake()?;
     let admitted_type = (delivery.event.event_type == "engineering_attention"
-        && (ordinary || continuation))
+        && (ordinary || continuation || manual_receipt))
         || source_review;
     if !phase_valid
         || !matches!(
@@ -1031,6 +1032,42 @@ mod tests {
                 "missing {key}"
             );
         }
+    }
+
+    #[test]
+    fn task_manual_wake_receipt_probe_requires_an_exact_submission_witness() {
+        let (store, lease) = super::super::scheduler::tests::fixture("manual-wake-receipt-probe");
+        let target = store.config().unwrap().targets["alpha"].clone();
+        let event = store
+            .produce_expected_wake(
+                "alpha",
+                "Continue the fixture",
+                &target,
+                crate::store::WakeIntent {
+                    purpose: crate::protocol::WakePurpose::ManualEndTurn,
+                    source_event_id: &format!("web-work-{}", "a".repeat(64)),
+                    source_turn_id: "fixture-turn",
+                    priority: 0,
+                    ttl_seconds: 600,
+                },
+            )
+            .unwrap();
+        let claimed = store.claim(&event, &lease).unwrap();
+        assert!(require_receipt_selection(&store, &claimed).is_err());
+        let submitting = store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        require_receipt_selection(&store, &submitting).unwrap();
+        require_delivery(&store, "alpha", &target, &submitting, Mode::Receipt).unwrap();
+        assert!(require_delivery(&store, "beta", &target, &submitting, Mode::Receipt).is_err());
+        assert!(require_delivery(&store, "alpha", &target, &submitting, Mode::Advisory).is_err());
+        assert_eq!(store.delivery(&event.event_id).unwrap(), Some(submitting));
     }
 
     #[test]

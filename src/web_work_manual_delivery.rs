@@ -463,24 +463,35 @@ mod tests {
             .unwrap();
         assert_pending();
         let submitting = wake.delivery(event_id).unwrap().unwrap();
+        crate::project_mcp_task::require_journaled_manual_wake(
+            prepared.scope(),
+            &record,
+            &submitting,
+        )
+        .unwrap();
+        let mut wrong_message = submitting.clone();
+        wrong_message.event.message.push_str(" unexpected text");
+        assert_eq!(
+            crate::project_mcp_task::require_journaled_manual_wake(
+                prepared.scope(),
+                &record,
+                &wrong_message
+            )
+            .unwrap_err(),
+            "WEB_TASK_MANUAL_WAKE_SELECTION_CHANGED"
+        );
         let receipt = Receipt {
             schema_version: 1,
             event_id: event_id.into(),
             target_generation: target.generation,
             target_digest: target.digest.clone(),
-            message_digest: submitting.message_digest,
+            message_digest: submitting.message_digest.clone(),
             sent_utc: now(),
             evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
         };
         wake.record_exact_receipt_timer(event_id, &receipt).unwrap();
-        wake.transition(
-            event_id,
-            &submitting.owner,
-            Phase::Sent,
-            Some(receipt),
-            None,
-        )
-        .unwrap();
+        wake.reconcile_task_continuation_sent_expected(event_id, receipt, &submitting)
+            .unwrap();
         assert_pending();
         wake.complete_timer(event_id).unwrap();
         let closed = crate::web_work::resolve(&control, resolution.clone()).unwrap();

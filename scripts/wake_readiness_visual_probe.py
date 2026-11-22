@@ -71,12 +71,19 @@ def load_delivery_message(path, expected_sha256, url, *, receipt_only=False, res
         refs = event["auditReferences"]
         fields = dict(item.removeprefix("catdesk.wake.v1:").split(":", 1) for item in refs
                       if isinstance(item, str) and item.startswith("catdesk.wake.v1:"))
-        continuation = (len(refs) == len(fields) == 5
-                        and fields.get("purpose") == "NEW_TASK"
-                        and re.fullmatch(r"web-work-[0-9a-f]{64}", fields.get("source-event", ""))
-                        and re.fullmatch(r"initial-context-[0-9a-f]{64}", fields.get("source-turn", ""))
-                        and fields.get("priority", "").isdigit() and 0 <= int(fields["priority"]) <= 255
-                        and fields.get("expires-utc", "").isdigit() and int(fields["expires-utc"]) > 0)
+        source_event = fields.get("source-event", "")
+        source_turn = fields.get("source-turn", "")
+        purpose = fields.get("purpose")
+        valid_metadata = (len(refs) == len(fields) == 5
+                          and re.fullmatch(r"web-work-[0-9a-f]{64}", source_event)
+                          and fields.get("priority", "").isdigit() and 0 <= int(fields["priority"]) <= 255
+                          and fields.get("expires-utc", "").isdigit() and int(fields["expires-utc"]) > 0)
+        continuation = (valid_metadata and purpose == "NEW_TASK"
+                        and re.fullmatch(r"initial-context-[0-9a-f]{64}", source_turn))
+        if valid_metadata and receipt_only and not response_only and purpose == "MANUAL_END_TURN":
+            identity = json.dumps([event["projectId"], source_event, source_turn, purpose], separators=(",", ":"))
+            continuation = (re.fullmatch(r"[A-Za-z0-9_-]{1,128}", source_turn)
+                            and event["eventId"] == "wake-intent-" + hashlib.sha256(identity.encode()).hexdigest())
     refs = event["auditReferences"]
     source_review = (source_review_diagnostics is True and sent_diagnostics is True
         and response_only is True and receipt_only is False

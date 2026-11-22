@@ -179,6 +179,41 @@ pub(crate) fn require_completed_task_continuations(
     Ok(())
 }
 
+pub(crate) fn require_journaled_manual_wake(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    delivery: &catdesk_wake::store::Delivery,
+) -> Result<(), String> {
+    let link = record
+        .task_assignment
+        .as_ref()
+        .ok_or("WEB_TASK_GRANT_REQUIRED")?;
+    let directory = task_directory(project, &link.task_id, false)?;
+    let calls = read_task_calls(project, record, &directory.join("assignment.json"), false)?;
+    let mut matched = false;
+    for (call_id, call) in &calls {
+        if is_completed_manual_wake(call) && manual_wake_event_id(call)? == delivery.event.event_id
+        {
+            if matched {
+                return Err("WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN".into());
+            }
+            validate_selection(
+                project,
+                record,
+                &delivery.target,
+                &delivery.event,
+                call_id,
+                call,
+            )?;
+            matched = true;
+        }
+    }
+    if !matched {
+        return Err("WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN".into());
+    }
+    Ok(())
+}
+
 fn is_completed_manual_wake(call: &ToolCallRecordV1) -> bool {
     call.tool_name == "wake.manual_end_turn" && call.status == ToolCallStatus::Completed
 }

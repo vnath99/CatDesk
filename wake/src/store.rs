@@ -270,6 +270,35 @@ impl Delivery {
         .then_some("RESPONSE_LOAD_ERROR")
     }
 
+    pub(crate) fn exact_task_manual_wake(&self) -> Result<bool> {
+        let event = &self.event;
+        let Some(metadata) = event.wake_metadata()? else {
+            return Ok(false);
+        };
+        Ok(event.event_type == "engineering_attention"
+            && event.audit_references.len() == 5
+            && metadata.purpose == WakePurpose::ManualEndTurn
+            && metadata.source_turn_id.len() <= 128
+            && metadata
+                .source_event_id
+                .strip_prefix("web-work-")
+                .is_some_and(|hash| {
+                    hash.len() == 64
+                        && hash
+                            .bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+            && WakeIntent {
+                purpose: metadata.purpose,
+                source_event_id: &metadata.source_event_id,
+                source_turn_id: &metadata.source_turn_id,
+                priority: metadata.priority,
+                ttl_seconds: 1,
+            }
+            .event_id(&event.project_id)?
+                == event.event_id)
+    }
+
     fn validate(&self) -> Result<()> {
         self.event.validate()?;
         self.target.validate()?;
@@ -1982,7 +2011,8 @@ impl Store {
         self.reconcile_submitting_sent_inner(id, receipt, Some(expected), false)
     }
 
-    /// The same receipt CAS for an exact task-context continuation. The caller
+    /// The same receipt CAS for an exact task-context continuation or task
+    /// manual Wake. The caller
     /// retains the task/project lease and supplies fresh read-only browser proof.
     /// This creates no task, producer authority, retry permission or USER input.
     pub fn reconcile_task_continuation_sent_expected(
@@ -2010,28 +2040,29 @@ impl Store {
                     .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         };
         let selected_kind = if task_continuation {
-            id.strip_prefix("wake-intent-").is_some_and(exact_hash)
-                && delivery.event.audit_references.len() == 5
-                && delivery.event.wake_metadata()?.is_some_and(|metadata| {
-                    metadata.purpose == crate::protocol::WakePurpose::NewTask
-                        && metadata
-                            .source_event_id
-                            .strip_prefix("web-work-")
-                            .is_some_and(exact_hash)
-                        && metadata
-                            .source_turn_id
-                            .strip_prefix("initial-context-")
-                            .is_some_and(exact_hash)
-                        && crate::store::WakeIntent {
-                            purpose: metadata.purpose,
-                            source_event_id: &metadata.source_event_id,
-                            source_turn_id: &metadata.source_turn_id,
-                            priority: metadata.priority,
-                            ttl_seconds: 1,
-                        }
-                        .event_id(&delivery.event.project_id)
-                        .is_ok_and(|expected_id| expected_id == id)
-                })
+            delivery.exact_task_manual_wake()?
+                || (id.strip_prefix("wake-intent-").is_some_and(exact_hash)
+                    && delivery.event.audit_references.len() == 5
+                    && delivery.event.wake_metadata()?.is_some_and(|metadata| {
+                        metadata.purpose == crate::protocol::WakePurpose::NewTask
+                            && metadata
+                                .source_event_id
+                                .strip_prefix("web-work-")
+                                .is_some_and(exact_hash)
+                            && metadata
+                                .source_turn_id
+                                .strip_prefix("initial-context-")
+                                .is_some_and(exact_hash)
+                            && crate::store::WakeIntent {
+                                purpose: metadata.purpose,
+                                source_event_id: &metadata.source_event_id,
+                                source_turn_id: &metadata.source_turn_id,
+                                priority: metadata.priority,
+                                ttl_seconds: 1,
+                            }
+                            .event_id(&delivery.event.project_id)
+                            .is_ok_and(|expected_id| expected_id == id)
+                    }))
         } else {
             delivery.event.audit_references.is_empty()
                 && id.strip_prefix("web-work-").is_some_and(exact_hash)
@@ -2870,6 +2901,13 @@ mod task_continuation_receipt_tests {
     use super::*;
 
     fn fixture() -> (Store, Delivery, Receipt) {
+        fixture_for(
+            WakePurpose::NewTask,
+            &format!("initial-context-{}", "b".repeat(64)),
+        )
+    }
+
+    fn fixture_for(purpose: WakePurpose, source_turn: &str) -> (Store, Delivery, Receipt) {
         let base = std::env::temp_dir().join(format!(
             "task-continuation-receipt-{}-{}",
             std::process::id(),
@@ -2887,9 +2925,9 @@ mod task_continuation_receipt_tests {
                 "frozen task continuation",
                 &target,
                 WakeIntent {
-                    purpose: WakePurpose::NewTask,
+                    purpose,
                     source_event_id: &format!("web-work-{}", "a".repeat(64)),
-                    source_turn_id: &format!("initial-context-{}", "b".repeat(64)),
+                    source_turn_id: source_turn,
                     priority: 0,
                     ttl_seconds: 600,
                 },
@@ -2917,6 +2955,33 @@ mod task_continuation_receipt_tests {
         };
         drop(host);
         (store, delivery, receipt)
+    }
+
+    #[test]
+    fn manual_wake_receipt_reconciles_one_exact_submitting_event() {
+        let (store, prior, receipt) = fixture_for(WakePurpose::ManualEndTurn, "fixture-turn");
+        let id = &prior.event.event_id;
+        let mut wrong_generation = receipt.clone();
+        wrong_generation.target_generation += 1;
+        assert!(
+            store
+                .reconcile_task_continuation_sent_expected(id, wrong_generation, &prior)
+                .is_err()
+        );
+        assert_eq!(store.delivery(id).unwrap(), Some(prior.clone()));
+        let witness = fs::read(store.submission_start_path(id)).unwrap();
+        let recovered = store
+            .reconcile_task_continuation_sent_expected(id, receipt.clone(), &prior)
+            .unwrap();
+        assert_eq!(recovered.phase, Phase::Sent);
+        assert_eq!(recovered.receipt, Some(receipt.clone()));
+        assert_eq!(fs::read(store.submission_start_path(id)).unwrap(), witness);
+        assert!(
+            store
+                .reconcile_task_continuation_sent_expected(id, receipt, &prior)
+                .is_err()
+        );
+        assert_eq!(store.delivery(id).unwrap(), Some(recovered));
     }
 
     #[test]

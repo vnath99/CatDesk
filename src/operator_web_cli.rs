@@ -1354,9 +1354,12 @@ fn inspect_review_response(
     let target =
         catdesk_wake::protocol::Target::new(key.target_generation, key.conversation_url.clone())?;
     let delivery = wake.delivery(event_id)?.ok_or("WEB_REVIEW_EVENT_MISSING")?;
-    let source_event = delivery
-        .event
-        .wake_metadata()?
+    let metadata = delivery.event.wake_metadata()?;
+    let manual_receipt = mode == TaskObservation::ReconcileSubmission
+        && metadata.as_ref().is_some_and(|metadata| {
+            metadata.purpose == catdesk_wake::protocol::WakePurpose::ManualEndTurn
+        });
+    let source_event = metadata
         .map(|metadata| metadata.source_event_id)
         .unwrap_or_else(|| delivery.event.event_id.clone());
     let task_record =
@@ -1381,12 +1384,28 @@ fn inspect_review_response(
     {
         return Err("WEB_REVIEW_TASK_BINDING_REQUIRED".into());
     }
-    if task_record
-        .as_ref()
-        .is_some_and(|record| record.target != target)
+    if !manual_receipt
+        && task_record
+            .as_ref()
+            .is_some_and(|record| record.target != target)
     {
         return Err("WEB_REVIEW_TASK_BINDING_CHANGED".into());
     }
+    let verify_manual_receipt = || {
+        if manual_receipt {
+            let record = task_record
+                .as_ref()
+                .ok_or("WEB_REVIEW_TASK_BINDING_REQUIRED")?;
+            lease.check_source_task(&record.target, &target, &source_event)?;
+            crate::project_mcp_task::require_journaled_manual_wake(
+                prepared.scope(),
+                record,
+                &delivery,
+            )?;
+        }
+        Ok::<(), String>(())
+    };
+    verify_manual_receipt()?;
     let guard = || {
         prepared
             .revalidate_registration()
@@ -1435,6 +1454,9 @@ fn inspect_review_response(
         if let Some(receipt) = receipt {
             let receipt: catdesk_wake::store::Receipt =
                 serde_json::from_value(receipt.clone()).map_err(|_| "WEB_WORK_RECEIPT_UNPROVEN")?;
+            // The project lease excludes task calls while this journal is read.
+            // Keep it outside the shared browser and registration commit locks.
+            verify_manual_receipt()?;
             // Browser ownership has fully exited. Reuse the existing short registry
             // lock and exact-delivery CAS; no shared lock spans browser observation.
             let _host = wake.host_lock()?;

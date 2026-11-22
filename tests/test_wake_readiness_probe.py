@@ -209,6 +209,39 @@ class ReadinessProbeTests(unittest.TestCase):
             self.assertEqual(read(value), message)
             self.assertEqual(json.loads(path.read_text()), value)
 
+    def test_manual_wake_can_be_observed_only_in_exact_receipt_mode(self):
+        url = "https://chatgpt.com/c/fixture"
+        source, turn, purpose = "web-work-" + "a" * 64, "fixture-turn", "MANUAL_END_TURN"
+        witness = json.dumps(["alpha", source, turn, purpose], separators=(",", ":"))
+        identity = "wake-intent-" + hashlib.sha256(witness.encode()).hexdigest()
+        refs = ["catdesk.wake.v1:" + key + ":" + field for key, field in [
+            ("purpose", purpose), ("source-event", source), ("source-turn", turn),
+            ("priority", "0"), ("expires-utc", "100")]]
+        message = "Continue the fixture"
+        value = dict(phase="SUBMITTING", receipt=None,
+            messageDigest=hashlib.sha256(message.encode()).hexdigest(),
+            target=dict(generation=1, url=url, digest=hashlib.sha256(url.encode()).hexdigest()),
+            event=dict(eventId=identity, projectId="alpha", eventType="engineering_attention",
+                targetGeneration=1, message=message, auditReferences=refs))
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "deliveries" / (identity + ".json")
+            path.parent.mkdir()
+            def read(item, **flags):
+                path.write_text(json.dumps(item), encoding="utf-8")
+                checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+                return self.probe.load_delivery_message(path, checksum, url, **flags)
+            self.assertEqual(read(value, receipt_only=True), value)
+            with self.assertRaises(ValueError):
+                read(value)
+            with self.assertRaises(ValueError):
+                read(value | {"phase": "CLAIMED"}, receipt_only=True)
+            with self.assertRaises(ValueError):
+                read(value | {"event": value["event"] | {"projectId": "beta"}}, receipt_only=True)
+            changed = refs.copy()
+            changed[2] += "-foreign"
+            with self.assertRaises(ValueError):
+                read(value | {"event": value["event"] | {"auditReferences": changed}}, receipt_only=True)
+
     def test_sent_continuation_diagnostics_cannot_admit_unknown_or_unreceived_delivery(self):
         url="https://chatgpt.com/c/fixture"
         event_id="wake-intent-"+"b"*64

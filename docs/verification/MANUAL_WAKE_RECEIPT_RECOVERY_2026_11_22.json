@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T21:33:41.1632229Z",
+  "scope": "DEVELOPMENT_MANUAL_WAKE_RECEIPT_RECOVERY_AND_READ_ONLY_CLOUD_LOOKUP",
+  "baseline": "ee54542578d31e410e7b80a911c34c67790dbae4",
+  "priorBehavior": "The existing exact submission recovery admitted a task-context continuation and refused a task-issued manual Wake before receipt observation or commit.",
+  "operatorCommand": "operator web review reconcile-submission --project-id <project> --event-id <original-manual-wake-event>",
+  "recovery": {
+    "required": ["one exact completed task-journal call", "original SUBMITTING delivery and witness", "fresh exact USER receipt", "same project, event, generation and target digest"],
+    "freshJournalChecksUnderExistingProjectLease": true,
+    "nativeAndPythonAdmitManualEventOnlyForReceiptProbe": true,
+    "republishOrResendAllowed": false,
+    "responseCompletionProvedByReceipt": false,
+    "existingReceiptCasReused": true
+  },
+  "verification": {
+    "pythonReadinessTestsPassed": 61,
+    "windowsReceiptTestsPassed": 3,
+    "windowsReadinessTestsPassed": 11,
+    "windowsBackendDeliveryAndRecoveryTestsPassed": 5,
+    "strictWakeClippyPassed": true,
+    "fixtures": "Disposable worktree, local task journal and retained native delivery metadata with simulated browser receipt evidence."
+  },
+  "cloudLookup": {
+    "existingSignedInChromeProfileUsed": true,
+    "oneDriveRecycleBinEmpty": true,
+    "cloudDesktopRows": 1,
+    "projectsFolderFound": false,
+    "temporaryLookupTabClosedVerified": true,
+    "filesRecoveredOrChanged": 0
+  },
+  "release": {
+    "wakeBrowserStarts": 0,
+    "externalMessagesSent": 0,
+    "historicalEventsReconciled": 0,
+    "productionMutations": 0,
+    "firstInstalledWebCycleAccepted": false
+  }
+}

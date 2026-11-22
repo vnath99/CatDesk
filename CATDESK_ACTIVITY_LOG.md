@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 21:33 UTC — extend exact receipt recovery to a task-issued self-Wake.** The existing recovery command now selects the original manual Wake through its completed task-journal call and can record a fresh exact USER receipt. The signed-in OneDrive cloud Desktop and recycle bin supplied no original Git backing. [Evidence](docs/verification/MANUAL_WAKE_RECEIPT_RECOVERY_2026_11_22.json).
+
 **2026-11-22 21:27 UTC — verify the one-command promotion resolver before starting a candidate.** A disposable native controller confirmed that the old PowerShell check accepted an array-valued artifact digest. The facade now requires one JSON object and scalar identity fields, and reports a refusal at candidate resolution. [Evidence](docs/verification/PROMOTION_CANDIDATE_SELECTION_SHAPE_2026_11_22.json).
 
 **2026-11-22 21:21 UTC — preserve task ownership through outstanding continuations.** Completion of an assigned Web request now checks its task journal and each task-issued manual Wake before closing. A queued, uncertain or response-pending Wake keeps the request open. [Evidence](docs/verification/MANUAL_WAKE_COMPLETION_GUARD_2026_11_22.json).

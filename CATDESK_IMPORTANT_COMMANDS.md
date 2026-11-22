@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — reconcile an interrupted task-issued self-Wake.** Supporting development builds accept `operator web review reconcile-submission --project-id <project> --event-id <original-manual-wake-event>`. It observes the exact conversation using the existing bounded browser owner. A committed receipt requires the original submission witness, exact task-journal identity and fresh USER proof. Observe the response timer separately. [Verification](docs/verification/MANUAL_WAKE_RECEIPT_RECOVERY_2026_11_22.json).
+
 **November 22 — identify an unproven candidate selection.** `REVIEWED_PROMOTION_RESOLUTION_UNPROVEN` at `RESOLVE_CANDIDATE` means the canonical resolver returned a result without the required exact candidate identity or shape. The supporting facade stops before starting a candidate. Use an approved native resolver and inspect the existing result for the original digest. [Verification](docs/verification/PROMOTION_CANDIDATE_SELECTION_SHAPE_2026_11_22.json).
 
 **November 22 — close a request after its requested continuations finish.** `catdesk_web_work_resolve` with outcome `completed` now returns `WEB_WORK_CONTINUATION_PENDING` when an exact task-issued manual Wake still needs delivery or a completed response. Use the existing event's receipt and timer for verification. A nonterminal task call returns `PROJECT_TASK_RECOVERY_REQUIRED`. [Verification](docs/verification/MANUAL_WAKE_COMPLETION_GUARD_2026_11_22.json).
