@@ -168,6 +168,21 @@ try {
         ($actions -join ',') -ceq 'rollback') 'the facade distinguishes confirmed predecessor serving from disk repair alone'
     $actions.Clear()
 
+    $supervisedRollback = $realCanonical.Clone()
+    $supervisedRollback.Recovery = {
+        param($engine,$root,$config,$expected,$manifest,$timeout,$requested,$backend,$failed,$automatic)
+        Require ($root -ceq $realCanonicalRoot -and $config -ceq $realConfig -and -not $expected -and -not $failed -and
+            $requested -ceq 'recover' -and $backend -and $automatic) 'backend-only supervision can use the retained authority without caller-supplied hashes'
+        [void]$actions.Add('supervised-rollback')
+        '{"State":"LOCAL_BACKEND_READY","RecoverySource":"LAST_KNOWN_GOOD"}'
+    }
+    $invalidSupervised = & $facade recover -BackendOnly -RollbackFailedPromotion -Workspace $realCanonicalRoot -ExpectedBuildSha256 $realHash -TestSeams $supervisedRollback | ConvertFrom-Json
+    Require ($invalidSupervised.state -ceq 'RECOVERY_AUTHORITY_REQUIRED' -and $actions.Count -eq 0) 'supervised rollback cannot override an explicit artifact pin'
+    $verifiedSupervised = & $facade recover -BackendOnly -RollbackFailedPromotion -Workspace $realCanonicalRoot -ConfigPath $realConfig -TestSeams $supervisedRollback | ConvertFrom-Json
+    Require ($verifiedSupervised.state -ceq 'LOCAL_BACKEND_READY' -and $verifiedSupervised.detail -match 'predecessor verified and selected' -and
+        ($actions -join ',') -ceq 'supervised-rollback') 'supervised verified recovery reports the selected predecessor'
+    $actions.Clear()
+
     $controlRoot = Join-Path $realCanonicalRoot '.catdesk\release-pair-control'
     [void][IO.Directory]::CreateDirectory($controlRoot)
     $leasePath = Join-Path $controlRoot 'stopped-owner.lock'

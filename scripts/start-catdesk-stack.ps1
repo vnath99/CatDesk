@@ -6,6 +6,7 @@ param(
     [int]$ReadyTimeoutSeconds = 180,
     [string]$ExpectedBuildSha256 = "",
     [string]$RollbackFromSha256 = "",
+    [switch]$RollbackFailedPromotion,
     [string]$BuildFingerprintPath = "",
     [string]$TunnelClientPath = "",
     [switch]$BackendOnly,
@@ -1228,6 +1229,51 @@ function Get-ExactBackendRollbackSelection {
     return $selection
 }
 
+function Get-SupervisedBackendRollbackSelection {
+    param([string]$Root, [System.IO.FileStream]$Lease)
+    if (-not $RollbackFailedPromotion -or $Mode -cne 'recover' -or -not $Execute -or -not $BackendOnly -or
+        $ExpectedBuildSha256 -or $RollbackFromSha256 -or $null -eq $Lease -or
+        (Get-CatDeskReleaseStartupGate -Root $Root -HeldLifecycleLease $Lease) -cne 'READY' -or
+        (Get-RequestedCatDeskFingerprint $Root '' $BuildFingerprintPath)) {
+        throw 'automatic rollback is outside the scoped release lease'
+    }
+    $pointer = Read-CatDeskLkgPointer $Root
+    if ($null -eq $pointer) { return }
+    # Require a completed reviewed promotion of the selected slot. A bare
+    # LKG pointer, a launch failure or runtime health cannot supply authority.
+    $promotion = Get-CatDeskReviewedPromotionAuthority -Root $Root -Canonical $pointer
+    $other = if ($pointer.Slot -ceq 'slot-a') { 'slot-b' } else { 'slot-a' }
+    $previous = Read-CatDeskLkgSlot -Root $Root -Slot $other
+    if ($null -eq $previous) { return }
+    $selection = Get-CatDeskRetainedReleasePredecessor -Root $Root -ExpectedHash $previous.Hash
+    if ($null -ne $selection -and $selection.Current.Slot -ceq $pointer.Slot -and
+        $selection.Current.Generation -eq $pointer.Generation -and $selection.Current.Hash -ceq $pointer.Hash) {
+        # The script's successful disk handoff can precede the native result.
+        # A missing, unbound or ambiguous terminal outcome grants no rollback.
+        $native = @{}
+        foreach ($name in @('authorization.json','claim.json','result.json')) {
+            $path = Assert-CatDeskRecoveryContainedPath $Root (Join-Path $Root ".catdesk\promotion-control\$name") 'supervised rollback promotion record'
+            $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or $item.Length -lt 1 -or $item.Length -gt 8192) { throw 'native promotion record is invalid' }
+            $native[$name] = ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText($path))
+        }
+        $auth = $native['authorization.json']; $claim = $native['claim.json']; $result = $native['result.json']
+        if ($auth.schemaVersion -ne 1 -or $claim.schemaVersion -ne 1 -or $result.schemaVersion -ne 1 -or
+            $auth.localBackendOnly -isnot [bool] -or -not $auth.localBackendOnly -or
+            ($auth.generation -isnot [int] -and $auth.generation -isnot [long]) -or $auth.generation -lt 1 -or
+            $auth.authorizationId -cne $promotion.authorizationId -or $auth.transactionId -cne $promotion.transactionId -or
+            $auth.claimId -cnotmatch '^[a-f0-9]{32}$' -or -not $auth.candidateRelativePath -or
+            $auth.priorCanonicalSha256 -cne $selection.Previous.Hash -or $auth.candidateSha256 -cne $pointer.Hash -or
+            $claim.state -cne 'CLAIMED_PENDING' -or $claim.transactionId -cne $auth.transactionId -or
+            $claim.authorizationId -cne $auth.authorizationId -or $claim.claimId -cne $auth.claimId -or
+            $claim.candidateRelativePath -cne $auth.candidateRelativePath -or
+            $result.state -cne 'PROMOTION_COMPLETED' -or $result.servingState -cne 'STOPPED_AFTER_BOUNDED_OWNER' -or
+            $result.transactionId -cne $auth.transactionId -or $result.authorizationGeneration -ne $auth.generation -or
+            $result.candidateSha256 -cne $auth.candidateSha256) { throw 'native promotion outcome is not uniquely complete' }
+        $selection | Add-Member -NotePropertyName Promotion -NotePropertyValue $promotion -PassThru
+    }
+}
+
 function Invoke-ExactBackendRollback {
     param([string]$Root, [System.IO.FileStream]$Lease)
     try {
@@ -1248,7 +1294,7 @@ function Invoke-ExactBackendRollback {
 }
 
 function Invoke-BackendOnlyBootstrap {
-    param([string]$Root, $Canonical, $RetainedSelection, [System.IO.FileStream]$StoppedLifecycleLease, $RollbackSelection)
+    param([string]$Root, $Canonical, $RetainedSelection, [System.IO.FileStream]$StoppedLifecycleLease, $RollbackSelection, $SupervisedSelection)
     # Release repair before this function retains its existing integrity/owner
     # gates and helper timeouts. Only local convergence is capped here; a probe
     # already in flight retains its existing finite per-call timeout.
@@ -1256,8 +1302,9 @@ function Invoke-BackendOnlyBootstrap {
     $local = Get-ConfiguredLocalMcp -Path $ConfigPath
     try {
         $headers = Get-LocalMcpProbeHeaders -LocalMcp $local
-        if (($null -ne $RetainedSelection -or $null -ne $RollbackSelection) -and !$headers.ContainsKey('Authorization')) {
-            throw 'LOCAL_MCP_AUTH_TOKEN_INVALID'
+        if (!$headers.ContainsKey('Authorization')) {
+            if ($null -ne $RetainedSelection -or $null -ne $RollbackSelection) { throw 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+            $SupervisedSelection = $null
         }
     } catch {
         $gate = if ($_.Exception.Message -eq 'LOCAL_MCP_AUTH_SCOPE_INVALID') { 'LOCAL_MCP_AUTH_SCOPE_INVALID' } else { 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
@@ -1286,7 +1333,7 @@ function Invoke-BackendOnlyBootstrap {
         # proved this closed mode. No foreign listener or same-path racer wins.
         $launchHash = $ExpectedBuildSha256
         $launchFingerprint = $BuildFingerprintPath
-        if ($RollbackFromSha256) {
+        if ($RollbackFromSha256 -or $null -ne $SupervisedSelection -or ($RollbackFailedPromotion -and $null -ne $RetainedSelection)) {
             if (@(Get-CatDeskDaemonProcessCandidates -Canonical $Canonical).Count) {
                 Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'a backend owner appeared before rollback launch'
                 return
@@ -1303,9 +1350,10 @@ function Invoke-BackendOnlyBootstrap {
         if ($rechecked.Path -cne $Canonical.Path -or $rechecked.Sha256 -cne $Canonical.Sha256) { throw 'local backend release changed before launch' }
         if ((Get-BackendOnlyUtcNow) -lt $deadline) { $started = Start-BackendOnlyDaemon -Canonical $Canonical -Root $Root -Config $ConfigPath }
     }
+    $provenSelection = if ($null -ne $RollbackSelection) { $RollbackSelection } else { $SupervisedSelection }
     $lastGate = 'LOCAL_MCP_RESPONSE_UNAVAILABLE'
     while ((Get-BackendOnlyUtcNow) -lt $deadline) {
-        $ready = Get-LocalMcpReadiness -LocalMcp $local -Canonical $Canonical -ExpectedDaemonProcess $started -RequireBearer:($null -ne $RetainedSelection -or $null -ne $RollbackSelection)
+        $ready = Get-LocalMcpReadiness -LocalMcp $local -Canonical $Canonical -ExpectedDaemonProcess $started -RequireBearer:($null -ne $RetainedSelection -or $null -ne $RollbackSelection -or $null -ne $SupervisedSelection)
         if ($ready.Ready) {
             if ($null -ne $RollbackSelection) {
                 Write-RedactedStatus 'ROLLBACK_CURRENT_BACKEND_READY' 'the exact selected backend passed authenticated MCP'
@@ -1319,7 +1367,7 @@ function Invoke-BackendOnlyBootstrap {
                     return
                 }
             }
-            $source = if ($RollbackFromSha256 -and $null -ne $RetainedSelection) { 'LAST_KNOWN_GOOD' } else { '' }
+            $source = if (($RollbackFromSha256 -or $RollbackFailedPromotion) -and $null -ne $RetainedSelection) { 'LAST_KNOWN_GOOD' } else { '' }
             Write-RedactedStatus 'LOCAL_BACKEND_READY' 'local backend only; Wake, GUI and official runtime not examined or started' $source
             return
         }
@@ -1328,13 +1376,22 @@ function Invoke-BackendOnlyBootstrap {
         # path's external-readiness proof is deliberately not weakened here.
         if ($existing -or $lastGate -in @('LOCAL_MCP_AUTH_TOKEN_INVALID','LOCAL_MCP_AUTH_SCOPE_INVALID','LOCAL_MCP_LISTENER_IDENTITY_MISMATCH','LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH')) { break }
         if ($started -is [Diagnostics.Process] -and $started.HasExited) {
-            if ($null -ne $RollbackSelection -and $started.ExitCode -ne 0 -and $lastGate -ceq 'LOCAL_MCP_LISTENER_MISSING') {
+            if ($null -ne $provenSelection -and $started.ExitCode -ne 0 -and $lastGate -ceq 'LOCAL_MCP_LISTENER_MISSING') {
                 try {
-                    $observed = Get-ExactBackendRollbackSelection -Root $Root -Lease $StoppedLifecycleLease
-                    if ($observed.Current.Slot -cne $RollbackSelection.Current.Slot -or
-                        $observed.Current.Generation -ne $RollbackSelection.Current.Generation -or
-                        $observed.Previous.Slot -cne $RollbackSelection.Previous.Slot -or
-                        $observed.Previous.Generation -ne $RollbackSelection.Previous.Generation -or
+                    if ($null -ne $SupervisedSelection) {
+                        $observed = Get-SupervisedBackendRollbackSelection -Root $Root -Lease $StoppedLifecycleLease
+                        if ($null -eq $observed -or $observed.Promotion.transactionId -cne $SupervisedSelection.Promotion.transactionId -or
+                            $observed.Promotion.authorizationId -cne $SupervisedSelection.Promotion.authorizationId) {
+                            throw 'reviewed promotion authority changed'
+                        }
+                    } else {
+                        $observed = Get-ExactBackendRollbackSelection -Root $Root -Lease $StoppedLifecycleLease
+                    }
+                    if ($observed.Current.Slot -cne $provenSelection.Current.Slot -or
+                        $observed.Current.Generation -ne $provenSelection.Current.Generation -or
+                        $observed.Previous.Slot -cne $provenSelection.Previous.Slot -or
+                        $observed.Previous.Generation -ne $provenSelection.Previous.Generation -or
+                        $observed.Previous.Hash -cne $provenSelection.Previous.Hash -or
                         (Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash $observed.Current.Hash).Sha256 -cne $Canonical.Sha256 -or
                         @(Get-CatDeskDaemonProcessCandidates -Canonical $Canonical).Count -or
                         (Get-LoopbackCatDeskListener -Port $local.Port -Canonical $Canonical)) {
@@ -1390,6 +1447,41 @@ function Invoke-CanonicalStackBootstrapCore {
         Invoke-ExactBackendRollback -Root $root -Lease $StoppedLifecycleLease
         return
     }
+    $supervisedSelection = $null
+    if ($RollbackFailedPromotion) {
+        try { $supervisedSelection = Get-SupervisedBackendRollbackSelection -Root $root -Lease $StoppedLifecycleLease } catch {}
+    }
+    if ($null -ne $supervisedSelection) {
+        # Recover an interrupted predecessor write only from the known binary
+        # and one of its two measured fingerprint values, never a third image.
+        try {
+            $binary = Assert-CatDeskRecoveryContainedPath $root (Join-Path $root 'target\release\catdesk.exe') 'rollback binary' -AllowMissingLeaf
+            $measured = if (Test-Path -LiteralPath $binary -PathType Leaf) { Get-CatDeskRecoverySha256 $binary } else { '' }
+            if ($measured -ceq $supervisedSelection.Previous.Hash) {
+                $fingerprint = Assert-CatDeskRecoveryContainedPath $root "$binary.sha256" 'rollback fingerprint'
+                $recorded = Get-VerifiedBuildFingerprint -FingerprintPath $fingerprint
+                if ($recorded -cnotin @($measured, $supervisedSelection.Current.Hash)) {
+                    throw 'unrecognized interrupted rollback fingerprint'
+                }
+                if ($recorded -cne $measured) {
+                    $local = Get-ConfiguredLocalMcp -Path $ConfigPath
+                    $identity = [pscustomobject]@{Path=$binary;Sha256=$measured}
+                    if (!(Get-LocalMcpProbeHeaders -LocalMcp $local).ContainsKey('Authorization') -or
+                        @(Get-CatDeskDaemonProcessCandidates -Canonical $identity).Count -or
+                        (Get-LoopbackCatDeskListener -Port $local.Port -Canonical $identity)) {
+                        throw 'interrupted rollback ownership is unproven'
+                    }
+                    [void](Restore-CatDeskCanonicalFromLastKnownGood -Root $root -ExpectedHash $measured -AllowRetainedPredecessor)
+                }
+                $restored = Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $measured
+                Invoke-BackendOnlyBootstrap -Root $root -Canonical $restored -RetainedSelection $supervisedSelection -StoppedLifecycleLease $StoppedLifecycleLease
+                return
+            }
+        } catch {
+            Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'interrupted supervised rollback requires its retained release evidence'
+            return
+        }
+    }
     $releaseRestored=$false;$releaseRecoverySource=''
     try {
         $canonical=Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
@@ -1434,7 +1526,9 @@ function Invoke-CanonicalStackBootstrapCore {
                 return
             }
         }
-        Invoke-BackendOnlyBootstrap -Root $root -Canonical $canonical -RetainedSelection $retainedSelection -StoppedLifecycleLease $StoppedLifecycleLease
+        $eligibleFailure = if ($null -ne $supervisedSelection -and -not $releaseRestored -and
+            $canonical.Sha256 -ceq $supervisedSelection.Current.Hash) { $supervisedSelection } else { $null }
+        Invoke-BackendOnlyBootstrap -Root $root -Canonical $canonical -RetainedSelection $retainedSelection -StoppedLifecycleLease $StoppedLifecycleLease -SupervisedSelection $eligibleFailure
         return
     }
     $localMcp=Get-ConfiguredLocalMcp -Path $ConfigPath;$runtimeAlias=Get-ConfiguredRuntimeAlias -Path $ConfigPath;$client=Find-TunnelClient -ExplicitPath $TunnelClientPath;if(-not $client){throw "official runtime client unavailable"};$setup=Join-Path $root "scripts\setup-secure-mcp.ps1";$diskMode=Read-OfficialRuntimeProcessMode -Path $ConfigPath;$existing=Get-LoopbackCatDeskListener -Port $localMcp.Port -Canonical $canonical;$launched=$false

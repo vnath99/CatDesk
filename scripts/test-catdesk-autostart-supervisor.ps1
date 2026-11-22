@@ -289,15 +289,15 @@ $detail = if ($parts.Count -eq 2) { $parts[1] } else { 'redacted' }
     # distinguish local failure from external degradation, and refuse broad
     # repair for authentication/release/foreign-owner or malformed evidence.
     $backendFacade=@'
-param([Parameter(Position=0)][string]$Action,[string]$Workspace,[switch]$BackendOnly)
+param([Parameter(Position=0)][string]$Action,[string]$Workspace,[switch]$BackendOnly,[switch]$RollbackFailedPromotion)
 [IO.File]::AppendAllText((Join-Path $Workspace 'backend-calls.log'),($Action+'|'+[string][bool]$BackendOnly+"`n"))
 $kind=[IO.File]::ReadAllText((Join-Path $Workspace 'backend-kind.txt'))
 if($Action -ceq 'recover'){
- if(!$BackendOnly -or $kind -cnotin @('missing','reviewed-pair')){throw 'UNAUTHORIZED_FIXTURE_RECOVERY'}
+ if(!$BackendOnly -or !$RollbackFailedPromotion -or $kind -cnotin @('missing','reviewed-pair')){throw 'UNAUTHORIZED_FIXTURE_RECOVERY'}
  [IO.File]::WriteAllText((Join-Path $Workspace 'backend-kind.txt'),'healthy')
  @{command='recover';state='LOCAL_BACKEND_READY'}|ConvertTo-Json -Compress;return
 }
-if($Action -cne 'diagnose' -or $BackendOnly){throw 'UNEXPECTED_FIXTURE_COMMAND'}
+if($Action -cne 'diagnose' -or $BackendOnly -or $RollbackFailedPromotion){throw 'UNEXPECTED_FIXTURE_COMMAND'}
 if ($kind -ceq 'busy-pair') {
     @{command='diagnose';state='DEGRADED';primaryLayer='RECOVERY_AUTHORITY';nextAction='NONE';layers=@(
         @{layer='LIFECYCLE_ENGINE';state='READY';gate='READY'},

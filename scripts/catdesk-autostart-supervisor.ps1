@@ -132,7 +132,10 @@ function Invoke-PublicLifecycle {
         $facade = Resolve-TrustedLifecycleFacadePath -Root $workspaceRoot
         $publicCommand = if($localOnly -and $command -ceq 'status'){'diagnose'}else{$command}
         $options=@{Workspace=$workspaceRoot}
-        if($localOnly -and $command -ceq 'recover'){$options.BackendOnly=$true}
+        if ($localOnly -and $command -ceq 'recover') {
+            $options.BackendOnly = $true
+            $options.RollbackFailedPromotion = $true
+        }
         $raw = @(& $facade $publicCommand @options)
         $text = [string]::Join("`n", [string[]]$raw)
         if ($text.Length -gt 4096) { return 'ACTION_REQUIRED' }

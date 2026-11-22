@@ -11,6 +11,7 @@ param(
     [string]$ConfigPath = (Join-Path ([Environment]::GetFolderPath('UserProfile')) '.catdesk\config.toml'),
     [string]$ExpectedBuildSha256 = '',
     [string]$RollbackFromSha256 = '',
+    [switch]$RollbackFailedPromotion,
     [string]$BuildFingerprintPath = '',
     [int]$ReadyTimeoutSeconds = 180,
     [switch]$BackendOnly,
@@ -53,6 +54,7 @@ try {
     $facadeConfigPath = $ConfigPath
     $facadeExpectedBuildSha256 = $ExpectedBuildSha256
     $facadeRollbackFromSha256 = $RollbackFromSha256
+    $facadeRollbackFailedPromotion = [bool]$RollbackFailedPromotion
     $facadeBuildFingerprintPath = $BuildFingerprintPath
     $facadeReadyTimeoutSeconds = $ReadyTimeoutSeconds
     $facadeBackendOnly = [bool]$BackendOnly
@@ -61,6 +63,7 @@ try {
     $ConfigPath = $facadeConfigPath
     $ExpectedBuildSha256 = $facadeExpectedBuildSha256
     $RollbackFromSha256 = $facadeRollbackFromSha256
+    $RollbackFailedPromotion = $facadeRollbackFailedPromotion
     $BuildFingerprintPath = $facadeBuildFingerprintPath
     $ReadyTimeoutSeconds = $facadeReadyTimeoutSeconds
     $BackendOnly = $facadeBackendOnly
@@ -729,15 +732,15 @@ function Invoke-CanonicalRecovery {
     # canonical release pair. Do not require canonical identity here: the
     # recovery engine first reconciles an interrupted reviewed promotion or a
     # persistent last-known-good pair, then revalidates identity before launch.
-    $raw = @(Invoke-LifecycleSeam -Name 'Recovery' -Arguments @($enginePath, $Workspace, $ConfigPath, $ExpectedBuildSha256, $BuildFingerprintPath, $ReadyTimeoutSeconds, $RequestedCommand, [bool]$BackendOnly, $RollbackFromSha256) -Default {
-        param($engine, $root, $config, $expected, $manifest, $timeout, $requested, $backend, $rollbackFrom)
+    $raw = @(Invoke-LifecycleSeam -Name 'Recovery' -Arguments @($enginePath, $Workspace, $ConfigPath, $ExpectedBuildSha256, $BuildFingerprintPath, $ReadyTimeoutSeconds, $RequestedCommand, [bool]$BackendOnly, $RollbackFromSha256, [bool]$RollbackFailedPromotion) -Default {
+        param($engine, $root, $config, $expected, $manifest, $timeout, $requested, $backend, $rollbackFrom, $rollbackFailed)
         # Both public start and recover use the same proven, release-only engine.
         $confirmRetainedSelection = $requested -ceq 'recover' -and $backend -and $expected
-        & $engine -Mode recover -Workspace $root -ConfigPath $config -ExpectedBuildSha256 $expected -BuildFingerprintPath $manifest -ReadyTimeoutSeconds $timeout -BackendOnly:$backend -ConfirmRetainedSelection:$confirmRetainedSelection -RollbackFromSha256 $rollbackFrom -Execute
+        & $engine -Mode recover -Workspace $root -ConfigPath $config -ExpectedBuildSha256 $expected -BuildFingerprintPath $manifest -ReadyTimeoutSeconds $timeout -BackendOnly:$backend -ConfirmRetainedSelection:$confirmRetainedSelection -RollbackFromSha256 $rollbackFrom -RollbackFailedPromotion:$rollbackFailed -Execute
     })
     $result = Get-LifecycleRecoveryResult -Raw $raw
     if ($BackendOnly -and $null -ne $result -and $result.State -eq 'LOCAL_BACKEND_READY') {
-        $detail = if ($RollbackFromSha256 -and $result.RecoverySource -ceq 'LAST_KNOWN_GOOD') {
+        $detail = if (($RollbackFromSha256 -or $RollbackFailedPromotion) -and $result.RecoverySource -ceq 'LAST_KNOWN_GOOD') {
             'scope=LOCAL_BACKEND_ONLY; retained predecessor verified and selected'
         } else {
             'scope=LOCAL_BACKEND_ONLY; Wake, GUI and official runtime not examined or started'
@@ -1383,6 +1386,11 @@ function Invoke-LifecycleReviewedPromotion {
 }
 
 try {
+    if ($RollbackFailedPromotion -and ($Command -cne 'recover' -or -not $BackendOnly -or
+        $ExpectedBuildSha256 -or $RollbackFromSha256)) {
+        Write-LifecycleStatus 'RECOVERY_AUTHORITY_REQUIRED' 'scope=SUPERVISED_BACKEND_ROLLBACK'
+        return
+    }
     if ($RollbackFromSha256 -and ($Command -cne 'recover' -or -not $BackendOnly -or
         $RollbackFromSha256 -notmatch '^[a-f0-9]{64}$' -or $ExpectedBuildSha256 -notmatch '^[a-f0-9]{64}$' -or
         $RollbackFromSha256 -eq $ExpectedBuildSha256)) {
