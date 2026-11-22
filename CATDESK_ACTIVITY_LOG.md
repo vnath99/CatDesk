@@ -1046,3 +1046,11 @@ Evidence: [docs/verification/PROMOTION_RETAINED_RESULT_WITHOUT_STAGING_2026_11_2
 Agent: Codex. Source: e5826f29f0150bdb21e7044ba9ad040462363b17. Outcome: partial. Real disposable Windows recovery restored the explicitly pinned verified predecessor after a split canonical pair. The restored binary served authenticated MCP and exited naturally. Both escrow slots and their pointer were preserved.. Next: Obtain genuine independent review and protected build evidence for the frozen backend. Qualify installed promotion and rollback. Complete the signed first Wake V3 selection before running the installed Web edit and self-Wake cycle..
 
 Evidence: [docs/verification/BACKEND_PINNED_PREDECESSOR_RECOVERY_2026_11_22.json](docs/verification/BACKEND_PINNED_PREDECESSOR_RECOVERY_2026_11_22.json); command: Bounded Windows recovery and authenticated MCP fixture; exit 0; SHA-256 e80de2ad392824e2eb296a443bb457e00643abfff8eb0c5c9f54331bb2f61d6f.
+
+<!-- catdesk-activity:confirmed-rollback-selection-2026-11-22 sha256:a1527772a57a4958b5df353c9042915b7ad1d9b2ad5ab21c0cd9701e6a3ec8dd -->
+
+## 2026-11-22T09:14:00Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: f623ac2eb01ceb6537e9127943f05ab99dfe1e6e. Outcome: partial. An explicit rollback now records the verified predecessor as selected only after authenticated MCP proves it is serving. The actual Windows private backend kept both escrow artifacts and later unpinned recovery selected the predecessor.. Next: Obtain genuine independent review and trusted build evidence for the frozen backend. Qualify the installed promotion and rollback. Verify the first signed Wake V3 selection, then run the installed Web edit and self-Wake cycle..
+
+Evidence: [docs/verification/BACKEND_CONFIRMED_ROLLBACK_SELECTION_2026_11_22.json](docs/verification/BACKEND_CONFIRMED_ROLLBACK_SELECTION_2026_11_22.json); command: Bounded Windows recovery selection and authenticated MCP fixture; exit 0; SHA-256 6521929d7ed5931bb57a4d2e8828b547bd3d06e5219b88af7f3079288b21120f.

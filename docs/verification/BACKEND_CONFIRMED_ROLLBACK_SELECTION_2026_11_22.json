@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "scope": "AUTHENTICATED_LOCAL_ROLLBACK_CONFIRMATION_WITH_TWO_DISPOSABLE_WINDOWS_RELEASES",
+  "sourceCommit": "f623ac2eb01ceb6537e9127943f05ab99dfe1e6e",
+  "baselineEvidence": "docs/verification/BACKEND_PINNED_PREDECESSOR_RECOVERY_2026_11_22.json",
+  "privateFixtureSha256": "c75c184491003c1b4d35b34819a325fcdab3ba03ef910dde81e421149ac88bd0",
+  "startedUtc": "2026-11-22T09:13:17.0347756+00:00",
+  "finishedUtc": "2026-11-22T09:13:53.7435750+00:00",
+  "priorActiveSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+  "confirmedPredecessorSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+  "checks": {
+    "splitCanonicalDiagnosis": "RECOVERY_AVAILABLE",
+    "fullStackRecovery": "RECOVERY_RELEASE_AUTHORITY_REQUIRED",
+    "noBearerRecoveryGate": "LOCAL_MCP_AUTH_TOKEN_INVALID",
+    "noBearerKeptSelectionAndStartedNoProcess": true,
+    "confirmedFromAlreadyRestoredCanonicalPair": true,
+    "authenticatedRecovery": "LOCAL_BACKEND_READY",
+    "anonymousHttpStatus": 401,
+    "authenticatedHttpStatus": 200,
+    "toolCount": 79,
+    "activeSelectionGenerationMatchedPreviousSlot": true,
+    "bothEscrowSlotsPreserved": true,
+    "configPreserved": true,
+    "repeatedConfirmationDidNotRewritePointerOrRestart": true,
+    "subsequentUnpinnedRecoveryRestoredConfirmedPredecessor": true,
+    "backendStarts": 1,
+    "backendExitedNaturally": true,
+    "listenerClosed": true,
+    "fixtureRemoved": true
+  },
+  "sourceTests": {
+    "bootstrapWindowsPowerShell51": "PASS",
+    "bootstrapPowerShell7": "PASS",
+    "lifecyclePowerShell7": "PASS",
+    "supervisorPowerShell7": "PASS",
+    "confirmationRequiresLifecycleLease": true,
+    "pointerDriftRefused": true
+  },
+  "limits": "The live test used actual retained executables and disposable escrow. The real release engine held the lifecycle lease, validated both slots and atomically committed their pointer. The fixture used the headless launch and exact Windows process observation on private loopback. Installed rollback, fixed-port startup and automatic fallback from an intact image that fails to serve remain unqualified.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}
