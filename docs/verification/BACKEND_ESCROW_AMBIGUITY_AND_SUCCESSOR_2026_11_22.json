@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "scope": "DISPOSABLE_WINDOWS_ESCROW_CAPTURE_AND_AUTHENTICATED_SUCCESSOR_AFTER_ROLLBACK",
+  "sourceCommit": "f5fa41cc781c1dcee3e4c9155bf5b1ed4d327d68",
+  "priorSourceCommit": "56c78d4876543f2d37033165ad912efc98c03f5e",
+  "privateFixtureSha256": "9decfee3a46b8799d796f8a4d79d6b169902906e56dc2bbf75dbc9deb0b1d9b8",
+  "baseline": {
+    "ambiguousEscrowDiagnosisRefused": true,
+    "captureOverwroteRetainedSlot": true
+  },
+  "regressions": {
+    "missingAndMalformedPointersWithEqualGenerationRefused": true,
+    "escrowHashesAndPointerPreserved": true,
+    "promotionStopsBeforePhaseOneHandoff": true,
+    "noPromotionTransactionCreatedByRefusal": true,
+    "bootstrapPowerShell7": "PASS",
+    "bootstrapWindowsPowerShell51": "PASS",
+    "promotionPowerShell7": "PASS",
+    "promotionWindowsPowerShell51": "PASS",
+    "priorPowerShell7FixtureFailure": "Existing mocked listener tried to call a script-local Hash function from a GetNewClosure module. Using the existing precomputed listener fixture preserves the same assertions."
+  },
+  "actualWindows": {
+    "startedUtc": "2026-11-22T10:05:00.6088259Z",
+    "finishedUtc": "2026-11-22T10:06:07.8812481Z",
+    "originalSelectedGeneration": 2,
+    "authenticatedRollbackGeneration": 1,
+    "successorGeneration": 3,
+    "confirmedFallbackSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+    "successorSha256": "7b71a5645ec5582e658b9de76ad28db440d5dc1667da64a1c28c1cb0cecfe5a8",
+    "replacedGenerationSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+    "selectedFallbackPinsUnchanged": 3,
+    "immutableInputsUnchanged": 3,
+    "successorReusedInactiveSlot": true,
+    "bothBackendsReady": true,
+    "anonymousMcpHttpStatus": 401,
+    "authenticatedMcpHttpStatus": 200,
+    "successorToolCount": 79,
+    "ownedBackendsExitedNaturally": 2,
+    "listenerClosed": true,
+    "fixtureRemoved": true,
+    "productionPortUsed": false
+  },
+  "limits": "Used exact executable bytes, real Windows escrow file selection and authenticated private-loopback MCP. The successor image and release-capture authority were disposable fixture inputs. The run did not establish protected promotion authority, normal installed startup, installed rollback, or live Web acceptance.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}

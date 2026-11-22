@@ -1102,3 +1102,11 @@ Evidence: [docs/verification/PROMOTION_RETIRED_RESULT_READBACK_2026_11_22.json](
 Agent: Codex. Source: 4ce3f14723734f54dc63115dc10e7b0dd248ac75. Outcome: partial. The development one-hash resolver refuses to restage the exact journaled retired artifact before candidate lookup. A read-only check against actual installed records preserved twelve release and journal hashes. The active successor still resolves. Fifty-eight native release tests and both PowerShell lifecycle suites passed. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/PROMOTION_RETIRED_ONE_HASH_REFUSAL_2026_11_22.json](docs/verification/PROMOTION_RETIRED_ONE_HASH_REFUSAL_2026_11_22.json); command: Read-only operator promote-resolve comparison against the exact archived result and active successor; exit 0; SHA-256 8e56c523a77466d2786131d72397154a587a59745176ecda79114f5cc7af7e7a.
+
+<!-- catdesk-activity:nov22-ambiguous-escrow-and-successor sha256:c24b1ef70b95edcab69c73f5926ac3ba5d9df36723be4b24d40eb0f6ec2fb9cc -->
+
+## 2026-11-22T10:06:07.8812481Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: f5fa41cc781c1dcee3e4c9155bf5b1ed4d327d68. Outcome: partial. Promotion and escrow capture now refuse ambiguous retained slots. A disposable Windows rollback activated generation 1, then the successor used generation 3 and preserved the verified fallback byte-for-byte. Both private backends verified authenticated MCP and exited. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/BACKEND_ESCROW_AMBIGUITY_AND_SUCCESSOR_2026_11_22.json](docs/verification/BACKEND_ESCROW_AMBIGUITY_AND_SUCCESSOR_2026_11_22.json); command: Disposable Windows escrow capture, rollback and successor startup on private loopback; exit 0; SHA-256 f9b2188f53323fc31df2ccf50c056bcc9cf7db0cb44a51bece88ad02a86c87e1.
