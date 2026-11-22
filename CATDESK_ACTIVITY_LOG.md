@@ -598,3 +598,11 @@ Evidence: [docs/verification/COMPATIBLE_BACKEND_REVIEW_ROUTE_PREFLIGHT_2026_11_2
 Agent: CatDesk development. Source: 015e0b82d33bd9d84c257cd98948fd54198b9f68. Outcome: partial. Audited the exact old task and confirmed the absence of a delivery, timer, submission witness, archive and execution grant. Froze schema-matched request and assignment pins for the full-cycle successor. Next: Keep the old work OPEN until both release prerequisites pass. Revalidate the pinned target and no-submit evidence before any retirement or new task admission.
 
 Evidence: [docs/verification/FIRST_WEB_CYCLE_BOUND_OPERANDS_2026_11_21.json](docs/verification/FIRST_WEB_CYCLE_BOUND_OPERANDS_2026_11_21.json); command: Read-only exact retirement operands and native source-grammar check of successor input packet; exit 0; SHA-256 28cafedbecf3467027b343e5a448b6602f543537bc336969275133125efe7bc5.
+
+<!-- catdesk-activity:first-web-v5-cached-route-nov21 sha256:1b4a981d077d524df52cfa5872692106149edcc4890773eb5cd7f5b83c4f5c5f -->
+
+## 2026-11-22T01:03:50Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 7b600a19fb868260308e0f8296df89fb07f851dc. Outcome: partial. Reconciled the visible v5 catalog with the exact 56aa backend. The isolated candidate accepted the reserved command-only envelope through parsing and stopped at project admission. Authentication and the optional-field guards refused as designed. Next: After guarded promotion verify the assigned ChatGPT Web tool catalog and actual scoped task call. Preserve all unknown submissions and independently verify the reviewed Wake V3 selection after the operator result.
+
+Evidence: [docs/verification/FIRST_WEB_V5_CACHED_ROUTE_CANDIDATE_2026_11_21.json](docs/verification/FIRST_WEB_V5_CACHED_ROUTE_CANDIDATE_2026_11_21.json); command: Bounded exact 56aa loopback route and refusal probe with no project grant or external call; exit 0; SHA-256 d3f585bf672bf514714197ebca88ee48e2e39a6d6f7a289477e7222681dddf1b.

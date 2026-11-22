@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T01:03:50.821982Z",
+  "scope": "CODEX_SESSION_PLUGIN_CATALOG_READ_AND_EXACT_56AA_ISOLATED_LOOPBACK_GUARD_TEST",
+  "codexConnectionToolMetadata": {
+    "connector": "CatDesk Local Tunnel v5",
+    "listedToolCount": 101,
+    "namedScopedDispatcherListed": false,
+    "runCommandListed": true,
+    "onlyRequiredOuterField": "command",
+    "actualChatGptWebCallerEstablished": false
+  },
+  "backendUnderTest": {
+    "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "appSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+    "mode": "computer",
+    "toolMode": "supervisor-only",
+    "loopbackOnly": true,
+    "namedScopedDispatcherAdvertised": true,
+    "genericShellToolAdvertised": false,
+    "protectedInstalledRelease": false
+  },
+  "preliminaryHarness": {
+    "assumptionFailed": "Expected the generic shell tool in the supervisor-only catalog. Source publishes only the named dispatcher in that mode while retaining the closed reserved route.",
+    "taskToolCallsBeforeFailure": 0,
+    "cleanupProven": true,
+    "resultSha256": "f141dce70e927d9b88106cb7aed64e771ca77b1ac2b3111f2d335dc32140f39a"
+  },
+  "deliberateRefusals": {
+    "anonymousHttpStatus": 401,
+    "optionalNullCwd": {
+      "error": "WEB_TASK_CACHED_ARGUMENTS_INVALID",
+      "invariant": "CWD_OVERRIDE_FORBIDDEN",
+      "nativeExecutionAttempted": false,
+      "retryAuthorized": false
+    },
+    "commandOnlyUnregisteredFixture": {
+      "error": "WEB_WORK_PROJECT_UNAVAILABLE",
+      "reachedExactScopedProjectAdmission": true,
+      "projectTaskStateCreated": false
+    },
+    "productReleaseAliasUnchanged": true
+  },
+  "planReadback": {
+    "currentCanonicalPlanRequired": true,
+    "currentCanonicalPlanNonempty": true,
+    "bytesPreserved": true,
+    "planOverrideUsed": false
+  },
+  "cleanup": {
+    "boundedJob": true,
+    "localListenerClosed": true,
+    "ownedBackendExited": true,
+    "officialListenerStillObserved": true,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "externalCalls": 0
+  },
+  "proofHashes": {
+    "candidateProbeResult": "7598e020ce6b2c1e2bcb502241a68e6b1cb397a67c3da6d9701ff201f619efd3",
+    "ownerReceipt": "51a6ae87cda5a70143448bb6f6305470f778954cbcf8ca25316891c70abd6c45"
+  },
+  "nativeModelCalls": 0,
+  "oldC49Replayed": false,
+  "installedWebExecutionQualified": false,
+  "nextGate": "After guarded promotion, verify the actual assigned Web client's available scoped tool and preserve the same task identity. Use the existing command-only reserved envelope only if the named tool is absent and the existing connector permits that route. Refusal or uncertainty is not permission to switch transports or retry a task."
+}
