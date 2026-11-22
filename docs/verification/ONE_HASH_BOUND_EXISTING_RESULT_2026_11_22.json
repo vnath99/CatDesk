@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "scope": "WINDOWS_NATIVE_PROMOTION_RECEIPT_AND_RETIREMENT_FIXTURES",
+  "verifiedUtc": "2026-11-22T06:36:27Z",
+  "sourceCommit": "89b33a81ebc339fdeb3fa9285af021fd49144c8e",
+  "oldShortcut": "The legacy result reader returned a same-artifact terminal receipt with no active claim. The promotion entry treated that digest match as an existing result.",
+  "preflightAdmission": {
+    "unboundReceipt": "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED",
+    "activeClaimForSameOrDifferentArtifactWithNoResult": "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED",
+    "staleTransactionOrGeneration": "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED",
+    "matchingTerminalReceipt": "RETURN_EXISTING_RESULT_WITH_AUTHORIZATION_GENERATION",
+    "differentArtifactWithValidTerminalPredecessor": "CONTINUE_EXISTING_REVIEW_AND_RETIREMENT_GATES",
+    "canonicalPairReadbackRemainsRequiredForFacadeCompletion": true,
+    "validReceiptAndClaimPreservedByteForByte": true
+  },
+  "tests": [
+    {
+      "command": "cargo test --locked --offline --bin catdesk routine_promote -- --test-threads=1",
+      "passed": 5,
+      "exitCode": 0
+    },
+    {
+      "command": "cargo test --locked --offline --bin catdesk daemon_reload::retirement:: -- --test-threads=1",
+      "passed": 24,
+      "exitCode": 0
+    }
+  ],
+  "changedRustFilesFormatCheckExit": 0,
+  "installedProductionActions": 0,
+  "installedAcceptance": false
+}

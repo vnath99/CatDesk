@@ -902,3 +902,11 @@ Evidence: [docs/verification/PROMOTION_RETAINED_OUTPUT_PIPE_2026_11_22.json](doc
 Agent: CatDesk development. Source: 12e7b8fa7c4bc90b1f1b98e318a047438de7e584. Outcome: partial. The development CLI reads a bound promotion outcome while the daemon is stopped. Seven compiled Windows command cases and six focused native tests passed against disposable records. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
 
 Evidence: [docs/verification/PROMOTION_OFFLINE_RESULT_READBACK_2026_11_22.json](docs/verification/PROMOTION_OFFLINE_RESULT_READBACK_2026_11_22.json); command: Native routine_promote tests and disposable Windows operator promote-result invocation; exit 0; SHA-256 8ffd228dc894b429344138e3d6963ab7ecf540b6e498c2e88b6e05dba55b8bfa.
+
+<!-- catdesk-activity:nov22-one-hash-bound-existing-result sha256:c29564ab236302eaaebc68063fa369ae33649c397991f0f3580e1a51305fb8b6 -->
+
+## 2026-11-22T06:36:27Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 89b33a81ebc339fdeb3fa9285af021fd49144c8e. Outcome: partial. One-hash promotion now requires the active claim, candidate hash, transaction and generation before reusing a receipt. Five promotion and 24 retirement tests passed on Windows. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
+
+Evidence: [docs/verification/ONE_HASH_BOUND_EXISTING_RESULT_2026_11_22.json](docs/verification/ONE_HASH_BOUND_EXISTING_RESULT_2026_11_22.json); command: Windows native routine promotion and promotion retirement regressions; exit 0; SHA-256 2017611a7f86fb94b647d7b542d5209d5fec5b600d671e242b4431a4425a7020.
