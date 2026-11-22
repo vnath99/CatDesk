@@ -665,6 +665,11 @@ pub fn confirm_reviewed_promotion(
     {
         return Err("reviewed promotion evidence drifted".into());
     }
+    if let Some(outcome) =
+        observe_existing_promotion_confirmation(&workspace, &preflight.authorization)?
+    {
+        return Ok(outcome);
+    }
     #[cfg(windows)]
     let source_pair = if preflight.authorization.local_backend_only {
         Some(pin_local_promotion_source_pair(
@@ -739,14 +744,6 @@ pub fn confirm_reviewed_promotion(
             file.write_all(&bytes)
                 .and_then(|_| file.sync_all())
                 .map_err(|_| "reviewed promotion claim is unavailable".to_string())?;
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let existing: ReviewedPromotionClaimV1 =
-                read_bounded_json(&claim_path, "reviewed promotion claim")?;
-            if existing != claim {
-                return Err("reviewed promotion claim is unavailable".into());
-            }
-            return reviewed_promotion_claim_outcome(&workspace, &preflight.authorization);
         }
         Err(_) => return Err("reviewed promotion claim is unavailable".into()),
     }
@@ -3341,6 +3338,52 @@ fn reviewed_promotion_worker_owner_path(workspace: &Path) -> PathBuf {
     reviewed_promotion_control_dir(workspace).join("worker-owner")
 }
 
+/// Confirmation holds the promotion mutation lease. A consumed token can only
+/// observe its original claim and authorization, even after the pair changed.
+fn observe_existing_promotion_confirmation(
+    workspace: &Path,
+    authorization: &ReviewedPromotionAuthorizationV1,
+) -> Result<Option<ReviewedPromotionConfirmationOutcomeV1>, String> {
+    const RECONCILE: &str = "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED";
+    let claim_path = reviewed_promotion_claim_path(workspace);
+    let claim_metadata = match fs::symlink_metadata(&claim_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            // A result or worker marker without its claim cannot justify a
+            // fresh authorization. Preserve the original records.
+            for path in [
+                reviewed_promotion_result_path(workspace),
+                reviewed_promotion_worker_owner_path(workspace),
+            ] {
+                if !matches!(fs::symlink_metadata(path), Err(e) if e.kind() == std::io::ErrorKind::NotFound)
+                {
+                    return Err(RECONCILE.into());
+                }
+            }
+            return Ok(None);
+        }
+        Err(_) => return Err(RECONCILE.into()),
+    };
+    let authorization_path = reviewed_promotion_authorization_path(workspace);
+    let authorization_metadata =
+        fs::symlink_metadata(&authorization_path).map_err(|_| RECONCILE)?;
+    if [claim_metadata, authorization_metadata]
+        .iter()
+        .any(|m| !m.is_file() || m.len() == 0 || m.len() > 8192)
+    {
+        return Err(RECONCILE.into());
+    }
+    let claim: ReviewedPromotionClaimV1 =
+        read_bounded_json(&claim_path, "reviewed promotion claim").map_err(|_| RECONCILE)?;
+    let recorded: ReviewedPromotionAuthorizationV1 =
+        read_bounded_json(&authorization_path, "reviewed promotion authorization")
+            .map_err(|_| RECONCILE)?;
+    if &recorded != authorization || !promotion_claim_matches(&claim, &recorded) {
+        return Err(RECONCILE.into());
+    }
+    reviewed_promotion_claim_outcome(workspace, &recorded).map(Some)
+}
+
 fn reviewed_promotion_claim_outcome(
     workspace: &Path,
     authorization: &ReviewedPromotionAuthorizationV1,
@@ -3899,6 +3942,84 @@ mod tests {
             snapshot_expected: expected,
             local_backend_only: false,
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn repeated_promotion_confirmation_observes_the_original_claim_without_rewriting_it() {
+        let root = temp_workspace("promotion-confirmation-reentry");
+        let mut authorization = sample_reviewed_promotion_authorization();
+        authorization.local_backend_only = true;
+        let candidate = root.join(&authorization.candidate_relative_path);
+        fs::create_dir_all(candidate.parent().unwrap()).unwrap();
+        fs::write(&candidate, b"inert reviewed promotion fixture").unwrap();
+        authorization.candidate_sha256 = sha256_file(&candidate).unwrap();
+        let preflight = ReviewedPromotionPreflightV1 {
+            schema_version: 1,
+            confirmation_token: "5".repeat(32),
+            expires_at_unix: authorization.expires_at_unix,
+            authorization: authorization.clone(),
+        };
+        let preflight_path = reviewed_promotion_preflight_path(&root);
+        let auth_path = reviewed_promotion_authorization_path(&root);
+        let claim_path = reviewed_promotion_claim_path(&root);
+        let result_path = reviewed_promotion_result_path(&root);
+        atomic_json_write(&preflight_path, &preflight).unwrap();
+        // Deliberately retain noncanonical JSON formatting to catch a rewrite
+        // even when every authorization field has exactly the same value.
+        let auth_bytes = serde_json::to_vec(&authorization).unwrap();
+        fs::write(&auth_path, &auth_bytes).unwrap();
+        let claim = ReviewedPromotionClaimV1 {
+            schema_version: 1,
+            authorization_id: authorization.authorization_id.clone(),
+            transaction_id: authorization.transaction_id.clone(),
+            claim_id: authorization.claim_id.clone(),
+            candidate_relative_path: authorization.candidate_relative_path.clone(),
+            state: "CLAIMED_PENDING".into(),
+        };
+        atomic_json_write(&claim_path, &claim).unwrap();
+        let claim_bytes = fs::read(&claim_path).unwrap();
+        let confirm = |token| {
+            confirm_reviewed_promotion(&root, &candidate, &authorization.candidate_sha256, token)
+        };
+        assert!(confirm("new-token").is_err());
+        assert_eq!(
+            confirm(&preflight.confirmation_token).unwrap().state,
+            "CLAIMED_PENDING_UNPROVEN"
+        );
+        assert_eq!(fs::read(&auth_path).unwrap(), auth_bytes);
+        assert_eq!(fs::read(&claim_path).unwrap(), claim_bytes);
+        assert!(!reviewed_promotion_worker_owner_path(&root).exists());
+
+        let result = ReviewedPromotionResultV1 {
+            schema_version: 1,
+            state: "PROMOTION_COMPLETED".into(),
+            authorization_generation: authorization.generation,
+            candidate_sha256: authorization.candidate_sha256.clone(),
+            transaction_id: authorization.transaction_id.clone(),
+            serving_state: Some("STOPPED_AFTER_BOUNDED_OWNER".into()),
+        };
+        atomic_json_write(&result_path, &result).unwrap();
+        let result_bytes = fs::read(&result_path).unwrap();
+        assert_eq!(
+            confirm(&preflight.confirmation_token).unwrap().state,
+            "PROMOTION_COMPLETED"
+        );
+        let mut conflicting = preflight.clone();
+        conflicting.authorization.claim_id = "7".repeat(32);
+        atomic_json_write(&preflight_path, &conflicting).unwrap();
+        assert!(confirm(&conflicting.confirmation_token).is_err());
+        assert_eq!(fs::read(&auth_path).unwrap(), auth_bytes);
+        assert_eq!(fs::read(&claim_path).unwrap(), claim_bytes);
+        assert_eq!(fs::read(&result_path).unwrap(), result_bytes);
+
+        fs::remove_file(&claim_path).unwrap();
+        atomic_json_write(&preflight_path, &preflight).unwrap();
+        assert!(confirm(&preflight.confirmation_token).is_err());
+        assert!(!claim_path.exists());
+        assert_eq!(fs::read(&auth_path).unwrap(), auth_bytes);
+        assert_eq!(fs::read(&result_path).unwrap(), result_bytes);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(windows)]
