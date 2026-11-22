@@ -1627,6 +1627,86 @@ pub(crate) mod tests {
         central_http_route_fixture(true).await;
     }
 
+    async fn start_frozen_cycle_backend(
+        image: &Path,
+        control: &Path,
+        route: &str,
+        token: &str,
+    ) -> (std::net::SocketAddr, String, tokio::process::Child) {
+        use sha2::{Digest, Sha256};
+        use std::process::Stdio;
+        use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+
+        assert!(image.is_absolute() && fs::metadata(image).unwrap().len() <= 128 * 1024 * 1024);
+        let digest = format!("{:x}", Sha256::digest(fs::read(image).unwrap()));
+        let expected = std::env::var("CATDESK_FROZEN_BACKEND_TEST_SHA256").unwrap();
+        assert_eq!(digest, expected);
+        let config = control.join(".catdesk/web-development/catdesk.toml");
+        let mut command = tokio::process::Command::new(image);
+        command
+            .current_dir(control)
+            .args([
+                "--headless-mcp",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "0",
+                "--workspace",
+            ])
+            .arg(control)
+            .arg("--config-path")
+            .arg(&config)
+            .args([
+                "--mcp-path",
+                route,
+                "--mode",
+                "computer",
+                "--tool-mode",
+                "supervisor-only",
+                "--no-ngrok",
+                "--no-web-auto",
+                "--max-runtime-seconds",
+                "60",
+            ])
+            .env("CATDESK_MCP_AUTH_TOKEN", token)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        let mut child = command.spawn().unwrap();
+        let mut output = BufReader::new(child.stdout.take().unwrap()).take(8193);
+        let mut ready = Vec::new();
+        let read = tokio::time::timeout(
+            Duration::from_secs(12),
+            output.read_until(b'\n', &mut ready),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(
+            (1..=8192).contains(&read),
+            "frozen backend did not publish bounded readiness"
+        );
+        let descriptor: Value = serde_json::from_slice(&ready).unwrap();
+        assert_eq!(descriptor["status"], "ready");
+        assert_eq!(descriptor["web_auto_scheduler_enabled"], false);
+        assert_eq!(
+            Path::new(descriptor["workspace"].as_str().unwrap())
+                .canonicalize()
+                .unwrap(),
+            control.canonicalize().unwrap()
+        );
+        let url = descriptor["mcp_url"].as_str().unwrap().to_owned();
+        let parsed = reqwest::Url::parse(&url).unwrap();
+        assert_eq!(parsed.scheme(), "http");
+        assert_eq!(parsed.host_str(), Some("127.0.0.1"));
+        assert_eq!(parsed.path(), route);
+        assert!(parsed.username().is_empty() && parsed.password().is_none());
+        assert!(parsed.query().is_none() && parsed.fragment().is_none());
+        let port = parsed.port().filter(|port| *port != 3200).unwrap();
+        (([127, 0, 0, 1], port).into(), url, child)
+    }
+
     #[cfg(windows)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore = "explicit bounded qualification with the installed native Windows command sandbox"]
@@ -1677,34 +1757,46 @@ pub(crate) mod tests {
         };
         let wake = ready_manual_wake(&f);
         let original = fs::read(f.native.join("src/lib.rs")).unwrap();
-        let mut app = crate::state::AppState::new_isolated_fixture(
-            0,
-            f.control.to_str().unwrap().into(),
-            f.control.join("inert-config.toml"),
-        )
-        .unwrap();
-        app.mode = crate::state::Mode::Computer;
-        app.tool_mode = crate::state::ToolMode::SupervisorOnly;
-        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
-        let state = Arc::new(tokio::sync::Mutex::new(app));
         let token = uuid::Uuid::new_v4().simple().to_string();
-        crate::configure_native_mcp_auth(&state, Ok(token.clone()))
-            .await
-            .unwrap();
         let path = "/cached-cycle/mcp";
-        let router = crate::native_mcp_router(state, None, path.into(), tx).await;
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let url = format!("http://{addr}{path}");
-        let (stop, stopped) = tokio::sync::oneshot::channel();
-        let server = tokio::spawn(async move {
-            axum::serve(listener, router)
-                .with_graceful_shutdown(async {
-                    let _ = stopped.await;
-                })
+        let frozen_image = std::env::var_os("CATDESK_FROZEN_BACKEND_TEST_IMAGE");
+        let (addr, url, mut child, local_server) = if let Some(image) = frozen_image {
+            let (addr, url, child) =
+                start_frozen_cycle_backend(Path::new(&image), &f.control, path, &token).await;
+            (addr, url, Some(child), None)
+        } else {
+            let mut app = crate::state::AppState::new_isolated_fixture(
+                0,
+                f.control.to_str().unwrap().into(),
+                f.control.join("inert-config.toml"),
+            )
+            .unwrap();
+            app.mode = crate::state::Mode::Computer;
+            app.tool_mode = crate::state::ToolMode::SupervisorOnly;
+            let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+            let state = Arc::new(tokio::sync::Mutex::new(app));
+            crate::configure_native_mcp_auth(&state, Ok(token.clone()))
                 .await
                 .unwrap();
-        });
+            let router = crate::native_mcp_router(state, None, path.into(), tx).await;
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let (stop, stopped) = tokio::sync::oneshot::channel();
+            let server = tokio::spawn(async move {
+                axum::serve(listener, router)
+                    .with_graceful_shutdown(async {
+                        let _ = stopped.await;
+                    })
+                    .await
+                    .unwrap();
+            });
+            (
+                addr,
+                format!("http://{addr}{path}"),
+                None,
+                Some((stop, server)),
+            )
+        };
         let client = reqwest::Client::builder()
             .no_proxy()
             .timeout(Duration::from_secs(30))
@@ -1825,12 +1917,39 @@ pub(crate) mod tests {
         );
         assert_eq!(fs::read(f.native.join("src/lib.rs")).unwrap(), original);
         drop(client);
-        stop.send(()).unwrap();
-        tokio::time::timeout(Duration::from_secs(5), server)
-            .await
-            .unwrap()
-            .unwrap();
+        if let Some((stop, server)) = local_server {
+            stop.send(()).unwrap();
+            tokio::time::timeout(Duration::from_secs(5), server)
+                .await
+                .unwrap()
+                .unwrap();
+        }
+        if let Some(child) = &mut child {
+            assert!(
+                tokio::time::timeout(Duration::from_secs(62), child.wait())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .success()
+            );
+        }
         assert!(tokio::net::TcpStream::connect(addr).await.is_err());
+
+        if child.is_some() {
+            // Only the UUID-owned temporary root returned by the fixture is
+            // eligible for cleanup. Drop the exact fixture key first.
+            let fixture_root = assignment.parent().unwrap().canonicalize().unwrap();
+            let temp = std::env::temp_dir().canonicalize().unwrap();
+            assert_eq!(fixture_root.parent(), Some(temp.as_path()));
+            let leaf = fixture_root.file_name().unwrap().to_str().unwrap();
+            assert!(uuid::Uuid::parse_str(leaf.strip_prefix("project-task-").unwrap()).is_ok());
+            drop((wake, f));
+            fs::remove_dir_all(&fixture_root).unwrap();
+            assert!(!fixture_root.exists());
+            println!(
+                "frozen backend: exact image, authenticated edit, sandbox verification, Git checkpoint, one queued Wake, natural exit and fixture cleanup"
+            );
+        }
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
