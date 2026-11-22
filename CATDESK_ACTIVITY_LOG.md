@@ -798,3 +798,11 @@ Evidence: [docs/verification/REVIEWED_DISK_PROMOTION_INTERRUPTION_AND_ROLLBACK_2
 Agent: Codex. Source: 726bccef4d1045b050bfba2728cb01809433525d. Outcome: partial. Stopped promotion recognizes its exact worker and waiting parent while excluding a separate same-image process. Both Windows PowerShell editions and 51 native tests passed. Next: Use the existing first Wake selection and independent backend review. Qualify the prior completed retirement and native persistent startup through protected promotion.
 
 Evidence: [docs/verification/STOPPED_PROMOTION_PROCESS_IDENTITY_2026_11_22.json](docs/verification/STOPPED_PROMOTION_PROCESS_IDENTITY_2026_11_22.json); command: Actual Win32 process admission fixture and all daemon_reload regression tests; exit 0; SHA-256 3da2587d4f2935e75f89695afecbde6cd59cb6e41fccf3ce40d509dfd3c6c45a.
+
+<!-- catdesk-activity:nov22-stopped-promotion-retired-predecessor sha256:7fcd44435cf71d73f2bde4d30fce7fbd8e291475b86f648207ef4c8ef2f6588d -->
+
+## 2026-11-22T05:20:00.5676692Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: cf05fa1b840c0350cf35950249de3d2c83bd887e. Outcome: partial. A verified completed predecessor can support a different stopped release after guarded archival. Changed archives and unresolved handoffs refused in the Windows test and 52 native release tests passed. Next: Use the existing first Wake selection and independent backend review. Qualify successive protected promotion and retained rollback through the existing installed lifecycle.
+
+Evidence: [docs/verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.json](docs/verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.json); command: Native Windows retired predecessor and daemon reload suite; exit 0; SHA-256 7c7e755bbf341a59e8d915796583e45127376a3ad8b8a8600be33c44bc1a9f5d.

@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 12:20 a.m. EST — successive stopped backend releases.** The development source accepts a verified completed retirement archive as history for a different candidate and transaction. The current release must match the archived successful candidate. Changed archives, open handoffs and reused transaction identities still refuse. The existing stopped-owner and health proofs still apply. [Windows evidence](docs/verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.json).
+
 **November 22, 12:17 a.m. EST — stopped promotion process ownership.** The worker now proves its exact live process before refusing other candidate images. The exact same-image parent waiting for the requested artifact is recognized through the Windows parent and creation records. A sibling with the same command still refused. Both PowerShell hosts and 51 native release tests passed. Prior completed releases still use the existing retirement procedure. [Evidence](docs/verification/STOPPED_PROMOTION_PROCESS_IDENTITY_2026_11_22.json).
 
 **November 22, 12:11 a.m. EST — real disk rollback with the retained executable.** The reviewed promoter wrote its journal, saved the previous pair and selected the exact candidate in a disposable workspace. Terminating the writer blocked ordinary startup. Rollback refused without authority. The fixture-authorized rollback restored the exact `5a939df2` pair, and that executable served authenticated MCP. The authority and initial listener handoff used existing test seams. [Evidence](docs/verification/REVIEWED_DISK_PROMOTION_INTERRUPTION_AND_ROLLBACK_2026_11_22.json).
@@ -352,5 +354,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Use the existing first Wake selection and independent backend review. Qualify the prior completed retirement and native persistent startup through protected promotion"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Use the existing first Wake selection and independent backend review. Qualify successive protected promotion and retained rollback through the existing installed lifecycle"}
 ```

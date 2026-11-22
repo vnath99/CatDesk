@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-22T05:20:00Z.** Use the existing completed retirement archive as predecessor evidence for successive stopped promotions. Its selected hash must match the current release, and the next artifact and transaction require their own authority. Keep the exact-candidate retry rule for failed retirements and the existing handoff and stopped-health checks. [Windows release regression](../verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.json).
+
 **Decision 2026-11-22T05:17:15Z.** During stopped-source promotion, recognize the exact worker and its bound waiting controller using the existing process inventory. The canonical owner and every other candidate process remain disqualifying. Standalone retirement still requires stopped-state evidence and grants no process exemption. [Actual Windows process evidence](../verification/STOPPED_PROMOTION_PROCESS_IDENTITY_2026_11_22.json).
 
 **Verification 2026-11-22T05:11:16Z.** The reviewed promoter's real disk transaction survived a disposable process interruption. Its existing guarded recovery restored the verified predecessor, retained the candidate and removed the journal after validating the restored pair. Authenticated headless MCP independently confirmed the restored image. The fixture supplied review authority and the initial listener handoff. [Evidence](../verification/REVIEWED_DISK_PROMOTION_INTERRUPTION_AND_ROLLBACK_2026_11_22.json).

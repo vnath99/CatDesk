@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "scope": "WINDOWS_NATIVE_RELEASE_ARCHIVE_AND_STOPPED_SOURCE_REGRESSION",
+  "verifiedUtc": "2026-11-22T05:20:00.5676692Z",
+  "sourceCommit": "cf05fa1b840c0350cf35950249de3d2c83bd887e",
+  "nativeTestExecutableSha256": "69f94088c96d664e146414546b8b52193f1bf4ce4ed31d4388055e26ca79b63b",
+  "originalBehavior": "The stopped source required the previous journal to bind the next candidate, as in a retry of one failed promotion.",
+  "regression": {
+    "existingWindowsArchiveOperationsRun": true,
+    "verifiedCompletedPredecessorWithDifferentArtifactAndTransactionAccepted": true,
+    "preparedRetirementRefused": true,
+    "unresolvedHandoffRefused": true,
+    "unrelatedPredecessorRefused": true,
+    "sameCandidateRefused": true,
+    "sameTransactionRefused": true,
+    "changedArchiveRefused": true,
+    "retiredFailureStillRequiresExactCandidate": true
+  },
+  "tests": {"command":"cargo test --locked --offline --bin catdesk daemon_reload:: -- --test-threads=1","passed":52,"failed":0,"exitCode":0},
+  "scopedRustfmtPassed": true,
+  "productionActions": 0,
+  "remaining": "The history fixture uses disposable receipts. Full retirement authority, stopped owner and local health checks, candidate review and installed promotion retain their existing qualification requirements."
+}
