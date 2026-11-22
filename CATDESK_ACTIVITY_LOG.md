@@ -606,3 +606,11 @@ Evidence: [docs/verification/FIRST_WEB_CYCLE_BOUND_OPERANDS_2026_11_21.json](doc
 Agent: CatDesk development. Source: 7b600a19fb868260308e0f8296df89fb07f851dc. Outcome: partial. Reconciled the visible v5 catalog with the exact 56aa backend. The isolated candidate accepted the reserved command-only envelope through parsing and stopped at project admission. Authentication and the optional-field guards refused as designed. Next: After guarded promotion verify the assigned ChatGPT Web tool catalog and actual scoped task call. Preserve all unknown submissions and independently verify the reviewed Wake V3 selection after the operator result.
 
 Evidence: [docs/verification/FIRST_WEB_V5_CACHED_ROUTE_CANDIDATE_2026_11_21.json](docs/verification/FIRST_WEB_V5_CACHED_ROUTE_CANDIDATE_2026_11_21.json); command: Bounded exact 56aa loopback route and refusal probe with no project grant or external call; exit 0; SHA-256 d3f585bf672bf514714197ebca88ee48e2e39a6d6f7a289477e7222681dddf1b.
+
+<!-- catdesk-activity:first-web-cycle-assignment-native-binding-nov21 sha256:becdd42de22ecb771023c9bd1e12b1e8255217835aacdb96bbf358964a64ffa2 -->
+
+## 2026-11-22T01:10:17Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 8879d43588c6a9e75a356bf3c0ea63296bb1eaad. Outcome: partial. Native read-only inspection confirmed the earlier first-cycle assignment lacked the explicit request and event association. The corrected frozen operand and matching digest passed the same native checks without creating task state. Next: Use the corrected assignment and matching association pins after Wake and backend release gates. Preserve the old task and unbound draft and revalidate the exact releases, target and delivery witnesses before admission.
+
+Evidence: [docs/verification/FIRST_WEB_CYCLE_ASSIGNMENT_ASSOCIATION_2026_11_21.json](docs/verification/FIRST_WEB_CYCLE_ASSIGNMENT_ASSOCIATION_2026_11_21.json); command: Offline locked bounded native assignment inspection and explicit source binding test; exit 0; SHA-256 4a3d24668b328550ffbb8df808c8dd89e9c2283f0b02dc0c3379fe7ca50614fa.

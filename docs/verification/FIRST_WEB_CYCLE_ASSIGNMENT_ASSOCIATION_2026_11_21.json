@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T01:10:17.4155439Z",
+  "scope": "ACTUAL_WINDOWS_NATIVE_READ_ONLY_VALIDATION_OF_EXACT_FIRST_CYCLE_INPUTS",
+  "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "originalDraft": {
+    "sha256": "ac2f7e3f3c4f00171f479b63bfe4f6e7f84ce4fb976bb0a98e6ad2469e18241e",
+    "metadataInspectionPassed": true,
+    "explicitWorkBindingPresent": false,
+    "nativeAssociationWouldRefuse": "PROJECT_TASK_EXPLICIT_WORK_ASSOCIATION_REQUIRED",
+    "historicalInputPreserved": true
+  },
+  "correctedDraft": {
+    "sha256": "72a0ba3886d65f9eb1a843262566125758e7a20ca102c274a7d4d2dc59df94b9",
+    "associationAndGrantPinsSha256": "dd59ce136b87463a73a9d5486c9f64121a497a9385278cea6b89c86725b0beaf",
+    "requestSha256": "a79202398d5aecfb36663151b8595c8f500d367d8c2e6a54b9964b3ae0a5e90d",
+    "soleAssignmentChange": "Added webWork with the existing prepared request and exact derived event ID.",
+    "solePinsChange": "Updated assignmentSha256 to the corrected draft bytes.",
+    "nativeScopeInspectionPassed": true,
+    "explicitSourceCheckPassed": true,
+    "nativeAssignmentLinkDigestMatched": true,
+    "sameWorkspaceBranchBaseCommandAndCheckpointScope": true
+  },
+  "proof": {
+    "offlineLockedNativeTest": true,
+    "isolatedSourceCopy": true,
+    "testsPassed": 1,
+    "testExecutableSha256": "25ad23f07f4485962ebe7868c0f16a9af79e508c7c7a1d40e0660041c817ba83",
+    "ownerReceiptSha256": "874051d537e2126f5b64d6738b21fa52731ab5c15b16c9c65bd6ae6dbc4d51f1",
+    "ownedProcessesRemaining": 0,
+    "installedExecutableChanged": false,
+    "projectBindingsChanged": false
+  },
+  "runtime": {
+    "successorWorkRecords": 0,
+    "newTaskDirectoryPresent": false,
+    "currentOpenRequests": 1,
+    "oldRequestRetired": false,
+    "executionGrantCreated": false,
+    "externalMessagesSent": 0,
+    "browserStarts": 0,
+    "installedAcceptance": false
+  },
+  "nextGate": "Use only the corrected assignment and matching pins after the qualified installed releases pass. Preserve the original request, exact target, and older inert draft. Revalidate the current installed predicates before any retirement or admission."
+}
