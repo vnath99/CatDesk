@@ -1086,3 +1086,11 @@ Evidence: [docs/verification/SCOPED_REVIEW_HOST_CONTENTION_2026_11_22.json](docs
 Agent: Codex. Source: 8d9543173fc6d0b4948f8e09fa4610a3c242d023. Outcome: partial. Native review preflight observes the existing Windows Wake lock and reports contention before qualification. An idle result is advisory. The tests created no host lock file through the observer and preserved the grant ledger, queue and timer state.. Next: Use an eligible independent review route for the original frozen backend draft. Complete trusted producer and installed promotion and rollback. Confirm the signed first Wake V3 selection and the installed Web cycle..
 
 Evidence: [docs/verification/SCOPED_REVIEW_PREFLIGHT_HOST_OBSERVATION_2026_11_22.json](docs/verification/SCOPED_REVIEW_PREFLIGHT_HOST_OBSERVATION_2026_11_22.json); command: Offline native review preflight and Wake read-only tests; exit 0; SHA-256 e39359c3ec007570912a11229077534a58ff1eb4c6bd03e946db05643f78d670.
+
+<!-- catdesk-activity:installed-retired-promotion-readback-2026-11-22 sha256:45d30cd2baf8f00d899eee0afb22aa8144acffbb3217f88eef2128bea7709dbc -->
+
+## 2026-11-22T09:48:17Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 519a7422e8af8f2b10112e0760bd3303dc62fe2a. Outcome: partial. The separate development controller read the exact archived production promotion and the active successor independently. Twelve checked release and journal hashes matched before and after. Fifty-eight native release regression tests passed.. Next: Admit the original frozen backend review through an eligible independent route. Complete trusted producer and installed promotion and rollback. Confirm first signed Wake V3 selection before the installed Web cycle..
+
+Evidence: [docs/verification/PROMOTION_RETIRED_RESULT_READBACK_2026_11_22.json](docs/verification/PROMOTION_RETIRED_RESULT_READBACK_2026_11_22.json); command: Compiled Windows observer against exact installed history and active successor; exit 0; SHA-256 db39d8d25623ac98db6669e6b206d1b6a55583029112df233b5c428631024144.

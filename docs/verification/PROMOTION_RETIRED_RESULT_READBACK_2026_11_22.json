@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_INSTALLED_PROMOTION_HISTORY_READ_BY_SEPARATE_WINDOWS_DEVELOPMENT_CONTROLLER",
+  "sourceCommit": "519a7422e8af8f2b10112e0760bd3303dc62fe2a",
+  "olderDevelopmentControllerSha256": "af12ba842dd9eb30f18ab488431ff9fa3ebcbc1460bd7ee8147724c486c40ce5",
+  "developmentControllerSha256": "b788c77bcf7e91912a039905fc3bdf5e92d52f78e439b1dcc3ed262e80316c19",
+  "privateFixtureSha256": "3b464bb9fdcbcdcf275115a8d93a681abf914493975479546ef4aa130a3933a1",
+  "artifactSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+  "baseline": {
+    "observedUtc": "2026-11-22T09:44:31.0805740+00:00",
+    "result": "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY",
+    "journalPhase": "COMPLETED",
+    "exitCode": 0
+  },
+  "actualReadback": {
+    "startedUtc": "2026-11-22T09:48:16.8404239+00:00",
+    "finishedUtc": "2026-11-22T09:48:17.3214827+00:00",
+    "retiredState": "PROMOTION_COMPLETED",
+    "archived": true,
+    "recordedServingState": "STOPPED_AFTER_BOUNDED_OWNER",
+    "activeState": "PROMOTION_COMPLETED",
+    "activeMatchedWithoutArchive": true,
+    "exactTransactionAndGenerationMatched": true,
+    "readOnly": true,
+    "archiveRecordsBound": 6,
+    "protectedPinsUnchanged": 12,
+    "observerProcessesExited": 2
+  },
+  "tests": {
+    "daemonReload": 58,
+    "allPassed": true,
+    "interruptedArchiveReadIsPending": true,
+    "mismatchedExactDigestUnlocated": true,
+    "archiveTamperRefused": true,
+    "archiveCannotSupplyMutatingPromotionAuthority": true,
+    "lockedOfflineBuild": "PASS",
+    "format": "PASS"
+  },
+  "preservedCompiledObserver": true,
+  "isolatedBuildCacheRemoved": true,
+  "limits": "The observer ran in the installed release workspace and read the real completed retirement journal and active successor using a separately compiled development executable. It observes only the retirement named by the current journal and never establishes current serving health or permits a replay. New installed promotion, rollback and the Web cycle were not exercised.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}
