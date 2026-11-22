@@ -4061,6 +4061,7 @@ pub(crate) fn web_task_worktree_witness(
 enum ProjectOriginProbeFailure {
     WorkspaceUnbounded,
     WorkspaceNotAbsolute,
+    WorkspaceMissing,
     WorkspaceUnavailable,
     WorkspaceReparseOrSymlink,
     WorkspaceCanonicalizationFailed,
@@ -4069,6 +4070,7 @@ enum ProjectOriginProbeFailure {
     OriginMissing,
     GitExecutableUnavailable,
     GitCommandFailed,
+    GitPointerUnverified,
     GitMetadataOversized,
     GitMetadataNonUtf8,
     GitMetadataInvalid,
@@ -4080,6 +4082,7 @@ impl ProjectOriginProbeFailure {
         match self {
             Self::WorkspaceUnbounded => "WORKSPACE_UNBOUNDED",
             Self::WorkspaceNotAbsolute => "WORKSPACE_NOT_ABSOLUTE",
+            Self::WorkspaceMissing => "WORKSPACE_MISSING",
             Self::WorkspaceUnavailable => "WORKSPACE_UNAVAILABLE",
             Self::WorkspaceReparseOrSymlink => "WORKSPACE_REPARSE_OR_SYMLINK",
             Self::WorkspaceCanonicalizationFailed => "WORKSPACE_CANONICALIZATION_FAILED",
@@ -4088,6 +4091,7 @@ impl ProjectOriginProbeFailure {
             Self::OriginMissing => "ORIGIN_MISSING",
             Self::GitExecutableUnavailable => "GIT_EXECUTABLE_UNAVAILABLE",
             Self::GitCommandFailed => "GIT_COMMAND_FAILED",
+            Self::GitPointerUnverified => "GIT_POINTER_UNVERIFIED",
             Self::GitMetadataOversized => "GIT_METADATA_OVERSIZED",
             Self::GitMetadataNonUtf8 => "GIT_METADATA_NON_UTF8",
             Self::GitMetadataInvalid => "GIT_METADATA_INVALID",
@@ -4122,22 +4126,34 @@ fn project_origin_workspace_probe(
     if !raw.is_absolute() {
         return Err(ProjectOriginProbeFailure::WorkspaceNotAbsolute);
     }
-    let metadata = std::fs::symlink_metadata(&raw)
-        .map_err(|_| ProjectOriginProbeFailure::WorkspaceUnavailable)?;
+    let metadata = std::fs::symlink_metadata(&raw).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            ProjectOriginProbeFailure::WorkspaceMissing
+        } else {
+            ProjectOriginProbeFailure::WorkspaceUnavailable
+        }
+    })?;
     if path_is_reparse_or_symlink(&metadata) {
         return Err(ProjectOriginProbeFailure::WorkspaceReparseOrSymlink);
     }
     let workspace = raw
         .canonicalize()
         .map_err(|_| ProjectOriginProbeFailure::WorkspaceCanonicalizationFailed)?;
-    let has_git_marker = std::fs::symlink_metadata(workspace.join(".git")).is_ok();
     let top_level = match bounded_git_metadata(
         &workspace,
         GitMetadataStage::TopLevel,
         ["rev-parse", "--show-toplevel"],
     ) {
-        Err(ProjectOriginProbeFailure::GitCommandFailed) if !has_git_marker => {
-            return Err(ProjectOriginProbeFailure::NotGitRoot);
+        Err(ProjectOriginProbeFailure::GitCommandFailed) => {
+            return Err(match std::fs::symlink_metadata(workspace.join(".git")) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    ProjectOriginProbeFailure::NotGitRoot
+                }
+                Ok(marker) if marker.is_file() && !path_is_reparse_or_symlink(&marker) => {
+                    ProjectOriginProbeFailure::GitPointerUnverified
+                }
+                _ => ProjectOriginProbeFailure::GitCommandFailed,
+            });
         }
         other => other?,
     };

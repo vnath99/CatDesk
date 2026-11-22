@@ -312,8 +312,16 @@ impl PreparedProjectScopeV1 {
             control_path,
             &controller.git_identity,
         )
-        .map_err(|_| {
-            RuntimeError::Validation("CatDesk control Git identity is unavailable".into())
+        .map_err(|reason| {
+            let reason = match reason.as_str() {
+                "WORKSPACE_MISSING" => "CatDesk control workspace is missing",
+                "GIT_POINTER_UNVERIFIED" => "CatDesk control Git pointer is unverified",
+                "candidate Git origin does not match expected identity" => {
+                    "CatDesk control Git origin does not match"
+                }
+                _ => "CatDesk control Git identity is unavailable",
+            };
+            RuntimeError::Validation(reason.into())
         })?;
         if observed_control != control_workspace {
             return Err(RuntimeError::Validation(
@@ -332,8 +340,16 @@ impl PreparedProjectScopeV1 {
             registered_path,
             &project.git_identity,
         )
-        .map_err(|_| {
-            RuntimeError::Validation("registered project Git identity is unavailable".into())
+        .map_err(|reason| {
+            let reason = match reason.as_str() {
+                "WORKSPACE_MISSING" => "registered project workspace is missing",
+                "GIT_POINTER_UNVERIFIED" => "registered project Git pointer is unverified",
+                "candidate Git origin does not match expected identity" => {
+                    "registered project Git origin does not match"
+                }
+                _ => "registered project Git identity is unavailable",
+            };
+            RuntimeError::Validation(reason.into())
         })?;
         if observed_workspace != project.workspace {
             return Err(RuntimeError::Validation(

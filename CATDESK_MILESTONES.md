@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — distinguish shared Git failures from Web pairing failures.** The development controller identifies the missing or unverified Git layer without probing the browser. Restoring the shared store is now also a prerequisite for canonical no-send review admission. The first installed Web coding cycle remains open. [Evidence](docs/verification/WEB_WORKSPACE_BACKING_DIAGNOSTICS_2026_11_22.json).
+
 **November 22 — recover a self-Wake startup refusal in development.** A task can keep its checkpoint and event identity after an adapter startup failure. Scoped Windows fixtures verify the recovery and the refusal of submission-witness cases. Installed Web acceptance remains open. [Evidence](docs/verification/WEB_TASK_WAKE_STARTUP_RECOVERY_2026_11_22.json).
 
 **November 22 — use Win32 process handles to verify Wake teardown.** Forced retirement now waits for the original helper and captured descendants, then checks the private Job is empty. Five consecutive attempts passed for the formerly intermittent fixture. Installed Chrome and Web self-Wake acceptance remain open. [Evidence](docs/verification/WAKE_JOB_PROCESS_EXIT_PROOF_2026_11_22.json).

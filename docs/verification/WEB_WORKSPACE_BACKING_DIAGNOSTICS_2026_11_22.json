@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T23:04:16Z",
+  "scope": "WINDOWS_READ_ONLY_WEB_WORKSPACE_BACKING_DIAGNOSTICS",
+  "baseline": "dc5487bba01865df3077dfb47d979ae7afb21bbe",
+  "currentWorkspace": {
+    "controllerRegistrationPathMatched": true,
+    "controllerGitPointerPresent": true,
+    "controllerPointerNamesOriginalSharedStore": true,
+    "controllerGitTopLevelExitCode": 128,
+    "originalSharedStorePresent": false,
+    "archivedRegisteredProjectContentRetained": true,
+    "retainedArchiveRepositoryRowsInspected": 567,
+    "matchingControllerAdminRows": 0,
+    "controllerAdminFilesRetainedInCheckedArchive": 0
+  },
+  "developmentVerification": {
+    "targetReadTestsPassed": 3,
+    "originProbeTestsPassed": 2,
+    "missingProjectRootDistinguished": true,
+    "unverifiedProjectAndControlPointersDistinguished": true,
+    "originMismatchDistinguished": true,
+    "registryWakePairAndSourceDeliveryStatePreserved": true
+  },
+  "recoveryPrerequisite": "Recover the authoritative common Git store, including the exact linked administration records for the canonical control checkout, registered disposable project and assigned worktree. Revalidate these identities and then rerun no-send reviewer admission on an eligible authorized route.",
+  "installedChanges": 0,
+  "browserActions": 0,
+  "reviewStarts": 0,
+  "externalMessages": 0,
+  "installedWebCycleAccepted": false,
+  "actualControlWorkspaceReadback": {
+    "image": "Uninstalled development build",
+    "imageSha256": "e70a5437be94c1c16eb74f4a86cb5e5b7843c5ecd468c8fbd64b5122c3e4f44d",
+    "command": "operator web target read --project-id <registered-project>",
+    "exitCode": 0,
+    "wakeStatus": "ATTENTION",
+    "diagnosticCode": "WEB_TARGET_CONTROL_GIT_POINTER_UNVERIFIED",
+    "readOnly": true,
+    "deliveryProved": false,
+    "pinnedFilesUnchanged": 3,
+    "stderrEmpty": true
+  }
+}

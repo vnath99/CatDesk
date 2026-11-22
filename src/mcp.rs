@@ -3696,7 +3696,19 @@ fn project_scope_read_failure_code(
                 "WEB_TARGET_CONTROL_WORKSPACE_CHANGED"
             }
             "CatDesk control Git identity is unavailable" => "WEB_TARGET_CONTROL_GIT_UNAVAILABLE",
+            "CatDesk control workspace is missing" => "WEB_TARGET_CONTROL_WORKSPACE_MISSING",
+            "CatDesk control Git pointer is unverified" => {
+                "WEB_TARGET_CONTROL_GIT_POINTER_UNVERIFIED"
+            }
+            "CatDesk control Git origin does not match" => "WEB_TARGET_CONTROL_GIT_ORIGIN_MISMATCH",
             "project is not registered" => "WEB_TARGET_PROJECT_NOT_REGISTERED",
+            "registered project workspace is missing" => "WEB_TARGET_PROJECT_WORKSPACE_MISSING",
+            "registered project Git pointer is unverified" => {
+                "WEB_TARGET_PROJECT_GIT_POINTER_UNVERIFIED"
+            }
+            "registered project Git origin does not match" => {
+                "WEB_TARGET_PROJECT_GIT_ORIGIN_MISMATCH"
+            }
             "registered project Git identity is unavailable" => {
                 "WEB_TARGET_PROJECT_GIT_UNAVAILABLE"
             }
@@ -13069,6 +13081,91 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn project_web_target_reports_missing_backing_without_changing_bindings() {
+        use crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1;
+        let (control, assignment, wake, _, source) =
+            crate::web_work::tests::assignment_fixture_for("alpha");
+        let registry_path = control.join(".catdesk/projects");
+        let registry = AutonomousProjectRegistryStoreV1::open_read_only(&registry_path)
+            .unwrap()
+            .load_registry()
+            .unwrap();
+        let project = registry
+            .projects
+            .iter()
+            .find(|project| project.project_id == "alpha")
+            .unwrap();
+        let workspace = &project.workspace;
+        let expect_code = |code| {
+            assert_eq!(
+                operator_read_project_web_target_diagnosed(&control, "alpha")
+                    .unwrap_err()
+                    .code,
+                code
+            );
+            assert_eq!(crate::operator_web_error_code(code), code);
+        };
+        let registry_bytes = fs::read(registry_path.join("projects.json")).unwrap();
+        let wake_bytes = fs::read(wake.root().join("config.json")).unwrap();
+        let existing = operator_read_project_web_target_diagnosed(&control, "alpha")
+            .unwrap()
+            .unwrap();
+
+        let saved_workspace = workspace.with_file_name("saved-target-fixture");
+        fs::rename(workspace, &saved_workspace).unwrap();
+        expect_code("WEB_TARGET_PROJECT_WORKSPACE_MISSING");
+        fs::create_dir(workspace).unwrap();
+        let git_pointer = workspace.join(".git");
+        // A plain pointer to absent Git administrative state. Never replace the
+        // original fixture workspace or publish this synthetic marker.
+        fs::write(&git_pointer, b"gitdir: missing-administrative-state\n").unwrap();
+        expect_code("WEB_TARGET_PROJECT_GIT_POINTER_UNVERIFIED");
+        assert_eq!(
+            fs::read(&git_pointer).unwrap(),
+            b"gitdir: missing-administrative-state\n"
+        );
+        fs::remove_file(git_pointer).unwrap();
+        fs::remove_dir(workspace).unwrap();
+        fs::rename(&saved_workspace, workspace).unwrap();
+
+        let config = workspace.join(".git/config");
+        let original_config = fs::read(&config).unwrap();
+        let different_config = String::from_utf8(original_config.clone())
+            .unwrap()
+            .replace(&project.git_identity, "https://example.test/wrong.git");
+        assert_ne!(different_config.as_bytes(), original_config);
+        fs::write(&config, different_config.as_bytes()).unwrap();
+        expect_code("WEB_TARGET_PROJECT_GIT_ORIGIN_MISMATCH");
+        assert_eq!(fs::read(&config).unwrap(), different_config.as_bytes());
+        fs::write(&config, original_config).unwrap();
+
+        let control_marker = control.join(".git");
+        let saved_control_marker = control.join("saved-git-fixture");
+        fs::rename(&control_marker, &saved_control_marker).unwrap();
+        fs::write(&control_marker, b"gitdir: missing-controller-state\n").unwrap();
+        expect_code("WEB_TARGET_CONTROL_GIT_POINTER_UNVERIFIED");
+        fs::remove_file(&control_marker).unwrap();
+        fs::rename(&saved_control_marker, &control_marker).unwrap();
+
+        assert_eq!(
+            operator_read_project_web_target_diagnosed(&control, "alpha").unwrap(),
+            Some(existing)
+        );
+        assert_eq!(
+            fs::read(registry_path.join("projects.json")).unwrap(),
+            registry_bytes
+        );
+        assert_eq!(
+            fs::read(wake.root().join("config.json")).unwrap(),
+            wake_bytes
+        );
+        assert!(wake.delivery(&source.event_id).unwrap().is_none());
+        assert!(wake.timer(&source.event_id).unwrap().is_none());
+        fs::remove_dir_all(assignment.parent().unwrap()).unwrap();
     }
 
     #[test]

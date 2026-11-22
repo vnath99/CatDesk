@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** The original shared Git backup must also contain the canonical control checkout's linked-worktree entry. The read-only target check distinguishes an unverified controller pointer, a missing project workspace, an unverified project pointer and an origin mismatch. [Evidence](docs/verification/WEB_WORKSPACE_BACKING_DIAGNOSTICS_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** A proved adapter startup refusal no longer strands the task Wake in the development build. Generic retry refuses this task-bound event. A submission witness or a mismatched record keeps it fenced. [Evidence](docs/verification/WEB_TASK_WAKE_STARTUP_RECOVERY_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** Corrected the intermittent forced-retirement fixture failure from the expired-Wake regression run. The adapter keeps its browser lock when exit proof is incomplete. Qualify real Chrome ownership and cleanup during installed self-Wake acceptance. [Evidence](docs/verification/WAKE_JOB_PROCESS_EXIT_PROOF_2026_11_22.json).
