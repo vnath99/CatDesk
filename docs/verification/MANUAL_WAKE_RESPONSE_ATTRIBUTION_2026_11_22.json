@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T21:15:14.0037613Z",
+  "scope": "WINDOWS_DEVELOPMENT_MANUAL_WAKE_RESPONSE_READER",
+  "baseline": "361330242c79a4eab9997c4d2ba3a7ffe0601956",
+  "reader": "operator web review read",
+  "attribution": {
+    "basis": "WORK_ASSIGNMENT_AND_EXACT_MANUAL_WAKE_MESSAGE",
+    "eventProof": "Exact USER delivery receipt and complete paired assistant response",
+    "stableReadback": ["paired project target", "full delivery", "original assignment attribution"],
+    "fields": ["projectId", "requestId", "sourceEventId", "sourceTurnId", "taskId", "assignmentSha256", "scopeSha256"],
+    "eventVerified": true,
+    "executionVerified": false,
+    "taskJournalAndGitEvidenceRequiredForAcceptance": true
+  },
+  "verification": {
+    "command": "cargo test --offline --locked --bin catdesk review_read -- --nocapture",
+    "passed": 16,
+    "failed": 0,
+    "fixture": "Windows isolated Git, registry, assignment and Wake store. The browser adapter response was simulated.",
+    "cases": [
+      "Verified manual continuation carries the original assignment and source turn",
+      "A changed receipt timestamp with the same target and message refuses the old observation",
+      "A changed assignment scope hash refuses the old observation",
+      "Existing source review, timeout, body verification and no-forwarding behavior remain covered"
+    ]
+  },
+  "release": {
+    "browserStarts": 0,
+    "externalMessagesSent": 0,
+    "productionMutations": 0,
+    "originalWakeV3Repeated": false,
+    "firstInstalledWebCycleAccepted": false
+  }
+}

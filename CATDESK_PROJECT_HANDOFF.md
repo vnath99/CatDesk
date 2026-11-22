@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 4:15 p.m. EST.** The existing manual self-Wake response reader can now return the bounded task identity alongside the verified response. It checks the original assignment and full delivery again after readback. Recovery of the original linked Git backing and admission of the frozen backend review remain prerequisites for the installed proof. [Verification](docs/verification/MANUAL_WAKE_RESPONSE_ATTRIBUTION_2026_11_22.json).
+
 **November 22, 4:11 p.m. EST.** Development persists the fixed assistant load error beside the exact sent Wake receipt. Read the existing timer STATUS using the original event ID for an attributable error and current timer state. The first installed continuation still depends on the frozen review, original Git worktree metadata and qualified release transitions. [Evidence](docs/verification/WAKE_DELIVERY_ERROR_READBACK_2026_11_22.json).
 
 **November 22, 4:06 p.m. EST.** A persistent assistant load error can now retain the exact USER receipt while leaving the turn incomplete. The source uses the existing browser owner and refresh guards. Artifact admission for changed Python bytes still requires genuine independent review. The previously reviewed pair passed its exact tests without a hash-list change. [Verification](docs/verification/WAKE_PERSISTED_RESPONSE_LOAD_FAILURE_2026_11_22.json).

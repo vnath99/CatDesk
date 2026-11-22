@@ -1534,6 +1534,47 @@ pub(super) fn read_review_guarded(
     )
 }
 
+fn manual_wake_response_attribution(
+    workspace: &Path,
+    delivery: &catdesk_wake::store::Delivery,
+) -> Result<Option<Value>, String> {
+    let event = &delivery.event;
+    let Some(metadata) = event
+        .wake_metadata()?
+        .filter(|metadata| metadata.purpose == catdesk_wake::protocol::WakePurpose::ManualEndTurn)
+    else {
+        return Ok(None);
+    };
+    let project = &event.project_id;
+    let record = crate::web_work_state::WorkLedger::record_for_event(
+        workspace,
+        project,
+        &metadata.source_event_id,
+    )?
+    .ok_or("WEB_REVIEW_TASK_BINDING_REQUIRED")?;
+    let assignment = record
+        .task_assignment
+        .as_ref()
+        .ok_or("WEB_REVIEW_TASK_BINDING_REQUIRED")?;
+    let expected = crate::wake_protocol_client::registered_manual_wake_message(
+        project,
+        &record.request_id,
+        &assignment.task_id,
+        &record.event_id,
+        &metadata.source_turn_id,
+    );
+    if event.message != expected {
+        return Err("WEB_REVIEW_TASK_BINDING_CHANGED".into());
+    }
+    Ok(Some(json!({
+        "basis":"WORK_ASSIGNMENT_AND_EXACT_MANUAL_WAKE_MESSAGE",
+        "projectId":project,"requestId":record.request_id,"sourceEventId":record.event_id,
+        "sourceTurnId":metadata.source_turn_id,"taskId":assignment.task_id,
+        "assignmentSha256":assignment.assignment_sha256,"scopeSha256":assignment.scope_sha256,
+        "executionVerified":false
+    })))
+}
+
 fn read_review_using<F>(
     workspace: &Path,
     project: &str,
@@ -1596,10 +1637,17 @@ where
         wake.root(),
         &target.url,
     )?;
+    let task_attribution = manual_wake_response_attribution(workspace, &delivery)?;
     keep_running()?;
     let report = snapshotter(&wake, project, &target, event_id, &keep_running);
     if paired_key(workspace, project)? != key {
         return Err("WEB_REVIEW_TARGET_CHANGED".into());
+    }
+    if wake.delivery(event_id)?.as_ref() != Some(&delivery) {
+        return Err("WEB_REVIEW_DELIVERY_SCOPE_CHANGED".into());
+    }
+    if manual_wake_response_attribution(workspace, &delivery)? != task_attribution {
+        return Err("WEB_REVIEW_TASK_BINDING_CHANGED".into());
     }
     if let Some(reason) = report.failure {
         return Ok(json!({"action":"web_review_read", "projectId":project,
@@ -1619,6 +1667,9 @@ where
             "diagnostic":report.diagnostic,"sendAttempted":false});
             if let Some(diagnostic) = tool_diagnostics {
                 result["toolDiagnostics"] = diagnostic;
+            }
+            if let Some(attribution) = task_attribution {
+                result["taskAttribution"] = attribution;
             }
             Ok(result)
         }
@@ -2988,6 +3039,150 @@ mod tests {
         for (path, original) in paths.iter().zip(before) {
             assert_eq!(std::fs::read(path).unwrap(), original);
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn review_read_attributes_exact_manual_wake_and_refuses_receipt_or_assignment_drift() {
+        use catdesk_wake::{
+            protocol::{WakePurpose, digest},
+            runtime::{SnapshotDiagnostic, SnapshotReadPhase, SnapshotReadReport},
+            store::{Delivery, Phase, Receipt, WakeIntent, now},
+        };
+        let (control, assignment, wake, pins, source) =
+            crate::web_work::tests::assignment_fixture_for("alpha");
+        wake.publish(&source).unwrap();
+        let associated = crate::web_work::associate(&control, pins.clone(), &assignment).unwrap();
+        let target = wake.config().unwrap().targets["alpha"].clone();
+        let message = crate::wake_protocol_client::registered_manual_wake_message(
+            "alpha",
+            "request-a",
+            "task-fixture",
+            &source.event_id,
+            "fixture-turn",
+        );
+        let event = wake
+            .produce_expected_wake(
+                "alpha",
+                &message,
+                &target,
+                WakeIntent {
+                    purpose: WakePurpose::ManualEndTurn,
+                    source_event_id: &source.event_id,
+                    source_turn_id: "fixture-turn",
+                    priority: 1,
+                    ttl_seconds: 600,
+                },
+            )
+            .unwrap();
+        let owner = wake.host_lock().unwrap();
+        wake.claim(&event, &owner).unwrap();
+        wake.transition(
+            &event.event_id,
+            owner.owner(),
+            Phase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: digest(&message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.transition(
+            &event.event_id,
+            owner.owner(),
+            Phase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        drop(owner);
+        let report = || SnapshotReadReport {
+            snapshot: Some(json!({"messages":[
+                {"role":"USER","text":message,"textComplete":true},
+                {"role":"ASSISTANT","text":"Fixture next turn.","textComplete":true}
+            ]})),
+            failure: None,
+            diagnostic: SnapshotDiagnostic {
+                phase: SnapshotReadPhase::Complete,
+                elapsed_millis: 10,
+                budget_millis: 90000,
+            },
+        };
+        let observed = read_review_using(
+            &control,
+            "alpha",
+            &event.event_id,
+            None,
+            &|| Ok(()),
+            |_, _, _, _, _| report(),
+        )
+        .unwrap();
+        assert_eq!(observed["eventVerified"], true);
+        let attribution = &observed["taskAttribution"];
+        assert_eq!(attribution["requestId"], "request-a");
+        assert_eq!(attribution["taskId"], "task-fixture");
+        assert_eq!(attribution["sourceEventId"], source.event_id);
+        assert_eq!(attribution["sourceTurnId"], "fixture-turn");
+        assert_eq!(attribution["assignmentSha256"], pins["assignmentSha256"]);
+        assert_eq!(
+            attribution["scopeSha256"],
+            associated["taskAssignment"]["scopeSha256"]
+        );
+        assert_eq!(attribution["executionVerified"], false);
+
+        let delivery_path = wake
+            .root()
+            .join(format!("deliveries/{}.json", event.event_id));
+        let original = std::fs::read(&delivery_path).unwrap();
+        let outcome = read_review_using(
+            &control,
+            "alpha",
+            &event.event_id,
+            None,
+            &|| Ok(()),
+            |_, _, _, _, _| {
+                let mut changed: Delivery = serde_json::from_slice(&original).unwrap();
+                changed.receipt.as_mut().unwrap().sent_utc += 1;
+                std::fs::write(&delivery_path, serde_json::to_vec(&changed).unwrap()).unwrap();
+                report()
+            },
+        );
+        assert_eq!(outcome.unwrap_err(), "WEB_REVIEW_DELIVERY_SCOPE_CHANGED");
+        std::fs::write(&delivery_path, original).unwrap();
+
+        let ledger_path = control.join(".catdesk/web-work/alpha.json");
+        let ledger_bytes = std::fs::read(&ledger_path).unwrap();
+        let outcome = read_review_using(
+            &control,
+            "alpha",
+            &event.event_id,
+            None,
+            &|| Ok(()),
+            |_, _, _, _, _| {
+                let mut ledger: Value = serde_json::from_slice(&ledger_bytes).unwrap();
+                ledger["records"][0]["taskAssignment"]["scopeSha256"] = json!("e".repeat(64));
+                std::fs::write(&ledger_path, serde_json::to_vec(&ledger).unwrap()).unwrap();
+                report()
+            },
+        );
+        assert_eq!(outcome.unwrap_err(), "WEB_REVIEW_TASK_BINDING_CHANGED");
+        std::fs::write(&ledger_path, ledger_bytes).unwrap();
+        let parent = control.parent().unwrap().canonicalize().unwrap();
+        assert_eq!(
+            parent.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        let name = parent.file_name().unwrap().to_str().unwrap();
+        assert!(uuid::Uuid::parse_str(name.strip_prefix("project-task-").unwrap()).is_ok());
+        drop(wake);
+        std::fs::remove_dir_all(parent).unwrap();
     }
 
     #[test]

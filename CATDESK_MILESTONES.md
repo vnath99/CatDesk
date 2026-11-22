@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — same-task continuation evidence.** Development can associate a verified manual self-Wake response with its original assignment and source turn, with a post-observation identity check. The first installed Web cycle still requires a real continued turn and independent Git and task-journal evidence. [Evidence](docs/verification/MANUAL_WAKE_RESPONSE_ATTRIBUTION_2026_11_22.json).
+
 **November 22 — autonomous response diagnosis.** Development status now retrieves the bounded error from the original Wake receipt after the sender exits. It withholds the receipt and error if the timer and delivery identities disagree. This readback still needs installed qualification. [Evidence](docs/verification/WAKE_DELIVERY_ERROR_READBACK_2026_11_22.json).
 
 **November 22 — Wake response recovery.** Development now preserves an attributable delivery receipt when the initial assistant response cannot load and the same error persists after safe refresh. The live first-cycle proof still requires an attributed next-turn continuation through the installed runtime. [Evidence](docs/verification/WAKE_PERSISTED_RESPONSE_LOAD_FAILURE_2026_11_22.json).

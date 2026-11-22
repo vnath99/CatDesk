@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 21:15 UTC — attribute the observed self-Wake response to its original task.** The response reader now checks the exact delivery and assignment on both sides of browser observation. Its verified response identifies the original task and source turn. [Evidence](docs/verification/MANUAL_WAKE_RESPONSE_ATTRIBUTION_2026_11_22.json).
+
 **2026-11-22 21:11 UTC — retain Wake response failures for read-only status.** The confirmed USER receipt and fixed assistant load error now commit in the same delivery record. The existing timer STATUS can report that observation after the sender exits. [Evidence](docs/verification/WAKE_DELIVERY_ERROR_READBACK_2026_11_22.json).
 
 **2026-11-22 21:06 UTC — keep a durable Wake receipt when the assistant response fails to load.** The ordinary adapter now distinguishes a persisted exact USER message from an unusable assistant turn. Two matching fresh-document load-error observations can preserve SENT delivery with an Attention timer. Tests covered exactly one submission, no re-send, and unchanged reviewed artifact admission. [Evidence](docs/verification/WAKE_PERSISTED_RESPONSE_LOAD_FAILURE_2026_11_22.json).
