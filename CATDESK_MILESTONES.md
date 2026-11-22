@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — recover a manual Wake with repeated MCP call IDs.** Development can select an original task-issued Wake whose identical intent was recorded under more than one call ID. Installed Web delivery and same-task continuation remain open. [Evidence](docs/verification/MANUAL_WAKE_REPEATED_CALL_RECOVERY_2026_11_22.json).
+
 **November 22 — scoped browser isolation before the response timer.** Development fixtures prove a same-project follow-up is stopped at the original submission fence and a sibling completes its own bounded send. The durable serial coding lane across turns and installed browser acceptance remain open. [Evidence](docs/verification/SCOPED_WAKE_SUBMISSION_FENCE_2026_11_22.json).
 
 **November 22 — same-task continuation through development MCP.** The Windows loopback case covers edit, verification, Git checkpoint, a simulated interrupted self-Wake and a second real authenticated task-tool call. The installed ChatGPT Web caller and actual browser continuation remain open. [Evidence](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).

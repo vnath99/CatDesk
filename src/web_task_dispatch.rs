@@ -2017,6 +2017,21 @@ pub(crate) mod tests {
             qualify_frozen_manual_wake_admission(Path::new(image), &f, &wake, &event, event_id)
                 .await;
         } else {
+            let retry = rpc(manual_request(&f, "end-turn-retry", "fixture-turn")).await;
+            expect_success(&retry);
+            assert_eq!(
+                retry["result"]["structuredContent"],
+                queued["result"]["structuredContent"]
+            );
+            assert!(wake.delivery(event_id).unwrap().is_none());
+            assert_eq!(
+                wake.events()
+                    .unwrap()
+                    .iter()
+                    .filter(|event| event.wake_metadata().unwrap().is_some())
+                    .count(),
+                1
+            );
             // Keep transport, verification and Git real. Browser effects
             // are simulated only after the existing guarded submission fence.
             assert_eq!(
@@ -2114,6 +2129,10 @@ pub(crate) mod tests {
             )
             .unwrap();
             let calls = journal.load_tool_calls(&run).unwrap();
+            assert_eq!(
+                calls["end-turn"].result_hash,
+                calls["end-turn-retry"].result_hash
+            );
             assert_eq!(
                 calls["after-self-wake"].status,
                 crate::delegated::journal::ToolCallStatus::Completed

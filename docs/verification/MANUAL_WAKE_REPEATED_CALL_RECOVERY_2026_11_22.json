@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T22:02:00Z",
+  "scope": "WINDOWS_DEVELOPMENT_REPEATED_MANUAL_WAKE_CALL_RECOVERY",
+  "baseline": "4286a80c6cddc988f56d265bcd41f0f6e464bcb7",
+  "finding": "A repeated exact manual-Wake request under a different MCP call ID can return the same immutable event and leave another completed journal record. The sender and reconciler formerly counted call records as separate pending sends.",
+  "correction": "The one-shot selector validates each matching call and chooses the first verified record in existing journal order for one exact event. Proof-only recovery validates every matching completed call against the same event. Conflicting arguments, result hashes, task data or distinct pending events still refuse.",
+  "verification": {
+    "manualDeliveryTestsPassed": 2,
+    "differentPendingEventsRefusedBeforeAdapter": true,
+    "sameEventWithTwoExactCallRecordsSelectedOnce": true,
+    "conflictingAliasRefusedBeforeAdapter": true,
+    "conflictingAliasRefusedDuringReadOnlyAttestation": true,
+    "interruptedOriginalEventRecoveredWithExactReceipt": true,
+    "completionHeldUntilExactResponseTimerComplete": true
+  },
+  "authenticatedWindowsLoopback": {
+    "passed": 1,
+    "testSeconds": 47.77,
+    "nativeModelCalls": 0,
+    "sameWakeResultAndJournalHashForRepeatedMcpCall": true,
+    "queuedWakeCount": 1,
+    "actualScopedGitCheckpointAndSandboxVerification": true,
+    "newAuthenticatedSameTaskCallObservedAtCheckpoint": true,
+    "receiptAndAssistantResponseSimulated": true,
+    "listenerClosedAndFixtureRemoved": true
+  },
+  "liveChatGptWebTest": false,
+  "productionChanges": false,
+  "originalOperationsReplayed": 0,
+  "remaining": "The original frozen backend review needs an eligible independent route and acknowledged producer evidence. Restore the registered disposable worktree using its original Git backing. Installed acceptance still requires actual v5 Web editing, verification, Git checkpoint, one delivered self-Wake, and a next-turn continuation under the original assignment."
+}

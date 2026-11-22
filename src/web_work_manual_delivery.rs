@@ -396,6 +396,28 @@ mod tests {
         wake.transition(older_id, &prior.owner, Phase::Sent, Some(receipt), None)
             .unwrap();
         wake.complete_timer(older_id).unwrap();
+        // A connector retry can record another completed call for the same
+        // semantic turn. Both journal rows refer to the original event.
+        let alias = queue("wake-one-retry", "done-turn");
+        assert_eq!(alias, published);
+        let journal = crate::delegated::journal::DelegatedJournal::open(
+            &control.join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal"),
+        )
+        .unwrap();
+        let journal_file = journal
+            .run_dir(&crate::delegated::contracts::RunId::new("task-fixture").unwrap())
+            .unwrap()
+            .join("tool_calls.json");
+        let journal_bytes = std::fs::read(&journal_file).unwrap();
+        let mut mismatched: Value = serde_json::from_slice(&journal_bytes).unwrap();
+        mismatched["wake-one-retry"]["resultHash"] = json!("different-result");
+        std::fs::write(&journal_file, serde_json::to_vec(&mismatched).unwrap()).unwrap();
+        assert_eq!(
+            deliver_with_sender(&control, "alpha", Selection::Next, forbidden_sender).unwrap_err(),
+            "WEB_TASK_MANUAL_WAKE_SELECTION_CHANGED"
+        );
+        assert!(wake.delivery(event_id).unwrap().is_none());
+        std::fs::write(&journal_file, &journal_bytes).unwrap();
         let unrelated = wake.root().join("queue/unrelated-fixture.json");
         std::fs::write(&unrelated, b"unrelated corrupt queue object").unwrap();
 
@@ -498,6 +520,21 @@ mod tests {
             &submitting,
         )
         .unwrap();
+        let journal_bytes = std::fs::read(&journal_file).unwrap();
+        let mut mismatched: Value = serde_json::from_slice(&journal_bytes).unwrap();
+        mismatched["wake-one-retry"]["resultHash"] = json!("different-result");
+        std::fs::write(&journal_file, serde_json::to_vec(&mismatched).unwrap()).unwrap();
+        assert_eq!(
+            crate::project_mcp_task::require_journaled_manual_wake(
+                prepared.scope(),
+                &record,
+                &submitting,
+            )
+            .unwrap_err(),
+            "WEB_TASK_MANUAL_WAKE_SELECTION_CHANGED"
+        );
+        assert_eq!(wake.delivery(event_id).unwrap(), Some(submitting.clone()));
+        std::fs::write(&journal_file, &journal_bytes).unwrap();
         let mut wrong_message = submitting.clone();
         wrong_message.event.message.push_str(" unexpected text");
         assert_eq!(

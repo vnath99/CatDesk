@@ -194,9 +194,8 @@ pub(crate) fn require_journaled_manual_wake(
     for (call_id, call) in &calls {
         if is_completed_manual_wake(call) && manual_wake_event_id(call)? == delivery.event.event_id
         {
-            if matched {
-                return Err("WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN".into());
-            }
+            // Every alias must independently bind the original event. An
+            // exact replay under a fresh call ID does not create a new send.
             validate_selection(
                 project,
                 record,
@@ -235,7 +234,7 @@ pub(crate) fn next_manual_wake(
     target: &Target,
     wake: &Store,
 ) -> Result<(String, Event), String> {
-    let mut pending = None;
+    let mut pending: Option<(String, Event)> = None;
     for (call_id, call) in manual_wake_calls(project, record, true)? {
         if !is_completed_manual_wake(&call) {
             continue;
@@ -264,8 +263,14 @@ pub(crate) fn next_manual_wake(
                 _ => return Err("WEB_TASK_MANUAL_WAKE_DELIVERY_HELD".into()),
             }
         }
-        if pending.replace((call_id, event)).is_some() {
-            return Err("WEB_TASK_MANUAL_WAKE_MULTIPLE_PENDING".into());
+        if let Some((_, selected)) = &pending {
+            if selected != &event {
+                return Err("WEB_TASK_MANUAL_WAKE_MULTIPLE_PENDING".into());
+            }
+            // The ordered journal gives a stable selector for equivalent
+            // aliases. Each alias has passed its own exact hash checks.
+        } else {
+            pending = Some((call_id, event));
         }
     }
     pending.ok_or_else(|| "WEB_TASK_MANUAL_WAKE_NO_PENDING_INTENT".into())

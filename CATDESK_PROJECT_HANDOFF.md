@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 4:58 p.m. EST.** A completed journal record under a second call ID can represent the same task-issued Wake. The same-event readback and reconciliation paths check every record's immutable hashes, keep the original event and use a stable call selector. The frozen backend review, original Git backing and approved installed release transition remain the first Web cycle gates. [Evidence](docs/verification/MANUAL_WAKE_REPEATED_CALL_RECOVERY_2026_11_22.json).
+
 **November 22, 4:54 p.m. EST.** Scoped manual Wake, review and continuation claims honor earlier same-target submission evidence before launching the adapter. Review preflight uses the same delivery check before reserving work. Keep the existing `56aa9912` draft pending an eligible independent review route and recover the original common Git store and per-worktree records before live assignment. [Verification](docs/verification/SCOPED_WAKE_SUBMISSION_FENCE_2026_11_22.json).
 
 **November 22, 4:44 p.m. EST.** The current development version exercises the original assignment across the guarded manual Wake fence, simulated receipt recovery and one authenticated next-turn file read. Installed acceptance still needs genuine conversation delivery and same-task continuation, with the frozen review and original workspace prerequisites. [Verification](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).
