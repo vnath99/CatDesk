@@ -1006,3 +1006,11 @@ Evidence: [docs/verification/FROZEN_BACKEND_POSITIVE_SCOPED_CYCLE_2026_11_22.jso
 Agent: Codex. Source: dc63e9561b82805841484815902ce9e25df97a94. Outcome: partial. The exact frozen backend sent one queued self-Wake to the scoped operator admission path in a disposable store. The operator refused a wrong call and an incomplete source timer, then retained a pre-submit adapter refusal without a receipt or replay. Next: Obtain independent review and producer evidence for the frozen backend and verify signed Wake V3 selection. Then qualify installed promotion and rollback and verify delivery and the next response using the existing v5 conversation.
 
 Evidence: [docs/verification/FROZEN_BACKEND_MANUAL_WAKE_ADMISSION_2026_11_22.json](docs/verification/FROZEN_BACKEND_MANUAL_WAKE_ADMISSION_2026_11_22.json); command: cargo test --locked --offline --target-dir target --bin catdesk web_task_dispatch::tests::cached_http_checkpoint_precedes_manual_wake -- --ignored --exact --nocapture; exit 0; SHA-256 cd65fa5e5bab2b18d79cd2605d36037e35e1b028e142d29ff8acb9685164d48f.
+
+<!-- catdesk-activity:nov22-task-owned-manual-wake-scheduler sha256:09441aa003c8187153fc4c423235063ddcab96fc6e5b5b519be5cf52199e1932 -->
+
+## 2026-11-22T08:34:47Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 11b1d63c5603a370c91e62c49b15f1f2f6b4908b. Outcome: partial. Development source now reserves task-owned self-Wake submission for the existing scoped sender and retains read-only receipt and response observation. All 51 targeted Windows tests passed. Next: Qualify the existing scoped sender under the installed release and verify the exact delivery and next response. The frozen backend still requires independent review and producer evidence, and the first Wake V3 selection remains separately signed.
+
+Evidence: [docs/verification/TASK_OWNED_MANUAL_WAKE_SCHEDULER_2026_11_22.json](docs/verification/TASK_OWNED_MANUAL_WAKE_SCHEDULER_2026_11_22.json); command: cargo test --locked --offline --target-dir target -p catdesk-wake --lib runtime::scheduler::tests -- --test-threads=1 --quiet; exit 0; SHA-256 6709e77f0a89e1c5104f822246e38db428233d1bca8c5c5374112f34b422dc2b.

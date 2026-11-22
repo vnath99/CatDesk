@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T08:34:47Z",
+  "scope": "WINDOWS_DEVELOPMENT_SCHEDULER_AND_SCOPED_ADAPTER_FIXTURES",
+  "sourceCommit": "11b1d63c5603a370c91e62c49b15f1f2f6b4908b",
+  "previousBehavior": "The general scheduler could claim a task-produced manual Wake before the task journal and grant were checked by the scoped sender.",
+  "observations": {
+    "unclaimedAndClaimedTaskWakeSkippedByBackgroundScheduler": true,
+    "metadataOnlyRearmAndReopenDidNotReenableBackgroundSend": true,
+    "siblingAndOrdinaryWorkRemainedSchedulable": true,
+    "submittingReceiptAndSentResponseObservationRemainedEligible": true,
+    "missingScopedManualGuardRefusedBeforeAdapterFrames": true,
+    "explicitScopedPathUsedOneAckAfterDurableFence": true,
+    "unknownScopedOutcomePreserved": true
+  },
+  "targetedTests": [
+    {
+      "command": "cargo test --locked --offline --target-dir target -p catdesk-wake --lib runtime::scheduler::tests -- --test-threads=1 --quiet",
+      "passed": 11,
+      "failed": 0,
+      "exitCode": 0
+    },
+    {
+      "command": "cargo test --locked --offline --target-dir target -p catdesk-wake --lib runtime::scoped_review::tests -- --test-threads=1 --quiet",
+      "passed": 40,
+      "failed": 0,
+      "exitCode": 0
+    }
+  ],
+  "earlierBroaderAttempts": {
+    "commandFilter": "runtime::",
+    "parallelPassed": 313,
+    "parallelFailures": 8,
+    "serialPassed": 317,
+    "serialFailuresBeforeFinalTestCorrection": 4,
+    "serialLegacyBrokerFixtureFailures": 3,
+    "legacyBrokerRefusal": "WAKE_SAME_STATE_LEGACY_OWNER_UNPROVEN",
+    "nativeReason": "SPLIT_ROOT_CANDIDATES",
+    "schedulerFixtureCorrection": "The reopened host now reclaims the test event before trying the submission transition. The final targeted tests passed.",
+    "earlierLegacyBaselineEvidence": "docs/verification/WAKE_LOCAL_REVIEW_INTAKE_PREFLIGHT_2026_11_22.json"
+  },
+  "remainingFixtureProcesses": 0,
+  "productionOrRetainedReleasesChanged": false,
+  "externalMessagesSent": 0,
+  "installedAcceptance": false
+}
