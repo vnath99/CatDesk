@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_BACKEND_ONLY_SUPERVISOR_AND_VERIFIED_FALLBACK_IN_DISPOSABLE_WORKSPACE",
+  "sourceCommit": "8c6c0fbb1188e95b0066b84e1e21cbfe0d1bd130",
+  "baselineCommit": "ae6397db0d8a086517d8070be0712a2b8f87c371",
+  "fixtureSha256": "b23e2c0eb41ab8b6cde83367e38d4f2de207719b140273de34348370d402aaac",
+  "startedUtc": "2026-11-22T07:37:35.079170Z",
+  "finishedUtc": "2026-11-22T07:38:15.984299Z",
+  "fault": "Candidate executable paired with the retained predecessor fingerprint",
+  "candidateSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+  "restoredSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+  "baselineStates": [
+    "DEGRADED",
+    "MONITORING_COMPLETE"
+  ],
+  "fixedStates": [
+    "RECOVERED",
+    "READY",
+    "MONITORING_COMPLETE"
+  ],
+  "actualProof": {
+    "publicDiagnosisVerifiedReviewedRecovery": true,
+    "recoveryEngineReplacedAndVerifiedExactCanonicalPair": true,
+    "recoveryLeaseAndFallbackSelectionExercised": true,
+    "escrowPointerAndTestConfigBytesPreserved": true,
+    "anonymousHttpStatus": 401,
+    "authenticatedHttpStatus": 200,
+    "authenticatedHttpStatusAfterMonitorExit": 200,
+    "toolCount": 79,
+    "restoredProcessExitedNaturally": true,
+    "listenerClosed": true,
+    "fixtureRemoved": true
+  },
+  "additionalTests": {
+    "backendOnlySupervisorPowerShell7": "PASS",
+    "backendOnlySupervisorWindowsPowerShell51": "PASS",
+    "publicLifecyclePowerShell7": "PASS",
+    "rejectsMissingOrAmbiguousAuthorityAndConflictingListener": true
+  },
+  "qualificationLimit": "Fixture escrow used real hashes and the existing reviewed slot reader and writer. The public diagnosis, bounded supervisor and lease-protected disk repair ran directly. Test adapters limited inventory to the disposable workspace, bound the real headless listener and used a private loopback port. Two earlier executions exposed fixture scope and TOML setup problems. They exited before acceptance and were corrected in the fixture only.",
+  "productionPortUsed": false,
+  "protectedInstallationChanged": false,
+  "recurringAutomationEnabled": false,
+  "installedAcceptance": false
+}

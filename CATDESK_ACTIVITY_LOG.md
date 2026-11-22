@@ -958,3 +958,11 @@ Evidence: [docs/verification/WAKE_ONE_COMMAND_ROUTINE_UPDATE_2026_11_22.json](do
 Agent: CatDesk development. Source: 43c0772c44c9e92f7471dfb1f2cf2ac91e704bd7. Outcome: partial. Development Wake keeps the original attempt and records a verified refusal before INTENT after the broker exits. A different request can then reach the existing protected preflight. 338 Windows tests passed. The dedicated producer still lacks a usable endpoint for Wake receipt publication. Next: Verify the original first Wake V3 selection after operator execution and qualify a reviewed publisher for genuine protected Wake receipts through existing release authority. Complete the frozen backend review through an eligible existing reviewer.
 
 Evidence: [docs/verification/WAKE_ROUTINE_PRE_INTENT_REFUSAL_2026_11_22.json](docs/verification/WAKE_ROUTINE_PRE_INTENT_REFUSAL_2026_11_22.json); command: cargo test --manifest-path wake/Cargo.toml --locked --offline --target-dir target --lib --bin CatDeskWakeHost install_broker -- --test-threads=1 --quiet; exit 0; SHA-256 e4e6482194bac53c77231ceb9658c8c60aa103e88de672e44d1fbcd25dc3fa1b.
+
+<!-- catdesk-activity:backend-only-supervisor-reviewed-fallback-20261122T073815Z sha256:9c19b4fb3e859f6f6ef22a47e2a0ef21a0bd888d891ba9ef8e7d98422b52e842 -->
+
+## 2026-11-22T07:38:15Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 8c6c0fbb1188e95b0066b84e1e21cbfe0d1bd130. Outcome: partial. The backend-only supervisor now accepts a verified reviewed-recovery diagnosis and uses the existing lease-protected recovery engine. A real isolated mismatch restored the exact retained executable and fingerprint and served authenticated MCP after the monitor exited. Next: Qualify installed promotion and rollback after the frozen backend receives eligible independent review and producer evidence. Verify the existing signed Wake V3 selection and qualify protected Wake receipt publication.
+
+Evidence: [docs/verification/BACKEND_ONLY_SUPERVISOR_REVIEWED_FALLBACK_2026_11_22.json](docs/verification/BACKEND_ONLY_SUPERVISOR_REVIEWED_FALLBACK_2026_11_22.json); command: Bounded Windows isolated supervisor, disk fallback and authenticated MCP fixture; exit 0; SHA-256 51c388f23038119067d36711dd12c51857aa84a6c9095dde338ce82b1e159fbd.
