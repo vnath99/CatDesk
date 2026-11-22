@@ -591,66 +591,146 @@ impl BrokerLedgerGuard<'_> {
         envelope_sha256: &str,
         now: u64,
     ) -> Result<SameStateLedgerAdmissionV3> {
-        if !lowercase_hex(envelope_sha256, 64) || now == 0 {
-            return Err("WAKE_SAME_STATE_ADMISSION_INVALID".into());
-        }
-        let root_id = root_info(self.root)?;
-        let inventory = ledger_inventory(self.root)?;
-        let mut next = 1;
-        let mut last_time = 0;
-        for (&generation, present) in &inventory {
-            if generation != next {
-                return Err("WAKE_LEDGER_STALE_GENERATION".into());
-            }
-            if is_v3_generation(self.root, generation)? {
-                let (binding, phase, _, original, envelope) =
-                    history_v3(self.root, generation, present, &root_id)?;
-                if binding.accepted_at_utc_seconds < last_time {
-                    return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
-                }
-                if binding.signed_envelope_sha256 == envelope_sha256 {
-                    return Ok(SameStateLedgerAdmissionV3 {
-                        install_generation: generation,
-                        accepted_at_utc_seconds: binding.accepted_at_utc_seconds,
-                        resume_binding: Some(binding),
-                        original_selection: Some(original),
-                        original_envelope: Some(envelope),
-                        selection_attempt_present: present[POINTER_ATTEMPT_SLOT],
-                        envelope_sha256: envelope_sha256.into(),
-                    });
-                }
-                if phase != InstallPhaseV1::Complete {
-                    return Err("WAKE_LEDGER_PRIOR_INCOMPLETE".into());
-                }
-                last_time = binding.accepted_at_utc_seconds;
-            } else {
-                let (intent, phase, _, _) =
-                    historical_intent(self.root, generation, present, &root_id)?;
-                if phase != InstallPhaseV1::Complete {
-                    return Err("WAKE_LEDGER_PRIOR_INCOMPLETE".into());
-                }
-                if intent.accepted_at_utc_seconds < last_time {
-                    return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
-                }
-                last_time = intent.accepted_at_utc_seconds;
-            }
-            next = generation
-                .checked_add(1)
-                .ok_or("WAKE_LEDGER_GENERATION_INVALID")?;
-        }
-        if now < last_time {
-            return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
-        }
-        Ok(SameStateLedgerAdmissionV3 {
-            install_generation: next,
-            accepted_at_utc_seconds: now,
-            resume_binding: None,
-            original_selection: None,
-            original_envelope: None,
-            selection_attempt_present: false,
-            envelope_sha256: envelope_sha256.into(),
-        })
+        observe_same_state_admission(self.root, envelope_sha256, now)
     }
+}
+
+fn observe_same_state_admission(
+    root: &OwnedHandle,
+    envelope_sha256: &str,
+    now: u64,
+) -> Result<SameStateLedgerAdmissionV3> {
+    if !lowercase_hex(envelope_sha256, 64) || now == 0 {
+        return Err("WAKE_SAME_STATE_ADMISSION_INVALID".into());
+    }
+    let root_id = root_info(root)?;
+    let inventory = ledger_inventory(root)?;
+    let mut next = 1;
+    let mut last_time = 0;
+    for (&generation, present) in &inventory {
+        if generation != next {
+            return Err("WAKE_LEDGER_STALE_GENERATION".into());
+        }
+        if is_v3_generation(root, generation)? {
+            let (binding, phase, _, original, envelope) =
+                history_v3(root, generation, present, &root_id)?;
+            if binding.accepted_at_utc_seconds < last_time {
+                return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
+            }
+            if binding.signed_envelope_sha256 == envelope_sha256 {
+                return Ok(SameStateLedgerAdmissionV3 {
+                    install_generation: generation,
+                    accepted_at_utc_seconds: binding.accepted_at_utc_seconds,
+                    resume_binding: Some(binding),
+                    original_selection: Some(original),
+                    original_envelope: Some(envelope),
+                    selection_attempt_present: present[POINTER_ATTEMPT_SLOT],
+                    envelope_sha256: envelope_sha256.into(),
+                });
+            }
+            if phase != InstallPhaseV1::Complete {
+                return Err("WAKE_LEDGER_PRIOR_INCOMPLETE".into());
+            }
+            last_time = binding.accepted_at_utc_seconds;
+        } else {
+            let (intent, phase, _, _) = historical_intent(root, generation, present, &root_id)?;
+            if phase != InstallPhaseV1::Complete {
+                return Err("WAKE_LEDGER_PRIOR_INCOMPLETE".into());
+            }
+            if intent.accepted_at_utc_seconds < last_time {
+                return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
+            }
+            last_time = intent.accepted_at_utc_seconds;
+        }
+        next = generation
+            .checked_add(1)
+            .ok_or("WAKE_LEDGER_GENERATION_INVALID")?;
+    }
+    if now < last_time {
+        return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
+    }
+    Ok(SameStateLedgerAdmissionV3 {
+        install_generation: next,
+        accepted_at_utc_seconds: now,
+        resume_binding: None,
+        original_selection: None,
+        original_envelope: None,
+        selection_attempt_present: false,
+        envelope_sha256: envelope_sha256.into(),
+    })
+}
+
+/// Read the next generation using the broker's existing inventory and clock
+/// floor rules. The closure receives observations while the read lock is
+/// retained, never a writable ledger lease or submission authority.
+pub(crate) fn with_fixed_fresh_same_state_readback(
+    expected_root: &ObjectIdentityV1,
+    generation: u64,
+    request_sha256: &str,
+    now: u64,
+    inspect: impl FnOnce(
+        &SameStateLedgerAdmissionV3,
+    ) -> Result<
+        crate::install_broker_approval::same_state::VerifiedLocalUserSelectionV1,
+    >,
+) -> Result<()> {
+    let root = crate::install_broker_preflight::acquire_fixed_protected_root_for_reader()?;
+    if root.root_identity() != expected_root {
+        return Err("WAKE_LEDGER_ROOT_CHANGED".into());
+    }
+    with_fresh_same_state_readback(root.root(), generation, request_sha256, now, |observed| {
+        let request = inspect(observed)?;
+        require_no_other_approval(
+            root.root(),
+            expected_root,
+            &request.payload().approval_id,
+            request.payload_sha256(),
+            None,
+        )
+    })
+}
+
+fn with_fresh_same_state_readback<T>(
+    root: &OwnedHandle,
+    generation: u64,
+    request_sha256: &str,
+    now: u64,
+    inspect: impl FnOnce(&SameStateLedgerAdmissionV3) -> Result<T>,
+) -> Result<T> {
+    let lock = open_optional(root, GLOBAL_LOCK_NAME)?.ok_or("WAKE_LEDGER_LOCK_UNPROVISIONED")?;
+    file_info(&lock, Some(0))?;
+    let observed = observe_same_state_admission(root, request_sha256, now)?;
+    if observed.resume_binding.is_some() {
+        return Err("WAKE_LOCAL_UPDATE_REQUEST_ALREADY_RECORDED_NO_RETRY".into());
+    }
+    if generation != observed.install_generation {
+        return Err("WAKE_LOCAL_UPDATE_GENERATION_CHANGED".into());
+    }
+    inspect(&observed)
+}
+
+fn require_no_other_approval(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    approval_id: &str,
+    payload_sha256: &str,
+    permitted_generation: Option<u64>,
+) -> Result<()> {
+    for (&generation, present) in &ledger_inventory(root)? {
+        let (id, payload) = if is_v3_generation(root, generation)? {
+            let (old, _, _, _, _) = history_v3(root, generation, present, root_id)?;
+            (old.approval_id, old.signed_payload_sha256)
+        } else {
+            let (old, _, _, _) = historical_intent(root, generation, present, root_id)?;
+            (old.approval_id, old.signed_approval_sha256)
+        };
+        if (id == approval_id || payload == payload_sha256)
+            && Some(generation) != permitted_generation
+        {
+            return Err("WAKE_LEDGER_APPROVAL_REPLAY".into());
+        }
+    }
+    Ok(())
 }
 
 impl<'a> BrokerLedgerGuard<'a> {
@@ -676,23 +756,14 @@ impl<'a> BrokerLedgerGuard<'a> {
         {
             return Err("WAKE_SAME_STATE_ADMISSION_INVALID".into());
         }
-        for (&generation, present) in &ledger_inventory(self.root)? {
-            let (id, payload) = if is_v3_generation(self.root, generation)? {
-                let (old, _, _, _, _) =
-                    history_v3(self.root, generation, present, &binding.protected_root)?;
-                (old.approval_id, old.signed_payload_sha256)
-            } else {
-                let (old, _, _, _) =
-                    historical_intent(self.root, generation, present, &binding.protected_root)?;
-                (old.approval_id, old.signed_approval_sha256)
-            };
-            if (id == binding.approval_id || payload == binding.signed_payload_sha256)
-                && !(generation == binding.install_generation
-                    && admission.resume_binding.as_ref() == Some(&binding))
-            {
-                return Err("WAKE_LEDGER_APPROVAL_REPLAY".into());
-            }
-        }
+        require_no_other_approval(
+            self.root,
+            &binding.protected_root,
+            &binding.approval_id,
+            &binding.signed_payload_sha256,
+            (admission.resume_binding.as_ref() == Some(&binding))
+                .then_some(binding.install_generation),
+        )?;
         let (phase, digest) = if let Some(previous) = &admission.resume_binding {
             if previous != &binding {
                 return Err("WAKE_LEDGER_APPROVAL_CONFLICT".into());
@@ -1361,6 +1432,90 @@ mod tests {
                 .exists()
         );
         drop(guard);
+        drop(root);
+        super::super::tests::remove_fixture(&path, 1);
+    }
+
+    #[test]
+    fn same_state_fresh_readback_binds_generation_and_refuses_retained_requests() {
+        let (path, root, _, _) = super::super::tests::fixture();
+        let original = b"fixture original selection";
+        let envelope = b"fixture received envelope";
+        let mut retained = binding(original);
+        retained.protected_root = root_info(&root).unwrap();
+        retained.signed_envelope_sha256 = format!("{:x}", Sha256::digest(envelope));
+        let next_sha = "b".repeat(64);
+        let inspect = |observed: &SameStateLedgerAdmissionV3| {
+            assert!(observed.resume_binding.is_none());
+            assert!(observed.original_envelope.is_none());
+            assert!(matches!(
+                BrokerLedgerGuard::acquire(&root),
+                Err(e) if e == "WAKE_LEDGER_CONTENDER_BUSY"
+            ));
+            Ok(observed.install_generation)
+        };
+        assert_eq!(
+            with_fresh_same_state_readback(&root, 1, &next_sha, 1000, inspect).unwrap(),
+            1
+        );
+        let reject_callback = |_observed: &SameStateLedgerAdmissionV3| -> Result<()> {
+            panic!("readback must refuse before inspection")
+        };
+        assert_eq!(
+            with_fresh_same_state_readback(&root, 2, &next_sha, 1000, reject_callback).unwrap_err(),
+            "WAKE_LOCAL_UPDATE_GENERATION_CHANGED"
+        );
+        let intent = path.join(record_name_v3(1, InstallPhaseV1::Intent));
+        assert!(!intent.exists());
+        let owner = BrokerLedgerGuard::acquire(&root).unwrap();
+        write_v3(
+            &root,
+            &retained.protected_root,
+            &fixture_record(
+                &retained,
+                InstallPhaseV1::Intent,
+                &"0".repeat(64),
+                original,
+                envelope,
+            ),
+        )
+        .unwrap();
+        drop(owner);
+        let previous = std::fs::read(&intent).unwrap();
+        assert_eq!(
+            with_fresh_same_state_readback(
+                &root,
+                1,
+                &retained.signed_envelope_sha256,
+                1000,
+                reject_callback
+            )
+            .unwrap_err(),
+            "WAKE_LOCAL_UPDATE_REQUEST_ALREADY_RECORDED_NO_RETRY"
+        );
+        assert_eq!(
+            with_fresh_same_state_readback(&root, 2, &next_sha, 1000, reject_callback).unwrap_err(),
+            "WAKE_LEDGER_PRIOR_INCOMPLETE"
+        );
+        let lock = BrokerLedgerGuard::acquire(&root).unwrap();
+        assert_eq!(
+            require_no_other_approval(
+                &root,
+                &retained.protected_root,
+                &retained.approval_id,
+                &next_sha,
+                None
+            )
+            .unwrap_err(),
+            "WAKE_LEDGER_APPROVAL_REPLAY"
+        );
+        assert_eq!(std::fs::read(&intent).unwrap(), previous);
+        assert!(
+            !path
+                .join(record_name_v3(2, InstallPhaseV1::Intent))
+                .exists()
+        );
+        drop(lock);
         drop(root);
         super::super::tests::remove_fixture(&path, 1);
     }

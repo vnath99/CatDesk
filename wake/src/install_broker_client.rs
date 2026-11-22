@@ -1065,28 +1065,82 @@ fn local_user_request_payload(request: &[u8]) -> Result<serde_json::Value> {
 /// Verify only the fixed receipt bundle with the same rules used by the broker.
 /// This opens no endpoint and neither grants nor claims a request.
 pub fn inspect_local_user_review_intake(request: &[u8]) -> Result<serde_json::Value> {
+    inspect_local_update_request(request, false)
+}
+
+/// Check a proposed fresh local update against actual pinned state before
+/// starting the broker. A passing readback never classifies transport history.
+pub fn inspect_fresh_local_user_update(request: &[u8]) -> Result<serde_json::Value> {
+    inspect_local_update_request(request, true)
+}
+
+fn inspect_local_update_request(
+    request: &[u8],
+    inspect_fresh_state: bool,
+) -> Result<serde_json::Value> {
     let payload = decode_local_user_request(request)?;
     let policy = crate::install_broker_policy::load_fixed_broker_policy_read_only()?;
     policy.current_process_local_updater()?;
     policy.same_state_resource_v2()?;
-    if payload.policy_sha256 != policy.readback()?.policy_sha256 {
+    let before = policy.readback()?;
+    if payload.policy_sha256 != before.policy_sha256 {
         return Err("WAKE_SAME_STATE_PROTECTED_POLICY_CHANGED".into());
     }
     if payload.reviewer_identity != policy.same_state_reviewer_identity_v2()? {
         return Err("WAKE_SAME_STATE_REVIEWER_MISMATCH".into());
     }
-    crate::runtime::inspect_fixed_local_review_intake(&payload)?;
-    policy.revalidate()?;
-    Ok(serde_json::json!({
+    let request_sha256 = format!("{:x}", Sha256::digest(request));
+    if inspect_fresh_state {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "WAKE_SELECTION_TIME_INVALID")?
+            .as_secs();
+        crate::install_broker_ledger::with_fixed_fresh_same_state_readback(
+            &before.protected_root,
+            payload.install_generation,
+            &request_sha256,
+            now,
+            |admission| {
+                let outer = serde_json::from_slice(request)
+                    .map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID")?;
+                let mut pins = crate::runtime::SameStateReadPinsV3::observe_for_operation(
+                    &policy,
+                    admission,
+                    &payload.operation,
+                    &outer,
+                )?;
+                let observed = pins.observed(&policy, &payload, admission)?;
+                let verified =
+                    crate::install_broker_approval::same_state::verify_local_user_selection_request_v1(
+                        request, &observed,
+                    )?;
+                pins.revalidate_for_payload(&payload)?;
+                pins.require_protected_review_intake()?;
+                Ok(verified)
+            },
+        )?;
+    } else {
+        crate::runtime::inspect_fixed_local_review_intake(&payload)?;
+    }
+    if policy.readback()? != before {
+        return Err("WAKE_SAME_STATE_PROTECTED_POLICY_CHANGED".into());
+    }
+    let mut result = serde_json::json!({
         "state":"WAKE_LOCAL_REVIEW_INTAKE_VERIFIED_ONLY",
         "operation":payload.operation,
-        "requestSha256":format!("{:x}", Sha256::digest(request)),
+        "requestSha256":request_sha256,
         "installGeneration":payload.install_generation,
         "readOnly":true,
         "serviceStarted":false,
         "ledgerAdmissionPerformed":false,
         "installationAuthorized":false
-    }))
+    });
+    if inspect_fresh_state {
+        result["state"] = "WAKE_LOCAL_UPDATE_PREFLIGHT_ONLY".into();
+        result["freshProtectedGenerationObserved"] = true.into();
+        result["replayAuthorized"] = false.into();
+    }
+    Ok(result)
 }
 
 pub(crate) fn same_state_complete_reply_matches(
