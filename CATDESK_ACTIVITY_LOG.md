@@ -774,3 +774,11 @@ Evidence: [docs/verification/PROMOTION_SUPERVISOR_BUSY_HANDOFF_2026_11_21.json](
 Agent: Codex. Source: 309c320e6e5597e5f1f752ffa0cf23636f621e9e. Outcome: partial. The real isolated Windows supervisor deferred behind the release lease, recovered through a fixture-owned launch, and verified authenticated MCP on the exact compatible candidate. Next: Use the existing signed first Wake selection and genuine independent backend review. Verify native persistent startup and retained rollback following protected promotion.
 
 Evidence: [docs/verification/ISOLATED_SUPERVISOR_CANDIDATE_MCP_2026_11_22.json](docs/verification/ISOLATED_SUPERVISOR_CANDIDATE_MCP_2026_11_22.json); command: Bounded existing Windows supervisor, native release file lease and exact isolated candidate MCP; exit 0; SHA-256 a7d3371ef832c2a9eb54b076767171eeeddfb4bf4c5a59629ee61d9d16a49c2e.
+
+<!-- catdesk-activity:nov22-interrupted-promotion-startup-fence sha256:9bb1489dddbf6cf6591d373da5fea6b3e0f0d2401ef6b513e008f36ab3c40837 -->
+
+## 2026-11-22T05:07:34.8946842Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: a8080f920f1703cacaf15328bba5c4d33192de97. Outcome: partial. The durable promotion journal blocked ordinary startup after a disposable Windows writer exited and released its lease. The matching pair and journal were preserved. Next: Use the prepared first Wake selection and genuine independent backend review. Qualify native startup and retained rollback after protected promotion.
+
+Evidence: [docs/verification/INTERRUPTED_PROMOTION_STARTUP_FENCE_2026_11_22.json](docs/verification/INTERRUPTED_PROMOTION_STARTUP_FENCE_2026_11_22.json); command: Bounded Windows release writer interruption and public lifecycle readback; exit 0; SHA-256 6ca22d41c6fbc8a91387821c01f48b2b596367efe3f6988fc056a3b9c31ee6b7.

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_WINDOWS_WRITER_EXIT_AND_PUBLIC_STARTUP_FENCE",
+  "sourceCommit": "a8080f920f1703cacaf15328bba5c4d33192de97",
+  "candidateSourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "candidateSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+  "fixtureSha256": "92f2956d754ff54bc2001eecd6c4409caa114264f58e574b6c5d6cbc69f6cb2f",
+  "receiptSha256": "53ea9dbc306589392dfbd3ee5270b6fb92c02cb629c3df9b0062517d98eeaa75",
+  "startedUtc": "2026-11-22T05:07:31.6766986Z",
+  "finishedUtc": "2026-11-22T05:07:34.8946842Z",
+  "originalBehavior": "An intact canonical pair proceeded beyond release recovery assessment while the promotion journal was present. The regression encountered the fixture's missing canonical binary later in startup.",
+  "liveFixture": {
+    "scope": "Owned disposable Windows writer. Real journal file with fixture authority identifiers and a matching copy of the retained candidate pair.",
+    "journalSha256": "2830b2369f66e3407b95c5d7f4b079c4c14053cafb35a0e4b288067409b28266",
+    "journalFlushedWhileLeaseHeld": true,
+    "writerTerminatedAndExitProved": true,
+    "exclusiveLeaseCanReopenAfterExit": true,
+    "publicCommands": ["start -BackendOnly", "recover -BackendOnly"],
+    "bothCommandsInBothPowerShellEditions": "RECOVERY_AUTHORITY_REQUIRED",
+    "allFourChildrenExited": true,
+    "matchingPairAndJournalPreserved": true,
+    "configLoaded": false,
+    "fixtureRemoved": true
+  },
+  "sourceSuitesPassedInBothPowerShellEditions": [
+    "scripts/test-start-catdesk-stack.ps1",
+    "scripts/test-catdesk-lifecycle.ps1",
+    "scripts/test-promote-reviewed-catdesk-build.ps1"
+  ],
+  "productionActions": 0,
+  "installedPromotionOrRollbackVerified": false,
+  "powerLossDurabilityVerified": false
+}

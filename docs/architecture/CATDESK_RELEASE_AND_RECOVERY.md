@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-22T05:07:34Z.** Use the existing durable promotion journal to block startup after the owner exits. The Windows lease protects the live handoff, and the journal protects the gap between matching disk bytes and a settled transaction. Existing reviewed reconciliation still owns rollback authority. A disposable writer-exit test verified the public startup boundary in both PowerShell editions. [Evidence](../verification/INTERRUPTED_PROMOTION_STARTUP_FENCE_2026_11_22.json).
+
 **Verification 2026-11-22T05:00:03Z.** The existing supervisor recovered in a real isolated Windows test after the release lease cleared. The fixture supplied the allowed headless launch on an ephemeral port, and the existing MCP readiness verifier tested the exact candidate twice. The installed lifecycle retains native daemon identity and its fixed loopback port. Validate that path and retained rollback after an authorized release. [Evidence](../verification/ISOLATED_SUPERVISOR_CANDIDATE_MCP_2026_11_22.json).
 
 **Decision 2026-11-22T04:54:08Z.** Propagate the Windows lease sharing violation through public recovery as a fixed busy state. The existing supervisor yields, then reads status before it can recover. Reserve the failure cooldown for invalid authority, unhealthy local MCP, and other failed recovery. Both PowerShell host editions refused recovery behind an independently held Windows lease. [Evidence](../verification/PROMOTION_SUPERVISOR_BUSY_HANDOFF_2026_11_21.json).
