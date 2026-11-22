@@ -432,6 +432,50 @@ try {
     Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_READBACK_UNVERIFIED') 'an unauthenticated existing listener does not read back as stopped or ready'
     $actions.Clear()
 
+    $warmup = $inactiveMonitor.Clone()
+    $warmup.LocalMcpReadiness = {
+        param($endpoint,$identity,$requireAuth)
+        [void]$authProbed.Add($requireAuth)
+        if ($authProbed.Count -eq 1) {
+            return [pscustomobject]@{Ready=$false;Gate='LOCAL_MCP_RESPONSE_TIMEOUT'}
+        }
+        [pscustomobject]@{Ready=$true;Gate='READY'}
+    }
+    $authProbed.Clear()
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 6 -TestSeams $warmup | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_READY') 'the same listener can become ready after a bounded MCP startup timeout'
+    Require (($authProbed -join ',') -ceq 'True,True' -and ($actions -join ',') -ceq 'promote-resolve,promote') 'the startup timeout triggers only another authenticated observation'
+    $actions.Clear()
+    $authProbed.Clear()
+
+    $pendingWarmup = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 1 -TestSeams $warmup | ConvertFrom-Json
+    Require ($pendingWarmup.detail -ceq 'LOCAL_BACKEND_STARTUP_PENDING' -and $authProbed.Count -eq 1 -and
+        ($actions -join ',') -ceq 'promote-resolve,promote') 'a spent startup budget preserves disk completion without a second probe'
+    $actions.Clear()
+    $authProbed.Clear()
+
+    $warmupListenerReads = [Collections.Generic.List[int]]::new()
+    $warmup.Listener = {
+        [void]$warmupListenerReads.Add(1)
+        [pscustomobject]@{Pid=3001;CreationTimeUtc=$(if ($warmupListenerReads.Count -lt 3) {'original'} else {'replacement'});MatchesCanonical=$true;Sha256=$digest}
+    }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 6 -TestSeams $warmup | ConvertFrom-Json
+    Require ($observed.detail -ceq 'LOCAL_BACKEND_READBACK_UNVERIFIED' -and $warmupListenerReads.Count -eq 3 -and $authProbed.Count -eq 1 -and
+        ($actions -join ',') -ceq 'promote-resolve,promote') 'a same-PID replacement between probes never receives a second probe or a start request'
+    $actions.Clear()
+    $authProbed.Clear()
+
+    $warmup.Listener = $inactiveMonitor.Listener
+    $warmup.LocalMcpReadiness = {
+        param($endpoint,$identity,$requireAuth)
+        [void]$authProbed.Add($requireAuth)
+        [pscustomobject]@{Ready=$false;Gate='LOCAL_MCP_PROTOCOL_UNREADY'}
+    }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 6 -TestSeams $warmup | ConvertFrom-Json
+    Require ($observed.detail -ceq 'LOCAL_BACKEND_READBACK_UNVERIFIED' -and $authProbed.Count -eq 1) 'an explicit protocol or authentication refusal does not qualify for startup observation'
+    $actions.Clear()
+    $authProbed.Clear()
+
     $servingObservation.Listener = { $null }
     $pendingBackend = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $servingObservation | ConvertFrom-Json
     Require ($pendingBackend.state -ceq 'PROMOTION_COMPLETED' -and $pendingBackend.detail -ceq 'LOCAL_BACKEND_STARTUP_PENDING' -and $authProbed.Count -eq 0 -and ($actions -join ',') -ceq 'promote-resolve,promote') 'unavailable listener leaves disk completion separate from serving'

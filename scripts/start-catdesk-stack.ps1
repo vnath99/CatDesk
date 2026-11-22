@@ -878,6 +878,12 @@ function Get-LocalMcpProbeHeaders {
     return @{ Authorization = 'Bearer ' + $token }
 }
 
+function Test-LocalMcpProbeTimeout {
+    param([Exception]$Exception)
+    return ($Exception -is [System.Net.WebException] -and $Exception.Status -eq [System.Net.WebExceptionStatus]::Timeout) -or
+        ([string]$Exception.Message -match '(?i)timed out|timeout')
+}
+
 function Get-LocalMcpReadiness {
     param($LocalMcp,$Canonical,$ExpectedDaemonProcess=$null,[switch]$RequireBearer)
     $observed=Invoke-BootstrapSeam -Name "LocalMcp" -Arguments @($LocalMcp,$Canonical,$ExpectedDaemonProcess,[bool]$RequireBearer) -Default {
@@ -912,6 +918,9 @@ function Get-LocalMcpReadiness {
             } catch {
                 $failure = $_.Exception.PSObject.Properties['Response']
                 $unauthorized = $null -ne $failure -and $null -ne $failure.Value -and [int]$failure.Value.StatusCode -eq 401
+                if (-not $unauthorized -and (Test-LocalMcpProbeTimeout $_.Exception)) {
+                    return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_TIMEOUT'
+                }
             }
             if (-not $unauthorized) {
                 return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'
@@ -924,8 +933,7 @@ function Get-LocalMcpReadiness {
             try {
                 $response=Invoke-BootstrapSeam -Name "LocalMcpHttp" -Arguments @($endpoint.Uri,($request|ConvertTo-Json -Compress -Depth 5),$headers) -Default { param($uri,$body,$probeHeaders) Invoke-SilentLoopbackHttp -Uri $uri -Method Post -ContentType "application/json" -Body $body -TimeoutSeconds 5 -Headers $probeHeaders }
             } catch {
-                $exception=$_.Exception
-                $timedOut=($exception -is [System.Net.WebException] -and $exception.Status -eq [System.Net.WebExceptionStatus]::Timeout) -or ([string]$exception.Message -match '(?i)timed out|timeout')
+                $timedOut = Test-LocalMcpProbeTimeout $_.Exception
                 return New-LocalMcpReadinessResult -Ready $false -Gate $(if($timedOut){'LOCAL_MCP_RESPONSE_TIMEOUT'}else{'LOCAL_MCP_RESPONSE_UNAVAILABLE'})
             }
             if($null -eq $response -or $response.StatusCode -lt 200 -or $response.StatusCode -ge 300){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_RESPONSE_UNAVAILABLE'}

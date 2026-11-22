@@ -1231,6 +1231,7 @@ function Get-LifecyclePromotionServingReadback {
         $waitSeconds = [Math]::Min(90, [Math]::Max(0, $ReadyTimeoutSeconds))
         $registration = $null
         $startRequested = $false
+        $warmingListener = $null
         while ($true) {
             # The monitor can exit after starting a persistent backend. Its
             # signal permits waiting, but neither proves nor disproves serving.
@@ -1238,22 +1239,36 @@ function Get-LifecyclePromotionServingReadback {
                 ($registration.TaskOwned -or $registration.RunOwned) -and
                 (Test-AutostartSupervisorRunning -Definition $registration.Definition)
             $gate = Get-CatDeskReleaseStartupGate -Root $Root
-            if ($gate -ceq 'RECOVERY_RELEASE_AUTHORITY_REQUIRED') { return $unverified }
+            if ($gate -ceq 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' -or
+                ($null -ne $warmingListener -and $gate -cne 'READY')) { return $unverified }
             if ($gate -ceq 'READY') {
                 $listener = Get-LifecycleListener -LocalMcp $local -Canonical $identity
+                if ($null -ne $warmingListener -and
+                    ($null -eq $listener -or $listener.Pid -ne $warmingListener.Pid -or
+                        $listener.CreationTimeUtc -cne $warmingListener.CreationTimeUtc)) { return $unverified }
                 if ($null -ne $listener) {
                     if (-not $listener.MatchesCanonical -or $listener.Sha256 -cne $Digest -or
                         [int]$listener.Pid -lt 1 -or -not $listener.CreationTimeUtc) { return $unverified }
+                    if ($null -ne $warmingListener -and $clock.Elapsed.TotalSeconds -ge $waitSeconds) {
+                        return 'LOCAL_BACKEND_STARTUP_PENDING'
+                    }
                     $pins = [CatDesk.DevLocalTarget.ReadOnlyScope]::new()
                     try {
                         Assert-LifecyclePromotedPair $Canonical $Digest $pins
                         $mcp = Get-LifecycleLocalMcpReadinessResult -LocalMcp $local -Canonical $identity -RequireBearer
                         $after = Get-LifecycleListener -LocalMcp $local -Canonical $identity
-                        if ($mcp.Ready -and $null -ne $after -and $after.MatchesCanonical -and $after.Sha256 -ceq $Digest -and
-                            $after.Pid -eq $listener.Pid -and $after.CreationTimeUtc -ceq $listener.CreationTimeUtc -and
-                            (Get-CatDeskReleaseStartupGate -Root $Root) -ceq 'READY') { return 'LOCAL_BACKEND_READY' }
-                        return $unverified
+                        if ($null -eq $after -or -not $after.MatchesCanonical -or $after.Sha256 -cne $Digest -or
+                            $after.Pid -ne $listener.Pid -or $after.CreationTimeUtc -cne $listener.CreationTimeUtc -or
+                            (Get-CatDeskReleaseStartupGate -Root $Root) -cne 'READY') { return $unverified }
+                        if ($mcp.Ready) { return 'LOCAL_BACKEND_READY' }
+                        if ($mcp.Gate -cne 'LOCAL_MCP_RESPONSE_TIMEOUT' -or $waitSeconds -eq 0) { return $unverified }
                     } finally { $pins.Dispose() }
+                    # A timeout during startup permits another read-only probe of
+                    # this process instance. A replacement must never inherit it.
+                    $warmingListener = $listener
+                    if ($clock.Elapsed.TotalSeconds -ge $waitSeconds) { return 'LOCAL_BACKEND_STARTUP_PENDING' }
+                    Start-Sleep -Milliseconds 1000
+                    continue
                 }
             }
             if ($null -eq $registration) {
