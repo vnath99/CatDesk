@@ -637,6 +637,51 @@ try {
   $expiredBackend=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
   if($expiredBackend.State -cne 'TRANSPORT_VERIFICATION_FAILED' -or ([string]::Join(',',$script:actions)) -cne 'support'){throw 'backend-only did not cap convergence at 60s or started after its deadline'}
   $script:BootstrapSeams.Remove('BackendOnlyUtcNow');$script:actions.Clear()
+
+  # Observe a real terminal child handle without running a daemon or touching a port.
+  $script:exitedBackendChild=$null
+  $script:backendTimeCalls=0
+  $script:BootstrapSeams['BackendOnlyUtcNow']={
+    $script:backendTimeCalls++
+    if ($script:backendTimeCalls -le 4) { $script:backendTime } else { $script:backendTime.AddSeconds(61) }
+  }
+  $script:BootstrapSeams['BackendOnlyStart']={
+    param($canonical,$workspaceRoot,$config)
+    Assert-FixtureLifecycleLeaseHeld $workspaceRoot 'backend-start'
+    [void]$script:actions.Add('backend-start')
+    $info=[Diagnostics.ProcessStartInfo]::new()
+    $info.FileName=Resolve-TrustedWindowsPowerShellPath
+    $info.Arguments='-NoProfile -NonInteractive -Command "exit 17"'
+    $info.UseShellExecute=$false
+    $info.CreateNoWindow=$true
+    $script:exitedBackendChild=[Diagnostics.Process]::Start($info)
+    $null=$script:exitedBackendChild.Handle
+    if (!$script:exitedBackendChild.WaitForExit(5000) -or $script:exitedBackendChild.ExitCode -ne 17) { throw 'fixture exit not proven' }
+    $script:exitedBackendChild
+  }
+  $script:BootstrapSeams['LocalMcp']={
+    param($endpoint,$identity,$expected)
+    if (!$expected -or $expected.Id -ne $script:exitedBackendChild.Id) { throw 'startup failure probe did not retain the exact child' }
+    New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_LISTENER_MISSING'
+  }
+  try {
+    $exitedBackend=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
+    if ($exitedBackend.State -cne 'TRANSPORT_VERIFICATION_FAILED' -or
+        $exitedBackend.Gate -cne 'LOCAL_MCP_LAUNCHED_PROCESS_EXITED' -or $script:backendTimeCalls -ne 4 -or
+        ([string]::Join(',',$script:actions)) -cne 'support,backend-start') {
+      throw "owned child exit was not terminal before the deadline ($($exitedBackend.Gate))"
+    }
+  } finally {
+    $script:BootstrapSeams.Remove('BackendOnlyUtcNow')
+    if ($null -ne $script:exitedBackendChild) {
+      if (!$script:exitedBackendChild.HasExited) {
+        $script:exitedBackendChild.Kill()
+        if (!$script:exitedBackendChild.WaitForExit(5000)) { throw 'fixture child cleanup could not be verified' }
+      }
+      $script:exitedBackendChild.Dispose()
+    }
+  }
+  $script:actions.Clear()
   function Get-CanonicalCatDeskIdentity { param($Root,$ExpectedHash,$FingerprintPath)Assert-FixtureLifecycleLeaseHeld $Root 'canonical';throw 'fixture canonical pair mismatch' }
   function Repair-CanonicalReleaseForRecovery { param($Root,$Config,$ExpectedHash)Assert-FixtureLifecycleLeaseHeld $Root 'repair';throw 'LKG_AUTHORITY_MISSING' }
   $missingAuthority=Invoke-CanonicalStackBootstrap|ConvertFrom-Json

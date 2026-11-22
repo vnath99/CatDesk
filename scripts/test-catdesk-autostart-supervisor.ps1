@@ -245,6 +245,7 @@ $detail = if ($parts.Count -eq 2) { $parts[1] } else { 'redacted' }
     [IO.File]::WriteAllText((Join-Path $workspace 'states.txt'), '{"command":"recover","state":"READY","detail":"redacted"}', [Text.UTF8Encoding]::new($false))
     Require ((Invoke-PublicLifecycle -Root $expectedWorkspace -Action status) -eq 'ACTION_REQUIRED') 'stale recover output cannot satisfy a status request'
     Require ((Get-SupervisorRecoveryGateClass -Detail 'gate=LOCAL_MCP_PENDING') -eq 'LOCAL_MCP_VERIFICATION_FAILED') 'local pending gate cannot be classified as external runtime failure'
+    Require ((Get-SupervisorRecoveryGateClass -Detail 'gate=LOCAL_MCP_LAUNCHED_PROCESS_EXITED') -ceq 'LOCAL_MCP_VERIFICATION_FAILED') 'owned exit ends the local recovery burst without invoking an external runtime action'
 
     $delays.Clear()
     [IO.File]::WriteAllText((Join-Path $workspace 'calls.log'), '')

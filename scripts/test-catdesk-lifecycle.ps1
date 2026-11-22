@@ -557,6 +557,11 @@ static class PromotionRefusal {
     $localGate.Recovery = { param($engine, $root, $config, $expected, $manifest, $timeout, $command) '{"State":"TRANSPORT_VERIFICATION_FAILED","Gate":"LOCAL_MCP_RESPONSE_TIMEOUT"}' }
     $localGateResult = Invoke-FixtureFacade -Command 'recover' -Seams $localGate | ConvertFrom-Json
     Require ($localGateResult.state -eq 'TRANSPORT_VERIFICATION_FAILED' -and $localGateResult.detail -eq 'gate=LOCAL_MCP_RESPONSE_TIMEOUT') 'recovery preserves the same fixed local-MCP layer vocabulary used by diagnose'
+    $localGate.Recovery = { '{"State":"TRANSPORT_VERIFICATION_FAILED","Gate":"LOCAL_MCP_LAUNCHED_PROCESS_EXITED"}' }
+    $ownedExit = Invoke-FixtureFacade -Command 'recover' -Seams $localGate -FixtureBackendOnly | ConvertFrom-Json
+    Require ($ownedExit.state -ceq 'TRANSPORT_VERIFICATION_FAILED' -and $ownedExit.detail -ceq 'gate=LOCAL_MCP_LAUNCHED_PROCESS_EXITED') 'backend-only recovery preserves terminal child exit'
+    $wrongOwnerScope = Invoke-FixtureFacade -Command 'recover' -Seams $localGate | ConvertFrom-Json
+    Require ($wrongOwnerScope.detail -cne 'gate=LOCAL_MCP_LAUNCHED_PROCESS_EXITED') 'full-stack recovery cannot claim a backend-only child exit'
 
     $partialRecovery = $base.Clone()
     $partialRecovery.Recovery = { param($engine, $root, $config, $expected, $manifest, $timeout, $command) '{"State":"CORE_CONNECTED_WAKE_PENDING","Gate":"WAKE_RUNTIME_NOT_READY"}' }

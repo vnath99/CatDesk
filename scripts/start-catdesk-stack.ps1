@@ -1259,6 +1259,10 @@ function Invoke-BackendOnlyBootstrap {
         # Existing canonical listeners are not recycled on a timeout: the full
         # path's external-readiness proof is deliberately not weakened here.
         if ($existing -or $lastGate -in @('LOCAL_MCP_AUTH_TOKEN_INVALID','LOCAL_MCP_AUTH_SCOPE_INVALID','LOCAL_MCP_LISTENER_IDENTITY_MISMATCH','LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH')) { break }
+        if ($started -is [Diagnostics.Process] -and $started.HasExited) {
+            Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'owned backend exited before verified readiness' '' 'LOCAL_MCP_LAUNCHED_PROCESS_EXITED'
+            return
+        }
         Start-Sleep -Milliseconds 250
     }
     Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'bounded local backend readiness did not converge' '' $lastGate

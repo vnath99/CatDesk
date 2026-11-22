@@ -781,6 +781,7 @@ function Get-LifecycleRecoveryResult {
             'RUNTIME_READYZ_FAILED', 'LOCAL_MCP_PENDING',
             'LOCAL_MCP_LISTENER_MISSING', 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH',
             'LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH', 'LOCAL_MCP_RESPONSE_TIMEOUT',
+            'LOCAL_MCP_LAUNCHED_PROCESS_EXITED',
             'LOCAL_MCP_RESPONSE_UNAVAILABLE', 'LOCAL_MCP_RESPONSE_INVALID',
             'LOCAL_MCP_PROTOCOL_UNREADY',
             'LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED', 'LOCAL_MCP_AUTH_TOKEN_INVALID', 'LOCAL_MCP_AUTH_SCOPE_INVALID'
@@ -789,6 +790,7 @@ function Get-LifecycleRecoveryResult {
         if ($BackendOnly -and $state -in @('CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING')) { return $null }
         if ($state -eq 'TRANSPORT_VERIFICATION_FAILED') {
             if ($gate -cnotin $allowedGates) { return $null }
+            if ($gate -ceq 'LOCAL_MCP_LAUNCHED_PROCESS_EXITED' -and -not $BackendOnly) { return $null }
         } elseif ($state -eq 'CORE_CONNECTED_WAKE_PENDING') {
             if ($gate -cne 'WAKE_RUNTIME_NOT_READY' -or $source) { return $null }
         } elseif ($gate) {
