@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T02:57:13.8542355Z",
+  "scope": "ACTUAL_INSTALLED_GRACEFUL_STOP_AND_FRESH_UNSIGNED_FIRST_SELECTION",
+  "previousRefusal": "V3_WAKE_OWNER_PRESENT",
+  "priorOperatorAttemptOrIntakeCreated": false,
+  "stop": {
+    "observedUtc": "2026-11-22T02:56:12.4087136Z",
+    "command": "Authenticated local Binagotchy Stop through the existing MCP owner",
+    "originalWakeHostExitedNaturally": true,
+    "desired": "STOPPED",
+    "remainingWakeHosts": 0,
+    "preservedStatePins": 894,
+    "changedStatePins": 0,
+    "additionalStatePins": 0,
+    "backendOwnerUnchanged": true,
+    "tunnelOwnerChanges": 0,
+    "forcedTermination": false,
+    "stopReceiptSha256": "ab054303e9347b3cd7396d812ad9bc4a399f7586ba399e290ab68189f7b09512"
+  },
+  "freshDraft": {
+    "originalPhysicalRootCurrentAndConfigMatch": true,
+    "controlPhysicalIdentityRefreshed": true,
+    "plannedSelectionSha256": "7364bc02c335c53aa972f405706e9eb1fc3de5aafb0c22f782b906f725b3540f",
+    "candidateSourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "fallbackSourceCommit": "5a939df267719322758df0598fd46532f07b8126",
+    "retainedArtifactBytesRemeasured": 8,
+    "retainedReviewAndQualificationReceipts": 6,
+    "originalPreservationPinsMatch": 894,
+    "originalReviewSha256": "972db6d20c5778fd26500cd406ca28322bd0edca3e8fcee5f1868e27a54fb1de",
+    "refreshedPayloadSha256": "c771d764a1a4c0d8065a823ccb6dc488d67520b92b92b774e23e3f82b4ca6bb9",
+    "refreshedPreimageSha256": "4d38ab3f9d0f8fe57ab2e622b602e5e1084e384ab83eeaff5825eeb9390e5f91",
+    "expiresUtc": "2026-11-23T02:57:13Z",
+    "requiredRemainingValiditySeconds": 300,
+    "nativeCanonicalPreviewMatched": true,
+    "plannerReceiptSha256": "12e9c13bf19c87d1e5dd20adc78db1356c6755e73f47640d5bf24162e643000c"
+  },
+  "reviewedProcedure": {
+    "literalSlotSubstitutionsOnly": true,
+    "allReversedTemplateHashesMatchPreviouslyReviewedFiles": true,
+    "operatorWrapperSha256": "4a19bb36f0e0eb34c6a1cb718d6a2c6f2bb7429d4c930f740f71cf988d2ec142",
+    "operatorSignerSha256": "a7f807341d4bc28932c2eb60cbae34e8cfecbf853be0c5f99c9e9b4a1a8d4a0a",
+    "independentInstalledReaderSha256": "e50de5c83143edbc7e2cf3e71bb0e95d92e4b52852c476f752513ae970c26cdd",
+    "templateProofSha256": "cdb86c7af6f59b106589de48ff84724668f27ed9a728e2a09ec8cfac5818cd04",
+    "wrapperReadOnlyPreflight": "V3_INPUTS_VERIFIED",
+    "enrolledAccountMatched": true,
+    "brokerStopped": true,
+    "fixedStageAbsent": true,
+    "privateKeyReads": 0,
+    "signaturesCreated": 0,
+    "brokerStarts": 0,
+    "protectedWrites": 0
+  },
+  "gates": {
+    "needsLocalOperatorFirstSelection": true,
+    "installedWakeSelectionVerified": false,
+    "backendCandidateAttestedAndPromoted": false,
+    "installedWebWorkCycleVerified": false
+  }
+}
