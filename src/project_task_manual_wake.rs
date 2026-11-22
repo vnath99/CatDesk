@@ -209,6 +209,20 @@ fn require_task_continuations(
             validate_selection(project, record, current, &event, &call_id, &call)?;
             continue;
         }
+        if let Some(delivery) = &observed
+            && delivery.phase == Phase::Stale
+            && wake.expired_task_manual_wake_archived(delivery)?
+        {
+            validate_selection(
+                project,
+                record,
+                &delivery.target,
+                &delivery.event,
+                &call_id,
+                &call,
+            )?;
+            continue;
+        }
         let delivery = observed
             .filter(|delivery| delivery.phase == Phase::Sent)
             .ok_or("WEB_WORK_CONTINUATION_PENDING")?;
@@ -230,6 +244,27 @@ fn require_task_continuations(
         }
     }
     Ok(())
+}
+
+/// Local retirement reads the original journal even if execution permission
+/// has been revoked. It grants no authority to send or amend the task.
+pub(crate) fn require_retirable_task_manual_wake(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    event: &Event,
+    call_id: &str,
+) -> Result<(), String> {
+    let link = record
+        .task_assignment
+        .as_ref()
+        .ok_or("WEB_TASK_GRANT_REQUIRED")?;
+    let directory = task_directory(project, &link.task_id, false)?;
+    let calls = read_task_calls(project, record, &directory.join("assignment.json"), true)?;
+    let call = calls
+        .get(call_id)
+        .ok_or("WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN")?;
+    validate_selection(project, record, target, event, call_id, call)
 }
 
 pub(crate) fn require_journaled_manual_wake(
@@ -312,6 +347,7 @@ pub(crate) fn next_manual_wake(
         if let Some(saved) = delivery {
             match saved.phase {
                 Phase::Sent => continue,
+                Phase::Stale if wake.expired_task_manual_wake_archived(&saved)? => continue,
                 Phase::Claimed if saved.target == *target => {}
                 _ => return Err("WEB_TASK_MANUAL_WAKE_DELIVERY_HELD".into()),
             }

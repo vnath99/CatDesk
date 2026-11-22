@@ -3657,6 +3657,163 @@ pub(crate) mod tests {
         assert_eq!(fs::read(&envelope).unwrap(), original_bytes);
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn expired_task_manual_wake_preserves_original_and_allows_fresh_continuation() {
+        use crate::web_work_state::{WorkLedger, execution_lane::Transition};
+        let f = fixture_with_manual_wake("alpha", true);
+        let wake = ready_manual_wake(&f);
+        let root = &f.control;
+        let lane =
+            |action| crate::web_work::transition_execution_lane(root, "alpha", "request-a", action);
+        lane(Transition::Select).unwrap();
+        let mut expiring = manual_request(&f, "wake-expiring", "old-turn");
+        expiring["params"]["arguments"]["arguments"]["ttlSeconds"] = json!(1);
+        let issued = call(&f, expiring.clone()).await;
+        assert!(issued.get("error").is_none(), "{issued}");
+        let id = issued["result"]["structuredContent"]["eventId"]
+            .as_str()
+            .unwrap();
+        let path = wake.root().join("queue").join(format!("{id}.json"));
+        let original_bytes = fs::read(&path).unwrap();
+        let archive = wake.root().join("archive").join(format!("{id}.json"));
+        let delivery_path = wake.root().join("deliveries").join(format!("{id}.json"));
+        let record = WorkLedger::open_read_only(root, "alpha")
+            .unwrap()
+            .record("request-a")
+            .unwrap()
+            .unwrap();
+        lane(Transition::Pause).unwrap();
+        tokio::time::timeout(Duration::from_secs(4), async {
+            while catdesk_wake::store::now()
+                < issued["result"]["structuredContent"]["expiresUtc"]
+                    .as_u64()
+                    .unwrap()
+            {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            wake.retire_stale(id).unwrap_err(),
+            "TASK_MANUAL_WAKE_RETIREMENT_REQUIRES_EXACT_SCOPE"
+        );
+        assert_eq!(
+            crate::web_work::retire_expired_manual_wake(
+                root,
+                "alpha",
+                "request-a",
+                "another-call",
+                id
+            )
+            .unwrap_err(),
+            "WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN"
+        );
+        let witness = wake
+            .root()
+            .join("logs")
+            .join(format!("submission-start-{id}.json"));
+        fs::write(&witness, b"incomplete fixture witness").unwrap();
+        assert_eq!(
+            crate::web_work::retire_expired_manual_wake(
+                root,
+                "alpha",
+                "request-a",
+                "wake-expiring",
+                id
+            )
+            .unwrap_err(),
+            "TASK_MANUAL_WAKE_RETIREMENT_UNPROVEN"
+        );
+        assert_eq!(fs::read(&path).unwrap(), original_bytes);
+        assert!(!delivery_path.exists());
+        fs::remove_file(&witness).unwrap();
+        let args = [
+            "operator",
+            "web",
+            "work",
+            "manual-wake-retire-expired",
+            "--project-id",
+            "alpha",
+            "--request-id",
+            "request-a",
+            "--call-id",
+            "wake-expiring",
+            "--event-id",
+            id,
+        ]
+        .map(str::to_string);
+        let action = crate::operator_facade::parse_operator_action(args)
+            .unwrap()
+            .unwrap();
+        let retired = crate::operator_facade::execute_operator_action(action, root)
+            .await
+            .unwrap();
+        assert_eq!(retired["status"], "TASK_WAKE_EXPIRED_UNSUBMITTED");
+        let evidence_bytes = fs::read(&delivery_path).unwrap();
+        assert_eq!(fs::read(&archive).unwrap(), original_bytes);
+        assert!(!path.exists());
+        let evidence = wake.delivery(id).unwrap().unwrap();
+        assert!(wake.expired_task_manual_wake_archived(&evidence).unwrap());
+        assert!(evidence.receipt.is_none());
+        assert!(wake.timer(id).unwrap().is_none());
+        // Isolate the partial transaction cut: journal persisted, archive not yet written.
+        fs::rename(&archive, &path).unwrap();
+        assert!(!wake.expired_task_manual_wake_archived(&evidence).unwrap());
+        assert_eq!(
+            crate::web_work::retire_expired_manual_wake(
+                root,
+                "alpha",
+                "request-a",
+                "wake-expiring",
+                id
+            )
+            .unwrap(),
+            retired
+        );
+        assert_eq!(fs::read(&delivery_path).unwrap(), evidence_bytes);
+        assert_eq!(fs::read(&archive).unwrap(), original_bytes);
+        assert!(wake.expired_task_manual_wake_archived(&evidence).unwrap());
+        lane(Transition::Resume).unwrap();
+        lane(Transition::Select).unwrap();
+        lane(Transition::Yield).unwrap();
+        lane(Transition::Select).unwrap();
+        assert_eq!(
+            call(&f, expiring).await["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        let fresh = call(&f, manual_request(&f, "wake-fresh", "new-turn")).await;
+        assert!(fresh.get("error").is_none(), "{fresh}");
+        let new_id = fresh["result"]["structuredContent"]["eventId"]
+            .as_str()
+            .unwrap();
+        assert_ne!(new_id, id);
+        assert_eq!(
+            crate::web_work::retire_expired_manual_wake(
+                root,
+                "alpha",
+                "request-a",
+                "wake-fresh",
+                new_id
+            )
+            .unwrap_err(),
+            "TASK_MANUAL_WAKE_NOT_EXPIRED"
+        );
+        wake.complete_timer(f.pins["sourceEventId"].as_str().unwrap())
+            .unwrap();
+        let next = crate::web_work::fixture_manual_submission_fence(root, "alpha").unwrap();
+        assert_eq!(next["eventId"], new_id);
+        assert_eq!(next["phase"], "SUBMITTING");
+        assert_eq!(wake.delivery(id).unwrap(), Some(evidence));
+        assert_eq!(
+            WorkLedger::open_read_only(root, "alpha")
+                .unwrap()
+                .record("request-a")
+                .unwrap(),
+            Some(record)
+        );
+    }
+
     async fn central_http_route_fixture(cached: bool) {
         let (alpha, beta) = paired_fixtures(false);
         let shared_wake = ready_manual_wake(&alpha);

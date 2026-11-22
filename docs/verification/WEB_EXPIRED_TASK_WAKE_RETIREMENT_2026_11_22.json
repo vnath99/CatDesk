@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T22:42:00Z",
+  "scope": "WINDOWS_DEVELOPMENT_EXACT_EXPIRED_TASK_WAKE_RETIREMENT",
+  "baseline": "96bf84a75490912ae7c76e5b2662f9420ae64a4f",
+  "recovery": "The local operator can retire one exact expired, untouched manual Wake while preserving its assignment. The original event is archived with typed STALE evidence and no receipt or timer. The task can authorize a different turn without replaying that event.",
+  "scopedWindowsTest": {
+    "passed": 1,
+    "seconds": 13.82,
+    "unscopedRetirementRefused": true,
+    "wrongJournalCallRefused": true,
+    "partialSubmissionWitnessRefused": true,
+    "originalQueueEnvelopeArchivedByteForByte": true,
+    "partialArchiveTransactionResumedWithoutChangingRetirementEvidence": true,
+    "sameTaskYieldAndFreshWakeWorked": true,
+    "unexpiredWakeRefusedRetirement": true,
+    "freshWakeReachedFixtureFenceOnly": true
+  },
+  "wakeStoreSubmissionRegressionsPassed": 16,
+  "broaderRetirementFilter": {
+    "passed": 12,
+    "failed": 1,
+    "failure": "The forced browser-adapter retirement fixture saw WAIT_TIMEOUT (258) on the retained descendant handle after retirement.",
+    "isolatedRerunPassed": true,
+    "rootCauseEstablished": false
+  },
+  "browserActions": 0,
+  "productionChanges": false,
+  "installedWebAcceptance": false
+}

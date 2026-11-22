@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 5:40 p.m. EST.** A parked manual Wake can expire without stranding its original assignment. The exact retirement command requires untouched-queue proof and preserves the archived event and original task journal. The installed Web cycle still needs the frozen review chain and original disposable Git backing. [Evidence](docs/verification/WEB_EXPIRED_TASK_WAKE_RETIREMENT_2026_11_22.json).
+
 **November 22, 5:33 p.m. EST.** Lane pause may preserve a queued self-Wake in place when its exact envelope has no delivery or submission evidence. The scoped sender checks the same project lease and lane, so it cannot send a parked event. After resumption, the same event can run under its original task. [Evidence](docs/verification/WEB_SERIAL_LANE_PARKED_WAKE_2026_11_22.json).
 
 **November 22, 5:27 p.m. EST.** The opt-in lane has local pause and resume commands. Scope follows the original request and task. A live or unresolved owner requires proof before release. An exact revoked waiter is skipped while its work record and journal remain available for recovery. [Evidence](docs/verification/WEB_SERIAL_LANE_PAUSE_2026_11_22.json).

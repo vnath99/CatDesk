@@ -29,7 +29,7 @@ mod manual_delivery;
 pub(crate) use manual_delivery::{
     authorize_manual_wake_delivery, next_manual_wake, require_completed_task_continuations,
     require_fresh_lane_call, require_journaled_manual_wake, require_manual_wake_checkpoint,
-    require_pause_safe_task_continuations,
+    require_pause_safe_task_continuations, require_retirable_task_manual_wake,
 };
 #[cfg(windows)]
 #[path = "project_task_recovery.rs"]

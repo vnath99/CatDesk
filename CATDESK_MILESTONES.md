@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — recover an expired parked Wake in development.** The original request survives the expiry. The archive records an unsubmitted retirement, and the next authorized turn selects its own fresh event. Installed Web acceptance remains open. [Evidence](docs/verification/WEB_EXPIRED_TASK_WAKE_RETIREMENT_2026_11_22.json).
+
 **November 22 — release the serial lane before an untouched self-Wake.** The existing pause mechanism lets a peer advance while a proved unclaimed intent is parked. Installed ChatGPT Web and live two-project acceptance remain open. [Evidence](docs/verification/WEB_SERIAL_LANE_PARKED_WAKE_2026_11_22.json).
 
 **November 22 — operator pause and resume in the serial Web lane.** Paused work keeps its original assignment and releases the lane only at a safe boundary. The queue skips revoked waiters. Installed Web and live multi-project qualification remain open. [Evidence](docs/verification/WEB_SERIAL_LANE_PAUSE_2026_11_22.json).

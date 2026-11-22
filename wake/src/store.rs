@@ -21,6 +21,8 @@ mod submission_deadline_tests;
 const MAX_FILE: u64 = 1024 * 1024;
 pub const MANUAL_TURN_PREFIX: &str = "manual-turn-";
 const MAX_SOURCE_PROGRESS_ITEMS: usize = 100_000;
+const STALE_OPERATOR: &str = "OPERATOR_RETIRED";
+const STALE_EXPIRED_TASK_WAKE: &str = "TASK_WAKE_EXPIRED_UNSUBMITTED";
 pub fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1798,6 +1800,15 @@ impl Store {
             return Err("QUEUE_EVENT_INVALID".into());
         }
         let _lock = self.read_lock()?;
+        self.unclaimed_task_manual_wake_locked(id, project, target)
+    }
+
+    fn unclaimed_task_manual_wake_locked(
+        &self,
+        id: &str,
+        project: &str,
+        target: &Target,
+    ) -> Result<Option<Event>> {
         if self.read_config()?.targets.get(project) != Some(target) {
             return Err("TARGET_GENERATION_STALE".into());
         }
@@ -2800,7 +2811,7 @@ impl Store {
             return Err("QUEUE_EVENT_INVALID".into());
         }
         let _lock = self.lock()?;
-        self.retire_stale_locked(id, None)
+        self.retire_stale_locked(id, None, STALE_OPERATOR)
     }
 
     /// Retire an exact, receiptless request during a durable caller-side closure.
@@ -2825,10 +2836,98 @@ impl Store {
         }
         expected_target.validate()?;
         let _lock = self.lock()?;
-        self.retire_stale_locked(id, Some((project, expected_target, message_sha256)))
+        self.retire_stale_locked(
+            id,
+            Some((project, expected_target, message_sha256)),
+            STALE_OPERATOR,
+        )
     }
 
-    fn retire_stale_locked(&self, id: &str, expected: Option<(&str, &Target, &str)>) -> Result<()> {
+    /// The caller has attributed this event to the exact task journal under
+    /// its project lease. Only expired, untouched intents can enter this
+    /// typed retirement. The same archive transaction handles interruptions.
+    pub fn retire_expired_task_manual_wake(&self, event: &Event, target: &Target) -> Result<()> {
+        event.validate()?;
+        target.validate()?;
+        let id = &event.event_id;
+        let project = &event.project_id;
+        let _lock = self.lock()?;
+        if event.target_generation != target.generation
+            || !event.requires_scoped_manual_wake()?
+            || self.read_config()?.targets.get(project) != Some(target)
+        {
+            return Err("WEB_TASK_MANUAL_WAKE_SELECTION_CHANGED".into());
+        }
+        if !event.is_expired_at(now())? {
+            return Err("TASK_MANUAL_WAKE_NOT_EXPIRED".into());
+        }
+        match self.read_delivery(id)? {
+            Some(prior)
+                if prior.event == *event
+                    && prior.target == *target
+                    && self.expired_task_manual_wake_locked(&prior)? => {}
+            None if self
+                .unclaimed_task_manual_wake_locked(id, project, target)?
+                .as_ref()
+                == Some(event) => {}
+            _ => return Err("TASK_MANUAL_WAKE_RETIREMENT_UNPROVEN".into()),
+        }
+        self.retire_stale_locked(
+            id,
+            Some((project, target, &digest(&event.message))),
+            STALE_EXPIRED_TASK_WAKE,
+        )
+    }
+
+    fn expired_task_manual_wake_locked(&self, delivery: &Delivery) -> Result<bool> {
+        if delivery.phase != Phase::Stale
+            || delivery.receipt.is_some()
+            || delivery.owner != "operator-retire"
+            || delivery.reason.as_deref() != Some(STALE_EXPIRED_TASK_WAKE)
+            || !delivery.event.requires_scoped_manual_wake()?
+            || !delivery.event.is_expired_at(delivery.updated_utc)?
+        {
+            return Ok(false);
+        }
+        for witness in [
+            self.submission_start_path(&delivery.event.event_id),
+            self.timer_path(&delivery.event.event_id),
+            self.pre_edit_refusal_path(&delivery.event.event_id),
+        ] {
+            match fs::symlink_metadata(witness) {
+                Ok(_) => return Ok(false),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err("SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE".into()),
+            }
+        }
+        Ok(true)
+    }
+
+    /// A partial retirement is never treated as a settled task Wake.
+    pub fn expired_task_manual_wake_archived(&self, delivery: &Delivery) -> Result<bool> {
+        delivery.validate()?;
+        let _lock = self.read_lock()?;
+        let id = &delivery.event.event_id;
+        if self.read_delivery(id)?.as_ref() != Some(delivery)
+            || !self.expired_task_manual_wake_locked(delivery)?
+        {
+            return Ok(false);
+        }
+        match fs::symlink_metadata(self.event_path(id)) {
+            Ok(_) => return Ok(false),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err("QUEUE_UNAVAILABLE".into()),
+        }
+        let archived: Event = read(&self.archive_path(id))?;
+        Ok(archived == delivery.event)
+    }
+
+    fn retire_stale_locked(
+        &self,
+        id: &str,
+        expected: Option<(&str, &Target, &str)>,
+        reason: &'static str,
+    ) -> Result<()> {
         if self
             .pre_edit_refusal_path(id)
             .try_exists()
@@ -2876,7 +2975,7 @@ impl Store {
                 if prior.event == archived
                     && prior.phase == Phase::Stale
                     && prior.receipt.is_none()
-                    && prior.reason.as_deref() == Some("OPERATOR_RETIRED")
+                    && prior.reason.as_deref() == Some(reason)
                     && expected.is_none_or(|(_, target, message_digest)| {
                         prior.target == *target && prior.message_digest == message_digest
                     })
@@ -2899,6 +2998,9 @@ impl Store {
         if event.event_id != id {
             return Err("QUEUE_ID_MISMATCH".into());
         }
+        if reason == STALE_OPERATOR && event.requires_scoped_manual_wake()? {
+            return Err("TASK_MANUAL_WAKE_RETIREMENT_REQUIRES_EXACT_SCOPE".into());
+        }
         if let Some((project, target, message_digest)) = expected {
             require_expected_retirement_event(&event, project, target, message_digest)?;
         }
@@ -2906,8 +3008,7 @@ impl Store {
         let prior = self.read_delivery(id)?;
         if expected.is_some()
             && prior.as_ref().is_some_and(|delivery| {
-                delivery.phase == Phase::Stale
-                    && delivery.reason.as_deref() != Some("OPERATOR_RETIRED")
+                delivery.phase == Phase::Stale && delivery.reason.as_deref() != Some(reason)
             })
         {
             return Err("STALE_RETIREMENT_PARTIAL".into());
@@ -2922,7 +3023,7 @@ impl Store {
                     delivery.event != event
                         || delivery.phase != Phase::Stale
                         || delivery.receipt.is_some()
-                        || delivery.reason.as_deref() != Some("OPERATOR_RETIRED")
+                        || delivery.reason.as_deref() != Some(reason)
                 })
             {
                 return Err("STALE_RETIREMENT_PARTIAL".into());
@@ -2976,10 +3077,12 @@ impl Store {
             updated_utc: now(),
             message_digest: digest(&event.message),
             receipt: None,
-            reason: Some("OPERATOR_RETIRED".into()),
+            reason: Some(reason.into()),
         };
         delivery.validate()?;
-        atomic(&self.delivery_path(id), &delivery)?;
+        if reason != STALE_EXPIRED_TASK_WAKE || prior.is_none() {
+            atomic(&self.delivery_path(id), &delivery)?;
+        }
         atomic(&self.archive_path(id), &event)?;
         fs::remove_file(self.event_path(id)).map_err(|_| "QUEUE_ARCHIVE_FAILED".into())
     }

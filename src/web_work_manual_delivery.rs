@@ -38,6 +38,82 @@ pub(crate) fn deliver_next(workspace: &Path, project: &str) -> Result<Value, Str
     deliver_selected(workspace, project, Selection::Next)
 }
 
+pub(crate) fn retire_expired(
+    workspace: &Path,
+    project: &str,
+    request_id: &str,
+    call_id: &str,
+    event_id: &str,
+) -> Result<Value, String> {
+    if ![project, request_id, call_id, event_id]
+        .into_iter()
+        .all(protocol::valid_id)
+    {
+        return Err("WEB_WORK_ARGUMENTS_INVALID".into());
+    }
+    let prepared = PreparedProjectScopeV1::resolve(workspace, project)
+        .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+    let lease = crate::operator_facade::acquire_web_work_lease(workspace, project)?;
+    let ledger = WorkLedger::open_read_only(workspace, project)?;
+    let record = ledger
+        .record(request_id)?
+        .ok_or("WEB_WORK_REQUEST_MISSING")?;
+    ledger.require_ordinary_request(request_id)?;
+    let paired = mcp::operator_read_project_web_target(workspace, project)
+        .map_err(|_| "WEB_WORK_PAIRED_TARGET_REQUIRED")?
+        .ok_or("WEB_WORK_PAIRED_TARGET_REQUIRED")?;
+    let target = Target::new(paired.generation, paired.url)?;
+    lease.check_source_task(&record.target, &target, &record.event_id)?;
+    require_assignment_source(workspace, project, &record, record.target == target)?;
+    let wake = Store::open(&wake_protocol_client::wake_root_for_workspace(workspace)?)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &target.url,
+    )?;
+    let event = match wake.delivery(event_id)? {
+        Some(delivery) => delivery.event,
+        None => wake
+            .unclaimed_task_manual_wake(event_id, project, &target)?
+            .ok_or("TASK_MANUAL_WAKE_RETIREMENT_UNPROVEN")?,
+    };
+    crate::project_mcp_task::require_retirable_task_manual_wake(
+        prepared.scope(),
+        &record,
+        &target,
+        &event,
+        call_id,
+    )?;
+    let registry =
+        AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+            .map_err(|_| "WEB_WORK_REGISTRY_UNAVAILABLE")?;
+    registry.with_registration_lock(|| {
+        prepared
+            .revalidate_registration()
+            .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+        if ledger.record(request_id)?.as_ref() != Some(&record)
+            || prepared.scope().project.chatgpt_target_url.as_deref() != Some(target.url.as_str())
+            || prepared.scope().project.chatgpt_target_sha256.as_deref()
+                != Some(target.digest.as_str())
+        {
+            return Err("WEB_WORK_DELIVERY_SELECTION_CHANGED".into());
+        }
+        lease.check_source_task(&record.target, &target, &record.event_id)?;
+        wake.retire_expired_task_manual_wake(&event, &target)?;
+        let delivery = wake
+            .delivery(event_id)?
+            .ok_or("TASK_MANUAL_WAKE_RETIREMENT_UNPROVEN")?;
+        if !wake.expired_task_manual_wake_archived(&delivery)? {
+            return Err("TASK_MANUAL_WAKE_RETIREMENT_UNPROVEN".into());
+        }
+        Ok(
+            json!({"status":"TASK_WAKE_EXPIRED_UNSUBMITTED","projectId":project,
+            "requestId":request_id,"taskCallId":call_id,"eventId":event_id,
+            "taskRemainsOpen":true,"deliveryProved":false}),
+        )
+    })
+}
+
 fn deliver_selected(
     workspace: &Path,
     project: &str,

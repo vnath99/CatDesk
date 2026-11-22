@@ -171,6 +171,7 @@ pub(crate) enum WebAction {
         request_id: String,
         call_id: String,
         event_id: String,
+        retire_expired: bool,
     },
     WorkInspect {
         project_id: String,
@@ -410,7 +411,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 project_id: project_id.into(),
             })
         }
-        ("work", "manual-wake-deliver") => {
+        ("work", "manual-wake-deliver" | "manual-wake-retire-expired") => {
             let mut id = |option| {
                 options
                     .remove(option)
@@ -428,6 +429,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 request_id: request_id.into(),
                 call_id: call_id.into(),
                 event_id: event_id.into(),
+                retire_expired: verb == "manual-wake-retire-expired",
             })
         }
         ("browser", "inspect") if options.is_empty() => Ok(WebAction::BrowserInspect {
@@ -2263,13 +2265,15 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             request_id,
             call_id,
             event_id,
-        } => crate::web_work::deliver_manual_wake(
-            &workspace,
-            &project_id,
-            &request_id,
-            &call_id,
-            &event_id,
-        ),
+            retire_expired,
+        } => {
+            let operation = if retire_expired {
+                crate::web_work::retire_expired_manual_wake
+            } else {
+                crate::web_work::deliver_manual_wake
+            };
+            operation(&workspace, &project_id, &request_id, &call_id, &event_id)
+        }
         WebAction::WorkInspect {
             project_id,
             request_id,
@@ -4075,6 +4079,7 @@ mod tests {
                 request_id: "existing-one".into(),
                 call_id: "wake-one".into(),
                 event_id: "wake-intent-one".into(),
+                retire_expired: false,
             }
         );
         for option in [
