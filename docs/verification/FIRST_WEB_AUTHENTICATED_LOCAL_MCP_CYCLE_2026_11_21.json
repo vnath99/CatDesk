@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T01:25:22.9880299Z",
+  "observedLocal": "2026-11-21T20:25:22.9880299-05:00",
+  "scope": "AUTHENTICATED_LOOPBACK_NATIVE_MCP_WITH_DISPOSABLE_WINDOWS_WORKSPACE",
+  "baselineCommit": "039e6ffe2adc905e1573a1f6b4daf4d523e2c95b",
+  "testFileGitBlob": "40f66d3768ebec0136995ddc3f275cb618c9d304",
+  "testOnlySourceChange": true,
+  "exactFrozenCandidateBinary": false,
+  "exactFrozenCandidateInProcessEvidence": "FIRST_WEB_CACHED_NATIVE_CYCLE_2026_11_21.json",
+  "command": "cargo test --offline --locked --bin catdesk web_task_dispatch::tests::cached_http_checkpoint_precedes_manual_wake -- --exact --ignored",
+  "owner": {
+    "startedUtc": "2026-11-22T01:23:37.9162360Z",
+    "maximumMilliseconds": 240000,
+    "job": "KILL_ON_JOB_CLOSE",
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "testsPassed": 1,
+    "ownerReceiptSha256": "6280e13a998141146e49b029594cea55ee44915353baf9389034ca7a7cd92363",
+    "testOwnedProcessesAfterExit": 0
+  },
+  "flow": {
+    "transport": "Ephemeral loopback port, production native MCP router, command-only reserved envelope",
+    "unauthenticatedStatus": 401,
+    "workspace": "Disposable registered task and linked Git worktree, synthetic initial SENT receipt",
+    "earlyManualWakeRefusal": "PROJECT_TASK_END_TURN_CHECKPOINT_REQUIRED",
+    "scopedEditApplied": true,
+    "realWindowsSandboxVerificationPassed": true,
+    "sandboxCleanupProved": true,
+    "nativeModelCalls": 0,
+    "reservedEnvelopeExecutedGenericShell": false,
+    "checkpointContainsVerifiedChange": true,
+    "duplicateCheckpointAndWakeRefused": true,
+    "otherWorkspaceBytesPreserved": true,
+    "manualWakeEvents": 1,
+    "browserDeliveryReceipts": 0,
+    "timersCreated": 0,
+    "loopbackListenerClosed": true
+  },
+  "gates": {
+    "operatorV3AttemptObserved": false,
+    "installedWakeBrokerStatus": "STOPPED",
+    "compatibleBackendReviewMode": "chatgpt_web_direct_autonomous",
+    "compatibleBackendDRAFTRequiresExactStartApproval": true,
+    "currentReviewRoute": "WEB_REVIEW_PROJECT_BUSY",
+    "alternativeReviewNote": "Existing producer can use qualified independent evidence through its managed review path. No alternate review under the current frozen Web-direct contract was admitted.",
+    "canonicalConnectorInvoked": false,
+    "actualWebCallerVerified": false,
+    "installedWebContinuationVerified": false,
+    "historicalSubmissionsReplayed": false
+  }
+}

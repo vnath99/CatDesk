@@ -1627,6 +1627,212 @@ pub(crate) mod tests {
         central_http_route_fixture(true).await;
     }
 
+    #[cfg(windows)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "explicit bounded qualification with the installed native Windows command sandbox"]
+    async fn cached_http_checkpoint_precedes_manual_wake() {
+        let project = "cached-http-cycle";
+        let (control, assignment, wake, mut pins, event) =
+            crate::web_work::tests::assignment_fixture_for(project);
+        let mut envelope: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+        let task = PathBuf::from(envelope["contract"]["workspace"].as_str().unwrap());
+        let findstr =
+            PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/findstr.exe");
+        envelope["contract"]["allowedCommandProfiles"] = json!(["check-content"]);
+        envelope["commandProfiles"] = json!([{
+            "id":"check-content", "argv":[findstr, "/L", "/C:{ 42 }", r"src\lib.rs"], "timeoutSeconds":25
+        }]);
+        envelope["checkpointPaths"] = json!(["src/lib.rs"]);
+        let content = serde_json::to_string_pretty(&envelope).unwrap();
+        fs::write(&assignment, &content).unwrap();
+        pins["assignmentSha256"] = json!(protocol::digest(&content));
+        wake.publish(&event).unwrap();
+        crate::web_work::associate(&control, pins.clone(), &assignment).unwrap();
+        sent(&wake, &event);
+        let key_path = fresh_fixture_key_path(&control, project);
+        let grant = crate::web_work::execution_permission_with_git_capabilities(
+            &control,
+            pins.clone(),
+            false,
+            true,
+            None,
+            true,
+            false,
+        )
+        .unwrap();
+        let owned_key = OwnedFixtureKey::retain(key_path, &grant);
+        let native = resolve_registered_project_from_control_root(&control, project)
+            .unwrap()
+            .project
+            .workspace;
+        let key = serde_json::from_slice(&owned_key.bytes).unwrap();
+        let f = Fixture {
+            control,
+            pins,
+            key,
+            task,
+            native,
+            keys: vec![owned_key],
+            _native_queue: None,
+        };
+        let wake = ready_manual_wake(&f);
+        let original = fs::read(f.native.join("src/lib.rs")).unwrap();
+        let mut app = crate::state::AppState::new_isolated_fixture(
+            0,
+            f.control.to_str().unwrap().into(),
+            f.control.join("inert-config.toml"),
+        )
+        .unwrap();
+        app.mode = crate::state::Mode::Computer;
+        app.tool_mode = crate::state::ToolMode::SupervisorOnly;
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let state = Arc::new(tokio::sync::Mutex::new(app));
+        let token = uuid::Uuid::new_v4().simple().to_string();
+        crate::configure_native_mcp_auth(&state, Ok(token.clone()))
+            .await
+            .unwrap();
+        let path = "/cached-cycle/mcp";
+        let router = crate::native_mcp_router(state, None, path.into(), tx).await;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let url = format!("http://{addr}{path}");
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(async {
+                    let _ = stopped.await;
+                })
+                .await
+                .unwrap();
+        });
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap();
+        let transport = |mut body: Value| {
+            let command = format!("{}{}", CACHED_COMMAND_PREFIX, body["params"]["arguments"]);
+            body["params"] = json!({"name":"run_command","arguments":{"command":command}});
+            body
+        };
+        let rpc = |body| {
+            let request = client.post(&url).bearer_auth(&token).json(&transport(body));
+            async move {
+                request
+                    .send()
+                    .await
+                    .unwrap()
+                    .error_for_status()
+                    .unwrap()
+                    .json::<Value>()
+                    .await
+                    .unwrap()
+            }
+        };
+        let expect_success = |answer: &Value| {
+            assert!(answer.get("error").is_none());
+            assert_eq!(answer["result"]["isError"], false);
+            assert_eq!(
+                answer["result"]["_meta"]["catdeskTaskTransport"]["shellExecuted"],
+                false
+            );
+        };
+
+        let early = manual_request(&f, "too-early", "fixture-turn");
+        let unauthorized = client
+            .post(&url)
+            .json(&transport(early.clone()))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            rpc(early).await["error"]["message"],
+            "PROJECT_TASK_END_TURN_CHECKPOINT_REQUIRED"
+        );
+        let preview = request(
+            &f,
+            "preview",
+            "patch.preview",
+            json!({
+                "patchId":"fixture-patch",
+                "operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 42 }"}]
+            }),
+        );
+        expect_success(&rpc(preview).await);
+        let apply = request(
+            &f,
+            "apply",
+            "patch.apply",
+            json!({"patchId":"fixture-patch"}),
+        );
+        expect_success(&rpc(apply).await);
+        let verify = request(
+            &f,
+            "verify",
+            "verify.command",
+            json!({"profile":"check-content"}),
+        );
+        let result = rpc(verify).await;
+        expect_success(&result);
+        let verified = &result["result"]["structuredContent"]["payload"];
+        assert_eq!(verified["success"], true);
+        assert_eq!(verified["modelCalls"], 0);
+        assert_eq!(verified["cleanupProved"], true);
+        let checkpoint = request(
+            &f,
+            "checkpoint",
+            "git.checkpoint",
+            json!({"verificationCallIds":["verify"]}),
+        );
+        let saved = rpc(checkpoint.clone()).await;
+        expect_success(&saved);
+        assert_eq!(
+            saved["result"]["structuredContent"]["payload"]["status"],
+            "CHECKPOINTED"
+        );
+        let git = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&f.task)
+            .args(["show", "HEAD:src/lib.rs"])
+            .output()
+            .unwrap();
+        assert!(git.status.success());
+        assert!(String::from_utf8(git.stdout).unwrap().contains("{ 42 }"));
+        assert_eq!(
+            rpc(checkpoint).await["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        let intent = manual_request(&f, "end-turn", "fixture-turn");
+        let queued = rpc(intent.clone()).await;
+        expect_success(&queued);
+        let event_id = queued["result"]["structuredContent"]["eventId"]
+            .as_str()
+            .unwrap();
+        assert!(wake.delivery(event_id).unwrap().is_none());
+        assert!(wake.timer(event_id).unwrap().is_none());
+        assert_eq!(
+            rpc(intent).await["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        assert_eq!(
+            wake.events()
+                .unwrap()
+                .iter()
+                .filter(|event| event.wake_metadata().unwrap().is_some())
+                .count(),
+            1
+        );
+        assert_eq!(fs::read(f.native.join("src/lib.rs")).unwrap(), original);
+        drop(client);
+        stop.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(tokio::net::TcpStream::connect(addr).await.is_err());
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn native_http_uses_scoped_grant_and_drains_after_disconnect() {
         native_http_fixture(false).await;
