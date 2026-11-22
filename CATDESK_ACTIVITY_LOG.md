@@ -734,3 +734,11 @@ Evidence: [docs/verification/WAKE_ROUTINE_REVIEW_INTAKE_AUTHORITY_2026_11_21.jso
 Agent: CatDesk Codex. Source: bc995a36325a7e82ea6ac27dfbc8755f7369f9d2. Outcome: partial. Built the exact routine Wake broker source twice from separate Windows roots and reproduced the executable byte for byte with deterministic linker options. Verified the installed image stayed unchanged. The dedicated reviewed producer is absent and the current broker bootstrap only creates a new installation. Next: Use the existing first signed selection and complete the frozen compatible backend review independently. Preserve the reproduced development artifact for exact review, then qualify a supported fixed broker replacement and trusted intake publication before installed routine adoption.
 
 Evidence: [docs/verification/WAKE_ROUTINE_BROKER_REPRODUCIBLE_BUILD_2026_11_21.json](docs/verification/WAKE_ROUTINE_BROKER_REPRODUCIBLE_BUILD_2026_11_21.json); command: Build the broker from exact archived source in two separate roots and verify the deterministic relink hashes; exit 0; SHA-256 55b936da1413880e3e18ebb2281d170eafd1a5a0fa56acf35ab3ce03c2297c6c.
+
+<!-- catdesk-activity:nov21-wake-broker-image-replacement sha256:540e9720f3e13b517ab9ea65160ad2cf6b59bf3646782e31c24f1fa1005cbd02 -->
+
+## 2026-11-22T04:36:55.0464864Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: b001f57bbeee1979bbf012234314f060ee07294f. Outcome: partial. Disposable Windows executables proved exclusive name replacement, launch exclusion and exact rollback on NTFS. The reviewed installed broker hash matched on readback. Next: Use the existing signed first Wake selection and independent backend review paths. Before deploying a later broker, qualify a durable startup block and interruption recovery with the retained fallback.
+
+Evidence: [docs/verification/WAKE_BROKER_IMAGE_REPLACEMENT_HANDLE_PROOF_2026_11_21.json](docs/verification/WAKE_BROKER_IMAGE_REPLACEMENT_HANDLE_PROOF_2026_11_21.json); command: Bounded Windows NTFS fixture with two harmless executables and a native rename; exit 0; SHA-256 4492545ae76eea5ac2c63c6e22501d6f322c11443dedc297c225e8109e3d9cf8.

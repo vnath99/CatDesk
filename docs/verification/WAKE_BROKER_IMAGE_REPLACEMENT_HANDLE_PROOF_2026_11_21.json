@@ -1,0 +1,42 @@
+{
+  "scope": "DISPOSABLE_WINDOWS_IMAGE_REPLACEMENT_FILE_HANDLE_PROOF",
+  "finishedUtc": "2026-11-22T04:36:19.655864Z",
+  "sourceAtObservation": "b001f57bbeee1979bbf012234314f060ee07294f",
+  "environment": {"windowsBuild": 26200, "filesystem": "NTFS"},
+  "fixtureSha256": "2ec605993b68bc76285f0f7b0ad9822381c10e048be30f3836184d40567f48a3",
+  "retainedReceiptSha256": "0b84e84618661d3a7fd830e748f52534ad0e4e7e5b9fc0dd93603346e4b00f8a",
+  "firstFixture": {
+    "operation": "SetFileInformationByHandle relative rename",
+    "win32Error": 87,
+    "swapReached": false
+  },
+  "nativeFixture": {
+    "replacementOperation": "NtSetInformationFile FileRenameInformationEx with REPLACE_IF_EXISTS and POSIX_SEMANTICS",
+    "baselineExitCode": 23,
+    "candidateExitCodeAfterRelease": 47,
+    "restoredExitCodeAfterRelease": 23,
+    "foreignReaderBlockedExclusiveAcquisition": true,
+    "ordinaryReplacementWin32Error": 5,
+    "ordinaryReplacementLeftTargetIdentityUnchanged": true,
+    "launchWhileHoldingOriginalWin32Error": 32,
+    "launchWhileHoldingPublishedWin32Error": 32,
+    "launchWhileHoldingRollbackWin32Error": 32,
+    "replacementAndRollbackMatchedExactIdentities": true,
+    "fallbackBytesPreserved": true,
+    "fixtureRootRemoved": true,
+    "exitCode": 0
+  },
+  "installedReadback": {
+    "observedUtc": "2026-11-22T04:36:55.0464864Z",
+    "brokerSha256": "9535a7185341b8683a01a4920eb5c3823f10c9bbcdaaf715e28554692bc46d3c",
+    "matchesReviewedImage": true
+  },
+  "serviceStarts": 0,
+  "protectedWrites": 0,
+  "signingMaterialReads": 0,
+  "remainingQualification": [
+    "A durable startup interlock must survive updater exit across image selection, readback and rollback",
+    "Predecessor file bytes were flushed in the fixture. Crash durability of publication and recovery after an interrupted service deployment remain unqualified",
+    "The current broker has no reviewed installed image replacement operation. Both fixture executables were harmless standalone programs"
+  ]
+}
