@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T01:18:01.1384956Z",
+  "observedLocal": "2026-11-21T20:18:01.1384956-05:00",
+  "scope": "EXACT_BACKEND_SOURCE_WITH_TEST_ONLY_ISOLATED_WINDOWS_TASK_FIXTURE",
+  "backendSourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "fixture": {
+    "test": "web_task_dispatch::tests::readonly_fixture_cached_route_validates_checkpoint_and_wake_order",
+    "correctedTestSourceSha256": "8e0cbd8547d28caaf1998e9ae56fdaad9f84c99864d9d5b9205a6280ad2711c2",
+    "handler": "In-process reserved CatDesk task envelope, using only the outer command field",
+    "initialDeliveryReceipt": "Synthetic SENT receipt for the disposable project",
+    "transportEvidence": "FIRST_WEB_V5_CACHED_ROUTE_CANDIDATE_2026_11_21.json"
+  },
+  "initialAttempt": {
+    "endedUtc": "2026-11-22T01:15:19.7084063Z",
+    "cargoExitCode": 101,
+    "nativeVerifierExitCode": 1,
+    "nativeVerifierDiagnostic": "FINDSTR: Cannot open lib.rs",
+    "cause": "The Windows verifier rejected the fixture's forward-slash file operand. The same executable, input file and search pattern succeeded with a native path separator.",
+    "ownerReceiptSha256": "6c4a34a13ce2c3cadb1bf380f196a1e5b38cb32f81756fe32d29989cd5d40768",
+    "runtimeSourceChanged": false
+  },
+  "correctedAttempt": {
+    "startedUtc": "2026-11-22T01:17:20.0097135Z",
+    "finishedUtc": "2026-11-22T01:18:01.1384956Z",
+    "cargoExitCode": 0,
+    "testsPassed": 1,
+    "ownerReceiptSha256": "dd9bc071fa28882b9c298bf6323e2d68258ea3e21ec34aba5ef8dbd31858316d",
+    "earlyManualWakeRefused": "PROJECT_TASK_END_TURN_CHECKPOINT_REQUIRED",
+    "scopedPatchPreviewAndApplyPassed": true,
+    "managedVerifierSucceeded": true,
+    "managedVerifierCleanupProved": true,
+    "verifiedGitCheckpointContainsEdit": true,
+    "duplicateCheckpointAndWakeCallsRefused": true,
+    "originalRegisteredFixtureBytesPreserved": true,
+    "newManualWakeEvents": 1,
+    "manualWakeDeliveryReceiptCreated": false,
+    "manualWakeTimerCreated": false,
+    "nativeModelCalls": 0,
+    "genericShellExecutedByReservedEnvelope": false,
+    "testOwnerTimedOut": false,
+    "testOwnerTerminationFailed": false,
+    "testOwnedProcessesAfterExit": 0
+  },
+  "installedAcceptance": {
+    "actualChatGptWebCaller": false,
+    "productionBackendPromoted": false,
+    "candidateWakeSelected": false,
+    "browserDeliveryPerformed": false,
+    "nextAssistantTurnObserved": false,
+    "historicalTasksReplayed": false
+  }
+}

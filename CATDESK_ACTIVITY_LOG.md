@@ -614,3 +614,11 @@ Evidence: [docs/verification/FIRST_WEB_V5_CACHED_ROUTE_CANDIDATE_2026_11_21.json
 Agent: CatDesk development. Source: 8879d43588c6a9e75a356bf3c0ea63296bb1eaad. Outcome: partial. Native read-only inspection confirmed the earlier first-cycle assignment lacked the explicit request and event association. The corrected frozen operand and matching digest passed the same native checks without creating task state. Next: Use the corrected assignment and matching association pins after Wake and backend release gates. Preserve the old task and unbound draft and revalidate the exact releases, target and delivery witnesses before admission.
 
 Evidence: [docs/verification/FIRST_WEB_CYCLE_ASSIGNMENT_ASSOCIATION_2026_11_21.json](docs/verification/FIRST_WEB_CYCLE_ASSIGNMENT_ASSOCIATION_2026_11_21.json); command: Offline locked bounded native assignment inspection and explicit source binding test; exit 0; SHA-256 4a3d24668b328550ffbb8df808c8dd89e9c2283f0b02dc0c3379fe7ca50614fa.
+
+<!-- catdesk-activity:first-web-cached-native-cycle-nov21 sha256:e4dc8dee741f2ea7a642eda5104a434e50a43d06845ccce1911ce3a623217881 -->
+
+## 2026-11-22T01:18:01.1384956Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 0b1e4aac4ce3a9c0628adf88dbff275f407606f8. Outcome: partial. The disposable Windows fixture used the candidate reserved task handler to edit, run a real native verifier, create a scoped Git checkpoint and queue one manual Wake. Early and duplicate actions were refused. The initial verifier operand failure was isolated to the fixture path separator and corrected without changing release source. No ChatGPT Web continuation was delivered. Next: Verify the signed Wake V3 selection if performed and obtain eligible independent review and producer authority for the compatible backend. After both release gates pass, use the already corrected assignment and observe actual Web execution and its next turn.
+
+Evidence: [docs/verification/FIRST_WEB_CACHED_NATIVE_CYCLE_2026_11_21.json](docs/verification/FIRST_WEB_CACHED_NATIVE_CYCLE_2026_11_21.json); command: cargo test --offline --locked --bin catdesk readonly_fixture_cached_route_validates_checkpoint_and_wake_order -- --nocapture; exit 0; SHA-256 a6828e08a7bf9bbc94cc4fe0830641c00eb4c00b41bfd3467932a40a54ba363c.
