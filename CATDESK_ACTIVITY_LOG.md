@@ -1078,3 +1078,11 @@ Evidence: [docs/verification/PROMOTION_INITIALLY_UNVERIFIED_SERVING_2026_11_22.j
 Agent: Codex. Source: cbae958ee4b65a3ab9340181727f1a757b89d7d9. Outcome: partial. Scoped review now acquires the existing Wake lease before reserving its grant. The Windows native contention test preserved ledger bytes and did not publish an event or timer. The Wake suite verified single acknowledgment with the same lease.. Next: Use an eligible independent route for the original frozen backend draft. Complete genuine review, trusted producer and installed promotion and rollback. Confirm signed first Wake V3 selection before the installed Web cycle..
 
 Evidence: [docs/verification/SCOPED_REVIEW_HOST_CONTENTION_2026_11_22.json](docs/verification/SCOPED_REVIEW_HOST_CONTENTION_2026_11_22.json); command: Offline CatDesk native contention and Wake scoped runtime tests; exit 0; SHA-256 a4d1930ea7c189af956574004c4334acc04770ddf02c0a7e6480cf34294bf79d.
+
+<!-- catdesk-activity:scoped-review-preflight-owner-2026-11-22 sha256:adcef93afc37b5195edb29020d3d02876f0eec67af8cbf5a14c063ed77d02a8d -->
+
+## 2026-11-22T09:41:29Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 8d9543173fc6d0b4948f8e09fa4610a3c242d023. Outcome: partial. Native review preflight observes the existing Windows Wake lock and reports contention before qualification. An idle result is advisory. The tests created no host lock file through the observer and preserved the grant ledger, queue and timer state.. Next: Use an eligible independent review route for the original frozen backend draft. Complete trusted producer and installed promotion and rollback. Confirm the signed first Wake V3 selection and the installed Web cycle..
+
+Evidence: [docs/verification/SCOPED_REVIEW_PREFLIGHT_HOST_OBSERVATION_2026_11_22.json](docs/verification/SCOPED_REVIEW_PREFLIGHT_HOST_OBSERVATION_2026_11_22.json); command: Offline native review preflight and Wake read-only tests; exit 0; SHA-256 e39359c3ec007570912a11229077534a58ff1eb4c6bd03e946db05643f78d670.

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T09:41:29Z",
+  "scope": "ACTUAL_WINDOWS_HOST_LOCK_OBSERVATION_AND_DISPOSABLE_SCOPED_REVIEW_PREFLIGHT",
+  "sourceCommit": "8d9543173fc6d0b4948f8e09fa4610a3c242d023",
+  "baselineCommit": "07df83c9e4172575d5292b114ae0363f3ce13da6",
+  "baseline": "The integration regression reproduced ELIGIBLE while the same Wake store already had a live exclusive owner.",
+  "verified": {
+    "preflightWhenHeld": "HOST_ALREADY_RUNNING",
+    "runWhenHeld": "HOST_ALREADY_RUNNING",
+    "preflightAfterRelease": "ELIGIBLE",
+    "newHostLockFileCreatedByProbe": false,
+    "staleLockFileWithNoOwnerAllowed": true,
+    "invalidLockLeafRefused": true,
+    "existingLeasePreserved": true,
+    "ledgerBytesUnchanged": true,
+    "newEvents": 0,
+    "newTimers": 0
+  },
+  "tests": {
+    "catdeskContention": 1,
+    "catdeskReviewRetry": 2,
+    "wakeReadOnly": 15,
+    "allPassed": true,
+    "bothCratesFormatCheck": "PASS",
+    "diffCheck": "PASS"
+  },
+  "limits": "The observer samples existing ownership. It neither reserves the Wake host nor authorizes a send. Run still takes the real exclusive owner lease. Disposable grant and registry fixtures exercised native state guards, with no authentication, browser or external reviewer.",
+  "browserStarts": 0,
+  "messagesSent": 0,
+  "productionActions": 0,
+  "installedAcceptance": false
+}
