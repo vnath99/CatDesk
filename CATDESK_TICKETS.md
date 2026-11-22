@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** A `SUBMITTING` delivery without a timer and a claimed delivery with a partial submission witness both stop another scoped send for the same target. The tests retain the original evidence and allow a different project to advance. [Verification](docs/verification/SCOPED_WAKE_SUBMISSION_FENCE_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** The loopback fixture now verifies the next scoped read and durable tool journal after simulated self-Wake recovery. Duplicate call and duplicate Wake selection are refused, and closure waits for the exact response timer. [Verification](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** Timer preparation failure preserves the original submitting event and replay fence. A prior exact receipt with a missing timer can recover it through the existing response observer. [Verification](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).

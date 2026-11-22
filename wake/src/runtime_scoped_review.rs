@@ -499,8 +499,8 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
     {
         return Err("SCOPED_REVIEW_REPLAY_REFUSED".into());
     }
-    // One validated key chooses one existing event. Never scan or dispatch a
-    // sibling project's queue, and never accept a caller-provided message.
+    // One validated key chooses one existing event. Only that project can
+    // supply an unresolved submission fence, and only this event can be sent.
     let event: Event = read(&store.root().join("queue").join(format!("{event_id}.json")))?;
     event.validate()?;
     let review = event.event_type == "source_review"
@@ -616,7 +616,7 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
     {
         return Err("SCOPED_REVIEW_PROJECT_BUSY".into());
     }
-    let delivery = store.claim(&event, &lease)?;
+    let delivery = store.claim_scoped(&event, &lease)?;
     let mut status = local_status(&delivery);
     let mut timed_before_submit = |event: &Event, target: &Target| {
         let callback_started = Instant::now();
@@ -1176,6 +1176,83 @@ mod tests {
                 target,
             )
             .unwrap()
+    }
+
+    #[test]
+    fn scoped_submission_fence_before_timer_holds_only_original_project() {
+        for partial in [false, true] {
+            let (store, review, alpha) = fixture("scoped-other-submission");
+            let previous = work_event(&store, "alpha", &alpha);
+            let owner = store.host_lock().unwrap();
+            store.claim(&previous, &owner).unwrap();
+            let witness = store
+                .root()
+                .join("logs")
+                .join(format!("submission-start-{}.json", previous.event_id));
+            if partial {
+                std::fs::write(&witness, b"interrupted witness write").unwrap();
+            } else {
+                store
+                    .transition(
+                        &previous.event_id,
+                        owner.owner(),
+                        Phase::Submitting,
+                        None,
+                        None,
+                    )
+                    .unwrap();
+            }
+            drop(owner);
+            assert!(store.timer(&previous.event_id).unwrap().is_none());
+            let prior = store.delivery(&previous.event_id).unwrap();
+            let evidence = std::fs::read(&witness).unwrap();
+            assert!(
+                store
+                    .has_unresolved_scoped_submission("alpha", &alpha, &review.event_id)
+                    .unwrap()
+            );
+            assert_eq!(
+                run_with_adapter::<FakeAdapter>(
+                    &store,
+                    &review.event_id,
+                    120,
+                    &mut |_, _| panic!("unresolved submission cannot authorize input"),
+                    &|| Ok(()),
+                    |_, _| panic!("unresolved submission cannot start a browser"),
+                )
+                .unwrap_err(),
+                "SCOPED_PROJECT_SUBMISSION_UNRESOLVED"
+            );
+            assert!(store.delivery(&review.event_id).unwrap().is_none());
+
+            let beta = store.config().unwrap().targets["beta"].clone();
+            let event = work_event(&store, "beta", &beta);
+            let fake = adapter(&event, &beta);
+            let admitted = fake.admitted.clone();
+            let acknowledgments = fake.ack_count.clone();
+            assert_eq!(
+                run_selected_with_adapter(
+                    &store,
+                    &event.event_id,
+                    120,
+                    Selection::WorkRequest(&event, &beta),
+                    &mut |_, _| {
+                        admitted.set(true);
+                        Ok(())
+                    },
+                    &|| Ok(()),
+                    |_, _| Ok(fake),
+                )
+                .unwrap()["phase"],
+                "SENT"
+            );
+            assert_eq!(acknowledgments.get(), 1);
+            assert_eq!(store.delivery(&previous.event_id).unwrap(), prior);
+            assert_eq!(std::fs::read(&witness).unwrap(), evidence);
+            assert!(store.timer(&previous.event_id).unwrap().is_none());
+            assert!(store.host_lock().is_ok());
+            std::fs::remove_dir_all(store.root().parent().unwrap()).unwrap();
+        }
     }
 
     #[test]

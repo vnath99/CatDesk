@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T21:55:00Z",
+  "scope": "WINDOWS_DEVELOPMENT_SCOPED_WAKE_AND_REVIEW_ADMISSION",
+  "baseline": "32219b4b90f453dd07a0153d87a457d58e66e059",
+  "finding": "The scoped sender checked unfinished response timers before claiming, but a different event for the same current target could already have crossed the submission fence without creating a timer.",
+  "correction": "Under the existing Wake store lock, check the original delivery journal for another event with the same project and current target generation, and refuse before claiming with SCOPED_PROJECT_SUBMISSION_UNRESOLVED. Review admission performs the same check before reserving the review. The original event stays eligible only for its existing recovery path.",
+  "tests": [
+    {
+      "suite": "Wake scoped sender",
+      "passed": 41,
+      "ignored": 2,
+      "ignoredReason": "Opt-in retained-package fixtures were outside this source verification.",
+      "observations": [
+        "An unresolved SUBMITTING event without an acceptance timer prevented a new scoped send.",
+        "A claimed event with a partial durable submission witness prevented a new scoped send.",
+        "The original delivery and witness remained byte-for-byte stable where recorded.",
+        "The sibling project advanced under its own exact target with one simulated submission acknowledgment.",
+        "Scoped continuation still succeeded with malformed unrelated queue payloads."
+      ]
+    },
+    {
+      "suite": "Wake cooperative scheduling",
+      "passed": 11
+    },
+    {
+      "suite": "Central review admission",
+      "passed": 1,
+      "observations": [
+        "Both preflight and run refused before creating a second review queue event.",
+        "The original submitting delivery and protected fixture snapshot were preserved."
+      ]
+    }
+  ],
+  "liveChatGptWebTest": false,
+  "productionChanges": false,
+  "remaining": "The installed Web cycle still requires independent review admission and producer attestation for the frozen backend, the exact original disposable worktree backed by its shared Git metadata, and qualified backend and Wake selection. The cross-turn serial Web coding lane is a separate acceptance requirement."
+}

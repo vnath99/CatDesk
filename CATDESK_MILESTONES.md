@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — scoped browser isolation before the response timer.** Development fixtures prove a same-project follow-up is stopped at the original submission fence and a sibling completes its own bounded send. The durable serial coding lane across turns and installed browser acceptance remain open. [Evidence](docs/verification/SCOPED_WAKE_SUBMISSION_FENCE_2026_11_22.json).
+
 **November 22 — same-task continuation through development MCP.** The Windows loopback case covers edit, verification, Git checkpoint, a simulated interrupted self-Wake and a second real authenticated task-tool call. The installed ChatGPT Web caller and actual browser continuation remain open. [Evidence](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).
 
 **November 22 — receipt recovery across interruption.** Development ensures exact reconciliation cannot commit a receipt before its timer. Windows fixtures also exercised recovery of a missing legacy timer and independent response completion. Installed Web acceptance remains open. [Evidence](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).

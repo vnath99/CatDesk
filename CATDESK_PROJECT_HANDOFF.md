@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 4:54 p.m. EST.** Scoped manual Wake, review and continuation claims honor earlier same-target submission evidence before launching the adapter. Review preflight uses the same delivery check before reserving work. Keep the existing `56aa9912` draft pending an eligible independent review route and recover the original common Git store and per-worktree records before live assignment. [Verification](docs/verification/SCOPED_WAKE_SUBMISSION_FENCE_2026_11_22.json).
+
 **November 22, 4:44 p.m. EST.** The current development version exercises the original assignment across the guarded manual Wake fence, simulated receipt recovery and one authenticated next-turn file read. Installed acceptance still needs genuine conversation delivery and same-task continuation, with the frozen review and original workspace prerequisites. [Verification](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).
 
 **November 22, 4:39 p.m. EST.** Exact receipt reconciliation prepares the timer inside the existing Wake transaction. For an earlier committed receipt with a missing timer, the existing reobserve command can restore it from the exact submission witness before observing a response. [Verification](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).

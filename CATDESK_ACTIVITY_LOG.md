@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 21:54 UTC — fence interrupted scoped Wake submissions before opening the browser.** Review admission and scoped claims now check the original delivery journal even when the interruption happened before the response timer. A sibling project can still use the shared browser owner. [Evidence](docs/verification/SCOPED_WAKE_SUBMISSION_FENCE_2026_11_22.json).
+
 **2026-11-22 21:44 UTC — exercise the same task on both sides of a self-Wake.** The isolated Windows loopback fixture now covers the guarded Wake handoff, exact receipt recovery and a fresh authenticated MCP read of the checkpoint under the original assignment. [Evidence](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).
 
 **2026-11-22 21:39 UTC — close the receipt-to-timer interruption gap.** Exact receipt reconciliation now prepares the response timer before committing delivery. The existing response observer can restore a missing timer from an earlier exact receipt and its original submission witness. [Evidence](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).

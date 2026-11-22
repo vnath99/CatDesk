@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — an unresolved send can precede its timer.** On supporting development builds, `SCOPED_PROJECT_SUBMISSION_UNRESOLVED` means another delivery for this project's current target is `SUBMITTING` or retains a submission witness. Reconcile the original event through its existing proof-only command, `operator web review reconcile-submission` for review or task-issued manual Wake, or `operator web work reconcile --project-id <project> --request-id <request>` for an ordinary work invitation. Use the original identity required by that command. [Evidence](docs/verification/SCOPED_WAKE_SUBMISSION_FENCE_2026_11_22.json).
+
 **November 22 — qualify same-task continuation on private loopback.** With both `CATDESK_FROZEN_BACKEND_TEST_*` variables unset, run the existing opt-in `cached_http_checkpoint_precedes_manual_wake` test. The development branch uses the Windows command sandbox, real Git and the original task journal, with simulated browser receipts and completion. [Verification](docs/verification/WEB_SAME_TASK_LOOPBACK_CONTINUATION_2026_11_22.json).
 
 **November 22 — recover a missing timer for a proven delivery.** On supporting development builds, `operator web review reobserve` can restore a missing timer for the original `SENT` event when the current target and original submission witness match. The restored timer starts from the committed receipt. Only a fresh exact response observation can complete it. [Verification](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).

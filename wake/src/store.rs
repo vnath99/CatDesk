@@ -1788,6 +1788,71 @@ impl Store {
     /// A host holds a separate lifetime lock. Only after that lock is acquired
     /// can it reclaim pre-submit work. Submitting/Sent/Attention are never replayed.
     pub fn claim(&self, event: &Event, lease: &HostLease) -> Result<Delivery> {
+        self.claim_inner(event, lease, false)
+    }
+
+    pub(crate) fn claim_scoped(&self, event: &Event, lease: &HostLease) -> Result<Delivery> {
+        self.claim_inner(event, lease, true)
+    }
+
+    /// A review admission check can see an unresolved send even when the
+    /// interruption happened before an acceptance timer was committed.
+    pub fn has_unresolved_scoped_submission(
+        &self,
+        project: &str,
+        target: &Target,
+        selected_event_id: &str,
+    ) -> Result<bool> {
+        if !valid_id(project) || !valid_id(selected_event_id) {
+            return Err("QUEUE_EVENT_INVALID".into());
+        }
+        let _lock = self.read_lock()?;
+        if self.read_config()?.targets.get(project) != Some(target) {
+            return Err("TARGET_GENERATION_STALE".into());
+        }
+        self.unresolved_scoped_submission_locked(project, target, selected_event_id)
+    }
+
+    fn unresolved_scoped_submission_locked(
+        &self,
+        project: &str,
+        target: &Target,
+        selected_event_id: &str,
+    ) -> Result<bool> {
+        // A durable claim precedes writing a submission witness. Read the
+        // delivery journal so unrelated queue payloads stay outside admission.
+        for entry in
+            fs::read_dir(self.root.join("deliveries")).map_err(|_| "RECEIPT_UNAVAILABLE")?
+        {
+            let path = entry.map_err(|_| "RECEIPT_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let delivery: Delivery = read(&path)?;
+            if delivery.event.project_id != project
+                || delivery.target.generation != target.generation
+            {
+                continue;
+            }
+            delivery.validate()?;
+            let id = &delivery.event.event_id;
+            if delivery.target != *target
+                || path.file_stem().and_then(|value| value.to_str()) != Some(id)
+            {
+                return Err("RECEIPT_BINDING_MISMATCH".into());
+            }
+            if id != selected_event_id
+                && delivery.phase != Phase::Sent
+                && (delivery.phase == Phase::Submitting
+                    || self.has_submission_witness_locked(id)?)
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn claim_inner(&self, event: &Event, lease: &HostLease, scoped: bool) -> Result<Delivery> {
         event.validate()?;
         if lease.root != self.root {
             return Err("HOST_LEASE_ROOT_MISMATCH".into());
@@ -1819,6 +1884,15 @@ impl Store {
         }
         if self.has_submission_witness_locked(&event.event_id)? {
             return Err("SUBMISSION_RECONCILIATION_REQUIRED".into());
+        }
+        if scoped
+            && self.unresolved_scoped_submission_locked(
+                &event.project_id,
+                target,
+                &event.event_id,
+            )?
+        {
+            return Err("SCOPED_PROJECT_SUBMISSION_UNRESOLVED".into());
         }
         let delivery = Delivery {
             schema_version: PROTOCOL_VERSION,

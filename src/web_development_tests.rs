@@ -253,12 +253,41 @@ async fn scoped_review_preflight_preserves_runtime_and_keeps_projects_independen
         crate::web_work::review_action(&control, "preflight", changed).unwrap_err(),
         "WEB_REVIEW_GRANT_SCOPE_CHANGED"
     );
-    assert!(
-        Store::open(&wake_root)
-            .unwrap()
-            .events()
-            .unwrap()
-            .is_empty()
+    let store = Store::open(&wake_root).unwrap();
+    assert!(store.events().unwrap().is_empty());
+    let target = &store.config().unwrap().targets["beta"];
+    let previous = store
+        .produce_expected(
+            "existing-beta-send",
+            "beta",
+            "engineering_attention",
+            "Prior fixture work",
+            target,
+        )
+        .unwrap();
+    let owner = store.host_lock().unwrap();
+    store.claim(&previous, &owner).unwrap();
+    let unresolved = store
+        .transition(
+            &previous.event_id,
+            owner.owner(),
+            catdesk_wake::store::Phase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+    drop(owner);
+    assert!(store.timer(&previous.event_id).unwrap().is_none());
+    for operation in ["preflight", "run"] {
+        assert_eq!(
+            crate::web_work::review_action(&control, operation, inputs[1].clone()).unwrap_err(),
+            "SCOPED_PROJECT_SUBMISSION_UNRESOLVED"
+        );
+    }
+    assert_eq!(store.events().unwrap(), [previous.clone()]);
+    assert_eq!(
+        store.delivery(&previous.event_id).unwrap(),
+        Some(unresolved)
     );
     assert_eq!(
         fs::read(wake_root.join("config.json")).unwrap(),

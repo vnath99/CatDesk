@@ -233,6 +233,9 @@ pub(crate) fn action(workspace: &Path, operation: &str, args: Value) -> Result<V
     {
         return Err("WEB_REVIEW_PROJECT_BUSY".into());
     }
+    if store.has_unresolved_scoped_submission(&input.project_id, &expected, &identity.event_id)? {
+        return Err("SCOPED_PROJECT_SUBMISSION_UNRESOLVED".into());
+    }
     if operation == "retry-pre-submit" {
         return with_project(&workspace, &input.project_id, &expected, |ledger| {
             lease.check_target(&expected)?;
