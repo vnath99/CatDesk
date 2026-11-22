@@ -4590,6 +4590,33 @@ mod tests {
         assert!(project.handoff_request().unwrap().is_none());
         assert!(!control.join(".catdesk/web-context").exists());
     }
+
+    #[cfg(windows)]
+    #[test]
+    fn review_run_with_busy_host_does_not_reserve_or_publish() {
+        use crate::web_work::{review_action, review_fixture};
+
+        let (parent, control, dev_root, alpha, _) = paired_handoff_fixture();
+        let wake = Store::open(&dev_root).unwrap();
+        let owned = wake.host_lock().unwrap();
+        let request = review_fixture(&control, &alpha);
+        let ledger = control.join(".catdesk/web-work/alpha.json");
+        let before = fs::read(&ledger).unwrap();
+        // Live publication is admitted only after the target's creation second.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        let preflight = review_action(&control, "preflight", request.clone());
+        let refused = review_action(&control, "run", request);
+        let unchanged = fs::read(&ledger).unwrap() == before;
+        let empty = wake.events().unwrap().is_empty()
+            && wake.timers_for_project("alpha").unwrap().is_empty();
+        drop(owned);
+        drop(wake);
+        fs::remove_dir_all(parent).unwrap();
+        assert_eq!(preflight.unwrap()["status"], "ELIGIBLE");
+        assert_eq!(refused.unwrap_err(), "HOST_ALREADY_RUNNING");
+        assert!(unchanged, "host contention consumed the review grant");
+        assert!(empty, "host contention published an event or a timer");
+    }
     #[cfg(windows)]
     #[test]
     fn handoff_target_config_writer_contention_preserves_code_and_recovers_without_actions() {

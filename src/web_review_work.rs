@@ -27,6 +27,41 @@ struct ReviewInput {
     request: Value,
 }
 
+#[cfg(all(test, windows))]
+pub(crate) fn review_fixture(workspace: &Path, target: &protocol::Target) -> Value {
+    let request = json!({
+        "projectId": "alpha", "requestId": "review-host-contention",
+        "expectedTargetGeneration": target.generation, "expectedTargetSha256": target.digest,
+        "taskText": "Read-only fixture source review"
+    });
+    let work = WorkRequest::parse(request.clone()).unwrap();
+    let identity = ReviewMessageIdentity {
+        request_id: work.request_id.clone(),
+        event_id: work.event_id(),
+        message_sha256: protocol::digest(&work.message().unwrap()),
+        review_key: "b".repeat(64),
+    };
+    WorkLedger::open(workspace, "alpha")
+        .unwrap()
+        .authorize_review(
+            ReviewGrantRequest {
+                grant_id: "review-host-fixture".into(),
+                category: "READ_ONLY_SOURCE_REVIEW".into(),
+                target: target.clone(),
+                expires_utc: now() + 600,
+                max_messages: 1,
+                max_execution_seconds: 120,
+                approval_evidence_sha256: "c".repeat(64),
+                messages: vec![identity.clone()],
+                unused_messages_from_grant: None,
+            },
+            now(),
+        )
+        .unwrap();
+    json!({"projectId":"alpha", "request":request,
+        "grantId":"review-host-fixture", "reviewKey":identity.review_key})
+}
+
 fn with_project<T>(
     workspace: &Path,
     project: &str,
@@ -182,6 +217,15 @@ pub(crate) fn action(workspace: &Path, operation: &str, args: Value) -> Result<V
     )?;
     let store = Store::open(&wake_protocol_client::wake_root_for_workspace(&workspace)?)?;
     require_stopped(&store)?;
+    // Lead publication with the same owner lease the sender will use. A busy
+    // browser owner must not reserve a review or leave an unstartable event.
+    let host = if operation == "preflight" {
+        None
+    } else {
+        let host = store.host_lock()?;
+        require_stopped(&store)?;
+        Some(host)
+    };
     if store
         .timers_for_project(&input.project_id)?
         .iter()
@@ -190,8 +234,6 @@ pub(crate) fn action(workspace: &Path, operation: &str, args: Value) -> Result<V
         return Err("WEB_REVIEW_PROJECT_BUSY".into());
     }
     if operation == "retry-pre-submit" {
-        let _host = store.host_lock()?;
-        require_stopped(&store)?;
         return with_project(&workspace, &input.project_id, &expected, |ledger| {
             lease.check_target(&expected)?;
             prepare_retry(
@@ -255,6 +297,7 @@ pub(crate) fn action(workspace: &Path, operation: &str, args: Value) -> Result<V
                     &expected,
                 )?;
                 wake_protocol_client::publish_registered_scoped_review(
+                    &store,
                     &workspace,
                     &input.project_id,
                     &identity.event_id,
@@ -295,6 +338,7 @@ pub(crate) fn action(workspace: &Path, operation: &str, args: Value) -> Result<V
     };
     let outcome = catdesk_wake::runtime::run_scoped_review(
         &store,
+        host.ok_or("WEB_REVIEW_HOST_LEASE_REQUIRED")?,
         &identity.event_id,
         permit.max_execution_seconds,
         &mut before_submit,

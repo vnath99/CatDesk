@@ -293,6 +293,7 @@ pub(crate) fn preflight_prepared_invitation(
 }
 
 pub(crate) fn publish_registered_scoped_review(
+    store: &Store,
     control_workspace: &Path,
     project: &str,
     event_id: &str,
@@ -300,8 +301,22 @@ pub(crate) fn publish_registered_scoped_review(
     expected: &Target,
     grant_id: &str,
 ) -> Result<Event, String> {
-    preflight_registered_invitation(control_workspace, project, expected)?;
-    let store = Store::open(&wake_root_for_workspace(control_workspace)?)?;
+    let (selected_store, activation, url, digest) =
+        registered_publication_context(control_workspace, project)?;
+    if selected_store.root() != store.root() {
+        return Err("WAKE_REVIEW_STORE_CHANGED".into());
+    }
+    if publication_target(
+        store,
+        &activation,
+        project,
+        &url,
+        &digest,
+        catdesk_wake::store::now(),
+    )? != *expected
+    {
+        return Err("WAKE_PROJECT_TARGET_CHANGED".into());
+    }
     store.produce_expected_with_audit(
         event_id,
         project,

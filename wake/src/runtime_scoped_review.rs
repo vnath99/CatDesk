@@ -4,7 +4,7 @@ use crate::protocol::Event;
 use serde_json::{Value, json};
 
 enum Selection<'a> {
-    Review,
+    Review(Option<HostLease>),
     TaskContinuation(&'a Event, &'a Target),
     RolloverContinuation(&'a Event, &'a Target),
     RolloverHandoff(&'a Event, &'a Target),
@@ -408,15 +408,17 @@ pub fn run_scoped_manual_end_turn_handoff(
 
 pub fn run_scoped_review(
     store: &Store,
+    lease: HostLease,
     event_id: &str,
     maximum_seconds: u64,
     before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
     keep_running: &dyn Fn() -> Result<()>,
 ) -> Result<Value> {
-    run_with_adapter(
+    run_selected_with_adapter(
         store,
         event_id,
         maximum_seconds,
+        Selection::Review(Some(lease)),
         before_submit,
         keep_running,
         |deadline, guard| {
@@ -431,6 +433,7 @@ pub fn run_scoped_review(
     )
 }
 
+#[cfg(test)]
 fn run_with_adapter<A: SubmissionAdapter>(
     store: &Store,
     event_id: &str,
@@ -443,7 +446,7 @@ fn run_with_adapter<A: SubmissionAdapter>(
         store,
         event_id,
         maximum_seconds,
-        Selection::Review,
+        Selection::Review(None),
         before_submit,
         keep_running,
         connect,
@@ -454,7 +457,7 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
     store: &Store,
     event_id: &str,
     maximum_seconds: u64,
-    selection: Selection<'_>,
+    mut selection: Selection<'_>,
     before_submit: &mut dyn FnMut(&Event, &Target) -> Result<()>,
     keep_running: &dyn Fn() -> Result<()>,
     connect: impl FnOnce(Instant, &dyn Fn() -> Result<()>) -> Result<A>,
@@ -482,7 +485,13 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
         result
     };
     guard()?;
-    let lease = store.host_lock()?;
+    let lease = match &mut selection {
+        Selection::Review(lease) => match lease.take() {
+            Some(lease) => lease,
+            None => store.host_lock()?,
+        },
+        _ => store.host_lock()?,
+    };
     guard()?;
     if store
         .delivery(event_id)?
@@ -510,7 +519,7 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
     let work = matches!(&selection, Selection::WorkRequest(..));
     let manual = matches!(&selection, Selection::ManualEndTurn(..));
     let permitted = match selection {
-        Selection::Review => review,
+        Selection::Review(_) => review,
         Selection::ManualEndTurn(expected, target) => {
             target.validate()?;
             &event == expected
@@ -1173,7 +1182,7 @@ mod tests {
                 &store,
                 &event.event_id,
                 120,
-                Selection::Review,
+                Selection::Review(None),
                 &mut |_, _| panic!("readiness failure cannot authorize input"),
                 &|| Ok(()),
                 |_, _| Ok(fake),
@@ -1257,7 +1266,7 @@ mod tests {
                     &store,
                     &event.event_id,
                     120,
-                    Selection::Review,
+                    Selection::Review(None),
                     &mut |_, _| panic!("untrusted readiness cannot authorize input"),
                     &|| Ok(()),
                     |_, _| Ok(fake),
@@ -1470,7 +1479,7 @@ mod tests {
                 &store,
                 &event.event_id,
                 10,
-                Selection::Review,
+                Selection::Review(None),
                 &mut |_, _| {
                     admitted.set(true);
                     Ok(())
@@ -2192,20 +2201,27 @@ mod tests {
     #[test]
     fn scoped_review_consumes_immediately_before_one_ack_and_preserves_stopped_control() {
         let (store, event, target) = fixture("scoped-success");
+        let lease = store.host_lock().unwrap();
+        let owner = lease.owner().to_owned();
         let fake = adapter(&event, &target);
         let admitted = fake.admitted.clone();
         let acknowledgments = fake.ack_count.clone();
         let before = std::fs::read(store.root().join("control.json")).unwrap();
-        let result = run_with_adapter(
+        let result = run_selected_with_adapter(
             &store,
             &event.event_id,
             180,
+            Selection::Review(Some(lease)),
             &mut |actual, actual_target| {
                 assert_eq!(actual, &event);
                 assert_eq!(actual_target, &target);
                 assert_eq!(
                     store.delivery(&event.event_id)?.unwrap().phase,
                     Phase::Claimed
+                );
+                assert_eq!(
+                    store.host_lock().err().as_deref(),
+                    Some("HOST_ALREADY_RUNNING")
                 );
                 admitted.set(true);
                 Ok(())
@@ -2216,6 +2232,11 @@ mod tests {
         .unwrap();
         assert_eq!(acknowledgments.get(), 1);
         assert_eq!(result["phase"], "SENT");
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().owner,
+            owner
+        );
+        assert!(store.host_lock().is_ok());
         assert_eq!(
             std::fs::read(store.root().join("control.json")).unwrap(),
             before

@@ -17,6 +17,8 @@ use std::path::Path;
 #[path = "web_review_work.rs"]
 mod review;
 pub(crate) use review::action as review_action;
+#[cfg(all(test, windows))]
+pub(crate) use review::review_fixture;
 #[path = "web_work_delivery.rs"]
 mod delivery;
 pub(crate) use delivery::deliver;
