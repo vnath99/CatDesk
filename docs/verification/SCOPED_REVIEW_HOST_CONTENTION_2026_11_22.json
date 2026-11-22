@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T09:37:14Z",
+  "scope": "WINDOWS_LOCAL_SCOPED_REVIEW_HOST_LEASE_AND_DISPOSABLE_GRANT_LEDGER",
+  "baselineCommit": "da102aeb9637d9a1efda7fec8c9373511fbd462f",
+  "sourceCommit": "cbae958ee4b65a3ab9340181727f1a757b89d7d9",
+  "reproduced": {
+    "preflight": "ELIGIBLE",
+    "runRefusal": "HOST_ALREADY_RUNNING",
+    "grantReservedDespiteRefusal": true
+  },
+  "corrected": {
+    "preflight": "ELIGIBLE",
+    "runRefusal": "HOST_ALREADY_RUNNING",
+    "grantLedgerByteIdentical": true,
+    "queueEmpty": true,
+    "turnTimersEmpty": true,
+    "correctedFixtureRemoved": true
+  },
+  "coverage": {
+    "actualWindowsContentionTests": 1,
+    "reviewAuthorizationAndRetryTests": 2,
+    "wakeScopedRuntimeTests": 40,
+    "oneAcknowledgmentUnderSameLeaseWithFixtureAdapter": true,
+    "originalOwnerKeptAndReleased": true,
+    "formatBothCrates": "PASS",
+    "diffCheck": "PASS"
+  },
+  "notes": "An initial regression harness stopped on the historical-event timestamp check before reaching the tested owner boundary. The harness now uses a bounded wait past target creation. Local command policy refused removal of its inert fixture directory. Subsequent baseline and passing test fixtures removed themselves.",
+  "limitations": "This exercised actual Windows locking and the native invocation with disposable project state. Browser output and independent reviewer authority were outside the test. The exact frozen backend and its original review draft were preserved.",
+  "messagesSent": 0,
+  "browserStarts": 0,
+  "installedChanges": 0,
+  "installedAcceptance": false
+}

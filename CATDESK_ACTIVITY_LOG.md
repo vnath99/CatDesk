@@ -1070,3 +1070,11 @@ Evidence: [docs/verification/BACKEND_OWNED_STARTUP_EXIT_2026_11_22.json](docs/ve
 Agent: Codex. Source: a9a8154dfd29729afec1e794c79203dc2821e09f. Outcome: partial. The one-hash facade independently verifies serving even when the completed local promotion receipt starts with UNVERIFIED. The compiled resolver and actual authenticated Windows backend passed the disposable readback and subsequent no-listener case.. Next: Use the eligible independent reviewer path and original frozen backend draft once admission is proven. Complete trusted producer and installed promotion and rollback. Confirm first signed Wake V3 selection and run the installed Web cycle..
 
 Evidence: [docs/verification/PROMOTION_INITIALLY_UNVERIFIED_SERVING_2026_11_22.json](docs/verification/PROMOTION_INITIALLY_UNVERIFIED_SERVING_2026_11_22.json); command: Bounded native Windows retained-receipt and live MCP verification; exit 0; SHA-256 3c92b50e22e225c134822315924feae91d6dbb373023456bbb02f94e0742ebd7.
+
+<!-- catdesk-activity:scoped-review-owner-contention-2026-11-22 sha256:c7e8db0744ef1f61d7df2842c143c49d2f19cd665a60b1fe99ef39b65910b86b -->
+
+## 2026-11-22T09:37:14Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: cbae958ee4b65a3ab9340181727f1a757b89d7d9. Outcome: partial. Scoped review now acquires the existing Wake lease before reserving its grant. The Windows native contention test preserved ledger bytes and did not publish an event or timer. The Wake suite verified single acknowledgment with the same lease.. Next: Use an eligible independent route for the original frozen backend draft. Complete genuine review, trusted producer and installed promotion and rollback. Confirm signed first Wake V3 selection before the installed Web cycle..
+
+Evidence: [docs/verification/SCOPED_REVIEW_HOST_CONTENTION_2026_11_22.json](docs/verification/SCOPED_REVIEW_HOST_CONTENTION_2026_11_22.json); command: Offline CatDesk native contention and Wake scoped runtime tests; exit 0; SHA-256 a4d1930ea7c189af956574004c4334acc04770ddf02c0a7e6480cf34294bf79d.
