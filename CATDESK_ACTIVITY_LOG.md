@@ -1182,3 +1182,11 @@ Evidence: [docs/verification/BACKEND_EXACT_INTACT_ROLLBACK_2026_11_22.json](docs
 Agent: Codex. Source: 303d1ee86f6b9e973a9e54058f387e7faff93a26. Outcome: partial. Native retirement can now archive a completed promotion after exact rollback and bind a different successor to the verified restored predecessor. Both retained artifacts and the selection pointer were pinned in Windows fixtures. Fifty-nine native release tests passed. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/STOPPED_PROMOTION_AFTER_ROLLBACK_2026_11_22.json](docs/verification/STOPPED_PROMOTION_AFTER_ROLLBACK_2026_11_22.json); command: cargo test --locked --offline --bin catdesk daemon_reload:: -- --test-threads=1; exit 0; SHA-256 aadf940b082354a72cd3cd1a6259670c21588c49deffcca9e0cc234c3029d6a6.
+
+<!-- catdesk-activity:promotion-retained-history-after-successor-20261122 sha256:19abf61f706e4f0115d152694cdfa28d5d43fda2120b91353896c96536e66c39 -->
+
+## 2026-11-22T11:26:50Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 4db84cb257bcf97609a32af82244d0ff448fd9bc. Outcome: partial. The compiled one-hash resolver suppresses replay after the retirement journal moves on. It read two original retained archives in a disposable copy, matched the newest verified generation, refused the old hash before candidate selection and preserved 19 installed file pins. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/PROMOTION_RETAINED_HISTORY_AFTER_SUCCESSOR_2026_11_22.json](docs/verification/PROMOTION_RETAINED_HISTORY_AFTER_SUCCESSOR_2026_11_22.json); command: cargo test --locked --offline --bin catdesk daemon_reload:: -- --test-threads=1; exit 0; SHA-256 38810fff94686aaa23072f6ccc16433c333d1c7167d838dd0bd4382418fc717e.

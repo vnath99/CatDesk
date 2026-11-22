@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T11:26:50Z",
+  "scope": "WINDOWS_COMPILED_READBACK_OF_INSTALLED_ARCHIVES_IN_DISPOSABLE_COPY",
+  "sourceCommit": "4db84cb257bcf97609a32af82244d0ff448fd9bc",
+  "baselineSourceCommit": "e7a97815c92d46f59e14030979d549c3acdbfb22",
+  "privateFixtureSha256": "bcc5be0cd2b369600ac9e10e7d6f54e0dcdadfa2f3ca000de5753055ba8f2a02",
+  "controllerSha256": "9394aba4b3792c9276669577ff752c6fbfb22640c7e8d27dc37d4c7506e7c342",
+  "startedUtc": "2026-11-22T11:26:10.398846Z",
+  "finishedUtc": "2026-11-22T11:26:11.437767Z",
+  "olderControlResult": "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY",
+  "retainedAttempts": 2,
+  "historicalReadback": "PROMOTION_FAILED_OR_AMBIGUOUS",
+  "latestVerifiedAuthorizationGenerationMatched": true,
+  "oldArtifactResolution": "REVIEWED_PROMOTION_ALREADY_RETIRED_INSPECT_RESULT",
+  "unrelatedPendingReadback": "PROMOTION_RESULT_PENDING_NO_RETRY",
+  "sourceAndInstalledPinsUnchanged": 19,
+  "ownedControllerProcessesExited": 4,
+  "fixtureRemoved": true,
+  "tests": {
+    "nativeWindowsPassed": 59,
+    "nativeWindowsFailed": 0,
+    "format": "PASS",
+    "offlineDebugBuild": "PASS"
+  },
+  "limits": "The compiled development controller read two original installed completion archives copied byte-for-byte into disposable state with an unrelated pending retirement. The comparison exercised current and historical resolution without a serving process or promotion attempt. The installed release and original archive hashes were verified unchanged.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}
