@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 23:16 UTC — bound native output in one-command backend promotion.** Real Windows fixture controllers emitted a megabyte on stdout or stderr. The facade retained at most 4,096 stdout characters, discarded stderr content, and kept the original digest readback after an exited candidate. [Evidence](docs/verification/PROMOTION_BOUNDED_NATIVE_OUTPUT_2026_11_22.json).
+
 **2026-11-22 23:12 UTC — prepare exact shared Git backup intake.** Three retained pointers identify the original control, registered Web project and assigned worktree entries. The assigned task supplies its pinned branch and commit. Real Windows Git fixtures verified the staged read and refusal of wrong or incomplete entries. [Evidence](docs/verification/WEB_WORKTREE_BACKUP_INTAKE_2026_11_22.json).
 
 **2026-11-22 23:04 UTC — identify the shared Git dependency of the canonical Web control checkout.** The original controller pointer and the disposable acceptance worktrees refer to the same missing Git store. The checked retained archive has no matching controller worktree record. The existing target read now identifies which Git check failed. [Evidence](docs/verification/WEB_WORKSPACE_BACKING_DIAGNOSTICS_2026_11_22.json).

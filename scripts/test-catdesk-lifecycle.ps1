@@ -619,9 +619,18 @@ static class PromotionRefusal {
             Console.WriteLine(mode == "selection-root-array" ? "[" + result + "]" : result);
             return 0;
         }
+        if (mode == "oversized-resolver") {
+            Console.Write("FIXTURE_PRIVATE_TEXT" + new string('x', 1024 * 1024));
+            return 0;
+        }
         bool ambiguous = mode.StartsWith("ambiguous-", StringComparison.Ordinal);
         if (ambiguous && args[1] == "promote") {
-            if (mode == "ambiguous-wrong-shape") {
+            if (mode == "ambiguous-oversized-candidate") {
+                Console.Write("FIXTURE_PRIVATE_TEXT" + new string('x', 1024 * 1024));
+            } else if (mode == "ambiguous-oversized-stderr") {
+                Console.Error.Write("FIXTURE_PRIVATE_TEXT" + new string('x', 1024 * 1024));
+                Console.WriteLine("{\"state\":\"PROMOTION_IN_PROGRESS\",\"candidateSha256\":\"" + args[2] + "\"}");
+            } else if (mode == "ambiguous-wrong-shape") {
                 Console.WriteLine("{\"state\":\"PROMOTION_COMPLETED\",\"candidateSha256\":[\"" + args[2] + "\"]}");
             } else if (mode == "ambiguous-pending") {
                 Console.WriteLine("{\"state\":\"PROMOTION_IN_PROGRESS\",\"candidateSha256\":\"" + args[2] + "\"}");
@@ -684,6 +693,9 @@ static class PromotionRefusal {
         @{ Mode = 'legacy-resolver'; State = 'REVIEWED_PROMOTION_RESOLVER_PROTOCOL_UNAVAILABLE'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
         @{ Mode = 'legacy-candidate'; State = 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'; Phase = 'READ_ORIGINAL_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
         @{ Mode = 'ambiguous-complete'; State = 'PROMOTION_COMPLETED'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
+        @{ Mode = 'ambiguous-oversized-candidate'; State = 'PROMOTION_COMPLETED'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
+        @{ Mode = 'ambiguous-oversized-stderr'; State = 'PROMOTION_COMPLETED'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
+        @{ Mode = 'oversized-resolver'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
         @{ Mode = 'ambiguous-wrong-shape'; State = 'PROMOTION_COMPLETED'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
         @{ Mode = 'ambiguous-pending'; State = 'PROMOTION_IN_PROGRESS'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote' }
         @{ Mode = 'ambiguous-failed'; State = 'PROMOTION_FAILED_OR_AMBIGUOUS'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
@@ -714,6 +726,10 @@ static class PromotionRefusal {
         Require (([IO.File]::ReadAllLines($invocations) -join ',') -ceq $case.Actions) 'refusal ends the operation without advancing or retrying'
     }
 
+    $exactBoundary = [CatDesk.DevLocalTarget.BoundedTextOutput]::Drain([IO.StringReader]::new('x' * 4096), 4096).GetAwaiter().GetResult()
+    $pastBoundary = [CatDesk.DevLocalTarget.BoundedTextOutput]::Drain([IO.StringReader]::new('x' * 16384), 4096).GetAwaiter().GetResult()
+    Require (-not $exactBoundary.Overflow -and $exactBoundary.Text.Length -eq 4096) 'reply exactly at the bound remains intact'
+    Require ($pastBoundary.Overflow -and $pastBoundary.Text.Length -eq 4096) 'reader drains excess output without buffering it'
     [IO.File]::WriteAllText((Join-Path $realCanonicalRoot 'refusal-mode.txt'), 'pipe-held')
     [IO.File]::WriteAllText($invocations, '')
     $pipeOwnerPath = Join-Path $realCanonicalRoot 'pipe-owner.pid'

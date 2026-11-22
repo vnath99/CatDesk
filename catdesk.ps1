@@ -1173,8 +1173,8 @@ function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$
             $info.RedirectStandardError = $true
             $process = [Diagnostics.Process]::Start($info)
             try {
-                $output = $process.StandardOutput.ReadToEndAsync()
-                $errors = $process.StandardError.ReadToEndAsync()
+                $output = [CatDesk.DevLocalTarget.BoundedTextOutput]::Drain($process.StandardOutput, 4096)
+                $errors = [CatDesk.DevLocalTarget.BoundedTextOutput]::Drain($process.StandardError, 0)
                 if (!$process.WaitForExit($wait)) {
                     if ($verb -ceq 'promote-resolve') {
                         try { $process.Kill(); [void]$process.WaitForExit(2000) } catch {}
@@ -1186,10 +1186,11 @@ function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$
                 if (-not [Threading.Tasks.Task]::WaitAll($streams, 2000)) {
                     throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
                 }
-                $wire = $output.GetAwaiter().GetResult()
-                if ($errors.GetAwaiter().GetResult().Length -ne 0 -or $wire.Length -gt 4096 -or $process.ExitCode -notin @(0, 2)) {
+                $capture = $output.GetAwaiter().GetResult()
+                if ($capture.Overflow -or $errors.GetAwaiter().GetResult().Overflow -or $process.ExitCode -notin @(0, 2)) {
                     throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
                 }
+                $wire = $capture.Text
                 if (-not $wire.TrimStart().StartsWith('{', [StringComparison]::Ordinal)) {
                     # ConvertFrom-Json can unwrap a one-element array at the
                     # pipeline boundary. The native reply is a JSON object.

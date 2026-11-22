@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 22.** Oversized native controller output can no longer grow the one-command promotion buffers. A resolved candidate runs once, and ambiguous output still requires the original result. The developer-cache normalization fixture has a separate baseline mismatch. [Evidence](docs/verification/PROMOTION_BOUNDED_NATIVE_OUTPUT_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** Backup intake checks original linked Git metadata in scratch before restoring a missing Web workspace. Wrong backlinks, redirected common directories, wrong branches, missing or corrupt indexes, alternates and the in-place original path fail admission. [Evidence](docs/verification/WEB_WORKTREE_BACKUP_INTAKE_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** The original shared Git backup must also contain the canonical control checkout's linked-worktree entry. The read-only target check distinguishes an unverified controller pointer, a missing project workspace, an unverified project pointer and an origin mismatch. [Evidence](docs/verification/WEB_WORKSPACE_BACKING_DIAGNOSTICS_2026_11_22.json).

@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
+using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 
 namespace CatDesk.DevLocalTarget {
@@ -18,6 +19,25 @@ namespace CatDesk.DevLocalTarget {
         public string Owner;
         public string Sha256;
         public long Length;
+    }
+    public sealed class BoundedTextOutput {
+        public string Text;
+        public bool Overflow;
+
+        // Drain both streams through EOF without retaining excess content.
+        // The caller owns the process and decides whether EOF was proved.
+        public static async Task<BoundedTextOutput> Drain(TextReader reader, int limit) {
+            var text = new StringBuilder();
+            var buffer = new char[1024];
+            bool overflow = false;
+            int count;
+            while ((count = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) != 0) {
+                int keep = Math.Min(count, limit - text.Length);
+                if (keep > 0) text.Append(buffer, 0, keep);
+                if (keep < count) overflow = true;
+            }
+            return new BoundedTextOutput { Text = text.ToString(), Overflow = overflow };
+        }
     }
     public sealed class ReadOnlyScope : IDisposable {
         public const string TemplateSha256 = "__NATIVE_TEMPLATE_SHA256__";

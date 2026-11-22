@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T23:16:19Z",
+  "scope": "WINDOWS_FIXTURE_ONE_COMMAND_BACKEND_PROMOTION_OUTPUT_BOUND",
+  "baseline": "80df6d5bba3163c3254e0e6b906632cc65addd9c",
+  "change": {
+    "stdoutRetainedCharacterLimit": 4096,
+    "stderrRetainedCharacterLimit": 0,
+    "stderrContentCausesRefusal": true,
+    "drainDeadlineAndExitOwnershipUnchanged": true,
+    "oversizedNativeTextNeverParsedOrEmitted": true
+  },
+  "verification": {
+    "windowsPowerShell51LifecyclePassed": true,
+    "powerShell7LifecyclePassed": true,
+    "realWindowsFixtureControllers": true,
+    "stdoutBoundaryAndOversizeRetentionChecked": true,
+    "largeResolverRefusedWithoutCandidate": true,
+    "largeCandidateStdoutOrStderrUsedOneExactResultRead": true,
+    "openPipeStillFenced": true,
+    "candidateReplayObserved": false
+  },
+  "additionalSuite": {
+    "command": "pwsh -NoProfile -NonInteractive -File scripts/test-catdesk-dev-local-target.ps1 -NativeFixtures",
+    "state": "OPTIN_NORMALIZATION_SHAPE_CHANGED",
+    "reproducedOnUnmodifiedBaseline": true,
+    "nativeHelperReached": false,
+    "coverage": "The independent developer-cache compatibility guard refuses before the changed shared helper loads. The two lifecycle suites exercise the helper during promotion fixtures."
+  },
+  "installedReleaseActions": 0,
+  "wakeBrokerStarts": 0,
+  "wakeSelectionSubmissions": 0,
+  "installedWebCycleAccepted": false
+}
