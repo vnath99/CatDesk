@@ -542,3 +542,11 @@ Evidence: [docs/verification/WAKE_V3_REVIEWED_SELECTION_INTAKE_2026_11_21.json](
 Agent: CatDesk development. Source: 84c9f4040bdae2a87cbc44d3896e4ed2702a0352. Outcome: partial. Exact V3 operator wrapper and signer passed independent source review, eleven inert cases and read-only installed broker preflight. Next: Enrolled administrator signs and submits the one exact V3 selection through the reviewed local wrapper. Independently verify stopped selection and preserve the separate backend promotion gate.
 
 Evidence: [docs/verification/WAKE_V3_OPERATOR_HANDOFF_2026_11_21.json](docs/verification/WAKE_V3_OPERATOR_HANDOFF_2026_11_21.json); command: Exact pin review, eleven inert cases and native read-only preflight; exit 0; SHA-256 0ea427e3091d7ad0d7a6673b892f4456cd2e8b5bd963ef6f84a3f42794335bbf.
+
+<!-- catdesk-activity:wake-v3-readback-preparation-nov21 sha256:d0958e92aa93837a2fcb8b7ba9a18ccc0fe1b074d4069825e1c3018e23144ab0 -->
+
+## 2026-11-22T00:19:41Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 19600260189954f3782d1d5ea22fcfe1a060a95e. Outcome: partial. Independent read-only installed V3 observer prepared with thirteen passing inert checks and exact source review. Next: Retain the unchanged V3 operator handoff and verify the installed selection with the prepared observer once genuine completion exists.
+
+Evidence: [docs/verification/WAKE_V3_INSTALLED_READBACK_PREPARATION_2026_11_21.json](docs/verification/WAKE_V3_INSTALLED_READBACK_PREPARATION_2026_11_21.json); command: Independent observer review and thirteen inert result ledger and preservation assertions; exit 0; SHA-256 4b0ae4de15b088771ec179da20c2d96c54710de385f780de496a6d0c644aa577.

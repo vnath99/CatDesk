@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T00:19:41.1056362Z",
+  "observedLocal": "2026-11-21T19:19:41.1056362-05:00",
+  "scope": "PREPARED_READ_ONLY_INSTALLED_V3_SELECTION_OBSERVER",
+  "observerSha256": "ee9d77dfef2fb5c3576dbc07fe21dc14495dcde12ace3d17558e35f83f6c7e57",
+  "fixtureSha256": "629843a144f689ed86dc2c1ea5bc934f80c98f02caa19503905e182b5b5dcfa1",
+  "independentSourceReview": "PASS",
+  "independentReviewer": "wake_bootstrap_reviewer",
+  "inertAssertionsPassed": 13,
+  "operatorStateAtInspection": "V3_OPERATOR_ATTEMPT_ABSENT",
+  "checksRequiredOnExecution": {
+    "exactTypedOperatorAndNativeCompleteResult": true,
+    "protectedLedgerPhases": 8,
+    "protectedLedgerAttemptRecords": 2,
+    "oldRawSelectionAndSignedEnvelopeEscrow": true,
+    "sameInstalledPolicyAndPhysicalWakeRoot": true,
+    "candidateAndFallbackRuntimeManifests": 2,
+    "installedArtifacts": 8,
+    "unrelatedWakeRegistryAndHistoryHashes": 893,
+    "brokerAndWakeStopped": true
+  },
+  "protectedReadsPerformedByFixture": 0,
+  "protectedWrites": 0,
+  "signatureOrSubmissionPerformed": false,
+  "installedSelectionVerified": false,
+  "liveWebAcceptance": false
+}
