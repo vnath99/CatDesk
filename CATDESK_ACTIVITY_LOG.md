@@ -1198,3 +1198,11 @@ Evidence: [docs/verification/PROMOTION_RETAINED_HISTORY_AFTER_SUCCESSOR_2026_11_
 Agent: Codex. Source: 07d390dcd89444b7779ff0cff1d0b00c7d63e9f5. Outcome: partial. The existing backend-only supervisor now requests rollback after a verified owned failure of a completed reviewed promotion. Disposable Windows tests authenticated the real retained release after failed startup and after an interrupted pair restore, and preserved the pending-result and authentication fences. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/BACKEND_SUPERVISED_PROMOTION_ROLLBACK_2026_11_22.json](docs/verification/BACKEND_SUPERVISED_PROMOTION_ROLLBACK_2026_11_22.json); command: pwsh -NoProfile -File scripts/test-catdesk-autostart-supervisor.ps1; exit 0; SHA-256 b0e9491e11e27e1f36dca737d60e06d193458232a838b9af2950c7b294a34573.
+
+<!-- catdesk-activity:promotion-retirement-with-serving-source-20261122 sha256:9ecbc71dcbfedf98307e89a1113c7e8726fca2d9d6a086c93e3d1ed8d38fc5d4 -->
+
+## 2026-11-22T11:44:04Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 47ff8a9de90217defd9e07dc033a479ff112cf22. Outcome: partial. The existing one-hash retirement admission now permits the exact later canonical loopback owner when the original promotion and handoff are terminal. Native Windows inspection preserved a private serving owner and kept identical durable proof after exit. Fifty-nine native tests passed. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/PROMOTION_RETIREMENT_WITH_SERVING_SOURCE_2026_11_22.json](docs/verification/PROMOTION_RETIREMENT_WITH_SERVING_SOURCE_2026_11_22.json); command: cargo test --locked --offline --bin catdesk daemon_reload:: -- --test-threads=1; exit 0; SHA-256 8a2cd0028f9240d7d6dd4e6d55472c84ad84c9e9677cce91f03dd88338f68f95.

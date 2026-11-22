@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T11:44:04Z",
+  "scope": "DISPOSABLE_WINDOWS_TERMINAL_RETIREMENT_SERVING_OWNER_OBSERVATION",
+  "sourceCommit": "47ff8a9de90217defd9e07dc033a479ff112cf22",
+  "baselineSourceCommit": "e5d1254ca73db77915f67142bfa359890a3c1586",
+  "privateFixtureSha256": "71a6d5e2dfab49d7bcaeba1c3634d85f7290fa68df866ce3f2e94893f6dd3476",
+  "startedUtc": "2026-11-22T11:42:22.818308Z",
+  "finishedUtc": "2026-11-22T11:42:31.178632Z",
+  "checks": {
+    "baselineRefusedExactServingOwner": true,
+    "fixedInspectionVerifiedSameNativeProcessAndPrivateLoopbackListener": true,
+    "ownerContinuedServingDuringObservation": true,
+    "missingHandoffRefused": true,
+    "ownerPredatingCompletedHandoffRefused": true,
+    "unexpectedDaemonArgumentsRefused": true,
+    "durableProofIdenticalAfterOwnerExit": true,
+    "fixtureFilePinsMatched": 7,
+    "ownedFixtureListenersExited": 2,
+    "fixtureRemoved": true
+  },
+  "tests": {
+    "nativeWindowsPassed": 59,
+    "nativeWindowsFailed": 0,
+    "format": "PASS"
+  },
+  "preliminaryFixtureCorrection": "Module autoload replaced the fixture listener shim during an initial read-only check. The observed owner change was rejected. The qualifying test imported NetTCPIP before defining its shim and used only the private listener.",
+  "limits": "The fixed production inspection ran under Windows PowerShell with actual private TCP, CIM and Process observations. Test code mapped the private listener port into the fixed request and used a disposable executable and handoff. The subsequent reviewed promotion, installed fixed port operation and Web cycle were outside the test.",
+  "productionWrites": 0,
+  "productionServiceOperations": 0,
+  "installedAcceptance": false
+}
