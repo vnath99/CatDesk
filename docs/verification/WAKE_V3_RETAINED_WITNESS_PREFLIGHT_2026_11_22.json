@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T09:54:58.4372571Z",
+  "scope": "RELOCATED_HISTORICAL_WITNESS_AND_ACTUAL_PRE_SELECTION_READ_ONLY",
+  "originalObserverSha256": "e50de5c83143edbc7e2cf3e71bb0e95d92e4b52852c476f752513ae970c26cdd",
+  "relocatedObserverSha256": "87cbd6072d06286f8895c7dba87d69cde78e58b95639d4f41057b4df79b88c94",
+  "historicalWitnessSha256": "0aeae976f04319202060f2bf8e5bb2bb51ad0806dcf717273e2f1a3545442d7a",
+  "qualificationScriptSha256": "af5e0c041cb9d4c3151f01e66307fb9c79a421e590a3ca99b4991edf4692c04a",
+  "originalFunctionsUnchanged": 12,
+  "targetedFixtureCasesPassed": 6,
+  "originalWitnessNeeded": false,
+  "actualPreservationPinsMatched": 894,
+  "operatorAttemptPresent": false,
+  "protectedWrites": 0,
+  "independentReviewOfRelocatedVariant": false,
+  "installedSelectionVerified": false,
+  "liveWebAcceptance": false
+}
