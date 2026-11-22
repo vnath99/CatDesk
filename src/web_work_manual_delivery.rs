@@ -135,6 +135,7 @@ fn deliver_with_sender(
                     return Err("WEB_WORK_DELIVERY_SELECTION_CHANGED".into());
                 }
                 ledger.require_ordinary_request(request_id)?;
+                execution_lane::require_owner(workspace, project, &record)?;
                 crate::project_mcp_task::authorize_manual_wake_delivery(
                     prepared.scope(),
                     &record,

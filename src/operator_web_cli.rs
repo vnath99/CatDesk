@@ -194,6 +194,11 @@ pub(crate) enum WebAction {
         project_id: String,
         input_file: PathBuf,
     },
+    WorkLane {
+        project_id: String,
+        request_id: String,
+        select: bool,
+    },
     WorkAssociate {
         project_id: String,
         input_file: PathBuf,
@@ -379,6 +384,20 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         return Err("WEB_USAGE: invalid project ID".into());
     }
     match (group, verb) {
+        ("work", "lane-select" | "lane-yield") => {
+            let request_id = options
+                .remove("--request-id")
+                .filter(|id| id.len() <= 128 && catdesk_wake::protocol::valid_id(id))
+                .ok_or("WEB_USAGE: --request-id is required")?;
+            if !options.is_empty() {
+                return Err("WEB_USAGE: unexpected execution lane option".into());
+            }
+            Ok(WebAction::WorkLane {
+                project_id: project_id.into(),
+                request_id: request_id.into(),
+                select: verb == "lane-select",
+            })
+        }
         ("work", "manual-wake-deliver-next") if options.is_empty() => {
             Ok(WebAction::WorkManualWakeDeliverNext {
                 project_id: project_id.into(),
@@ -2222,6 +2241,13 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             request_id,
         } => crate::web_work::deliver(&workspace, &project_id, &request_id),
+        WebAction::WorkLane {
+            project_id,
+            request_id,
+            select,
+        } => {
+            crate::web_work::transition_execution_lane(&workspace, &project_id, &request_id, select)
+        }
         WebAction::WorkManualWakeDeliverNext { project_id } => {
             crate::web_work::deliver_next_manual_wake(&workspace, &project_id)
         }

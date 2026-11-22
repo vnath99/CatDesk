@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 5:13 p.m. EST.** Serial development now supports local selection, queued project status, and exact safe yield through the existing work registry. It is inactive until first selection. Native Codex and read-only observations are outside the direct-Web effects gate. The frozen backend review, original Git backing and reviewed installed release still gate the first Web cycle. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_LANE_2026_11_22.json).
+
 **November 22, 5:05 p.m. EST.** Assigned requests cannot release their original task through retirement while a call or self-Wake is unresolved. The existing never-started withdrawal and exact review pre-edit retirement are separate supported cases. The first installed cycle still needs the original backing worktree and the frozen backend review and promotion. [Evidence](docs/verification/WEB_ASSIGNED_WORK_RETIREMENT_2026_11_22.json).
 
 **November 22, 4:58 p.m. EST.** A completed journal record under a second call ID can represent the same task-issued Wake. The same-event readback and reconciliation paths check every record's immutable hashes, keep the original event and use a stable call selector. The frozen backend review, original Git backing and approved installed release transition remain the first Web cycle gates. [Evidence](docs/verification/MANUAL_WAKE_REPEATED_CALL_RECOVERY_2026_11_22.json).

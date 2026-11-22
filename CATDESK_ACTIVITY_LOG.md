@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 22:13 UTC — add a durable direct-Web execution owner.** The existing operator CLI selects one open assignment, and the original work records retain queued peers. Yield uses the project lease and exact task/Wake evidence. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_LANE_2026_11_22.json).
+
 **2026-11-22 22:05 UTC — preserve assigned work through retirement.** Terminal work resolution now checks the same task journal and exact self-Wake evidence for both completion and retirement before changing the source delivery or ledger. [Evidence](docs/verification/WEB_ASSIGNED_WORK_RETIREMENT_2026_11_22.json).
 
 **2026-11-22 21:58 UTC — recognize repeated calls for the same manual Wake.** One-shot selection and proof-only recovery now validate every recorded call against the immutable event. Two matching journal records count as one delivery; an actual conflict still stops admission. [Evidence](docs/verification/MANUAL_WAKE_REPEATED_CALL_RECOVERY_2026_11_22.json).

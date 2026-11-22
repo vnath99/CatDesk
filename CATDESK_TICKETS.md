@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** Opt-in operator serial admission now binds the active project, request, source event and archived assignment. A self-Wake retains the owner across the response timer, and pending effects refuse a yield. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_LANE_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** Retirement now shares the existing closure guard. The source event and original assignment remain available for recovery until their required evidence is settled. [Evidence](docs/verification/WEB_ASSIGNED_WORK_RETIREMENT_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** An equivalent repeated task call no longer makes one pending Wake look like two. A mismatched result hash and two different pending events still fail closed. [Evidence](docs/verification/MANUAL_WAKE_REPEATED_CALL_RECOVERY_2026_11_22.json).

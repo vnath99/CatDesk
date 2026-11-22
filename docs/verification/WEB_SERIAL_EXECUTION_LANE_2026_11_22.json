@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T22:16:00Z",
+  "scope": "WINDOWS_DEVELOPMENT_OPERATOR_SELECTED_DIRECT_WEB_EXECUTION",
+  "baseline": "20a732c698902436c54ac033296df0160d9d8381",
+  "owner": "Exact project, OPEN request, source event and archived assignment in the existing Web work state directory.",
+  "selection": "Explicit local operator command. The first selection refuses pre-existing tool journals for any open linked assignment. Pending peers retain their original work records. Selection and work closure share the existing registration lock.",
+  "scopedEffects": [
+    "Patch preparation and apply",
+    "Sandbox verification",
+    "Scoped Git checkpoint and sync",
+    "Manual self-Wake intent and scoped send"
+  ],
+  "yield": "The exact current owner remains active while a task call or self-Wake response is unresolved. A proved yield leaves its request OPEN. An exactly closed owner also permits new selection.",
+  "independent": "Project status, existing reads and optional native Codex ownership remain separate from this direct Web effect gate.",
+  "twoProjectDispatcherFixture": {
+    "passed": 1,
+    "testSeconds": 33.70,
+    "preExistingOpenTaskJournalRefusedActivation": true,
+    "initialSelectionThroughExistingOperatorCli": true,
+    "queuedProjectDidNotOpenTaskJournalForRefusedPatch": true,
+    "queuedReadSucceeded": true,
+    "queuedProjectSelfWakeRefused": true,
+    "originalOwnerAndReceiptRetainedUntilResponseComplete": true,
+    "secondProjectEditedOnlyItsAssignedWorktreeAfterYield": true,
+    "releasedProjectCouldNotApplyItsPreviouslyPreparedPatch": true,
+    "originalQueuedWorkRecordPreserved": true,
+    "browserReceiptSimulated": true
+  },
+  "existingWebWorkRegressionTests": {
+    "command": "cargo test --offline --locked --bin catdesk -- web_work:: --test-threads=1",
+    "passed": 19,
+    "failed": 0
+  },
+  "limitations": {
+    "enabledByDefault": false,
+    "automaticQueueOrder": false,
+    "actualChatGptWebBrowserInvoked": false,
+    "productionChanges": false,
+    "multiProjectInstalledAcceptance": false
+  },
+  "next": "Qualify the first actual installed v5 Web edit and self-Wake, then exercise the lane with two independently registered installed conversations and the existing receipts."
+}

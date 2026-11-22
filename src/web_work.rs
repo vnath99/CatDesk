@@ -7,7 +7,7 @@ use crate::{
         resolve_registered_project_from_control_root,
     },
     mcp, wake_protocol_client,
-    web_work_state::WorkLedger,
+    web_work_state::{WorkLedger, execution_lane},
 };
 use catdesk_wake::{protocol, store::now};
 use serde::Deserialize;
@@ -562,14 +562,28 @@ fn authorize_native_status(
     )
 }
 
+#[cfg(all(test, windows))]
 pub(crate) fn authorized_assignment(
     workspace: &Path,
     args: Value,
     key: &str,
 ) -> Result<Value, String> {
+    authorized_assignment_for_tool(workspace, args, key, false)
+}
+
+pub(crate) fn authorized_assignment_for_tool(
+    workspace: &Path,
+    args: Value,
+    key: &str,
+    requires_lane: bool,
+) -> Result<Value, String> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {
-        let result = assigned_action(workspace, args.clone(), AssignmentAction::Authorize(key));
+        let result = assigned_action(
+            workspace,
+            args.clone(),
+            AssignmentAction::Authorize { key, requires_lane },
+        );
         if matches!(
             result.as_ref().map_err(String::as_str),
             Err("WEB_CONTEXT_REGISTRATION_BUSY" | "WEB_TARGET_WAKE_CONFIG_BUSY")
@@ -698,6 +712,7 @@ fn manual_wake_once_with_preparation(
                 record.target == expected,
             )?;
             crate::project_mcp_task::authorized_manual_wake_assignment(scope, &record, key)?;
+            execution_lane::require_owner(workspace, &request.project_id, &record)?;
             wake_protocol_client::preflight_prepared_invitation(&prepared, &expected)?;
             crate::project_mcp_task::journal_manual_wake(
                 scope,
@@ -763,7 +778,10 @@ enum AssignmentAction<'a> {
         allow_git_sync: bool,
         native_queue_task_id: Option<&'a str>,
     },
-    Authorize(&'a str),
+    Authorize {
+        key: &'a str,
+        requires_lane: bool,
+    },
 }
 
 fn assigned_action(
@@ -872,9 +890,12 @@ fn assigned_action(
                         )
                     }
                 }
-                AssignmentAction::Authorize(key) => {
+                AssignmentAction::Authorize { key, requires_lane } => {
                     let archive =
                         crate::project_mcp_task::authorized_web_assignment(scope, &record, key)?;
+                    if requires_lane {
+                        execution_lane::require_owner(workspace, &request.project_id, &record)?;
+                    }
                     // Do not acquire the task writer during authorization: stale or
                     // mismatched caller identity must refuse before task startup.
                     Ok(
@@ -883,6 +904,83 @@ fn assigned_action(
                 }
                 AssignmentAction::Associate(_) => unreachable!(),
             }
+        },
+    )
+}
+
+/// Local operator only. Select one existing assignment or explicitly yield
+/// it at a quiescent boundary. No task, browser, grant or worker is started.
+pub(crate) fn transition_execution_lane(
+    workspace: &Path,
+    project: &str,
+    request_id: &str,
+    select: bool,
+) -> Result<Value, String> {
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "WEB_WORK_CONTROL_UNAVAILABLE")?;
+    let prepared = PreparedProjectScopeV1::resolve(&workspace, project)
+        .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+    let lease = crate::operator_facade::acquire_web_work_lease(&workspace, project)?;
+    let ledger = WorkLedger::open_read_only(&workspace, project)?;
+    let record = ledger
+        .record(request_id)?
+        .ok_or("WEB_WORK_REQUEST_MISSING")?;
+    ledger.require_ordinary_request(request_id)?;
+    if record.phase != "OPEN" || record.task_assignment.is_none() {
+        return Err("WEB_WORK_ASSIGNMENT_REQUIRED".into());
+    }
+    let paired = mcp::operator_read_project_web_target(&workspace, project)
+        .map_err(|_| "WEB_WORK_PAIRED_TARGET_REQUIRED")?
+        .ok_or("WEB_WORK_PAIRED_TARGET_REQUIRED")?;
+    let wake = catdesk_wake::store::Store::open_read_only(
+        &wake_protocol_client::wake_root_for_workspace(&workspace)?,
+    )?;
+    if !select {
+        execution_lane::require_owner(&workspace, project, &record)?;
+        crate::project_mcp_task::require_completed_task_continuations(
+            prepared.scope(),
+            &record,
+            &wake,
+        )?;
+    }
+    mcp::with_current_project_web_target(
+        &workspace,
+        project,
+        paired.generation,
+        &paired.sha256,
+        |workspace, paired| {
+            prepared
+                .revalidate_registration()
+                .map_err(|_| "WEB_WORK_PROJECT_REGISTRATION_CHANGED")?;
+            if ledger.record(request_id)?.as_ref() != Some(&record) {
+                return Err("WEB_WORK_ASSIGNMENT_SOURCE_CHANGED".into());
+            }
+            let current = protocol::Target::new(paired.generation, paired.url.clone())?;
+            lease.check_source_task(&record.target, &current, &record.event_id)?;
+            if select && !execution_lane::is_enabled(workspace)? {
+                let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+                    workspace.join(".catdesk/projects"),
+                )
+                .and_then(|store| store.load_registry())
+                .map_err(|_| "WEB_WORK_REGISTRY_UNAVAILABLE")?;
+                for registered in registry.projects {
+                    let other_id = &registered.project_id;
+                    if let Some(open) =
+                        WorkLedger::open_read_only(workspace, other_id)?.active_record()?
+                        && let Some(link) = open.task_assignment
+                    {
+                        let scope =
+                            resolve_registered_project_from_control_root(workspace, other_id)
+                                .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+                        crate::project_mcp_task::require_unstarted_lane_task(
+                            &scope,
+                            &link.task_id,
+                        )?;
+                    }
+                }
+            }
+            execution_lane::transition(workspace, project, &record, select)
         },
     )
 }

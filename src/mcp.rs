@@ -6532,6 +6532,7 @@ fn web_project_registry_status_with(
             let mut rollover = rollover_status(workspace, project_id);
             annotate_rollover_current_target(&mut rollover, paired_target);
             let mut work = crate::web_work_state::WorkLedger::status(workspace, project_id);
+            work["executionLane"] = crate::web_work_state::execution_lane::status(workspace, project_id);
             work["delivery"] = match &wake_progress {
                 Ok((events, deliveries)) => {
                     web_work_delivery_progress(project_id, &work, paired_target, events, deliveries)

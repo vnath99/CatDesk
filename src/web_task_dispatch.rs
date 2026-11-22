@@ -214,8 +214,13 @@ impl Call {
 }
 
 fn authorize(control: &Path, call: &Call) -> Result<PathBuf, String> {
-    let admission =
-        crate::web_work::authorized_assignment(control, call.pins(), &call.execution_key)?;
+    let requires_lane = crate::project_mcp_task::tool_enters_web_execution_lane(&call.tool);
+    let admission = crate::web_work::authorized_assignment_for_tool(
+        control,
+        call.pins(),
+        &call.execution_key,
+        requires_lane,
+    )?;
     if admission["taskId"].as_str() != Some(&call.task_id) {
         return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
     }
@@ -3199,6 +3204,164 @@ pub(crate) mod tests {
             serde_json::from_slice(&fs::read(grant["executionKeyFile"].as_str().unwrap()).unwrap())
                 .unwrap();
         (alpha, beta)
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn serial_web_lane_preserves_owner_through_wake_and_allows_safe_yield() {
+        use crate::web_work_state::{WorkLedger, execution_lane};
+        let (alpha, beta) = paired_fixtures(false);
+        let wake = ready_manual_wake(&alpha);
+        let root = &alpha.control;
+        assert_eq!(
+            execution_lane::status(root, "alpha")["status"],
+            "NOT_ENABLED"
+        );
+        let transition = |project: &str, select| {
+            crate::web_work::transition_execution_lane(root, project, "request-a", select)
+        };
+        let select_alpha = [
+            "operator",
+            "web",
+            "work",
+            "lane-select",
+            "--project-id",
+            "alpha",
+            "--request-id",
+            "request-a",
+        ]
+        .map(str::to_string);
+        let old_journal = root.join(".catdesk/project-mcp-tasks/beta/task-fixture/journal");
+        fs::create_dir(&old_journal).unwrap();
+        assert_eq!(
+            transition("alpha", true).unwrap_err(),
+            "WEB_WORK_LANE_EXISTING_TASK_ACTIVITY"
+        );
+        assert_eq!(
+            execution_lane::status(root, "alpha")["status"],
+            "NOT_ENABLED"
+        );
+        fs::remove_dir(&old_journal).unwrap();
+        let action = crate::operator_facade::parse_operator_action(select_alpha)
+            .unwrap()
+            .unwrap();
+        let selected = crate::operator_facade::execute_operator_action(action, root)
+            .await
+            .unwrap();
+        assert_eq!(selected["status"], "ACTIVE");
+        assert_eq!(execution_lane::status(root, "beta")["status"], "QUEUED");
+        assert_eq!(
+            transition("beta", true).unwrap_err(),
+            "WEB_WORK_LANE_ALREADY_OWNED"
+        );
+
+        let preview = |f: &Fixture| {
+            request(
+                f,
+                "serial-preview",
+                "patch.preview",
+                json!({"patchId":"serial-patch","operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 52 }"}]}),
+            )
+        };
+        assert_eq!(
+            call(&beta, preview(&beta)).await["error"]["message"],
+            "WEB_WORK_EXECUTION_QUEUED"
+        );
+        assert!(
+            !root
+                .join(".catdesk/project-mcp-tasks/beta/task-fixture/journal")
+                .exists()
+        );
+        let alpha_preview = call(&alpha, preview(&alpha)).await;
+        assert!(alpha_preview.get("error").is_none(), "{alpha_preview}");
+        let beta_read = call(
+            &beta,
+            request(&beta, "queued-read", "read", json!({"path":"src/lib.rs"})),
+        )
+        .await;
+        assert!(beta_read.get("error").is_none(), "{beta_read}");
+        let queued = WorkLedger::open_read_only(root, "beta")
+            .unwrap()
+            .record("request-a")
+            .unwrap()
+            .unwrap();
+        assert_eq!(queued.phase, "OPEN");
+        assert_eq!(
+            call(&beta, manual_request(&beta, "not-owner", "beta-turn")).await["error"]["message"],
+            "WEB_WORK_EXECUTION_QUEUED"
+        );
+        let alpha_wake = call(&alpha, manual_request(&alpha, "alpha-wake", "alpha-turn")).await;
+        assert!(alpha_wake.get("error").is_none(), "{alpha_wake}");
+        let event_id = alpha_wake["result"]["structuredContent"]["eventId"]
+            .as_str()
+            .unwrap();
+        assert_eq!(
+            transition("alpha", false).unwrap_err(),
+            "WEB_WORK_CONTINUATION_PENDING"
+        );
+        let event = wake
+            .events()
+            .unwrap()
+            .into_iter()
+            .find(|event| event.event_id == event_id)
+            .unwrap();
+        // Simulate the exact browser receipt without opening a browser or
+        // sending any message. A delivered USER alone cannot release ownership.
+        sent(&wake, &event);
+        assert_eq!(
+            transition("alpha", false).unwrap_err(),
+            "WEB_WORK_CONTINUATION_PENDING"
+        );
+        assert_eq!(execution_lane::status(root, "alpha")["status"], "ACTIVE");
+        wake.complete_timer(event_id).unwrap();
+        assert_eq!(transition("alpha", false).unwrap()["status"], "YIELDED");
+        assert_eq!(
+            execution_lane::status(root, "alpha")["status"],
+            "AVAILABLE_FOR_SELECTION"
+        );
+        assert_eq!(transition("beta", true).unwrap()["status"], "ACTIVE");
+        let beta_preview = call(&beta, preview(&beta)).await;
+        assert!(beta_preview.get("error").is_none(), "{beta_preview}");
+        let beta_apply = call(
+            &beta,
+            request(
+                &beta,
+                "serial-apply",
+                "patch.apply",
+                json!({"patchId":"serial-patch"}),
+            ),
+        )
+        .await;
+        assert!(beta_apply.get("error").is_none(), "{beta_apply}");
+        assert_eq!(
+            call(
+                &alpha,
+                request(
+                    &alpha,
+                    "previous-owner",
+                    "patch.apply",
+                    json!({"patchId":"serial-patch"})
+                )
+            )
+            .await["error"]["message"],
+            "WEB_WORK_EXECUTION_QUEUED"
+        );
+        assert!(
+            fs::read_to_string(beta.task.join("src/lib.rs"))
+                .unwrap()
+                .contains("{ 52 }")
+        );
+        assert!(
+            fs::read_to_string(alpha.task.join("src/lib.rs"))
+                .unwrap()
+                .contains("{ 1 }")
+        );
+        let reopened = WorkLedger::open_read_only(root, "beta")
+            .unwrap()
+            .record("request-a")
+            .unwrap()
+            .unwrap();
+        assert_eq!(reopened, queued);
+        assert_eq!(wake.delivery(event_id).unwrap().unwrap().phase, Phase::Sent);
     }
 
     async fn central_http_route_fixture(cached: bool) {

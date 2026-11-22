@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — serial Web execution in development.** One persistent operator-selected assignment owns scoped edits, verification, Git actions and self-Wake. Queue order is operator-selected. The first installed Web cycle and multi-project browser acceptance remain open. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_LANE_2026_11_22.json).
+
 **November 22 — safe release of exact Web work ownership.** Development checks pending effects and response evidence on both terminal outcomes. Terminal ownership safety is one prerequisite for yielding a shared lane. Installed Web continuation and serial lane acceptance remain open. [Evidence](docs/verification/WEB_ASSIGNED_WORK_RETIREMENT_2026_11_22.json).
 
 **November 22 — recover a manual Wake with repeated MCP call IDs.** Development can select an original task-issued Wake whose identical intent was recorded under more than one call ID. Installed Web delivery and same-task continuation remain open. [Evidence](docs/verification/MANUAL_WAKE_REPEATED_CALL_RECOVERY_2026_11_22.json).

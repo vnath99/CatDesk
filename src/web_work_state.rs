@@ -14,6 +14,8 @@ use uuid::Uuid;
 const MAX_RECORDS: usize = 128;
 const MAX_BYTES: usize = 256 * 1024;
 
+#[path = "web_execution_lane.rs"]
+pub(crate) mod execution_lane;
 #[path = "web_review_authorization.rs"]
 mod review_authorization;
 pub(crate) use review_authorization::{
@@ -243,31 +245,7 @@ impl WorkLedger {
         if bytes.len() > MAX_BYTES {
             return Err("WEB_WORK_LEDGER_FULL".into());
         }
-        let parent = self.path.parent().ok_or("WEB_WORK_LEDGER_UNSAFE")?;
-        plain(parent.parent().ok_or("WEB_WORK_LEDGER_UNSAFE")?, true)?;
-        plain(parent, true)?;
-        match fs::symlink_metadata(&self.path) {
-            Ok(_) => plain(&self.path, false)?,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(_) => return Err("WEB_WORK_LEDGER_UNAVAILABLE".into()),
-        }
-        let temporary = parent.join(format!(".{}.tmp", Uuid::new_v4()));
-        let outcome = (|| {
-            let mut file = OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&temporary)
-                .map_err(|_| "WEB_WORK_LEDGER_UNAVAILABLE")?;
-            file.write_all(&bytes)
-                .and_then(|_| file.sync_all())
-                .map_err(|_| "WEB_WORK_LEDGER_UNAVAILABLE")?;
-            drop(file);
-            replace_atomic(&temporary, &self.path)
-        })();
-        if outcome.is_err() {
-            let _ = fs::remove_file(&temporary);
-        }
-        outcome?;
+        write_work_state(&self.path, &bytes)?;
         if self.load()? != *state {
             return Err("WEB_WORK_LEDGER_READBACK_CHANGED".into());
         }
@@ -533,6 +511,34 @@ impl WorkLedger {
             |_| json!({"status":"ATTENTION","reason":"WEB_WORK_LEDGER_UNAVAILABLE"}),
         )
     }
+}
+
+fn write_work_state(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let parent = path.parent().ok_or("WEB_WORK_LEDGER_UNSAFE")?;
+    plain(parent.parent().ok_or("WEB_WORK_LEDGER_UNSAFE")?, true)?;
+    plain(parent, true)?;
+    match fs::symlink_metadata(path) {
+        Ok(_) => plain(path, false)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err("WEB_WORK_LEDGER_UNAVAILABLE".into()),
+    }
+    let temporary = parent.join(format!(".{}.tmp", Uuid::new_v4()));
+    let outcome = (|| {
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(|_| "WEB_WORK_LEDGER_UNAVAILABLE")?;
+        file.write_all(bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| "WEB_WORK_LEDGER_UNAVAILABLE")?;
+        drop(file);
+        replace_atomic(&temporary, path)
+    })();
+    if outcome.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    outcome
 }
 
 #[cfg(windows)]

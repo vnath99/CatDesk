@@ -1344,10 +1344,11 @@ fn check_linked_assignment(
     project: &ResolvedProjectScopeV1,
     inspected: &AssignmentInspection,
     lease: &crate::operator_facade::WebWorkLease,
+    requires_lane: bool,
 ) -> Result<(), String> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {
-        let result = check_linked_assignment_once(project, inspected, lease);
+        let result = check_linked_assignment_once(project, inspected, lease, requires_lane);
         if matches!(
             result.as_ref().map_err(String::as_str),
             Err("WEB_CONTEXT_REGISTRATION_BUSY" | "WEB_TARGET_WAKE_CONFIG_BUSY")
@@ -1364,6 +1365,7 @@ fn check_linked_assignment_once(
     project: &ResolvedProjectScopeV1,
     inspected: &AssignmentInspection,
     lease: &crate::operator_facade::WebWorkLease,
+    requires_lane: bool,
 ) -> Result<(), String> {
     let source = inspected
         .web_work
@@ -1397,9 +1399,35 @@ fn check_linked_assignment_once(
                 &record,
                 record.target == current,
             )?;
-            check_record_assignment(project, inspected, &record)
+            check_record_assignment(project, inspected, &record)?;
+            if requires_lane {
+                crate::web_work_state::execution_lane::require_owner(
+                    &project.control_workspace,
+                    &project.project.project_id,
+                    &record,
+                )?;
+            }
+            Ok(())
         },
     )
+}
+
+pub(crate) fn tool_enters_web_execution_lane(tool: &str) -> bool {
+    matches!(
+        tool,
+        "patch.preview" | "patch.apply" | "verify.command" | "git.checkpoint" | "git.sync"
+    )
+}
+
+pub(crate) fn require_unstarted_lane_task(
+    project: &ResolvedProjectScopeV1,
+    task_id: &str,
+) -> Result<(), String> {
+    let root = task_directory(project, task_id, false)?;
+    match fs::symlink_metadata(root.join("journal")) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        _ => Err("WEB_WORK_LANE_EXISTING_TASK_ACTIVITY".into()),
+    }
 }
 
 /// Admission is durable metadata only. It never starts a service, writer turn,
@@ -1508,7 +1536,7 @@ impl ProjectTask {
         require_registered_scope(project)?;
         let inspected = inspect_assignment(project, assignment, connection_seconds)?;
         if inspected.web_work.is_some() {
-            check_linked_assignment(project, &inspected, &project_lease)?;
+            check_linked_assignment(project, &inspected, &project_lease, false)?;
         }
         let linked_assignment = inspected.web_work.as_ref().map(|_| inspected.clone());
         #[cfg(windows)]
@@ -1802,6 +1830,7 @@ impl ProjectTask {
                         .project_lease
                         .as_ref()
                         .ok_or("PROJECT_TASK_RECOVERY_REQUIRED")?,
+                    tool_enters_web_execution_lane(&call.tool),
                 )?;
             }
             unregistered_task_root(&task.project, &task.root)?;
