@@ -204,7 +204,7 @@ fn run_one_service_submission() -> Result<()> {
             .as_str()
             .ok_or("WAKE_BROKER_REQUEST_OPERATION_UNSUPPORTED")?;
         let pins = crate::runtime::SameStateReadPinsV3::observe_for_operation(
-            &policy, &admission, operation,
+            &policy, &admission, operation, &purpose,
         )?;
         let grant = policy.verify_same_state_selection_v3(&frame, pins, &admission)?;
         let resources = crate::runtime::SameStateInstallResources::acquire(grant)?;

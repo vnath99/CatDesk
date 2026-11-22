@@ -376,13 +376,20 @@ impl Fixture {
         }
     }
     fn pins(&self, admission: &SameStateLedgerAdmissionV3) -> SameStateReadPinsV3 {
+        self.observe(admission, None).unwrap()
+    }
+    fn observe(
+        &self,
+        admission: &SameStateLedgerAdmissionV3,
+        local_previous: Option<&str>,
+    ) -> Result<SameStateReadPinsV3> {
         SameStateReadPinsV3::observe_with_mode(
             &self.policy,
             admission,
             SameStateIntakeV3::Isolated(self.intake.clone()),
             self.payload.operation == "ROLLBACK_SAME_STATE_RELEASE",
+            local_previous,
         )
-        .unwrap()
     }
     fn rollback() -> Self {
         Self::qualified_selection(false, true)
@@ -474,13 +481,21 @@ impl Fixture {
         admission: &SameStateLedgerAdmissionV3,
         envelope: Vec<u8>,
     ) -> PolicyVerifiedSameStateSelectionV3<'p> {
+        self.grant_with_pins(admission, envelope, self.pins(admission))
+    }
+    fn grant_with_pins<'p>(
+        &'p self,
+        admission: &SameStateLedgerAdmissionV3,
+        envelope: Vec<u8>,
+        pins: SameStateReadPinsV3,
+    ) -> PolicyVerifiedSameStateSelectionV3<'p> {
         let operator = crate::install_broker_operator::isolated_same_state_operator_fixture(
             &self.policy.readback().unwrap().operator_sid_sha256,
         );
         let frame =
             crate::install_broker_request::isolated_same_state_frame_fixture(envelope, operator);
         self.policy
-            .verify_same_state_selection_v3(&frame, self.pins(admission), admission)
+            .verify_same_state_selection_v3(&frame, pins, admission)
             .unwrap()
     }
     fn preserved(&self) {
@@ -577,6 +592,15 @@ fn same_state_local_user_enrolled_select_and_rollback_preserve_state() {
 fn same_state_local_user_gives_current_a_working_fallback_under_exclusive_pins() {
     for matches_binding in [false, true] {
         let mut fixture = Fixture::qualified_selection(true, false);
+        let unrelated: Value = serde_json::from_slice(&fixture.before).unwrap();
+        let unrelated = install_id(&unrelated).unwrap();
+        assert!(fixture.state.join("versions").join(unrelated).is_dir());
+        std::fs::rename(
+            fixture.intake.join("previous"),
+            fixture.path.join("unused-previous"),
+        )
+        .unwrap();
+        assert!(!fixture.intake.join("previous").exists());
         let working = fixture.payload.rollback_authority.release().clone();
         let mut original_release = working.clone();
         original_release.working_evidence = None;
@@ -598,7 +622,15 @@ fn same_state_local_user_gives_current_a_working_fallback_under_exclusive_pins()
         let preliminary = guard
             .same_state_admission_v3(&"0".repeat(64), 1000)
             .unwrap();
-        let mut pins = fixture.pins(&preliminary);
+        assert_eq!(
+            fixture
+                .observe(&preliminary, Some(unrelated))
+                .err()
+                .as_deref(),
+            Some("WAKE_SAME_STATE_LOCAL_PREDECESSOR_INVALID")
+        );
+        let id = working.manifest.package_id.as_str();
+        let mut pins = fixture.observe(&preliminary, Some(id)).unwrap();
         fixture.payload.state_snapshot = pins.snapshot().clone();
         let observed = pins.observed(&fixture.policy, &fixture.payload, &preliminary);
         drop(pins);
@@ -608,8 +640,11 @@ fn same_state_local_user_gives_current_a_working_fallback_under_exclusive_pins()
             let admission = guard
                 .same_state_admission_v3(&digest(&request), 1000)
                 .unwrap();
-            let resources =
-                SameStateInstallResources::acquire(fixture.grant(&admission, request)).unwrap();
+            let pins = fixture.observe(&admission, Some(id)).unwrap();
+            let resources = SameStateInstallResources::acquire(
+                fixture.grant_with_pins(&admission, request, pins),
+            )
+            .unwrap();
             let previous_dir = fixture
                 .state
                 .join("versions")
@@ -822,7 +857,8 @@ fn same_state_local_user_unknown_pointer_is_preserved_after_interruption() {
             &fixture.policy,
             &admission,
             SameStateIntakeV3::Isolated(fixture.intake.clone()),
-            true
+            true,
+            None,
         )
         .err()
         .unwrap(),
@@ -1894,7 +1930,8 @@ fn same_state_rollback_altered_previous_or_current_cas_refuses_without_intent() 
             &fixture.policy,
             &admission,
             SameStateIntakeV3::Isolated(fixture.intake.clone()),
-            true
+            true,
+            None,
         )
         .is_err()
     );

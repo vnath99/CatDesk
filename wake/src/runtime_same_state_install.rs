@@ -288,11 +288,28 @@ impl SameStateReadPinsV3 {
         policy: &BrokerProtectedPolicyV1,
         admission: &SameStateLedgerAdmissionV3,
         operation: &str,
+        request: &Value,
     ) -> Result<Self> {
+        let rollback_authority = &request["payload"]["rollbackAuthority"];
         match operation {
+            "SELECT_SAME_STATE_RELEASE"
+                if request["authorization"] == "LOCAL_USER_POLICY"
+                    && rollback_authority["mode"] == "VERIFIED_WORKING_PREVIOUS" =>
+            {
+                let id = rollback_authority["release"]["manifest"]["packageId"]
+                    .as_str()
+                    .ok_or("WAKE_SAME_STATE_LOCAL_PREDECESSOR_INVALID")?;
+                Self::observe_with_mode(
+                    policy,
+                    admission,
+                    SameStateIntakeV3::Fixed,
+                    false,
+                    Some(id),
+                )
+            }
             "SELECT_SAME_STATE_RELEASE" => Self::observe(policy, admission),
             "ROLLBACK_SAME_STATE_RELEASE" => {
-                Self::observe_with_mode(policy, admission, SameStateIntakeV3::Fixed, true)
+                Self::observe_with_mode(policy, admission, SameStateIntakeV3::Fixed, true, None)
             }
             _ => Err("WAKE_SAME_STATE_OPERATION_INVALID".into()),
         }
@@ -309,13 +326,14 @@ impl SameStateReadPinsV3 {
         admission: &SameStateLedgerAdmissionV3,
         intake: SameStateIntakeV3,
     ) -> Result<Self> {
-        Self::observe_with_mode(policy, admission, intake, false)
+        Self::observe_with_mode(policy, admission, intake, false, None)
     }
     fn observe_with_mode(
         policy: &BrokerProtectedPolicyV1,
         admission: &SameStateLedgerAdmissionV3,
         intake: SameStateIntakeV3,
         rollback: bool,
+        local_previous: Option<&str>,
     ) -> Result<Self> {
         let configured = policy.same_state_resource_v2()?;
         let root = PathBuf::from(&configured.path);
@@ -382,6 +400,18 @@ impl SameStateReadPinsV3 {
             .map_err(|_| "WAKE_SAME_STATE_SELECTION_INVALID")?;
         let previous = if let Some(target) = &target {
             RuntimePackagePinsV3::installed(&root, install_id(&target.pointer)?)?
+        } else if let Some(id) = local_previous {
+            // A request can name only current or recorded previous on the
+            // escrowed original selection. It never supplies a source path.
+            let inspected = install_selection::inspect_install_selection(&original_raw)?;
+            let selection = &inspected["selection"];
+            if selection.is_null()
+                || (selection["current"]["pointer"]["directory"].as_str() != Some(id)
+                    && selection["previous"]["pointer"]["directory"].as_str() != Some(id))
+            {
+                return Err("WAKE_SAME_STATE_LOCAL_PREDECESSOR_INVALID".into());
+            }
+            RuntimePackagePinsV3::installed(&root, id)?
         } else {
             match &intake {
                 #[cfg(test)]
@@ -756,7 +786,6 @@ pub(crate) struct SameStateInstallResources<'p> {
     _host: HostLease,
     _browser: File,
     _legacy_images: Vec<OfflineObjectPinV2>,
-    retained_current_as_previous: Option<RuntimePackagePinsV3>,
     failed_image_observations: Vec<FailedCurrentImageV3>,
     missing_images: Vec<PathBuf>,
     _failed_image_parents: Vec<(PathBuf, OfflineObjectPinV2)>,
@@ -790,21 +819,35 @@ impl<'p> SameStateInstallResources<'p> {
             .map_err(|_| "WAKE_SAME_STATE_SELECTION_INVALID")?;
         let rollback = grant.payload().operation == "ROLLBACK_SAME_STATE_RELEASE";
         let old_id = install_id(&original)?;
-        let mut retained_current_as_previous = {
-            let pins = grant.pins_mut()?;
+        let retained_current_as_previous = {
+            let mut pins = grant.pins_mut()?;
             if pins.previous.manifest().package_id == old_id {
                 if rollback || original.get("selection").is_none() {
                     return Err("WAKE_SAME_STATE_LEGACY_PREVIOUS_IMAGE_OVERLAP".into());
                 }
-                let mut installed =
-                    RuntimePackagePinsV3::installed_for_handoff(store.root(), old_id)?;
-                if original["selection"]["current"]["pointer"] != installed.pointer() {
+                if original["selection"]["current"]["pointer"] != pins.previous.pointer() {
                     return Err("WAKE_SAME_STATE_PUBLISHED_PACKAGE_MISMATCH".into());
                 }
-                verify_retained_previous(&mut installed, &pins.previous)?;
-                Some(installed)
+                let root_identity = pins.snapshot.root.clone();
+                if !pins
+                    .previous
+                    .exclude_installed_launch_images(&root_identity)?
+                {
+                    let installed =
+                        RuntimePackagePinsV3::installed_for_handoff(store.root(), old_id)?;
+                    if installed.manifest() != pins.previous.manifest()
+                        || installed.runtime_manifest_bytes()
+                            != pins.previous.runtime_manifest_bytes()
+                    {
+                        return Err("WAKE_SAME_STATE_PUBLISHED_PACKAGE_MISMATCH".into());
+                    }
+                    // Both packages match the same reviewed immutable bytes.
+                    // Retain the installed copy under its launch exclusion.
+                    pins.previous = installed;
+                }
+                true
             } else {
-                None
+                false
             }
         };
         let mut legacy_images = Vec::new();
@@ -831,7 +874,7 @@ impl<'p> SameStateInstallResources<'p> {
             ("CatDeskWakeHost.exe", "hostSha256"),
             ("CatDeskBinagotchy.exe", "binagotchySha256"),
         ] {
-            if retained_current_as_previous.is_some() {
+            if retained_current_as_previous {
                 break;
             }
             let image = store
@@ -895,9 +938,6 @@ impl<'p> SameStateInstallResources<'p> {
             thread::sleep(Duration::from_millis(100));
         }
         grant.revalidate()?;
-        if let Some(retained) = retained_current_as_previous.as_mut() {
-            retained.revalidate()?;
-        }
         Ok(Self {
             grant,
             store,
@@ -906,7 +946,6 @@ impl<'p> SameStateInstallResources<'p> {
             _host: host,
             _browser: browser,
             _legacy_images: legacy_images,
-            retained_current_as_previous,
             failed_image_observations,
             missing_images,
             _failed_image_parents: failed_image_parents,
@@ -916,9 +955,6 @@ impl<'p> SameStateInstallResources<'p> {
         &self.grant
     }
     fn revalidate_excluded_images(&mut self) -> Result<()> {
-        if let Some(retained) = self.retained_current_as_previous.as_mut() {
-            retained.revalidate()?;
-        }
         if self.grant.payload().operation != "ROLLBACK_SAME_STATE_RELEASE" {
             return Ok(());
         }
@@ -1047,7 +1083,7 @@ impl<'p> SameStateInstallResources<'p> {
                 &stage_name(&envelope_sha, "candidate"),
                 self.grant.policy(),
             )?;
-            if self.retained_current_as_previous.is_none()
+            if !pins.previous.holds_exclusive_launch_images()
                 && !self
                     .store
                     .root()
@@ -1064,13 +1100,13 @@ impl<'p> SameStateInstallResources<'p> {
             }
         }
         if ledger.phase() == InstallPhaseV1::StageStarted {
-            let pins = self.grant.pins_mut()?;
+            let mut pins = self.grant.pins_mut()?;
             verify_package(
                 &self.store,
                 &stage_name(&envelope_sha, "candidate"),
                 &pins.candidate,
             )?;
-            if self.retained_current_as_previous.is_none()
+            if !pins.previous.holds_exclusive_launch_images()
                 && !self
                     .store
                     .root()
@@ -1084,12 +1120,7 @@ impl<'p> SameStateInstallResources<'p> {
                     &pins.previous,
                 )?;
             } else {
-                verify_previous_package(
-                    &self.store,
-                    &previous_id,
-                    &pins.previous,
-                    self.retained_current_as_previous.as_mut(),
-                )?;
+                verify_previous_package(&self.store, &previous_id, &mut pins.previous)?;
             }
             drop(pins);
             ledger.record_phase(InstallPhaseV1::Staged, None)?;
@@ -1098,24 +1129,23 @@ impl<'p> SameStateInstallResources<'p> {
             // A publication attempt is sticky. After a crash, only two exact
             // complete destinations prove publication; never repeat a rename.
             let publication_pins = if ledger.publication_attempt_present()? {
-                let pins = self.grant.pins_mut()?;
+                let mut pins = self.grant.pins_mut()?;
                 verify_package(&self.store, &candidate_id, &pins.candidate)?;
-                verify_previous_package(
-                    &self.store,
-                    &previous_id,
-                    &pins.previous,
-                    self.retained_current_as_previous.as_mut(),
-                )?;
+                verify_previous_package(&self.store, &previous_id, &mut pins.previous)?;
                 Vec::new()
             } else {
-                let publication = RuntimePackagePublicationV3::prepare_with_retained_previous(
-                    self.store.root(),
-                    &payload,
-                    &envelope_sha,
-                    ledger,
-                    self.grant.policy(),
-                    self.retained_current_as_previous.as_mut(),
-                )?;
+                let publication = {
+                    let mut pins = self.grant.pins_mut()?;
+                    let retained = pins.previous.holds_exclusive_launch_images();
+                    RuntimePackagePublicationV3::prepare_with_retained_previous(
+                        self.store.root(),
+                        &payload,
+                        &envelope_sha,
+                        ledger,
+                        self.grant.policy(),
+                        retained.then_some(&mut pins.previous),
+                    )?
+                };
                 self.grant.revalidate()?;
                 ledger.record_publication_attempt()?;
                 publication.publish(ledger)?
@@ -1127,14 +1157,9 @@ impl<'p> SameStateInstallResources<'p> {
             drop(publication_pins);
         }
         if ledger.phase() == InstallPhaseV1::Published {
-            let pins = self.grant.pins_mut()?;
+            let mut pins = self.grant.pins_mut()?;
             verify_package(&self.store, &candidate_id, &pins.candidate)?;
-            verify_previous_package(
-                &self.store,
-                &previous_id,
-                &pins.previous,
-                self.retained_current_as_previous.as_mut(),
-            )?;
+            verify_previous_package(&self.store, &previous_id, &mut pins.previous)?;
             drop(pins);
             self.grant.revalidate()?;
             // Actual stopped singleton/browser leases remain owned by self.
@@ -1283,26 +1308,13 @@ fn verify_package(store: &Store, id: &str, source: &RuntimePackagePinsV3) -> Res
 fn verify_previous_package(
     store: &Store,
     id: &str,
-    source: &RuntimePackagePinsV3,
-    retained: Option<&mut RuntimePackagePinsV3>,
+    source: &mut RuntimePackagePinsV3,
 ) -> Result<()> {
-    match retained {
-        Some(previous) => verify_retained_previous(previous, source),
-        None => verify_package(store, id, source),
+    if source.holds_exclusive_launch_images() {
+        source.revalidate()
+    } else {
+        verify_package(store, id, source)
     }
-}
-
-fn verify_retained_previous(
-    retained: &mut RuntimePackagePinsV3,
-    source: &RuntimePackagePinsV3,
-) -> Result<()> {
-    retained.revalidate()?;
-    if retained.manifest() != source.manifest()
-        || retained.runtime_manifest_bytes() != source.runtime_manifest_bytes()
-    {
-        return Err("WAKE_SAME_STATE_PUBLISHED_PACKAGE_MISMATCH".into());
-    }
-    Ok(())
 }
 
 #[cfg(test)]

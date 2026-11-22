@@ -710,3 +710,11 @@ Evidence: [docs/verification/WAKE_ROUTINE_FALLBACK_HANDOFF_2026_11_21.json](docs
 Agent: CatDesk Codex. Source: 4b6b87b1d877db1a0de9cd27c32651fdaf6c2ee3. Outcome: partial. The development broker verified a newly qualified current package through its existing exclusive executable handles and committed a routine selection and exact rollback in a disposable Windows fixture. A separate wider run preserved its legacy ownership refusal. Next: Verify protected first Wake selection after the existing signed operator step and continue the frozen compatible backend review and producer independently. Qualify reviewed broker bytes and protected intake under the enrolled account before calling routine production release autonomous.
 
 Evidence: [docs/verification/WAKE_RETAIN_WORKING_CURRENT_2026_11_21.json](docs/verification/WAKE_RETAIN_WORKING_CURRENT_2026_11_21.json); command: Run Wake native retained-current selection and rollback fixture, planner tests, serial local-user tests and strict Clippy; exit 0; SHA-256 d28c93be1df8b4b0237a6b91c896bd983b2906e8cd04c9768a3d760ab7c88d0f.
+
+<!-- catdesk-activity:nov21-wake-reuse-installed-fallback sha256:65ef505e625a5c4b03851988b89fedc2ea8ef053c4a376cdf17907c6e4c944dc -->
+
+## 2026-11-22T04:10:40.4431840Z — WAKE-LIFECYCLE
+
+Agent: CatDesk Codex. Source: 93d655e5f86c0abd06f36bade488c0c63b269ba2. Outcome: partial. Routine local Wake selection now reuses the exact installed rollback package with identity and launch exclusion preserved. The native Windows fixture completed selection and rollback without a duplicate fallback intake, and four compatibility cases passed. Next: Verify first signed Wake selection after the existing operator step and continue the exact compatible backend review and producer independently. Qualify genuine candidate and receipt staging under the enrolled account and a reviewed broker release before production routine acceptance.
+
+Evidence: [docs/verification/WAKE_ROUTINE_INSTALLED_FALLBACK_REUSE_2026_11_21.json](docs/verification/WAKE_ROUTINE_INSTALLED_FALLBACK_REUSE_2026_11_21.json); command: Run the Windows native fallback reuse fixture, four serial same-state compatibility tests, formatting and strict Clippy; exit 0; SHA-256 ab7c0ef44f7ff4ca8a92a53e1bb0dc7d21b2017aba244effe1e215b0ed7882b2.

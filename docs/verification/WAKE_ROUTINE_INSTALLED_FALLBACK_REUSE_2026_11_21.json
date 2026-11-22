@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T04:10:40.4431840Z",
+  "scope": "WINDOWS_DISPOSABLE_NATIVE_RELEASE_TRANSACTION_USING_ONLY_THE_INSTALLED_FALLBACK_BYTES",
+  "parentCommit": "93d655e5f86c0abd06f36bade488c0c63b269ba2",
+  "testedFileSha256": {
+    "install_broker_service_runtime.rs": "946ae9e68b183b9dc14d58514dba6af34e5b67d4794e56f2759da216d7e22b6c",
+    "install_broker_source_runtime.rs": "50027cb9d105ea7b5b63fe3a0d94974a8819b156190882fb9d807223ccaca1e2",
+    "runtime_same_state_install.rs": "13756f649f707fd8d8f2a965a4462d08c191cc28550726930afb265be6795f61",
+    "runtime_same_state_install_tests.rs": "43a697444cda366c2186c544c3741e8c23acf3782e312d48c90ca0590b9a1628"
+  },
+  "fixture": {
+    "duplicatedIntakePreviousPresent": false,
+    "initialSelectionHasOlderFallback": false,
+    "unrelatedInstalledPackageRefused": "WAKE_SAME_STATE_LOCAL_PREDECESSOR_INVALID",
+    "mismatchedPriorQualificationRefusedBeforeIntent": true,
+    "foreignImageReadWin32": [
+      32,
+      32
+    ],
+    "select": "SELECTED_STOPPED",
+    "rollback": "ROLLED_BACK_STOPPED",
+    "selectionAndRollbackLedgerPhase": "COMPLETE",
+    "exactProtectedFixtureStatePreserved": true,
+    "actualServiceStarts": 0,
+    "browserStarts": 0
+  },
+  "checks": {
+    "focusedNativeFixture": "PASS",
+    "format": "PASS",
+    "clippyAllTargetsWithWarningsDenied": "PASS",
+    "compatibility": {
+      "passed": 4,
+      "failed": 0,
+      "exitCode": 0,
+      "names": [
+        "same_state_dispatch_is_versioned_without_reclassifying_legacy_requests",
+        "same_state_local_user_enrolled_select_and_rollback_preserve_state",
+        "same_state_local_user_unknown_pointer_is_preserved_after_interruption",
+        "same_state_real_files_signed_reconstruction_selects_stopped_and_preserves_state"
+      ]
+    }
+  },
+  "limits": {
+    "changedInstalledBroker": false,
+    "changedFrozenFirstSelection": false,
+    "nonAdminCandidateAndReviewReceiptPublicationVerified": false,
+    "installedRoutineReleaseVerified": false,
+    "backendReviewCompleted": false,
+    "installedWebCycleVerified": false
+  }
+}

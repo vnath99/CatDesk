@@ -698,6 +698,46 @@ impl RuntimePackagePinsV3 {
             true,
         )
     }
+
+    pub(crate) fn holds_exclusive_launch_images(&self) -> bool {
+        self.exclusive_launch_images
+    }
+
+    /// Convert the already verified installed package into the launch
+    /// exclusion lease. The state/Host/browser locks must already be held.
+    pub(crate) fn exclude_installed_launch_images(
+        &mut self,
+        root_identity: &crate::install_broker_offline_v2::FullFileIdentityV2,
+    ) -> Result<bool> {
+        use crate::install_broker_offline_pins::full_identity_of_handle;
+        if self.chain.len() != 2
+            || self.chain[0] != "versions"
+            || full_identity_of_handle(self.ancestors[0].as_raw_handle())? != *root_identity
+        {
+            return Ok(false);
+        }
+        self.revalidate()?;
+        let directory = &self.ancestors[2];
+        for (index, name) in ARTIFACT_NAMES.into_iter().take(2).enumerate() {
+            let slot = &mut self.artifacts[index];
+            let identity = full_identity_of_handle(slot.as_raw_handle())?;
+            let metadata = open_artifact_metadata(directory, name)?;
+            if full_identity_of_handle(metadata.as_raw_handle())? != identity {
+                return Err("WAKE_SAME_STATE_PACKAGE_CHANGED".into());
+            }
+            // Drop only the incompatible data open. The relative directory
+            // and metadata witness stay held across exact-identity reacquisition.
+            drop(std::mem::replace(slot, File::from(metadata)));
+            let exclusive = open_relative_object(directory, name, false, false, 0)?;
+            if full_identity_of_handle(exclusive.as_raw_handle())? != identity {
+                return Err("WAKE_SAME_STATE_PACKAGE_CHANGED".into());
+            }
+            *slot = File::from(exclusive);
+        }
+        self.exclusive_launch_images = true;
+        self.revalidate()?;
+        Ok(true)
+    }
     #[cfg(test)]
     pub(crate) fn isolated(root: &std::path::Path, role: RuntimeSourceRoleV3) -> Result<Self> {
         let temp =
@@ -956,15 +996,7 @@ impl RuntimePackagePinsV3 {
             let reopened = if self.exclusive_launch_images && index < 2 {
                 // Attribute-only access establishes the live name without
                 // opening file data or sharing the held executable handle.
-                open_relative_with_access(
-                    directory,
-                    name,
-                    false,
-                    false,
-                    7,
-                    None,
-                    FILE_READ_ATTRIBUTES | SYNCHRONIZE,
-                )?
+                open_artifact_metadata(directory, name)?
             } else {
                 open_relative(directory, name, false)?
             };
@@ -976,4 +1008,16 @@ impl RuntimePackagePinsV3 {
         }
         Ok(())
     }
+}
+
+fn open_artifact_metadata(directory: &OwnedHandle, name: &str) -> Result<OwnedHandle> {
+    open_relative_with_access(
+        directory,
+        name,
+        false,
+        false,
+        7,
+        None,
+        FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+    )
 }
