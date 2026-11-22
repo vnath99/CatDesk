@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T00:51:42.2240262Z",
+  "scope": "ACTUAL_INSTALLED_NO_SEND_REVIEW_PREFLIGHT_AND_TIMER_CORRELATION",
+  "reviewContract": "nov21-independent-56aa-backend-review",
+  "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "target": {
+    "registrationPaired": true,
+    "runtimeMode": "INSTALLED_STORE",
+    "targetGeneration": 34,
+    "wakeControl": "STOPPED",
+    "isEarlierOptionalReviewConversation": false,
+    "metadataReceiptSha256": "68ab85b8e98222e71944a17361eea59cf422e933ce41bb7029c31d35912a6b41"
+  },
+  "preflight": {
+    "installedImageSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "exitCode": 2,
+    "reason": "WEB_REVIEW_PROJECT_BUSY",
+    "frozenInputSha256": "f1731617f3d544bbee11c2dfa5b6afd276e74a2d9c4d4daf885fddde9729e74e",
+    "nativeOutputSha256": "a74b429663ade217ee844101e1ed997dda4b1f00c751b8de70c971e291afbd28",
+    "newReviewGrantOrWorkRecords": 0,
+    "newEventObjects": 0,
+    "registryAndWakeConfigControlHashesUnchanged": true
+  },
+  "timers": {
+    "totalForProject": 530,
+    "unfinished": 157,
+    "olderGeneration": 155,
+    "exactCurrentTarget": 2,
+    "currentTargetRecords": [
+      {
+        "kind": "LEGACY_MANUAL_TURN",
+        "state": "OBSERVING",
+        "deliveryRecord": false
+      },
+      {
+        "kind": "LEGACY_WAKE_TEST",
+        "state": "ATTENTION",
+        "deliveryPhase": "SUBMITTING",
+        "receipt": false,
+        "reason": "SUBMIT_TARGET_DRIFT_CHROME_ERROR"
+      }
+    ],
+    "classificationSha256": "041200c380a96930dee67f806b3d57cc1efd05a18863aaf4f9f6a4ccc8619ddf"
+  },
+  "disposition": {
+    "reviewPreflightChecksAllUnfinishedProjectTimers": true,
+    "manualStopRequiresBasisForEndingExactOriginalTimer": true,
+    "ordinarySubmissionReconcileRequiresTaskAssignment": true,
+    "sourceReviewReconcileRequiresReviewEvent": true,
+    "guardedStaleRetirementRejectsEventWithTimer": true,
+    "disposableAcceptanceProjectOpenRequests": 1,
+    "oldReviewEventReplayAllowed": false
+  },
+  "independentReviewStarted": false,
+  "externalMessagesSent": 0,
+  "browserStarts": 0,
+  "wakeStarts": 0,
+  "backendDraftApproved": false,
+  "backendProducerInvoked": false,
+  "nextGate": "A supported reviewer must use an independent, authorized destination with no conflicting work or ambiguous submissions. Preserve both generation-34 records and the older timers. Do not ask for exact draft approval while the existing route would refuse it."
+}
