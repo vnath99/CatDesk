@@ -279,7 +279,7 @@ function Read-CatDeskLkgPointer([string]$Root) {
     [pscustomobject]@{ Slot = $slot; Generation = $generation; Hash = $sha; Path = $path }
 }
 
-function Get-CatDeskLastKnownGoodRelease([string]$Root) {
+function Get-CatDeskLastKnownGoodRelease([string]$Root, [switch]$AllowMissing) {
     $valid = @()
     foreach ($slot in $script:CatDeskReleaseRecoverySlots) {
         try {
@@ -290,7 +290,12 @@ function Get-CatDeskLastKnownGoodRelease([string]$Root) {
             # rejected below; an intact alternate slot may still be recovered.
         }
     }
-    if ($valid.Count -eq 0) { throw 'no trusted release recovery snapshot is available' }
+    if ($valid.Count -eq 0 -and -not $AllowMissing) { throw 'no trusted release recovery snapshot is available' }
+    Select-CatDeskLkgSlot -Root $Root -Valid $valid
+}
+
+function Select-CatDeskLkgSlot([string]$Root, [object[]]$Valid) {
+    if ($Valid.Count -eq 0) { return $null }
     $pointer = $null
     try { $pointer = Read-CatDeskLkgPointer $Root } catch { $pointer = $null }
     if ($null -ne $pointer) {
@@ -562,8 +567,8 @@ function Save-CatDeskLastKnownGoodRelease([string]$Root, $Canonical, [string]$So
         try { $item = Read-CatDeskLkgSlot -Root $rootPath -Slot $slot; if ($null -ne $item) { $valid += $item } } catch {}
     }
     $maxGeneration = if ($valid.Count) { [int](($valid | Measure-Object -Property Generation -Maximum).Maximum) } else { 0 }
-    $current = $null
-    try { $current = Get-CatDeskLastKnownGoodRelease $rootPath } catch {}
+    # An ambiguous selection cannot identify an inactive slot to replace.
+    $current = Select-CatDeskLkgSlot -Root $rootPath -Valid $valid
     if ($null -ne $current -and $current.Hash -eq $canonicalEvidence.Hash) {
         $pointerMatches = $false
         try {

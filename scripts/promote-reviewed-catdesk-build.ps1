@@ -666,6 +666,12 @@ try {
         return
     }
     $script:PromotionAuthorization = Get-ProtectedPromotionAuthorization -Root $root -Token $AuthorizationToken -TransactionId $TransactionId -Candidate $candidate -CandidateHash $candidateHash -PriorHash $canonical.Hash
+    try {
+        [void](Get-CatDeskLastKnownGoodRelease -Root $root -AllowMissing)
+    } catch {
+        Write-PromotionResult -State 'RECOVERY_SNAPSHOT_UNPROVEN_OPERATOR_ATTENTION' -CandidateValidated $true -CanonicalReleaseValidated $true -PromotionRequired $true
+        return
+    }
     # If a prior invocation reached the candidate listener but did not reach
     # the disk promotion, resume only from bounded, identity-complete evidence.
     # Any existing but stale, malformed, or ambiguous evidence blocks a new

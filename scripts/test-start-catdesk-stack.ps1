@@ -422,6 +422,36 @@ try {
   $splitAfter=@($splitPins|ForEach-Object{(Get-FixtureHash -LiteralPath $_ -Algorithm SHA256).Hash})
   if(($splitAfter -join ',') -cne ($splitBefore -join ',')){throw 'diagnosis mutated an interrupted promotion or retained release'}
   $ambiguousRoot=Join-Path $root 'ambiguous-lkg';$ambiguousRelease=Join-Path $ambiguousRoot 'target\release';New-Item -ItemType Directory -Path $ambiguousRelease -Force|Out-Null;$ambiguousBinary=Join-Path $ambiguousRelease 'catdesk.exe';[IO.File]::WriteAllText($ambiguousBinary,'ambiguous-reviewed');$ambiguousHash=(Get-FixtureHash $ambiguousBinary -Algorithm SHA256).Hash.ToLowerInvariant();[IO.File]::WriteAllText("$ambiguousBinary.sha256","$ambiguousHash`n");$ambiguousPair=Get-CatDeskCanonicalPairEvidence $ambiguousRoot;$ambiguousLkg=Save-CatDeskLastKnownGoodRelease -Root $ambiguousRoot -Canonical $ambiguousPair;$ambiguousOther=if($ambiguousLkg.Slot -eq 'slot-a'){'slot-b'}else{'slot-a'};$ambiguousRecovery=Join-Path $ambiguousRoot '.catdesk\release-recovery';Copy-Item -LiteralPath (Join-Path $ambiguousRecovery $ambiguousLkg.Slot) -Destination (Join-Path $ambiguousRecovery $ambiguousOther) -Recurse -Force;Remove-Item -LiteralPath (Join-Path $ambiguousRecovery 'current.json') -Force;$ambiguousAssessment=Get-CanonicalReleaseRecoveryAssessment -Root $ambiguousRoot -ExpectedHash "";if($ambiguousAssessment.State -ne 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED'){throw 'ambiguous recovery authority was not classified fail-closed'}
+  $ambiguousPointer = Join-Path $ambiguousRecovery 'current.json'
+  $otherSlot = Join-Path $ambiguousRecovery $ambiguousOther
+  $otherBinary = Join-Path $otherSlot 'catdesk.exe'
+  $otherManifest = Join-Path $otherSlot 'manifest.json'
+  [IO.File]::WriteAllText($otherBinary, 'different retained reviewed artifact')
+  $otherHash = (Get-FixtureHash $otherBinary).Hash.ToLowerInvariant()
+  [IO.File]::WriteAllText("$otherBinary.sha256", $otherHash)
+  $otherMetadata = [IO.File]::ReadAllText($otherManifest) | ConvertFrom-Json
+  $otherMetadata.sha256 = $otherHash
+  [IO.File]::WriteAllText($otherManifest, ($otherMetadata | ConvertTo-Json -Compress))
+  [void](Read-CatDeskLkgSlot -Root $ambiguousRoot -Slot $ambiguousOther)
+  [IO.File]::WriteAllText($ambiguousBinary, 'new reviewed artifact')
+  [IO.File]::WriteAllText("$ambiguousBinary.sha256", (Get-FixtureHash $ambiguousBinary).Hash.ToLowerInvariant())
+  $newPair = Get-CatDeskCanonicalPairEvidence $ambiguousRoot
+  $escrowFiles = @($ambiguousLkg.Binary, $ambiguousLkg.Manifest, $ambiguousLkg.Metadata, $otherBinary, "$otherBinary.sha256", $otherManifest)
+  $escrowPins = @($escrowFiles | ForEach-Object { (Get-FixtureHash $_).Hash })
+  foreach ($brokenPointer in @($false, $true)) {
+    if ($brokenPointer) { [IO.File]::WriteAllText($ambiguousPointer, 'malformed pointer') }
+    $refusal = $null
+    try { [void](Save-CatDeskLastKnownGoodRelease -Root $ambiguousRoot -Canonical $newPair) }
+    catch { $refusal = $_.Exception.Message }
+    if ($refusal -cne 'release recovery snapshot authority is ambiguous') { throw 'new capture replaced an ambiguous retained slot' }
+    $afterPins = @($escrowFiles | ForEach-Object { (Get-FixtureHash $_).Hash })
+    if (($afterPins -join ',') -cne ($escrowPins -join ',')) { throw 'refused capture changed retained escrow' }
+    if ($brokenPointer) {
+      if ([IO.File]::ReadAllText($ambiguousPointer) -cne 'malformed pointer') { throw 'refused capture rewrote the untrusted pointer' }
+    } elseif (Test-Path -LiteralPath $ambiguousPointer) {
+      throw 'refused capture created a selection pointer'
+    }
+  }
   # Fake every side-effect boundary to exercise idempotent daemon orchestration.
   function Assert-FixtureLifecycleLeaseHeld([string]$Root,[string]$Stage) {
     if($Mode -eq 'plan' -or -not $Execute){return}

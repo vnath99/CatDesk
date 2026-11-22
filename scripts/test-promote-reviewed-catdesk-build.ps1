@@ -139,6 +139,24 @@ try {
     Require ((Hash $fixture.Canonical) -eq $before -and -not (Test-Path -LiteralPath (Join-Path $workspace '.catdesk\promotion-recovery'))) 'plan mode makes no binary or backup mutation'
     Require (($plan | ConvertTo-Json -Compress) -notmatch '(?i)secret|token|https?://|route|tunnel-client|catdesk-reviewed\.exe') 'plan output remains compact and redacted'
 
+    . (Join-Path $PSScriptRoot 'catdesk-release-recovery.ps1')
+    $lkg = Save-CatDeskLastKnownGoodRelease -Root $workspace -Canonical (Get-CatDeskCanonicalPairEvidence $workspace)
+    $recovery = Get-CatDeskReleaseRecoveryDirectory $workspace
+    $otherSlot = if ($lkg.Slot -eq 'slot-a') { 'slot-b' } else { 'slot-a' }
+    $otherDirectory = Join-Path $recovery $otherSlot
+    Copy-Item -LiteralPath (Join-Path $recovery $lkg.Slot) -Destination $otherDirectory -Recurse
+    $pointer = Join-Path $recovery 'current.json'
+    [IO.File]::WriteAllText($pointer, 'unusable pointer')
+    $pins = @($fixture.Canonical, "$($fixture.Canonical).sha256")
+    $pins += @(Get-ChildItem -LiteralPath $recovery -File -Recurse | ForEach-Object FullName)
+    $beforeRefusal = @($pins | ForEach-Object { Hash $_ })
+    $calls = [Collections.Generic.List[string]]::new()
+    $ambiguous = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -Execute -TestSeams (New-Seams $calls) | ConvertFrom-Json
+    Require ($ambiguous.state -ceq 'RECOVERY_SNAPSHOT_UNPROVEN_OPERATOR_ATTENTION' -and $calls.Count -eq 0) 'ambiguous escrow stops promotion before a handoff'
+    Require (-not (Test-Path -LiteralPath (TransactionPath $workspace))) 'ambiguous escrow creates no promotion transaction'
+    $afterRefusal = @($pins | ForEach-Object { Hash $_ })
+    Require (($afterRefusal -join ',') -ceq ($beforeRefusal -join ',')) 'ambiguous escrow and the canonical pair stay unchanged'
+
     # A resumed Phase 1 must supply the same complete, freshly verified process
     # identity consumed by the real restart helper, not a PID-only projection.
     $fixture = Reset-Fixture $workspace
@@ -695,7 +713,7 @@ try {
     Require ($legacyForLocal.state -eq 'OPERATOR_ATTENTION_PHASE1' -and $calls.Count -eq 0) 'local backend profile refuses a legacy receipt without starting another handoff'
     $completed=[DateTimeOffset]::UtcNow
     Write-Phase1Evidence $fixture @{schemaVersion=4;profile='LOCAL_BACKEND_ONLY';mcpAuthenticated=$true;completedAtUtc=$completed.ToString('o');newProcessStartedAtUtc=$completed.AddSeconds(-10).ToString('o')}
-    $localSeams.Phase1ListenerRecords = { @([pscustomobject]@{Pid=42;ProcessName='catdesk';BuildPath=$fixture.Candidate;BuildHash=(Hash $fixture.Candidate);ProcessStartedAtUtc=$completed.AddSeconds(-10).ToString('o')}) }.GetNewClosure()
+    $localSeams = New-ResumeSeams $calls @((New-CandidateListener $fixture $completed.AddSeconds(-10)))
     $localReady = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -ValidatePhase1 -BackendOnly -TestSeams $localSeams | ConvertFrom-Json
     Require ($localReady.state -eq 'PHASE1_PROVEN') 'exact authenticated local-backend receipt is accepted'
     $wrongProfile = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace -ValidatePhase1 -TestSeams $localSeams | ConvertFrom-Json
