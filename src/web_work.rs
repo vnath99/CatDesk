@@ -1108,8 +1108,37 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
     let registry =
         AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
             .map_err(|_| "WEB_WORK_REGISTRY_UNAVAILABLE")?;
+    // This reads assignment journals under the project lease only. Take the
+    // shared registry lock later for the exact scope and ledger comparison.
+    let completion = if resolution.outcome == "completed" {
+        let ledger = WorkLedger::open_read_only(&workspace, &validated.project_id)?;
+        let record = ledger
+            .record(&validated.request_id)?
+            .ok_or("WEB_WORK_REQUEST_MISSING")?;
+        if record.target.generation != validated.expected_target_generation
+            || record.target.digest != validated.expected_target_sha256
+        {
+            return Err("WEB_WORK_TARGET_CHANGED".into());
+        }
+        if record.phase == "OPEN" && record.task_assignment.is_some() {
+            let scope =
+                resolve_registered_project_from_control_root(&workspace, &validated.project_id)
+                    .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
+            let wake =
+                Store::open_read_only(&wake_protocol_client::wake_root_for_workspace(&workspace)?)?;
+            crate::project_mcp_task::require_completed_task_continuations(&scope, &record, &wake)?;
+            Some((
+                record,
+                crate::project_mcp_task::assignment_scope_sha256(&scope),
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     registry.with_registration_lock(|| {
-        resolve_registered_project_from_control_root(&workspace, &validated.project_id)
+        let scope = resolve_registered_project_from_control_root(&workspace, &validated.project_id)
             .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
         let ledger = WorkLedger::open(&workspace, &validated.project_id)?;
         let record = ledger
@@ -1205,8 +1234,17 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
                 return Err("WEB_WORK_COMPLETED_RESPONSE_REQUIRED".into());
             }
         }
-        // A completed browser turn is a transport prerequisite. The outcome and
-        // summary remain an explicit coordinator report, not verified artifacts.
+        if resolution.outcome == "completed"
+            && record.task_assignment.is_some()
+            && completion.as_ref().is_none_or(|(checked, scope_digest)| {
+                checked != &record
+                    || *scope_digest != crate::project_mcp_task::assignment_scope_sha256(&scope)
+            })
+        {
+            return Err("WEB_WORK_ASSIGNMENT_SOURCE_CHANGED".into());
+        }
+        // Exact browser progress is a prerequisite. The outcome and summary
+        // remain an explicit coordinator report, not verified artifacts.
         ledger.resolve(
             &validated.request_id,
             &record.target,

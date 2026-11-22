@@ -7046,6 +7046,7 @@ fn web_work_refusal(req: &JsonRpcRequest, error: &str, message: &str) -> JsonRpc
             | "WAKE_PROJECT_TARGET_MISMATCH"
             | "WAKE_HISTORICAL_EVENT_RETAINED"
             | "WAKE_PROJECT_TARGET_CHANGED"
+            | "PROJECT_TASK_RECOVERY_REQUIRED"
             | "QUEUE_EVENT_ID_CONFLICT" => error,
             _ => "WEB_WORK_REQUEST_UNAVAILABLE",
         }

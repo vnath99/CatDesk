@@ -304,6 +304,23 @@ mod tests {
         let published = queue("wake-one", "done-turn");
         let event_id = published["eventId"].as_str().unwrap();
         let older_id = older["eventId"].as_str().unwrap();
+        let resolution = json!({"projectId":"alpha","requestId":"request-a",
+            "expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,
+            "outcome":"completed","summary":"Verified task fixture"});
+        let assert_pending = || {
+            assert_eq!(
+                crate::web_work::resolve(&control, resolution.clone()).unwrap_err(),
+                "WEB_WORK_CONTINUATION_PENDING"
+            );
+            assert_eq!(
+                WorkLedger::open_read_only(&control, "alpha")
+                    .unwrap()
+                    .record("request-a")
+                    .unwrap(),
+                Some(record.clone())
+            );
+        };
+        assert_pending();
         let older_event: Event =
             read(&wake.root().join("queue").join(format!("{older_id}.json"))).unwrap();
 
@@ -423,5 +440,55 @@ mod tests {
             Phase::Submitting
         );
         assert!(wake.delivery(event_id).unwrap().unwrap().receipt.is_none());
+        assert_eq!(
+            crate::web_work::resolve(&control, resolution.clone()).unwrap_err(),
+            "PROJECT_TASK_RECOVERY_REQUIRED"
+        );
+        use crate::delegated::{
+            contracts::{RunId, ToolCallId},
+            journal::{DelegatedJournal, ToolCallStatus},
+        };
+        let journal = DelegatedJournal::open(
+            &control.join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal"),
+        )
+        .unwrap();
+        journal
+            .transition_tool_call(
+                &RunId::new("task-fixture").unwrap(),
+                &ToolCallId::new("continued-read").unwrap(),
+                ToolCallStatus::Failed,
+                None,
+                Some("Fixture call ended without an effect".into()),
+            )
+            .unwrap();
+        assert_pending();
+        let submitting = wake.delivery(event_id).unwrap().unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event_id.into(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: submitting.message_digest,
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(event_id, &receipt).unwrap();
+        wake.transition(
+            event_id,
+            &submitting.owner,
+            Phase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        assert_pending();
+        wake.complete_timer(event_id).unwrap();
+        let closed = crate::web_work::resolve(&control, resolution.clone()).unwrap();
+        assert_eq!(closed["phase"], "CLOSED");
+        assert_eq!(closed["taskCompletionVerified"], false);
+        assert_eq!(
+            crate::web_work::resolve(&control, resolution).unwrap(),
+            closed
+        );
     }
 }

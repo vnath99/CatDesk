@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — close a request after its requested continuations finish.** `catdesk_web_work_resolve` with outcome `completed` now returns `WEB_WORK_CONTINUATION_PENDING` when an exact task-issued manual Wake still needs delivery or a completed response. Use the existing event's receipt and timer for verification. A nonterminal task call returns `PROJECT_TASK_RECOVERY_REQUIRED`. [Verification](docs/verification/MANUAL_WAKE_COMPLETION_GUARD_2026_11_22.json).
+
 **November 22 — read the same-task response after a manual self-Wake.** Use the existing `operator web review read --project-id <project> --event-id <manual-wake-event>` for the exact delivered event. Supporting development builds return `taskAttribution` for a verified manual response and refuse if the delivery or assignment changed during the read. Verify Git and the existing task journal independently before resolving the task. [Verification](docs/verification/MANUAL_WAKE_RESPONSE_ATTRIBUTION_2026_11_22.json).
 
 **November 22 — read a Wake response error after the sender exits.** Call `catdesk_turn_timer` with action `STATUS` and the exact Wake event ID as `timerId`. The development runtime returns `lastObservedResponseError` when the stored timer matches the committed delivery. Read `state` for current response progress. The error is historical evidence and can remain present after successful response recovery. [Verification](docs/verification/WAKE_DELIVERY_ERROR_READBACK_2026_11_22.json).

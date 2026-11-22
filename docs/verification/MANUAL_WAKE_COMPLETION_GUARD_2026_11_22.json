@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T21:21:44.6425866Z",
+  "scope": "WINDOWS_DEVELOPMENT_ASSIGNED_WEB_REQUEST_COMPLETION",
+  "baseline": "fafb0f2ab54520586c93c6bde776d90cb45916c1",
+  "entryPoint": "catdesk_web_work_resolve",
+  "priorBehavior": "Completion could close an assigned request when its original exact delivery and timer were complete while a task-issued manual Wake remained unresolved.",
+  "guards": {
+    "journalReadBeforeSharedRegistrationLock": true,
+    "scopeAndLedgerRecheckedAtClosure": true,
+    "inFlightOrUncertainTaskCall": "PROJECT_TASK_RECOVERY_REQUIRED",
+    "grantedTaskWithMissingJournal": "PROJECT_TASK_RECOVERY_REQUIRED",
+    "unresolvedManualWake": "WEB_WORK_CONTINUATION_PENDING",
+    "completedContinuation": "Exact journaled Wake, SENT receipt and matching completed response timer",
+    "newSubmissionAuthorized": false,
+    "taskCompletionVerifiedByClosure": false
+  },
+  "verification": {
+    "finalWindowsManualDeliveryTestsPassed": 2,
+    "finalWindowsWebDevelopmentTestsPassed": 5,
+    "rustfmtCheckPassed": true,
+    "cases": [
+      "An existing queued manual Wake retains the original OPEN work record",
+      "A live scoped tool call prevents closing the request",
+      "A SUBMITTING manual Wake without a receipt remains unresolved after the tool call settles",
+      "A SENT Wake with an unfinished response remains unresolved",
+      "Both exact response timers complete before closure, and the existing close retry is idempotent"
+    ],
+    "fixture": "Isolated Git and Wake store with simulated receipts and browser progress"
+  },
+  "release": {
+    "browserStarts": 0,
+    "externalMessagesSent": 0,
+    "productionMutations": 0,
+    "firstInstalledWebCycleAccepted": false
+  }
+}

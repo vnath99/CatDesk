@@ -4,7 +4,7 @@ use super::*;
 use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
 use catdesk_wake::{
     protocol::{Event, Target, WakePurpose, valid_id},
-    store::{Phase, Store, read},
+    store::{Phase, ResponseState, Store, read},
 };
 
 pub(crate) fn authorize_manual_wake_delivery(
@@ -55,8 +55,29 @@ fn manual_wake_calls(
     )?)?)
     .map_err(|_| "WEB_TASK_GRANT_INVALID")?;
     let archive = authorized_manual_wake_assignment(project, record, &key)?;
-    let assignment: Assignment = serde_json::from_slice(&read_assignment_bytes(&archive)?)
-        .map_err(|_| "PROJECT_TASK_ASSIGNMENT_INVALID")?;
+    read_task_calls(project, record, &archive, require_quiescent)
+}
+
+fn read_task_calls(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    archive: &Path,
+    require_quiescent: bool,
+) -> Result<std::collections::BTreeMap<String, ToolCallRecordV1>, String> {
+    let link = record
+        .task_assignment
+        .as_ref()
+        .ok_or("WEB_TASK_GRANT_REQUIRED")?;
+    let bytes = read_assignment_bytes(archive)?;
+    if catdesk_wake::protocol::digest(
+        std::str::from_utf8(&bytes).map_err(|_| "PROJECT_TASK_ASSIGNMENT_INVALID")?,
+    ) != link.assignment_sha256
+        || link.scope_sha256 != assignment_scope_sha256(project)
+    {
+        return Err("PROJECT_TASK_CONTRACT_CHANGED".into());
+    }
+    let assignment: Assignment =
+        serde_json::from_slice(&bytes).map_err(|_| "PROJECT_TASK_ASSIGNMENT_INVALID")?;
     if assignment.schema_version != 1
         || assignment.project_id != project.project.project_id
         || assignment.contract.task_id != link.task_id
@@ -107,6 +128,72 @@ fn manual_wake_calls(
     Ok(calls)
 }
 
+/// A coordinator's terminal report cannot discard a live or uncertain task call
+/// or replace the exact response evidence for a self-Wake the task requested.
+pub(crate) fn require_completed_task_continuations(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    wake: &Store,
+) -> Result<(), String> {
+    let Some(link) = record.task_assignment.as_ref() else {
+        return Ok(());
+    };
+    let directory = task_directory(project, &link.task_id, false)?;
+    match fs::symlink_metadata(directory.join("journal")) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return match fs::symlink_metadata(directory.join("execution-grant.json")) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                _ => Err("PROJECT_TASK_RECOVERY_REQUIRED".into()),
+            };
+        }
+        Err(_) => return Err("PROJECT_TASK_RECOVERY_REQUIRED".into()),
+    }
+    let calls = read_task_calls(project, record, &directory.join("assignment.json"), true)?;
+    for (call_id, call) in calls {
+        if !is_completed_manual_wake(&call) {
+            continue;
+        }
+        let id = manual_wake_event_id(&call)?;
+        let delivery = wake
+            .delivery(id)?
+            .filter(|delivery| delivery.phase == Phase::Sent)
+            .ok_or("WEB_WORK_CONTINUATION_PENDING")?;
+        validate_selection(
+            project,
+            record,
+            &delivery.target,
+            &delivery.event,
+            &call_id,
+            &call,
+        )?;
+        let timer = wake.timer(id)?.ok_or("WEB_WORK_CONTINUATION_PENDING")?;
+        if timer.project_id != project.project.project_id
+            || timer.target_generation != delivery.target.generation
+            || timer.target_digest != delivery.target.digest
+            || timer.response_state != ResponseState::Complete
+        {
+            return Err("WEB_WORK_CONTINUATION_PENDING".into());
+        }
+    }
+    Ok(())
+}
+
+fn is_completed_manual_wake(call: &ToolCallRecordV1) -> bool {
+    call.tool_name == "wake.manual_end_turn" && call.status == ToolCallStatus::Completed
+}
+
+fn manual_wake_event_id(call: &ToolCallRecordV1) -> Result<&str, String> {
+    // The summary is only a locator. validate_selection checks the exact event
+    // against the immutable journal hashes before using any delivery evidence.
+    call.outcome_summary
+        .as_deref()
+        .and_then(|summary| summary.strip_prefix("manual Wake intent "))
+        .and_then(|summary| summary.strip_suffix(" recorded; delivery unverified"))
+        .filter(|id| valid_id(id) && id.starts_with("wake-intent-"))
+        .ok_or_else(|| "WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN".into())
+}
+
 pub(crate) fn next_manual_wake(
     project: &ResolvedProjectScopeV1,
     record: &crate::web_work_state::WorkRecord,
@@ -115,18 +202,10 @@ pub(crate) fn next_manual_wake(
 ) -> Result<(String, Event), String> {
     let mut pending = None;
     for (call_id, call) in manual_wake_calls(project, record, true)? {
-        if call.tool_name != "wake.manual_end_turn" || call.status != ToolCallStatus::Completed {
+        if !is_completed_manual_wake(&call) {
             continue;
         }
-        // The retained summary is only a locator. The exact queue event and
-        // both journal hashes must agree before it can select a send.
-        let id = call
-            .outcome_summary
-            .as_deref()
-            .and_then(|summary| summary.strip_prefix("manual Wake intent "))
-            .and_then(|summary| summary.strip_suffix(" recorded; delivery unverified"))
-            .filter(|id| valid_id(id) && id.starts_with("wake-intent-"))
-            .ok_or("WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN")?;
+        let id = manual_wake_event_id(&call)?;
         let delivery = wake.delivery(id)?;
         let event: Event = match &delivery {
             Some(saved) => saved.event.clone(),

@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — protect continuity through task closure.** Development holds assigned Web requests open while their journaled continuations lack exact response evidence. The first installed Web cycle still requires live delivery and independent task and Git verification. [Evidence](docs/verification/MANUAL_WAKE_COMPLETION_GUARD_2026_11_22.json).
+
 **November 22 — same-task continuation evidence.** Development can associate a verified manual self-Wake response with its original assignment and source turn, with a post-observation identity check. The first installed Web cycle still requires a real continued turn and independent Git and task-journal evidence. [Evidence](docs/verification/MANUAL_WAKE_RESPONSE_ATTRIBUTION_2026_11_22.json).
 
 **November 22 — autonomous response diagnosis.** Development status now retrieves the bounded error from the original Wake receipt after the sender exits. It withholds the receipt and error if the timer and delivery identities disagree. This readback still needs installed qualification. [Evidence](docs/verification/WAKE_DELIVERY_ERROR_READBACK_2026_11_22.json).
