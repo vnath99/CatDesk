@@ -564,18 +564,7 @@ pub(super) fn admit_stopped_source(
     auth: &ReviewedPromotionAuthorizationV1,
 ) -> Result<(), String> {
     let parent = metadata(workspace)?;
-    let j = journal(&parent)?.ok_or("promotion source requires completed explicit retirement")?;
-    if j.phase != "COMPLETED"
-        || j.plan.prior_sha256 != auth.prior_canonical_sha256
-        || j.plan.candidate_sha256 != auth.candidate_sha256
-    {
-        return Err("promotion source retirement binding differs".into());
-    }
-    verify_archive(&parent, &j)?;
-    let handoffs = child(&parent, "restart-handoff")?;
-    if read_optional_relative_regular(&handoffs, "latest.json", 4096, LABEL)?.is_some() {
-        return Err("promotion source has an unresolved new handoff".into());
-    }
+    validate_stopped_source_history(&parent, auth)?;
     inspect_owners_context(
         workspace,
         auth,
@@ -586,6 +575,35 @@ pub(super) fn admit_stopped_source(
         None,
     )
     .map(|_| ())
+}
+
+fn validate_stopped_source_history(
+    parent: &Guard,
+    auth: &ReviewedPromotionAuthorizationV1,
+) -> Result<(), String> {
+    let retired =
+        journal(parent)?.ok_or("promotion source requires completed explicit retirement")?;
+    let plan = &retired.plan;
+    let candidate_matches = if plan.completed_promotion {
+        // The successful prior release is the currently selected source.
+        // The next artifact and transaction must have their own authority.
+        plan.candidate_sha256 != auth.candidate_sha256 && plan.transaction_id != auth.transaction_id
+    } else {
+        // A retired failure can admit only a new attempt at that exact artifact.
+        plan.candidate_sha256 == auth.candidate_sha256
+    };
+    if retired.phase != "COMPLETED"
+        || plan.canonical_sha256() != auth.prior_canonical_sha256
+        || !candidate_matches
+    {
+        return Err("promotion source retirement binding differs".into());
+    }
+    verify_archive(parent, &retired)?;
+    let handoffs = child(parent, "restart-handoff")?;
+    if read_optional_relative_regular(&handoffs, "latest.json", 4096, LABEL)?.is_some() {
+        return Err("promotion source has an unresolved new handoff".into());
+    }
+    Ok(())
 }
 
 pub(crate) fn qualify_stopped_source(
@@ -1943,12 +1961,13 @@ mod tests {
         assert!(admit_stopped_source(&root, &auth).is_err());
         let parent = metadata(&root).unwrap();
         archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
+        validate_stopped_source_history(&parent, &auth).unwrap();
         let mut changed = auth.clone();
         changed.candidate_sha256 = "f".repeat(64);
-        assert!(admit_stopped_source(&root, &changed).is_err());
+        assert!(validate_stopped_source_history(&parent, &changed).is_err());
         changed = auth.clone();
         changed.prior_canonical_sha256 = "f".repeat(64);
-        assert!(admit_stopped_source(&root, &changed).is_err());
+        assert!(validate_stopped_source_history(&parent, &changed).is_err());
         fs::write(
             root.join(".catdesk/restart-handoff/latest.json"),
             b"unknown new handoff",
@@ -1959,6 +1978,65 @@ mod tests {
             fs::read(root.join(".catdesk/restart-handoff/latest.json")).unwrap(),
             b"unknown new handoff"
         );
+        drop(parent);
+        cleanup_fixture(root);
+    }
+
+    #[test]
+    fn retired_success_binds_the_predecessor_for_a_different_stopped_promotion() {
+        let (root, mut value) = fixture();
+        let handoff_sha256 = value.plan.historical_handoff_sha256.take().unwrap();
+        value.plan.schema_version = 2;
+        value.plan.completed_promotion = true;
+        value.evidence_sha256 = digest(&bytes(&value.plan).unwrap());
+        let (mut next, _, _, _) = terminal_fixture();
+        next.transaction_id = "e".repeat(32);
+        next.prior_canonical_sha256 = value.plan.candidate_sha256.clone();
+        next.candidate_sha256 = "f".repeat(64);
+        let parent = metadata(&root).unwrap();
+        update_journal(&parent, &value).unwrap();
+        assert!(validate_stopped_source_history(&parent, &next).is_err());
+        archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
+        assert_eq!(
+            validate_stopped_source_history(&parent, &next).unwrap_err(),
+            "promotion source has an unresolved new handoff"
+        );
+        {
+            let handoffs = child(&parent, "restart-handoff").unwrap();
+            archive_completed_handoff_exact(&handoffs, &handoff_sha256).unwrap();
+        }
+        validate_stopped_source_history(&parent, &next).unwrap();
+        for (prior, candidate, transaction) in [
+            (
+                &value.plan.prior_sha256,
+                &next.candidate_sha256,
+                &next.transaction_id,
+            ),
+            (
+                &next.prior_canonical_sha256,
+                &value.plan.candidate_sha256,
+                &next.transaction_id,
+            ),
+            (
+                &next.prior_canonical_sha256,
+                &next.candidate_sha256,
+                &value.plan.transaction_id,
+            ),
+        ] {
+            let mut mismatched = next.clone();
+            mismatched.prior_canonical_sha256 = prior.clone();
+            mismatched.candidate_sha256 = candidate.clone();
+            mismatched.transaction_id = transaction.clone();
+            assert!(validate_stopped_source_history(&parent, &mismatched).is_err());
+        }
+        fs::write(
+            root.join(".catdesk")
+                .join(archive_name(&value.plan.transaction_id).unwrap())
+                .join("claim.json"),
+            b"changed archive",
+        )
+        .unwrap();
+        assert!(validate_stopped_source_history(&parent, &next).is_err());
         drop(parent);
         cleanup_fixture(root);
     }
