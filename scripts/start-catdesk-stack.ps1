@@ -1104,12 +1104,13 @@ function Get-CanonicalReleaseRecoveryAssessment([string]$Root, [string]$Expected
     try { $expected = Get-RequestedCatDeskFingerprint (Resolve-CatDeskRecoveryRoot $Root) $ExpectedHash $FingerprintPath }
     catch { return [pscustomobject]@{ State = 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'; RecoverySource = '' } }
     try {
-        $trusted = Get-CatDeskLastKnownGoodRelease -Root $Root
+        [void](Select-CatDeskRecoveryRelease -Root $Root -ExpectedHash $expected -AllowRetainedPredecessor:(-not [string]::IsNullOrWhiteSpace($ExpectedHash)))
     } catch {
-        return [pscustomobject]@{ State = (Get-CatDeskLkgAuthorityFailure -Root $Root); RecoverySource = '' }
-    }
-    if ($expected -and $expected -cne $trusted.Hash) {
-        return [pscustomobject]@{ State = 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'; RecoverySource = '' }
+        $gate = [string]$_.Exception.Message
+        if ($gate -cnotin @('LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED')) {
+            $gate = 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'
+        }
+        return [pscustomobject]@{ State = $gate; RecoverySource = '' }
     }
     return [pscustomobject]@{ State = 'RECOVERY_READY'; RecoverySource = 'LAST_KNOWN_GOOD' }
 }
@@ -1126,14 +1127,12 @@ function Stop-CanonicalPathCatDeskForReleaseRepair([string]$Root, [string]$Confi
     return (Stop-CatDeskListenerProcessForRecovery -LocalMcp $local -Canonical $observedCanonical -Candidate $listener -FailureMessage "canonical CatDesk did not stop for release repair")
 }
 
-function Repair-CanonicalReleaseForRecovery([string]$Root, [string]$Config, [string]$ExpectedHash) {
+function Repair-CanonicalReleaseForRecovery {
+    param([string]$Root, [string]$Config, [string]$ExpectedHash, [switch]$AllowRetainedPredecessor)
     if (-not (Test-CatDeskPromotionStartupReady -Root $Root)) {
         throw 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'
     }
-    try { $trusted = Get-CatDeskLastKnownGoodRelease -Root $Root } catch { throw (Get-CatDeskLkgAuthorityFailure -Root $Root) }
-    if ($ExpectedHash -and $ExpectedHash.ToLowerInvariant() -ne $trusted.Hash) {
-        throw "trusted release recovery snapshot does not match requested hash"
-    }
+    $trusted = Select-CatDeskRecoveryRelease -Root $Root -ExpectedHash $ExpectedHash -AllowRetainedPredecessor:$AllowRetainedPredecessor
     $canonicalBinary = Join-Path $Root 'target\release\catdesk.exe'
     $actualHash = $null
     if (Test-Path -LiteralPath $canonicalBinary -PathType Leaf) {
@@ -1142,7 +1141,7 @@ function Repair-CanonicalReleaseForRecovery([string]$Root, [string]$Config, [str
     if ($actualHash -ne $trusted.Hash) {
         [void](Stop-CanonicalPathCatDeskForReleaseRepair -Root $Root -Config $Config)
     }
-    $restored = Restore-CatDeskCanonicalFromLastKnownGood -Root $Root -ExpectedHash $ExpectedHash
+    $restored = Restore-CatDeskCanonicalFromLastKnownGood -Root $Root -ExpectedHash $ExpectedHash -AllowRetainedPredecessor:$AllowRetainedPredecessor
     return [pscustomobject]@{ Source = 'LAST_KNOWN_GOOD'; RestoredBinary = $restored.RestoredBinary; RestoredManifest = $restored.RestoredManifest; Hash = $restored.Hash }
 }
 
@@ -1295,7 +1294,8 @@ function Invoke-CanonicalStackBootstrapCore {
         if($Mode -ne "recover"){throw}
         try {
             $requested = Get-RequestedCatDeskFingerprint $root $ExpectedBuildSha256 $BuildFingerprintPath
-            $recovery=Repair-CanonicalReleaseForRecovery -Root $root -Config $ConfigPath -ExpectedHash $requested
+            $pinnedPredecessor = $BackendOnly -and -not [string]::IsNullOrWhiteSpace($ExpectedBuildSha256)
+            $recovery=Repair-CanonicalReleaseForRecovery -Root $root -Config $ConfigPath -ExpectedHash $requested -AllowRetainedPredecessor:$pinnedPredecessor
             $canonical=Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $requested -FingerprintPath $BuildFingerprintPath
             $releaseRestored=$true;$releaseRecoverySource=[string]$recovery.Source
         } catch {

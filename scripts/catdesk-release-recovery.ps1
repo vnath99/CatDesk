@@ -625,10 +625,39 @@ function Replace-CatDeskRecoveryFile([string]$Source, [string]$Destination, [str
     }
 }
 
-function Restore-CatDeskCanonicalFromLastKnownGood([string]$Root, [string]$ExpectedHash = '') {
+function Select-CatDeskRecoveryRelease {
+    param([string]$Root, [string]$ExpectedHash = '', [switch]$AllowRetainedPredecessor)
+    try { $current = Get-CatDeskLastKnownGoodRelease $Root } catch { throw (Get-CatDeskLkgAuthorityFailure $Root) }
+    if (!$ExpectedHash -or $ExpectedHash.ToLowerInvariant() -eq $current.Hash) { return $current }
+    if (!$AllowRetainedPredecessor -or $ExpectedHash -notmatch '^[a-f0-9]{64}$') {
+        throw 'trusted release recovery snapshot does not match requested hash'
+    }
+
+    # A different expectation is not evidence that an intact canonical pair
+    # failed. Only a measured split can select the prior slot.
+    $split = $false
+    try { [void](Get-CatDeskCanonicalPairEvidence $Root) }
+    catch { $split = $_.Exception.Message -ceq 'canonical release pair does not match' }
+    if (!$split) { throw 'canonical split pair is unproven for predecessor recovery' }
+
+    $pointer = Read-CatDeskLkgPointer $Root
+    if ($null -eq $pointer -or $pointer.Slot -cne $current.Slot -or
+        $pointer.Generation -ne $current.Generation -or $pointer.Hash -cne $current.Hash) {
+        throw 'selected release recovery slot is unproven for predecessor recovery'
+    }
+    $other = if ($current.Slot -ceq 'slot-a') { 'slot-b' } else { 'slot-a' }
+    $previous = Read-CatDeskLkgSlot -Root $Root -Slot $other
+    if ($null -eq $previous -or $previous.Generation -ge $current.Generation -or
+        $previous.Hash -cne $ExpectedHash.ToLowerInvariant()) {
+        throw 'retained release predecessor does not match requested hash'
+    }
+    return $previous
+}
+
+function Restore-CatDeskCanonicalFromLastKnownGood {
+    param([string]$Root, [string]$ExpectedHash = '', [switch]$AllowRetainedPredecessor)
     $rootPath = Resolve-CatDeskRecoveryRoot $Root
-    $trusted = Get-CatDeskLastKnownGoodRelease $rootPath
-    if ($ExpectedHash -and $ExpectedHash.ToLowerInvariant() -ne $trusted.Hash) { throw 'trusted release recovery snapshot does not match requested hash' }
+    $trusted = Select-CatDeskRecoveryRelease -Root $rootPath -ExpectedHash $ExpectedHash -AllowRetainedPredecessor:$AllowRetainedPredecessor
     $release = Join-Path $rootPath 'target\release'
     if (-not (Test-Path -LiteralPath $release -PathType Container)) { New-Item -ItemType Directory -Path $release -Force -ErrorAction Stop | Out-Null }
     $releaseItem = Get-Item -LiteralPath $release -Force -ErrorAction Stop

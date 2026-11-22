@@ -309,6 +309,41 @@ try {
   [IO.File]::WriteAllText($binary,"corrupt-both");[IO.File]::WriteAllText($manifest,(('e'*64)+"`n"));$pairRepair=Restore-CatDeskCanonicalFromLastKnownGood $root;if(-not $pairRepair.RestoredBinary -or -not $pairRepair.RestoredManifest -or (Get-CatDeskCanonicalPairEvidence $root).Hash -ne $hash){throw "two-sided canonical split brain was not self-healed from LKG"}
   [IO.File]::WriteAllText($binary,"synthetic-v2");$hash2=(Get-FixtureHash $binary -Algorithm SHA256).Hash.ToLowerInvariant();[IO.File]::WriteAllText($manifest,"$hash2`n");$canonicalPair2=Get-CatDeskCanonicalPairEvidence $root;$lkg2=Save-CatDeskLastKnownGoodRelease -Root $root -Canonical $canonicalPair2;if($lkg2.Hash -ne $hash2 -or $lkg2.Generation -ne 2 -or $lkg2.Slot -eq $lkg1.Slot){throw "second reviewed LKG generation did not use the inactive slot"}
   $pointer=Join-Path $root ".catdesk\release-recovery\current.json";[IO.File]::WriteAllText($pointer,"corrupt-pointer");$reconciled=Get-CatDeskLastKnownGoodRelease $root;if($reconciled.Hash -ne $hash2 -or $reconciled.Generation -ne 2){throw "corrupt LKG pointer did not reconcile to the unique highest valid generation"};$pointerRepair=Save-CatDeskLastKnownGoodRelease -Root $root -Canonical $canonicalPair2;$repairedPointer=Read-CatDeskLkgPointer $root;if($pointerRepair.Generation -ne 2 -or $repairedPointer.Generation -ne 2 -or $repairedPointer.Hash -ne $hash2 -or $repairedPointer.Slot -ne $lkg2.Slot){throw "same-hash reviewed promotion did not repair the durable LKG pointer"}
+
+  # Recovery can target the exact older reviewed slot after a proved split pair.
+  $olderPin = $lkg1.Hash
+  $beforeSlotPaths = @($lkg1.Binary,$lkg1.Manifest,$lkg1.Metadata,$lkg2.Binary,$lkg2.Manifest,$lkg2.Metadata,$pointer)
+  $beforeSlots = @($beforeSlotPaths | ForEach-Object { (Get-FixtureHash -LiteralPath $_ -Algorithm SHA256).Hash })
+  $healthy = Get-CanonicalReleaseRecoveryAssessment -Root $root -ExpectedHash $olderPin
+  if ($healthy.State -cne 'RECOVERY_RELEASE_AUTHORITY_REQUIRED') { throw 'a predecessor pin must not replace a valid current pair' }
+
+  [IO.File]::WriteAllText($manifest,$olderPin)
+  $brokenFingerprint = [IO.File]::ReadAllText($manifest)
+  $assessment = Get-CanonicalReleaseRecoveryAssessment -Root $root -ExpectedHash $olderPin
+  if ($assessment.State -cne 'RECOVERY_READY' -or [IO.File]::ReadAllText($manifest) -cne $brokenFingerprint) {
+    throw "explicit verified predecessor was not admitted by read-only assessment ($($assessment.State))"
+  }
+  $supplemental = Join-Path $root 'old-reference-fingerprint'
+  [IO.File]::WriteAllText($supplemental,$olderPin)
+  $referenceOnly = Get-CanonicalReleaseRecoveryAssessment -Root $root -ExpectedHash '' -FingerprintPath $supplemental
+  if ($referenceOnly.State -cne 'RECOVERY_RELEASE_AUTHORITY_REQUIRED') { throw 'a supplemental file silently selected a retained predecessor' }
+
+  $pointerBefore = [IO.File]::ReadAllBytes($pointer)
+  try {
+    [IO.File]::WriteAllText($pointer,'unproven-pointer')
+    $unproven = Get-CanonicalReleaseRecoveryAssessment -Root $root -ExpectedHash $olderPin
+    if ($unproven.State -cne 'RECOVERY_RELEASE_AUTHORITY_REQUIRED') { throw 'an invalid pointer made an older slot selectable' }
+  } finally {
+    [IO.File]::WriteAllBytes($pointer,$pointerBefore)
+  }
+  $restoredOlder = Restore-CatDeskCanonicalFromLastKnownGood -Root $root -ExpectedHash $olderPin -AllowRetainedPredecessor
+  if ($restoredOlder.Hash -cne $olderPin -or $restoredOlder.Slot -cne $lkg1.Slot -or
+      (Get-CatDeskCanonicalPairEvidence $root).Hash -cne $olderPin) { throw 'the exact retained predecessor pair was not restored' }
+  $afterSlots = @($beforeSlotPaths | ForEach-Object { (Get-FixtureHash -LiteralPath $_ -Algorithm SHA256).Hash })
+  if (($beforeSlots -join ',') -cne ($afterSlots -join ',')) { throw 'explicit predecessor recovery changed retained release evidence' }
+  $restoredCurrent = Restore-CatDeskCanonicalFromLastKnownGood $root
+  if ($restoredCurrent.Hash -cne $hash2) { throw 'the ordinary recovery selection moved after explicit predecessor recovery' }
+
   $inactive=if($lkg2.Slot -eq 'slot-a'){'slot-b'}else{'slot-a'};$inactivePath=Join-Path $root ".catdesk\release-recovery\$inactive";Remove-Item -LiteralPath $inactivePath -Recurse -Force;New-Item -ItemType Directory -Path $inactivePath|Out-Null;[IO.File]::WriteAllText((Join-Path $inactivePath 'manifest.json'),'partial');$reconciledPartial=Get-CatDeskLastKnownGoodRelease $root;if($reconciledPartial.Hash -ne $hash2){throw "incomplete inactive LKG slot displaced the valid generation"}
   $noLkgRoot=Join-Path $root 'no-lkg';New-Item -ItemType Directory -Path $noLkgRoot|Out-Null;try{$null=Get-CatDeskLastKnownGoodRelease $noLkgRoot;throw "missing LKG authority was accepted"}catch{if($_.Exception.Message -match "missing LKG authority was accepted"){throw}}
   # T-0159: native reload receipts, health/process continuity, and review
