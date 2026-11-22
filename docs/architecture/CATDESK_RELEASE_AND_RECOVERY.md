@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Verification 2026-11-22T05:11:16Z.** The reviewed promoter's real disk transaction survived a disposable process interruption. Its existing guarded recovery restored the verified predecessor, retained the candidate and removed the journal after validating the restored pair. Authenticated headless MCP independently confirmed the restored image. The fixture supplied review authority and the initial listener handoff. [Evidence](../verification/REVIEWED_DISK_PROMOTION_INTERRUPTION_AND_ROLLBACK_2026_11_22.json).
+
 **Decision 2026-11-22T05:07:34Z.** Use the existing durable promotion journal to block startup after the owner exits. The Windows lease protects the live handoff, and the journal protects the gap between matching disk bytes and a settled transaction. Existing reviewed reconciliation still owns rollback authority. A disposable writer-exit test verified the public startup boundary in both PowerShell editions. [Evidence](../verification/INTERRUPTED_PROMOTION_STARTUP_FENCE_2026_11_22.json).
 
 **Verification 2026-11-22T05:00:03Z.** The existing supervisor recovered in a real isolated Windows test after the release lease cleared. The fixture supplied the allowed headless launch on an ephemeral port, and the existing MCP readiness verifier tested the exact candidate twice. The installed lifecycle retains native daemon identity and its fixed loopback port. Validate that path and retained rollback after an authorized release. [Evidence](../verification/ISOLATED_SUPERVISOR_CANDIDATE_MCP_2026_11_22.json).

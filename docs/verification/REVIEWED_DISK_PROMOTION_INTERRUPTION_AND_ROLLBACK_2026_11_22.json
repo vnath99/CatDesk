@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_FILESYSTEM_PROMOTION_INTERRUPTION_AND_REAL_ROLLBACK_BACKEND",
+  "sourceCommit": "8c0188d81f1dae297135ba6303d4697f374938e9",
+  "promoterSha256": "fb603f6ceedf15af2c092610b56a5295107a685a943fec2a4d5c33a0d46f8c06",
+  "fixtureSha256": "f210843cde6f4ef11114497eb69edbbed6c42e902f1389193f44fb0f017f3d50",
+  "receiptSha256": "31f5145fecdd18f573e26850544e69e0d23f1cb225ad361d30c9c08745351a40",
+  "startedUtc": "2026-11-22T05:11:10.068039Z",
+  "finishedUtc": "2026-11-22T05:11:16.500846Z",
+  "candidate": {
+    "commit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "sha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465"
+  },
+  "previous": {
+    "commit": "5a939df267719322758df0598fd46532f07b8126",
+    "sha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050"
+  },
+  "diskTransaction": {
+    "actualPromoterBackupJournalPairReplacementAndRestoreRan": true,
+    "checkpoint": "AFTER_CANONICAL_MANIFEST_REPLACEMENT",
+    "writerTerminatedAtCheckpointAndExitProved": true,
+    "journalSha256BeforeInterruption": "d71b351ff32396cc7cd4c7b65b6d853ad8861a9abaaab527a5ee26da2cc36191",
+    "publicStartup": "RECOVERY_AUTHORITY_REQUIRED",
+    "unapprovedRollback": "REVIEWED_PROMOTION_AUTHORIZATION_REQUIRED",
+    "journalAndCandidateUnchangedOnRefusal": true,
+    "exactFixtureAuthorizedRollback": "RECOVERED_PRIOR_CANONICAL",
+    "previousPairAndBackupVerified": true,
+    "candidateAfterRollbackVerified": true,
+    "journalClearedBySuccessfulRollback": true
+  },
+  "restoredBackend": {
+    "headlessOnWindowsAssignedLoopbackPort": true,
+    "authorizedHttpStatus": 200,
+    "anonymousHttpStatus": 401,
+    "initializeVerified": true,
+    "toolCount": 79,
+    "ownedListenerClosedAndFixtureRemoved": true
+  },
+  "limitations": "The existing test seams supplied fixture-only authority and the initial listener handoff. Disk backup, journal, swap and rollback ran without substitution. The restored executable served on an isolated headless port. Protected installed promotion, native persistent startup and unattended rollback remain unqualified for this candidate.",
+  "productionPortUsed": false,
+  "productionActions": 0
+}

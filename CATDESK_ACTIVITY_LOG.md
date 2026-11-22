@@ -782,3 +782,11 @@ Evidence: [docs/verification/ISOLATED_SUPERVISOR_CANDIDATE_MCP_2026_11_22.json](
 Agent: Codex. Source: a8080f920f1703cacaf15328bba5c4d33192de97. Outcome: partial. The durable promotion journal blocked ordinary startup after a disposable Windows writer exited and released its lease. The matching pair and journal were preserved. Next: Use the prepared first Wake selection and genuine independent backend review. Qualify native startup and retained rollback after protected promotion.
 
 Evidence: [docs/verification/INTERRUPTED_PROMOTION_STARTUP_FENCE_2026_11_22.json](docs/verification/INTERRUPTED_PROMOTION_STARTUP_FENCE_2026_11_22.json); command: Bounded Windows release writer interruption and public lifecycle readback; exit 0; SHA-256 6ca22d41c6fbc8a91387821c01f48b2b596367efe3f6988fc056a3b9c31ee6b7.
+
+<!-- catdesk-activity:nov22-reviewed-disk-promotion-rollback sha256:9072862bd2bec10a2f1217b3d1280809f206f10ed0008cc6b72917f272b3b100 -->
+
+## 2026-11-22T05:11:16.500846Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 8c0188d81f1dae297135ba6303d4697f374938e9. Outcome: partial. The actual promotion script swapped the disposable pair and retained the prior bytes. Following writer exit it refused unapproved recovery, then restored the exact predecessor under fixture authorization and verified authenticated MCP. Next: Use the prepared first Wake selection and the existing independent backend review. Exercise native persistent startup and retained rollback after protected promotion.
+
+Evidence: [docs/verification/REVIEWED_DISK_PROMOTION_INTERRUPTION_AND_ROLLBACK_2026_11_22.json](docs/verification/REVIEWED_DISK_PROMOTION_INTERRUPTION_AND_ROLLBACK_2026_11_22.json); command: Bounded actual reviewed disk promotion, process interruption and isolated MCP rollback health; exit 0; SHA-256 e115f11325fc9363b7d3c03d75b4d258d67608cc2dea30e9db9d909e9000a1ff.
