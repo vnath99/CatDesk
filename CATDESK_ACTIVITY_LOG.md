@@ -998,3 +998,11 @@ Evidence: [docs/verification/CANONICAL_FINGERPRINT_EXPECTATION_RECOVERY_2026_11_
 Agent: CatDesk development. Source: a15d2952777f5603b16eaf3c2512f6f35aa0a384. Outcome: partial. The exact frozen 56aa9912 backend completed scoped edit, real Windows verification, Git checkpoint and one queued Wake on authenticated private loopback. Duplicate calls were refused and the owner exited naturally. ChatGPT Web delivery remains unverified. Next: Obtain the attributable independent review and producer evidence for the original frozen backend. Verify the signed first Wake V3 selection, then exercise the existing v5 conversation through installed edit, verification, checkpoint and actual self-Wake delivery.
 
 Evidence: [docs/verification/FROZEN_BACKEND_POSITIVE_SCOPED_CYCLE_2026_11_22.json](docs/verification/FROZEN_BACKEND_POSITIVE_SCOPED_CYCLE_2026_11_22.json); command: cargo test --locked --offline --target-dir target --bin catdesk web_task_dispatch::tests::cached_http_checkpoint_precedes_manual_wake -- --exact --ignored; exit 0; SHA-256 f98970a196f190b2834107e93e5f91644c541e00842b61c0d5cd1529d6e18d3b.
+
+<!-- catdesk-activity:nov22-frozen-backend-manual-wake-admission sha256:72477a7482248cb27c2e7f4bf8f3a562fddca0e00adec9b541f805206db2076d -->
+
+## 2026-11-22T08:21:14Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: dc63e9561b82805841484815902ce9e25df97a94. Outcome: partial. The exact frozen backend sent one queued self-Wake to the scoped operator admission path in a disposable store. The operator refused a wrong call and an incomplete source timer, then retained a pre-submit adapter refusal without a receipt or replay. Next: Obtain independent review and producer evidence for the frozen backend and verify signed Wake V3 selection. Then qualify installed promotion and rollback and verify delivery and the next response using the existing v5 conversation.
+
+Evidence: [docs/verification/FROZEN_BACKEND_MANUAL_WAKE_ADMISSION_2026_11_22.json](docs/verification/FROZEN_BACKEND_MANUAL_WAKE_ADMISSION_2026_11_22.json); command: cargo test --locked --offline --target-dir target --bin catdesk web_task_dispatch::tests::cached_http_checkpoint_precedes_manual_wake -- --ignored --exact --nocapture; exit 0; SHA-256 cd65fa5e5bab2b18d79cd2605d36037e35e1b028e142d29ff8acb9685164d48f.

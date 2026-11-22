@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T08:21:14Z",
+  "scope": "ACTUAL_FROZEN_WINDOWS_BACKEND_AND_PUBLIC_OPERATOR_CLI_DISPOSABLE_WAKE_STORE_NO_BROWSER",
+  "testSourceCommit": "dc63e9561b82805841484815902ce9e25df97a94",
+  "artifactSourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "artifactSha256BeforeAndAfter": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+  "frozenArtifactModified": false,
+  "test": {
+    "command": "cargo test --locked --offline --target-dir target --bin catdesk web_task_dispatch::tests::cached_http_checkpoint_precedes_manual_wake -- --ignored --exact --nocapture",
+    "testOnlyChange": true,
+    "testsPassed": 1,
+    "elapsedSeconds": 64.29,
+    "exitCode": 0,
+    "formatAndDiffCheckPassed": true
+  },
+  "observation": {
+    "observedUtc": "2026-11-22T08:20:03.4097107Z",
+    "exactImageHeadlessOwners": 1,
+    "webAutomationDisabled": true,
+    "headlessMaximumSeconds": 60,
+    "remainingExactImageProcesses": 0,
+    "naturalHeadlessExit": true,
+    "listenerClosed": true,
+    "fixtureRootRemoved": true
+  },
+  "checkpointAndQueue": {
+    "authenticatedPrivateLoopback": true,
+    "realWindowsSandboxVerification": true,
+    "verifiedGitCheckpoint": true,
+    "queuedWakeIntents": 1
+  },
+  "manualWake": {
+    "wrongCall": "WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN",
+    "pendingSourceTimer": "SCOPED_REVIEW_PROJECT_BUSY",
+    "noClaimBeforeSourceCompletion": true,
+    "initialSourceReceiptAndCompletionWereFixtureInputs": true,
+    "exactEventAndTargetClaimedAfterSourceCompletion": true,
+    "inertInterpreterRefusal": "BROWSER_ADAPTER_START_FAILED",
+    "retainedPhase": "ATTENTION",
+    "secondAttempt": "SCOPED_REVIEW_REPLAY_REFUSED",
+    "queueAndRetainedDeliveryPreserved": true,
+    "submissionWitnessCreated": false,
+    "deliveryReceiptCreated": false,
+    "newTurnTimerCreated": false
+  },
+  "browserStarted": false,
+  "externalMessagesSent": 0,
+  "historicalTaskReplayed": false,
+  "actualV5CallerVerified": false,
+  "installedPromotionOrRollbackPerformed": false,
+  "installedWebCycleAccepted": false
+}
