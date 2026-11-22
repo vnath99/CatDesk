@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — stopped local promotion controller.** The development worker recognizes only its bound worker process and the earlier-created same-candidate process waiting for the exact artifact. The normal stopped retirement path still requires no live owner for that release. Successive promotions must settle the previous completed transaction through the existing guarded path. [Verification](docs/verification/STOPPED_PROMOTION_PROCESS_IDENTITY_2026_11_22.json).
+
 **November 22 — interrupted rollback verification.** The existing reviewed promoter refused an unapproved rollback and preserved the candidate and journal. In isolated state, the controlled use of its existing fixture authority restored the exact retained pair and settled the journal. The restored executable answered authenticated MCP. Production rollback still requires the supported reviewed authority. [Evidence](docs/verification/REVIEWED_DISK_PROMOTION_INTERRUPTION_AND_ROLLBACK_2026_11_22.json).
 
 **November 22 — interrupted promotion with a matching executable and fingerprint.** Development startup requires the existing disk transaction to be settled after its owner exits. A surviving promotion journal yields `RECOVERY_AUTHORITY_REQUIRED` before backend launch, even if the pair matches. Inspect the original transaction and use the guarded reconciliation or rollback procedure. [Verification](docs/verification/INTERRUPTED_PROMOTION_STARTUP_FENCE_2026_11_22.json). [Existing release procedure](docs/orchestrator/CATDESK_PRODUCTION_RELEASE_LIFECYCLE.md).

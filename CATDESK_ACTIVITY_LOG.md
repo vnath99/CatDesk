@@ -790,3 +790,11 @@ Evidence: [docs/verification/INTERRUPTED_PROMOTION_STARTUP_FENCE_2026_11_22.json
 Agent: Codex. Source: 8c0188d81f1dae297135ba6303d4697f374938e9. Outcome: partial. The actual promotion script swapped the disposable pair and retained the prior bytes. Following writer exit it refused unapproved recovery, then restored the exact predecessor under fixture authorization and verified authenticated MCP. Next: Use the prepared first Wake selection and the existing independent backend review. Exercise native persistent startup and retained rollback after protected promotion.
 
 Evidence: [docs/verification/REVIEWED_DISK_PROMOTION_INTERRUPTION_AND_ROLLBACK_2026_11_22.json](docs/verification/REVIEWED_DISK_PROMOTION_INTERRUPTION_AND_ROLLBACK_2026_11_22.json); command: Bounded actual reviewed disk promotion, process interruption and isolated MCP rollback health; exit 0; SHA-256 e115f11325fc9363b7d3c03d75b4d258d67608cc2dea30e9db9d909e9000a1ff.
+
+<!-- catdesk-activity:nov22-stopped-promotion-process-identity sha256:260e3577a8b2a576de7c3d02d24c54e82efb61a52817d31ab6374012bbf59a74 -->
+
+## 2026-11-22T05:17:15.8428696Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 726bccef4d1045b050bfba2728cb01809433525d. Outcome: partial. Stopped promotion recognizes its exact worker and waiting parent while excluding a separate same-image process. Both Windows PowerShell editions and 51 native tests passed. Next: Use the existing first Wake selection and independent backend review. Qualify the prior completed retirement and native persistent startup through protected promotion.
+
+Evidence: [docs/verification/STOPPED_PROMOTION_PROCESS_IDENTITY_2026_11_22.json](docs/verification/STOPPED_PROMOTION_PROCESS_IDENTITY_2026_11_22.json); command: Actual Win32 process admission fixture and all daemon_reload regression tests; exit 0; SHA-256 3da2587d4f2935e75f89695afecbde6cd59cb6e41fccf3ce40d509dfd3c6c45a.

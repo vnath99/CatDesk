@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "scope": "REAL_WINDOWS_PROCESS_RELATIONSHIPS_AND_NATIVE_RELEASE_REGRESSIONS",
+  "sourceCommit": "726bccef4d1045b050bfba2728cb01809433525d",
+  "verifiedUtc": "2026-11-22T05:17:15.8428696Z",
+  "fixtureSha256": "a12b694ace24b090fb1ebb07247b3f5c51e9862da5f1173dc5dd1f09f745ce5b",
+  "nativeTestExecutableSha256": "3a827843228c4ca739dc86437028c4489e76801701a707f2e5cb32e6dcde5c0f",
+  "defect": "The stopped-source inspection refused the candidate image before it recognized its own promotion worker. The one-hash controller also remained alive while waiting for the worker's receipt.",
+  "windowsProcessProof": {
+    "powershell7FinishedUtc": "2026-11-22T05:16:48.8926916Z",
+    "windowsPowershell51FinishedUtc": "2026-11-22T05:16:49.7321975Z",
+    "scope": "Three harmless processes from one disposable image. The fixture invoked the exact product admission function with actual Win32_Process rows.",
+    "knownWorkerAdmitted": true,
+    "earlierExactParentAdmitted": true,
+    "unrelatedProcessWithSameImageAndCommandExcluded": true,
+    "wrongHashParentExcluded": true,
+    "wrongTransactionWorkerRefused": true,
+    "stoppedRetirementExemptions": 0,
+    "fixtureRemoved": true
+  },
+  "nativeTests": {"command":"cargo test --locked --offline --bin catdesk daemon_reload:: -- --test-threads=1","passed":51,"failed":0,"exitCode":0},
+  "scopedRustfmtPassed": true,
+  "productionActions": 0,
+  "remaining": "The existing exit, retained release, historical retirement, promotion authority and startup gates still apply. The process fixture opens no backend port. Protected promotion from stopped state remains unqualified for this source."
+}
