@@ -934,3 +934,11 @@ Evidence: [docs/verification/WAKE_LOCAL_BROKER_PIPE_READINESS_2026_11_22.json](d
 Agent: CatDesk development. Source: 75d5f9b5fa672fea035c8fb71caa9adcb4ec8ee9. Outcome: partial. The development Wake controller checks a frozen local update against the protected generation and release inputs before broker start. Twenty-five Windows ledger, client, CLI and rollback tests passed. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
 
 Evidence: [docs/verification/WAKE_FRESH_LOCAL_UPDATE_PREFLIGHT_2026_11_22.json](docs/verification/WAKE_FRESH_LOCAL_UPDATE_PREFLIGHT_2026_11_22.json); command: Windows Wake ledger, client, CLI and enrolled selection plus rollback regression tests; exit 0; SHA-256 c4f0d64eb6387fffa463d970dce01fb178434aac5c795d1d5534d542b4b0caaa.
+
+<!-- catdesk-activity:nov22-wake-local-reply-recovery-and-exit sha256:42253e90f6e85b737c5631c153e656e5b0032d4333003c5c24f004e73d77f7c8 -->
+
+## 2026-11-22T07:11:16Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: ebf4e4c2e24a0d18b271e7125a2c31a2017a457e. Outcome: partial. The development Wake client can recover a lost reply from the exact completed protected ledger after the original broker exits. Twenty-six Windows client, ledger and CLI tests passed. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
+
+Evidence: [docs/verification/WAKE_LOCAL_REPLY_RECOVERY_AND_EXIT_2026_11_22.json](docs/verification/WAKE_LOCAL_REPLY_RECOVERY_AND_EXIT_2026_11_22.json); command: Windows Wake broker client, same-state ledger and WakeHost CLI tests; exit 0; SHA-256 e0661cbca584db1ef4c9d949bcc6173f60ae284935fe53f0e313211808da2734.

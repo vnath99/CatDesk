@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "scope": "WINDOWS_WAKE_CLIENT_PROCESS_EXIT_AND_NATIVE_LEDGER_FIXTURES",
+  "verifiedUtc": "2026-11-22T07:11:16Z",
+  "sourceCommit": "ebf4e4c2e24a0d18b271e7125a2c31a2017a457e",
+  "behavior": {
+    "originalPipeWriteBudgetUnchanged": true,
+    "observesExactConnectedProcessHandle": true,
+    "brokerExitReadbackBudgetSeconds": 15,
+    "requiresStoppedScmWithNoPidForReadbackRecovery": true,
+    "validWireReplyPreservesOriginalCompletion": true,
+    "lostReplyRecoveredState": "WAKE_LOCAL_UPDATE_COMPLETE_RECOVERED_FROM_LEDGER",
+    "ledgerBindsRequestGenerationPlannedSelectionAndTerminalPhase": true,
+    "automaticRetryAuthorized": false,
+    "liveAcceptanceEstablished": false
+  },
+  "actualFixtures": {
+    "runningProcessDidNotTriggerStoppedObservation": true,
+    "realTestProcessExitedNaturally": true,
+    "differentRunningScmOwnerRefused": true,
+    "nativeTerminalLedgerRecordAccepted": true,
+    "wrongDigestGenerationPhaseOrUnverifiedCleanupRefused": true,
+    "testProcessesRemaining": 0
+  },
+  "tests": {
+    "brokerClientPassed": 14,
+    "sameStateLedgerPassed": 10,
+    "wakeHostCliPassed": 2,
+    "formatCheckExit": 0
+  },
+  "productionBrokerStarts": 0,
+  "installedAcceptance": false
+}
