@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_COMPILED_WINDOWS_RESOLVER_AND_AUTHENTICATED_SERVING_READBACK_WITH_DISPOSABLE_RETAINED_RECEIPT",
+  "sourceCommit": "a9a8154dfd29729afec1e794c79203dc2821e09f",
+  "baselineCommit": "dd1b612688a5504f202b88dd8fb0a0ed43ec67ae",
+  "privateFixtureSha256": "0555ec2ab84e3a5eec63c38378adfba9826ace07ab5b9581b28d92df51e46231",
+  "compiledControllerSource": "a6132b0c3ab9a6bd78c884bf5dfedf5c1f06d2c3",
+  "compiledControllerSha256": "af12ba842dd9eb30f18ab488431ff9fa3ebcbc1460bd7ee8147724c486c40ce5",
+  "baseline": "The new regression expected authenticated serving to be verified for a completed promotion with recorded servingState UNVERIFIED. The prior facade returned UNVERIFIED without probing.",
+  "tests": {
+    "lifecycleWindowsPowerShell51": "PASS",
+    "lifecyclePowerShell7": "PASS",
+    "freshReceiptAlsoReadBack": true,
+    "inactiveMonitorAndNoListenerDoesNotClaimStopped": true,
+    "retainedReceiptDoesNotRelaunchCandidate": true
+  },
+  "actualWindows": {
+    "startedUtc": "2026-11-22T09:25:19.1306473+00:00",
+    "finishedUtc": "2026-11-22T09:26:05.3521594+00:00",
+    "recordedServingState": "UNVERIFIED",
+    "observedServingDetail": "LOCAL_BACKEND_READY",
+    "servingDetailAfterNaturalExit": "LOCAL_BACKEND_READBACK_UNVERIFIED",
+    "authRequiredByProbe": true,
+    "authenticatedHttpAfterFacade": 200,
+    "tools": 79,
+    "windowsOwnerSamples": 3,
+    "stagingAbsent": true,
+    "retainedReleaseAndJournalPinsPreserved": 5,
+    "fixtureRemoved": true,
+    "listenerClosed": true
+  },
+  "limits": "A real compiled resolver read a synthetic retained journal in a disposable workspace. Windows process identity and real MCP were checked for the exact candidate serving on a private port through bounded headless mode. This proves readback, not independent release authority, fixed-port production startup or installed promotion.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}

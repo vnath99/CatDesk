@@ -1062,3 +1062,11 @@ Evidence: [docs/verification/BACKEND_CONFIRMED_ROLLBACK_SELECTION_2026_11_22.jso
 Agent: Codex. Source: 489f675149b29cb79fd648f61715fa813eb92576. Outcome: partial. Backend-only recovery now stops waiting once its exact newly launched child has exited. The frozen backend failed on an invalid disposable config and returned the new gate in 3.1 seconds. The pair stayed intact and the private owner exited.. Next: Verify an eligible independent ChatGPT Web review-only route for the original frozen draft. Its exact start approval, genuine report, acknowledgment and source snapshot remain mandatory. Qualify installed promotion and rollback and confirm the first signed Wake V3 selection before the installed Web cycle..
 
 Evidence: [docs/verification/BACKEND_OWNED_STARTUP_EXIT_2026_11_22.json](docs/verification/BACKEND_OWNED_STARTUP_EXIT_2026_11_22.json); command: Bounded frozen Windows backend with a malformed disposable config; exit 0; SHA-256 1fe0e313fd142ed80a00046ad0b1e349876c31d0384ba0400da10ff9abe3f128.
+
+<!-- catdesk-activity:unverified-handoff-serving-readback-2026-11-22 sha256:ad04577cd6a611e91e458a9dd57840de4bf7f3be8b4b41831521a304fa39f95e -->
+
+## 2026-11-22T09:26:06Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: a9a8154dfd29729afec1e794c79203dc2821e09f. Outcome: partial. The one-hash facade independently verifies serving even when the completed local promotion receipt starts with UNVERIFIED. The compiled resolver and actual authenticated Windows backend passed the disposable readback and subsequent no-listener case.. Next: Use the eligible independent reviewer path and original frozen backend draft once admission is proven. Complete trusted producer and installed promotion and rollback. Confirm first signed Wake V3 selection and run the installed Web cycle..
+
+Evidence: [docs/verification/PROMOTION_INITIALLY_UNVERIFIED_SERVING_2026_11_22.json](docs/verification/PROMOTION_INITIALLY_UNVERIFIED_SERVING_2026_11_22.json); command: Bounded native Windows retained-receipt and live MCP verification; exit 0; SHA-256 3c92b50e22e225c134822315924feae91d6dbb373023456bbb02f94e0742ebd7.
