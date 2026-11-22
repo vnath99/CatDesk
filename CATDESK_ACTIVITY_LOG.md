@@ -1118,3 +1118,11 @@ Evidence: [docs/verification/BACKEND_ESCROW_AMBIGUITY_AND_SUCCESSOR_2026_11_22.j
 Agent: Codex. Source: 42946497df32f36f20a88da4d038e2a8c759e20b. Outcome: partial. Authorized interrupted rollback now restores the matching release selector before clearing the journal. Disposable Windows tests preserved both slots across two interruptions. A later unpinned recovery selected the exact predecessor, which passed authenticated MCP and exited cleanly. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/BACKEND_INTERRUPTED_ROLLBACK_SELECTION_2026_11_22.json](docs/verification/BACKEND_INTERRUPTED_ROLLBACK_SELECTION_2026_11_22.json); command: Disposable Windows promotion rollback at two durable checkpoints and authenticated predecessor startup; exit 0; SHA-256 69085f6f2c03e2f324a3950c5c3a6945095e6a6da82182496f4d579f1ec76a41.
+
+<!-- catdesk-activity:nov22-promotion-registered-backend-owner sha256:e75e0b0a67c3e75908b5971a5f99bdd5fd359e65005e5bfc13d63365ac13c2fb -->
+
+## 2026-11-22T10:21:43.972980Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: c45a18e091549231733c3b9d6ec4e079bac85423. Outcome: partial. Fresh promotion can request one start of an exact existing backend-only scheduled task. It can observe the listener of the already-running full-stack owner which the installed read-only registration check found. Two disposable Windows fixtures verified authenticated MCP after facade exit. Scheduler dispatch was modeled. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/PROMOTION_REGISTERED_BACKEND_OWNER_2026_11_22.json](docs/verification/PROMOTION_REGISTERED_BACKEND_OWNER_2026_11_22.json); command: Windows one-hash owner fixtures and read-only installed registration inspection; exit 0; SHA-256 a60bc098b6a4f59b882f65799044482717f444a116df0c5d5bef273d6c685bbb.

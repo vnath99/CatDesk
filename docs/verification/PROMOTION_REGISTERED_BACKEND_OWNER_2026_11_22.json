@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "scope": "DEVELOPMENT_ONE_HASH_RESTORATION_WITH_EXISTING_OWNER_AND_REAL_PRIVATE_MCP",
+  "sourceCommit": "c45a18e091549231733c3b9d6ec4e079bac85423",
+  "baselineSourceCommit": "a5414454b7136f92d0366a54fa99e03ab496ce2e",
+  "baseline": "The facade reported STOPPED_AFTER_BOUNDED_OWNER when an eligible backend-only scheduled owner existed but had stopped. It waited only for a live backend-only registration.",
+  "tests": {
+    "lifecyclePowerShell7": "PASS",
+    "lifecycleWindowsPowerShell51": "PASS",
+    "freshColdBackendTaskRequestsOneStart": true,
+    "disabledForeignAndStoppedFullStackTasksUntouched": true,
+    "retainedReceiptObservationOnly": true,
+    "delayedStartIsPending": true,
+    "ambiguousDispatchDoesNotRetry": true,
+    "activeFullStackIsReadOnly": true
+  },
+  "actualWindows": {
+    "coldBackendTaskFixture": {
+      "fixtureSha256": "0be33aa181561c3fc9f130f97eed80c9e8bd324e216e01fdf0371ecc540e0a7c",
+      "startedUtc": "2026-11-22T10:19:29.284042Z",
+      "finishedUtc": "2026-11-22T10:19:50.820972Z",
+      "taskRequestCount": 1,
+      "selectedBackendStartedAfterRequest": true,
+      "detail": "LOCAL_BACKEND_READY",
+      "anonymousHttp": 401,
+      "authenticatedHttpAfterFacadeExit": 200,
+      "backendExitedNaturally": true,
+      "listenerClosed": true,
+      "fixtureRemoved": true
+    },
+    "runningFullStackFixture": {
+      "fixtureSha256": "8895f6c6f69aaaac7e38ff49c1be7acc491dda792e08f97e8340a94ad38c8ac5",
+      "startedUtc": "2026-11-22T10:21:24.359481+00:00",
+      "artifactSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+      "facade": {
+        "command": "promote",
+        "state": "PROMOTION_COMPLETED",
+        "detail": "LOCAL_BACKEND_READY"
+      },
+      "anonymousStatus": 401,
+      "authenticatedStatusAfterFacadeExit": 200,
+      "testBackendExitedNaturally": true,
+      "testListenerClosed": true,
+      "fixturePromotionAuthority": true,
+      "scopedObservation": "ALREADY_RUNNING_FULL_STACK_REGISTRATION",
+      "fixtureStartupRequestCount": 0,
+      "nativeSupervisorRegistrationChanged": false,
+      "productionPortUsed": false,
+      "fixtureRemoved": true,
+      "finishedUtc": "2026-11-22T10:21:43.972980+00:00"
+    }
+  },
+  "installedRegistrationReadOnly": {
+    "observedUtc": "2026-11-22T10:20:34.1346925+00:00",
+    "scheduledTaskPresent": false,
+    "taskOwned": false,
+    "runKeyOwned": true,
+    "backendOnly": false,
+    "registrationConflict": "",
+    "monitorRunning": true,
+    "taskReady": false,
+    "demandStartAllowed": false,
+    "readOnly": true
+  },
+  "limits": "The test harness modeled promotion authority and Windows Task Scheduler dispatch. Both fixtures launched actual candidate bytes on private loopback, verified exact Windows process ownership and kept authenticated MCP serving after the facade exited. The installed snapshot inspected the exact registration and the existing monitor guard only. Neither fixture started a Windows scheduled task, changed a registration, or exercised protected promotion, installed serving, or ChatGPT Web continuation.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}
