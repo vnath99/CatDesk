@@ -1022,3 +1022,11 @@ Evidence: [docs/verification/TASK_OWNED_MANUAL_WAKE_SCHEDULER_2026_11_22.json](d
 Agent: Codex. Source: 0dbc306e0a2157381d915a88d7b23978e3ccceae. Outcome: partial. Development can select one journal-bound self-Wake with the project ID alone. The bounded one-shot preserves the stopped scoped sender gate and refuses ambiguous or unresolved deliveries. Thirteen Windows source tests passed. Next: Verify signed Wake V3 selection and complete genuine independent review and producer evidence. Qualify installed promotion and rollback, then exercise one actual v5 edit, verification, checkpoint and scoped self-Wake response.
 
 Evidence: [docs/verification/ONE_SHOT_PROJECT_MANUAL_WAKE_SELECTION_2026_11_22.json](docs/verification/ONE_SHOT_PROJECT_MANUAL_WAKE_SELECTION_2026_11_22.json); command: cargo test --locked --offline --target-dir target --bin catdesk manual_wake -- --test-threads=1 --quiet; exit 0; SHA-256 7e662bb11d606fa19343d93865c48dc756af3bc47f695be22a2479ada480def4.
+
+<!-- catdesk-activity:nov22-promotion-serving-after-monitor-exit sha256:3f60ffce0c373e297cb8b2c83d688f864ff0d5151d6c63eb2feb4a847dc15b57 -->
+
+## 2026-11-22T08:50:41Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: c9b4a7ffecbc09a0a0597975fc47f9f51208c034. Outcome: partial. The promotion facade verifies serving independently of the monitor signal. A real disposable Windows backend passed authenticated MCP and still answered after the facade exited. Both PowerShell fixture suites passed. Next: Obtain independent review and trusted build evidence for the frozen backend, then qualify the installed promotion and rollback. Verify the separately signed first Wake V3 selection before the actual v5 self-Wake cycle.
+
+Evidence: [docs/verification/PROMOTION_SERVING_AFTER_MONITOR_EXIT_2026_11_22.json](docs/verification/PROMOTION_SERVING_AFTER_MONITOR_EXIT_2026_11_22.json); command: powershell.exe -NoProfile -NonInteractive -File scripts/test-catdesk-lifecycle.ps1; exit 0; SHA-256 bd2ba76fb70b902f6d1d2a7ac7e05854e2567b52de385d77ad9224975932086f.

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T08:50:41Z",
+  "scope": "ACTUAL_FROZEN_BACKEND_WITH_PUBLIC_PROMOTION_READBACK_ON_PRIVATE_WINDOWS_LOOPBACK",
+  "sourceCommit": "c9b4a7ffecbc09a0a0597975fc47f9f51208c034",
+  "priorSourceCommit": "86105fcafed666862f64b4265323513e9dea8c4a",
+  "facadeSha256": "98c6251d5710f1a781dbfa4feb182be313335a792e215f8c9167efc5aa1a191a",
+  "privateFixtureSha256": "4cd4b3babc92543d729a661e9c9e016797db32eea10bc09e60c088fce78233ee",
+  "baselineObserved": "STOPPED_AFTER_BOUNDED_OWNER despite the fixture retaining the exact healthy listener",
+  "fixtureChecks": {
+    "windowsPowerShell51": "PASS",
+    "powerShell7": "PASS",
+    "inactiveMonitorAndExactAuthenticatedListener": "LOCAL_BACKEND_READY",
+    "unregisteredWithUnverifiedListener": "LOCAL_BACKEND_READBACK_UNVERIFIED",
+    "activeMonitorWithoutListener": "LOCAL_BACKEND_STARTUP_PENDING",
+    "ownerCreationTimeDrift": "LOCAL_BACKEND_READBACK_UNVERIFIED"
+  },
+  "actualHeadlessCase": {
+    "startedUtc": "2026-11-22T08:49:46.2151673Z",
+    "finishedUtc": "2026-11-22T08:50:30.8515393Z",
+    "imageSourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "imageSha256BeforeAndAfter": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+    "detail": "LOCAL_BACKEND_READY",
+    "monitorRegistered": false,
+    "windowsOwnerSamples": 3,
+    "authenticatedMcpReadinessChecksPassed": true,
+    "authenticatedStatusAfterFacade": 200,
+    "toolCount": 79,
+    "naturalExit": true,
+    "listenerClosed": true,
+    "fixtureRemoved": true,
+    "remainingFixtureProcesses": 0
+  },
+  "limitations": "The exact real headless backend used a disposable release pair and private port. Native promotion authority/receipt, monitor registration and headless-mode admission were fixtures. The Windows listener inventory, path/hash and process identity, authenticated MCP checks and post-facade serving were measured.",
+  "productionPortUsed": false,
+  "protectedInstallationChanged": false,
+  "installedPromotionOrRollbackQualified": false
+}
