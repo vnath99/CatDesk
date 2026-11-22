@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** Candidate resolution now uses scalar artifact and build-attempt fields before launching the reviewed controller. A malformed reply stays in the resolution phase. This change qualifies the development facade only. [Verification](docs/verification/PROMOTION_CANDIDATE_SELECTION_SHAPE_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** Closing an assigned Web request as completed now requires a settled local task journal and exact completed responses for its existing manual Wakes. Reports and explicit retirement retain their existing paths. [Verification](docs/verification/MANUAL_WAKE_COMPLETION_GUARD_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** Verified manual self-Wake readback identifies the original request, task, assignment and source turn. A changed receipt or assignment blocks response acceptance. Git and task execution remain separately verified. [Verification](docs/verification/MANUAL_WAKE_RESPONSE_ATTRIBUTION_2026_11_22.json).

@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 21:27 UTC — verify the one-command promotion resolver before starting a candidate.** A disposable native controller confirmed that the old PowerShell check accepted an array-valued artifact digest. The facade now requires one JSON object and scalar identity fields, and reports a refusal at candidate resolution. [Evidence](docs/verification/PROMOTION_CANDIDATE_SELECTION_SHAPE_2026_11_22.json).
+
 **2026-11-22 21:21 UTC — preserve task ownership through outstanding continuations.** Completion of an assigned Web request now checks its task journal and each task-issued manual Wake before closing. A queued, uncertain or response-pending Wake keeps the request open. [Evidence](docs/verification/MANUAL_WAKE_COMPLETION_GUARD_2026_11_22.json).
 
 **2026-11-22 21:15 UTC — attribute the observed self-Wake response to its original task.** The response reader now checks the exact delivery and assignment on both sides of browser observation. Its verified response identifies the original task and source turn. [Evidence](docs/verification/MANUAL_WAKE_RESPONSE_ATTRIBUTION_2026_11_22.json).

@@ -1190,7 +1190,12 @@ function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$
                 if ($errors.GetAwaiter().GetResult().Length -ne 0 -or $wire.Length -gt 4096 -or $process.ExitCode -notin @(0, 2)) {
                     throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
                 }
-                if ($process.ExitCode -eq 2 -and -not $wire.TrimStart().StartsWith('{', [StringComparison]::Ordinal)) {
+                if (-not $wire.TrimStart().StartsWith('{', [StringComparison]::Ordinal)) {
+                    # ConvertFrom-Json can unwrap a one-element array at the
+                    # pipeline boundary. The native reply is a JSON object.
+                    if ($process.ExitCode -eq 0 -and $verb -ceq 'promote-resolve') {
+                        throw 'REVIEWED_PROMOTION_RESOLUTION_UNPROVEN'
+                    }
                     throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
                 }
                 try {
@@ -1366,8 +1371,10 @@ function Invoke-LifecycleReviewedPromotion {
             }
             $receipt = $selection
         } else {
-            if ($selection.state -cne 'PROMOTION_CANDIDATE_RESOLVED' -or $selection.candidateSha256 -cne $digest -or
-                $selection.buildAttemptId -cnotmatch '^[0-9a-f]{32}$') {
+            if ($selection -isnot [pscustomobject] -or
+                $selection.state -isnot [string] -or $selection.state -cne 'PROMOTION_CANDIDATE_RESOLVED' -or
+                $selection.candidateSha256 -isnot [string] -or $selection.candidateSha256 -cne $digest -or
+                $selection.buildAttemptId -isnot [string] -or $selection.buildAttemptId -cnotmatch '\A[0-9a-f]{32}\z') {
                 throw 'REVIEWED_PROMOTION_RESOLUTION_UNPROVEN'
             }
             # The canonical resolver has exited and its file pin was released.
@@ -1420,7 +1427,8 @@ function Invoke-LifecycleReviewedPromotion {
     } catch {
         $reason = [string]$_.Exception.Message
         if ($reason -cin $script:PromotionNativeRefusals -or
-            ($phase -ceq 'RESOLVE_CANDIDATE' -and $reason -ceq 'REVIEWED_PROMOTION_RESOLVER_PROTOCOL_UNAVAILABLE')) {
+            ($phase -ceq 'RESOLVE_CANDIDATE' -and $reason -cin @(
+                'REVIEWED_PROMOTION_RESOLVER_PROTOCOL_UNAVAILABLE','REVIEWED_PROMOTION_RESOLUTION_UNPROVEN'))) {
             Write-LifecycleStatus $reason $phase
             return
         }

@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 4:27 p.m. EST.** The development one-command promotion facade refuses an array-valued SHA, attempt ID, state or root response before candidate execution. Its previous exact-result reconciliation remains available. The frozen backend still uses existing authenticated promotion after an eligible independent review and producer attestation. [Verification](docs/verification/PROMOTION_CANDIDATE_SELECTION_SHAPE_2026_11_22.json).
+
 **November 22, 4:21 p.m. EST.** Assigned Web completion now preserves ownership while any already requested manual Wake is queued, uncertain or waiting for its response. The check reuses the original task journal, receipt and timer. Git and task execution are verified separately. [Verification](docs/verification/MANUAL_WAKE_COMPLETION_GUARD_2026_11_22.json).
 
 **November 22, 4:15 p.m. EST.** The existing manual self-Wake response reader can now return the bounded task identity alongside the verified response. It checks the original assignment and full delivery again after readback. Recovery of the original linked Git backing and admission of the frozen backend review remain prerequisites for the installed proof. [Verification](docs/verification/MANUAL_WAKE_RESPONSE_ATTRIBUTION_2026_11_22.json).

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T21:27:02.4050384Z",
+  "scope": "DEVELOPMENT_ONE_COMMAND_PROMOTION_RESOLVER_SELECTION",
+  "baseline": "91df8194a46e8f431517ff474604af0a63bf226b",
+  "reproduction": {
+    "host": "PowerShell 7.6.9",
+    "singleElementArrayPassedOldPredicate": true,
+    "derivedCandidatePathMatchedScalarPath": true,
+    "actualWindowsControllerBeforeFix": "An array-valued digest advanced to the disposable candidate and received its distinct native refusal"
+  },
+  "verification": {
+    "script": "scripts/test-catdesk-lifecycle.ps1",
+    "windowsPowerShell51Passed": true,
+    "powerShell769Passed": true,
+    "malformedSelectionCases": ["wrapped root object", "array-valued state", "array-valued artifact digest", "array-valued build attempt"],
+    "eachRefusal": "REVIEWED_PROMOTION_RESOLUTION_UNPROVEN",
+    "eachPhase": "RESOLVE_CANDIDATE",
+    "eachNativeInvocationSequence": ["promote-resolve"],
+    "validSelectionAndExistingExactResultCasesPassed": true
+  },
+  "workspaceRecoveryObservation": {
+    "sharedStorePresent": false,
+    "localFileHistoryConfigurationObserved": false,
+    "shadowCopyQuery": "HRESULT 0x80041014",
+    "shadowCopyAvailabilityEstablished": false
+  },
+  "authority": {
+    "productionMutations": 0,
+    "protectedCandidateLaunches": 0,
+    "externalMessagesSent": 0,
+    "historicalWakeSubmissionRepeated": false,
+    "installedWebAcceptance": false
+  }
+}

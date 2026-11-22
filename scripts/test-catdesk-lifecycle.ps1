@@ -608,6 +608,17 @@ static class PromotionRefusal {
         }
         string mode = File.ReadAllText("refusal-mode.txt");
         File.AppendAllText("refusal-invocations.txt", args[1] + "\n");
+        if (mode.StartsWith("selection-", StringComparison.Ordinal) && args[1] == "promote-resolve") {
+            string state = "\"PROMOTION_CANDIDATE_RESOLVED\"";
+            string sha = "\"" + args[2] + "\"";
+            string attempt = "\"" + new string('a', 32) + "\"";
+            if (mode == "selection-state-array") state = "[" + state + "]";
+            if (mode == "selection-sha-array") sha = "[" + sha + "]";
+            if (mode == "selection-attempt-array") attempt = "[" + attempt + "]";
+            string result = "{\"state\":" + state + ",\"candidateSha256\":" + sha + ",\"buildAttemptId\":" + attempt + "}";
+            Console.WriteLine(mode == "selection-root-array" ? "[" + result + "]" : result);
+            return 0;
+        }
         bool ambiguous = mode.StartsWith("ambiguous-", StringComparison.Ordinal);
         if (ambiguous && args[1] == "promote") {
             if (mode == "ambiguous-wrong-shape") {
@@ -666,6 +677,10 @@ static class PromotionRefusal {
     [IO.File]::WriteAllText($realFingerprint, $digest)
     $invocations = Join-Path $realCanonicalRoot 'refusal-invocations.txt'
     $cases = @(
+        @{ Mode = 'selection-sha-array'; State = 'REVIEWED_PROMOTION_RESOLUTION_UNPROVEN'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
+        @{ Mode = 'selection-attempt-array'; State = 'REVIEWED_PROMOTION_RESOLUTION_UNPROVEN'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
+        @{ Mode = 'selection-state-array'; State = 'REVIEWED_PROMOTION_RESOLUTION_UNPROVEN'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
+        @{ Mode = 'selection-root-array'; State = 'REVIEWED_PROMOTION_RESOLUTION_UNPROVEN'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
         @{ Mode = 'legacy-resolver'; State = 'REVIEWED_PROMOTION_RESOLVER_PROTOCOL_UNAVAILABLE'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
         @{ Mode = 'legacy-candidate'; State = 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'; Phase = 'READ_ORIGINAL_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
         @{ Mode = 'ambiguous-complete'; State = 'PROMOTION_COMPLETED'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
