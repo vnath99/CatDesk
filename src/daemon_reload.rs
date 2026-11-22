@@ -1025,37 +1025,41 @@ fn promotion_claim_matches(
         && claim.candidate_relative_path == authorization.candidate_relative_path
 }
 
-/// Observe the active claimed promotion without creating a claim, acquiring a
-/// mutation lease, or requiring the canonical executable or daemon to be ready.
 #[cfg(windows)]
-pub(crate) fn observe_local_reviewed_promotion(
-    workspace: &Path,
-    expected_sha256: &str,
-) -> Result<serde_json::Value, String> {
+enum LocalPromotionObservation {
+    Missing,
+    UnboundResult,
+    Claimed {
+        candidate_sha256: String,
+        generation: u64,
+        transaction_id: String,
+    },
+    Recorded(ReviewedPromotionResultV1),
+}
+
+#[cfg(windows)]
+fn read_local_promotion(workspace: &Path) -> Result<LocalPromotionObservation, String> {
     use crate::windows_protected_fs::{
         ProtectedDirectoryGuard, read_optional_relative_regular, read_relative_regular,
     };
-    use serde_json::json;
 
     const LABEL: &str = "reviewed promotion readback";
     const UNVERIFIED: &str = "REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY";
 
-    let sha = normalize_sha256(expected_sha256)?;
-    let missing = || {
-        json!({
-            "state":"PROMOTION_RESULT_NOT_LOCATED_NO_RETRY", "candidateSha256":sha,
-            "readOnly":true
-        })
-    };
     let workspace = canonical_directory(workspace, LABEL)?;
     let mut control = ProtectedDirectoryGuard::acquire_read_only(&workspace, LABEL)?;
     if !control.descend_optional_existing(".catdesk", LABEL)?
         || !control.descend_optional_existing("promotion-control", LABEL)?
     {
-        return Ok(missing());
+        return Ok(LocalPromotionObservation::Missing);
     }
     let Some(claim) = read_optional_relative_regular(&control, "claim.json", 8192, LABEL)? else {
-        return Ok(missing());
+        let result = read_optional_relative_regular(&control, "result.json", 4096, LABEL)?;
+        return Ok(if result.is_some() {
+            LocalPromotionObservation::UnboundResult
+        } else {
+            LocalPromotionObservation::Missing
+        });
     };
     let claim: ReviewedPromotionClaimV1 = serde_json::from_slice(&claim).map_err(|_| UNVERIFIED)?;
     let authorization: ReviewedPromotionAuthorizationV1 = serde_json::from_slice(
@@ -1064,6 +1068,7 @@ pub(crate) fn observe_local_reviewed_promotion(
     .map_err(|_| UNVERIFIED)?;
     if authorization.schema_version != 1
         || authorization.generation == 0
+        || normalize_sha256(&authorization.candidate_sha256)? != authorization.candidate_sha256
         || !promotion_claim_matches(&claim, &authorization)
         || authorization.transaction_id.len() != 32
         || !authorization
@@ -1073,20 +1078,17 @@ pub(crate) fn observe_local_reviewed_promotion(
     {
         return Err(UNVERIFIED.into());
     }
-    if authorization.candidate_sha256 != sha {
-        return Ok(missing());
-    }
     let Some(result) = read_optional_relative_regular(&control, "result.json", 4096, LABEL)? else {
-        return Ok(json!({
-            "state":"PROMOTION_RESULT_PENDING_NO_RETRY", "candidateSha256":sha,
-            "authorizationGeneration":authorization.generation,
-            "transactionId":authorization.transaction_id, "readOnly":true
-        }));
+        return Ok(LocalPromotionObservation::Claimed {
+            candidate_sha256: authorization.candidate_sha256,
+            generation: authorization.generation,
+            transaction_id: authorization.transaction_id,
+        });
     };
     let result: ReviewedPromotionResultV1 =
         serde_json::from_slice(&result).map_err(|_| UNVERIFIED)?;
     if !valid_promotion_result(&result)
-        || result.candidate_sha256 != sha
+        || result.candidate_sha256 != authorization.candidate_sha256
         || result.transaction_id != authorization.transaction_id
         || result.authorization_generation != authorization.generation
         || (!authorization.local_backend_only && result.serving_state.is_some())
@@ -1096,12 +1098,59 @@ pub(crate) fn observe_local_reviewed_promotion(
     {
         return Err(UNVERIFIED.into());
     }
-    Ok(json!({
-        "state":result.state, "candidateSha256":sha,
-        "authorizationGeneration":result.authorization_generation,
-        "transactionId":result.transaction_id, "recordedServingState":result.serving_state,
-        "readOnly":true
-    }))
+    Ok(LocalPromotionObservation::Recorded(result))
+}
+
+/// Observe the active claimed promotion without creating a claim, acquiring a
+/// mutation lease, or requiring the canonical executable or daemon to be ready.
+#[cfg(windows)]
+pub(crate) fn observe_local_reviewed_promotion(
+    workspace: &Path,
+    expected_sha256: &str,
+) -> Result<serde_json::Value, String> {
+    use serde_json::json;
+
+    let sha = normalize_sha256(expected_sha256)?;
+    Ok(match read_local_promotion(workspace)? {
+        LocalPromotionObservation::Claimed {
+            candidate_sha256,
+            generation,
+            transaction_id,
+        } if candidate_sha256 == sha => json!({
+            "state":"PROMOTION_RESULT_PENDING_NO_RETRY", "candidateSha256":sha,
+            "authorizationGeneration":generation, "transactionId":transaction_id, "readOnly":true
+        }),
+        LocalPromotionObservation::Recorded(result) if result.candidate_sha256 == sha => json!({
+            "state":result.state, "candidateSha256":sha,
+            "authorizationGeneration":result.authorization_generation,
+            "transactionId":result.transaction_id, "recordedServingState":result.serving_state,
+            "readOnly":true
+        }),
+        _ => json!({
+            "state":"PROMOTION_RESULT_NOT_LOCATED_NO_RETRY", "candidateSha256":sha,
+            "readOnly":true
+        }),
+    })
+}
+
+/// Admit only an exact terminal receipt for an idempotent one-hash response.
+/// An unbound receipt or unfinished claim requires reconciliation before any new attempt.
+#[cfg(windows)]
+pub(crate) fn existing_local_promotion_result(
+    workspace: &Path,
+    candidate_sha256: &str,
+) -> Result<Option<ReviewedPromotionResultV1>, String> {
+    const RECONCILE: &str = "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED";
+    let sha = normalize_sha256(candidate_sha256)?;
+    match read_local_promotion(workspace).map_err(|_| RECONCILE)? {
+        LocalPromotionObservation::Recorded(result) if result.candidate_sha256 == sha => {
+            Ok(Some(result))
+        }
+        LocalPromotionObservation::Missing | LocalPromotionObservation::Recorded(_) => Ok(None),
+        LocalPromotionObservation::Claimed { .. } | LocalPromotionObservation::UnboundResult => {
+            Err(RECONCILE.into())
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -3611,6 +3660,8 @@ mod tests {
         authorization.local_backend_only = true;
         authorization.expires_at_unix = 0;
         let digest = authorization.candidate_sha256.clone();
+        let reenter = |sha: &str| existing_local_promotion_result(&root, sha);
+        let reconcile = "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED";
         let run = |sha: &str| {
             let action =
                 parse_operator_action(["operator", "promote-result", sha].map(str::to_owned))
@@ -3622,6 +3673,7 @@ mod tests {
             run(&digest).await.unwrap()["state"],
             "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
         );
+        assert!(reenter(&digest).unwrap().is_none());
         assert!(!root.join(".catdesk").exists());
         let control = reviewed_promotion_control_dir(&root);
         fs::create_dir_all(&control).unwrap();
@@ -3645,7 +3697,17 @@ mod tests {
         let auth_path = reviewed_promotion_authorization_path(&root);
         let claim_path = reviewed_promotion_claim_path(&root);
         atomic_json_write(&result_path, &result).unwrap();
-        // A bare receipt cannot identify an active attempt.
+        // A bare receipt cannot identify an active attempt. The old one-hash
+        // shortcut would have accepted this receipt by artifact hash alone.
+        assert_eq!(
+            reviewed_promotion_result(&root)
+                .unwrap()
+                .unwrap()
+                .candidate_sha256,
+            digest
+        );
+        assert_eq!(reenter(&digest).unwrap_err(), reconcile);
+        assert_eq!(reenter(&"0".repeat(64)).unwrap_err(), reconcile);
         assert_eq!(
             run(&digest).await.unwrap()["state"],
             "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
@@ -3653,6 +3715,8 @@ mod tests {
         fs::remove_file(&result_path).unwrap();
         atomic_json_write(&auth_path, &authorization).unwrap();
         atomic_json_write(&claim_path, &claim).unwrap();
+        assert_eq!(reenter(&digest).unwrap_err(), reconcile);
+        assert_eq!(reenter(&"0".repeat(64)).unwrap_err(), reconcile);
         let pending = run(&digest).await.unwrap();
         assert_eq!(pending["state"], "PROMOTION_RESULT_PENDING_NO_RETRY");
         assert_eq!(pending["transactionId"], authorization.transaction_id);
@@ -3662,6 +3726,8 @@ mod tests {
         );
         atomic_json_write(&result_path, &result).unwrap();
         let before = [&auth_path, &claim_path, &result_path].map(|path| fs::read(path).unwrap());
+        assert_eq!(reenter(&digest).unwrap().unwrap(), result);
+        assert!(reenter(&"0".repeat(64)).unwrap().is_none());
         let read = run(&digest.to_ascii_uppercase()).await.unwrap();
         assert_eq!(read["state"], "PROMOTION_COMPLETED");
         assert_eq!(read["recordedServingState"], "STOPPED_AFTER_BOUNDED_OWNER");
@@ -3683,6 +3749,7 @@ mod tests {
             result.transaction_id = transaction;
             result.authorization_generation = generation;
             atomic_json_write(&result_path, &result).unwrap();
+            assert_eq!(reenter(&digest).unwrap_err(), reconcile);
             assert_eq!(
                 run(&digest).await.unwrap_err(),
                 "REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY"
@@ -3690,6 +3757,7 @@ mod tests {
         }
         fs::remove_file(&result_path).unwrap();
         fs::create_dir(&result_path).unwrap();
+        assert_eq!(reenter(&digest).unwrap_err(), reconcile);
         assert_eq!(
             run(&digest).await.unwrap_err(),
             "REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY"

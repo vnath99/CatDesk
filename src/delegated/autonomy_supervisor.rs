@@ -426,13 +426,14 @@ pub(crate) fn promote_active_backend(
     if candidate.canonicalize().ok().as_ref() != Some(&current) {
         return Err("REVIEWED_PROMOTION_USE_ATTESTED_CANDIDATE_CONTROLLER".into());
     }
-    if let Some(result) = crate::daemon_reload::reviewed_promotion_result(&workspace)?
-        && result.candidate_sha256 == expected_sha256
+    if let Some(result) =
+        crate::daemon_reload::existing_local_promotion_result(&workspace, expected_sha256)?
     {
         return Ok(json!({
             "state": result.state,
             "candidateSha256": result.candidate_sha256,
             "existingResult": true,
+            "authorizationGeneration": result.authorization_generation,
             "servingState": result.serving_state,
         }));
     }
