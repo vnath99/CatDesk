@@ -1038,3 +1038,11 @@ Evidence: [docs/verification/PROMOTION_SERVING_AFTER_MONITOR_EXIT_2026_11_22.jso
 Agent: Codex. Source: a6132b0c3ab9a6bd78c884bf5dfedf5c1f06d2c3. Outcome: partial. The one-hash facade reads a bound terminal promotion before resolving staged build files. The actual compiled Windows controller preserved the disposable canonical pair and journal, refused a pending claim, and reused failed or completed history without a second controller. Next: Obtain independent review and trusted build evidence for the frozen backend, then qualify installed promotion and rollback. Verify signed first Wake V3 selection before the real v5 edit and self-Wake cycle.
 
 Evidence: [docs/verification/PROMOTION_RETAINED_RESULT_WITHOUT_STAGING_2026_11_22.json](docs/verification/PROMOTION_RETAINED_RESULT_WITHOUT_STAGING_2026_11_22.json); command: cargo test --locked --offline --target-dir target --bin catdesk routine_promote -- --test-threads=1 --quiet; exit 0; SHA-256 0b5011d6d697a6e32cf066c3dd61068b7b81e1e83effc82842de6bd1862d7830.
+
+<!-- catdesk-activity:pinned-predecessor-recovery-2026-11-22 sha256:05733df160a5bf668d36d2f30935c4373ad7a9b0f88ca4e22ad70add3ed6cc95 -->
+
+## 2026-11-22T09:07:00Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: e5826f29f0150bdb21e7044ba9ad040462363b17. Outcome: partial. Real disposable Windows recovery restored the explicitly pinned verified predecessor after a split canonical pair. The restored binary served authenticated MCP and exited naturally. Both escrow slots and their pointer were preserved.. Next: Obtain genuine independent review and protected build evidence for the frozen backend. Qualify installed promotion and rollback. Complete the signed first Wake V3 selection before running the installed Web edit and self-Wake cycle..
+
+Evidence: [docs/verification/BACKEND_PINNED_PREDECESSOR_RECOVERY_2026_11_22.json](docs/verification/BACKEND_PINNED_PREDECESSOR_RECOVERY_2026_11_22.json); command: Bounded Windows recovery and authenticated MCP fixture; exit 0; SHA-256 e80de2ad392824e2eb296a443bb457e00643abfff8eb0c5c9f54331bb2f61d6f.

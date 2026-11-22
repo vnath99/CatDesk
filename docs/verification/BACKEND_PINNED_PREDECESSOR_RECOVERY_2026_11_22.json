@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_WINDOWS_RELEASE_RECOVERY_ENGINE_AND_PRIVATE_MCP_WITH_TWO_DISPOSABLE_ESCROW_GENERATIONS",
+  "sourceCommit": "e5826f29f0150bdb21e7044ba9ad040462363b17",
+  "baselineCommit": "9bc2862d833258def148d1901d92422f61d761f3",
+  "privateFixtureSha256": "6784eccbaf9d58a7591da116650bbc8cfe8d02dbe882ae97a62530bbc08330e5",
+  "baseline": "Explicit selection of the verified predecessor was refused with RECOVERY_RELEASE_AUTHORITY_REQUIRED after a verified canonical split.",
+  "windowsQualification": {
+    "startedUtc": "2026-11-22T09:06:24.6505347+00:00",
+    "finishedUtc": "2026-11-22T09:06:59.8689506+00:00",
+    "activeEscrowSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+    "requestedAndRestoredSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+    "splitPairDiagnosis": "RECOVERY_AVAILABLE",
+    "unscopedRecovery": "RECOVERY_RELEASE_AUTHORITY_REQUIRED",
+    "recovery": "LOCAL_BACKEND_READY",
+    "unchangedReleaseRecordHashes": 7,
+    "fixtureConfigurationPreserved": true,
+    "defaultEscrowSelectionPreserved": true,
+    "backendStarts": 1,
+    "anonymousMcpHttpStatus": 401,
+    "authenticatedMcpHttpStatus": 200,
+    "authenticatedToolCount": 79,
+    "backendExitedNaturally": true,
+    "listenerClosed": true,
+    "fixtureRemoved": true
+  },
+  "sourceRegressions": {
+    "command": "scripts/test-start-catdesk-stack.ps1",
+    "windowsPowerShell51": "PASS",
+    "powerShell7": "PASS",
+    "refusals": [
+      "healthy pair and different predecessor pin",
+      "supplemental fingerprint used as the only pin",
+      "unproven selection pointer"
+    ]
+  },
+  "limitations": "The exact two executable artifacts were measured and used. The existing escrow writer seeded disposable authority. The real lifecycle lease, diagnosis and repair ran against private state. Fixture adapters limited ownership checks to the owned process and replaced the fixed-port daemon launch with a bounded headless launch on private loopback. This did not exercise installed promotion, recovery from an intact but unhealthy current pair, or the installed Web cycle.",
+  "productionPortUsed": false,
+  "productionActions": 0,
+  "installedAcceptance": false
+}
