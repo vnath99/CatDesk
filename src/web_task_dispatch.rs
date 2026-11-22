@@ -1707,6 +1707,103 @@ pub(crate) mod tests {
         (([127, 0, 0, 1], port).into(), url, child)
     }
 
+    async fn qualify_frozen_manual_wake_admission(
+        image: &Path,
+        f: &Fixture,
+        wake: &Store,
+        source: &protocol::Event,
+        event_id: &str,
+    ) {
+        let wake_root = catdesk_wake::development_runtime::root_for_workspace(&f.control)
+            .unwrap()
+            .unwrap();
+        assert_eq!(wake.root(), wake_root);
+        // The final refusal is a real Windows image-load failure. The fixture
+        // interpreter is intentionally inert, so no browser can be started.
+        assert_eq!(
+            fs::read(wake.root().join("runtime/python.exe")).unwrap(),
+            b"inert fixture Python"
+        );
+        let queue_path = wake.root().join("queue").join(format!("{event_id}.json"));
+        let submission_start = wake
+            .root()
+            .join("logs")
+            .join(format!("submission-start-{event_id}.json"));
+        let queued = fs::read(&queue_path).unwrap();
+        let event: protocol::Event = serde_json::from_slice(&queued).unwrap();
+        let target = wake.config().unwrap().targets[&source.project_id].clone();
+        let source_delivery = wake.delivery(&source.event_id).unwrap().unwrap();
+        let invoke = |call_id| async move {
+            let output = tokio::time::timeout(
+                Duration::from_secs(10),
+                tokio::process::Command::new(image)
+                    .current_dir(&f.control)
+                    .args([
+                        "operator",
+                        "web",
+                        "work",
+                        "manual-wake-deliver",
+                        "--project-id",
+                        &source.project_id,
+                        "--request-id",
+                        "request-a",
+                        "--call-id",
+                        call_id,
+                        "--event-id",
+                        event_id,
+                    ])
+                    .kill_on_drop(true)
+                    .output(),
+            )
+            .await
+            .expect("frozen manual Wake operator exceeded its fixture bound")
+            .unwrap();
+            assert_eq!(output.status.code(), Some(2));
+            serde_json::from_slice::<Value>(&output.stdout).unwrap()
+        };
+
+        assert_eq!(
+            invoke("wrong-call").await["errorCode"],
+            "WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN"
+        );
+        assert_eq!(
+            invoke("end-turn").await["errorCode"],
+            "SCOPED_REVIEW_PROJECT_BUSY"
+        );
+        assert!(wake.delivery(event_id).unwrap().is_none());
+        assert!(!submission_start.try_exists().unwrap());
+        assert_eq!(fs::read(&queue_path).unwrap(), queued);
+
+        // The source receipt was synthetic. In live use only an attributed
+        // completed browser response permits this timer transition.
+        wake.complete_timer(&source.event_id).unwrap();
+        assert_eq!(
+            invoke("end-turn").await["errorCode"],
+            "BROWSER_ADAPTER_START_FAILED"
+        );
+        let delivery = wake.delivery(event_id).unwrap().unwrap();
+        assert_eq!(delivery.phase, Phase::Attention);
+        assert_eq!(delivery.event, event);
+        assert_eq!(delivery.target, target);
+        assert_eq!(
+            delivery.reason.as_deref(),
+            Some("BROWSER_ADAPTER_START_FAILED")
+        );
+        assert!(delivery.receipt.is_none());
+        assert_eq!(
+            invoke("end-turn").await["errorCode"],
+            "SCOPED_REVIEW_REPLAY_REFUSED"
+        );
+        assert_eq!(wake.delivery(event_id).unwrap(), Some(delivery));
+        assert!(!submission_start.try_exists().unwrap());
+        assert!(wake.timer(event_id).unwrap().is_none());
+        assert_eq!(fs::read(queue_path).unwrap(), queued);
+        assert_eq!(
+            wake.delivery(&source.event_id).unwrap(),
+            Some(source_delivery)
+        );
+    }
+
     #[cfg(windows)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore = "explicit bounded qualification with the installed native Windows command sandbox"]
@@ -1760,9 +1857,9 @@ pub(crate) mod tests {
         let token = uuid::Uuid::new_v4().simple().to_string();
         let path = "/cached-cycle/mcp";
         let frozen_image = std::env::var_os("CATDESK_FROZEN_BACKEND_TEST_IMAGE");
-        let (addr, url, mut child, local_server) = if let Some(image) = frozen_image {
+        let (addr, url, mut child, local_server) = if let Some(image) = frozen_image.as_deref() {
             let (addr, url, child) =
-                start_frozen_cycle_backend(Path::new(&image), &f.control, path, &token).await;
+                start_frozen_cycle_backend(Path::new(image), &f.control, path, &token).await;
             (addr, url, Some(child), None)
         } else {
             let mut app = crate::state::AppState::new_isolated_fixture(
@@ -1916,6 +2013,10 @@ pub(crate) mod tests {
             1
         );
         assert_eq!(fs::read(f.native.join("src/lib.rs")).unwrap(), original);
+        if let Some(image) = frozen_image.as_deref() {
+            qualify_frozen_manual_wake_admission(Path::new(image), &f, &wake, &event, event_id)
+                .await;
+        }
         drop(client);
         if let Some((stop, server)) = local_server {
             stop.send(()).unwrap();
@@ -1947,7 +2048,7 @@ pub(crate) mod tests {
             fs::remove_dir_all(&fixture_root).unwrap();
             assert!(!fixture_root.exists());
             println!(
-                "frozen backend: exact image, authenticated edit, sandbox verification, Git checkpoint, one queued Wake, natural exit and fixture cleanup"
+                "frozen backend: exact image, authenticated edit, sandbox verification, Git checkpoint, exact manual Wake admission and refusal, natural exit and fixture cleanup"
             );
         }
     }
