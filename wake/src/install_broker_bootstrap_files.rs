@@ -306,7 +306,30 @@ fn security(file: &File) -> Result<Security> {
     })
 }
 fn safe_parent(file: &File, outer_create_only: bool) -> Result<()> {
-    let security = security(file)?;
+    require_trusted_acl(&security(file)?, |mask| {
+        dangerous_parent_mask(mask, outer_create_only)
+    })
+}
+
+/// Routine requests carry receipt digests, so the publisher's filesystem
+/// boundary must independently protect those bytes. Outer ancestors may
+/// permit ordinary creates, but the intake and its evidence cannot.
+pub(crate) fn require_review_intake_acl(file: &File, ancestor: bool) -> Result<()> {
+    security(file)
+        .and_then(|acl| require_review_intake_descriptor(&acl, ancestor))
+        .map_err(|_| "WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED".into())
+}
+
+fn require_review_intake_descriptor(acl: &Security, ancestor: bool) -> Result<()> {
+    require_trusted_acl(acl, |mask| {
+        dangerous_parent_mask(mask, !ancestor) || (!ancestor && mask & 0x6 != 0)
+    })
+}
+
+fn require_trusted_acl(
+    security: &Security,
+    allows_untrusted_write: impl Fn(u32) -> bool,
+) -> Result<()> {
     let ti = trusted_installer()?;
     let trusted = |sid: &str| sid == "S-1-5-18" || sid == "S-1-5-32-544" || sid == ti;
     if !trusted(&security.owner) {
@@ -326,7 +349,7 @@ fn safe_parent(file: &File, outer_create_only: bool) -> Result<()> {
         }
         let mask = unsafe { *ace.cast::<u8>().add(4).cast::<u32>() };
         let sid = sid_string(unsafe { ace.cast::<u8>().add(8) }.cast())?;
-        if !trusted(&sid) && dangerous_parent_mask(mask, outer_create_only) {
+        if !trusted(&sid) && allows_untrusted_write(mask) {
             return Err("WAKE_BOOTSTRAP_UNSAFE_PARENT".into());
         }
     }
@@ -1049,6 +1072,96 @@ mod tests {
             assert!(!dangerous_parent_mask(mask, false));
         }
         assert!(!dangerous_parent_mask(0x001200a9, false));
+    }
+    #[test]
+    fn routine_review_intake_requires_trusted_owners_and_nonwritable_receipts() {
+        #[link(name = "advapi32")]
+        unsafe extern "system" {
+            fn GetSecurityDescriptorOwner(
+                descriptor: *mut c_void,
+                owner: *mut *mut c_void,
+                defaulted: *mut i32,
+            ) -> i32;
+            fn GetSecurityDescriptorDacl(
+                descriptor: *mut c_void,
+                present: *mut i32,
+                acl: *mut *mut c_void,
+                defaulted: *mut i32,
+            ) -> i32;
+        }
+        let parse = |sddl: &str| {
+            let mut descriptor = ptr::null_mut();
+            let mut owner = ptr::null_mut();
+            let mut dacl = ptr::null_mut();
+            let mut defaulted = 0;
+            let mut present = 0;
+            assert_ne!(
+                unsafe {
+                    ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                        wide(sddl).as_ptr(),
+                        1,
+                        &mut descriptor,
+                        ptr::null_mut(),
+                    )
+                },
+                0
+            );
+            let descriptor = Local(descriptor);
+            assert_ne!(
+                unsafe { GetSecurityDescriptorOwner(descriptor.0, &mut owner, &mut defaulted) },
+                0
+            );
+            assert_ne!(
+                unsafe {
+                    GetSecurityDescriptorDacl(descriptor.0, &mut present, &mut dacl, &mut defaulted)
+                },
+                0
+            );
+            assert_ne!(present, 0);
+            assert!(!dacl.is_null());
+            Security {
+                owner: sid_string(owner).unwrap(),
+                sddl: descriptor_text(descriptor.0).unwrap(),
+                _descriptor: descriptor,
+                dacl: dacl.cast(),
+            }
+        };
+        let protected = parse("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;;GR;;;IU)");
+        assert!(require_review_intake_descriptor(&protected, false).is_ok());
+        let outer = parse("O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;0x116;;;IU)");
+        assert!(require_review_intake_descriptor(&outer, true).is_ok());
+        assert!(require_review_intake_descriptor(&outer, false).is_err());
+        let delete_child = parse("O:BAG:BAD:P(A;;FA;;;SY)(A;;0x40;;;IU)");
+        assert!(require_review_intake_descriptor(&delete_child, true).is_err());
+        let untrusted_owner = parse("O:IUG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)");
+        assert!(require_review_intake_descriptor(&untrusted_owner, false).is_err());
+    }
+
+    #[test]
+    fn routine_review_intake_refuses_actual_user_writable_file() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-wake-review-acl-fixture-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let parent = OpenOptions::new()
+            .access_mode(READ)
+            .share_mode(3)
+            .custom_flags(0x02200000)
+            .open(&root)
+            .unwrap();
+        let mut file = relative(&parent, "receipt.json", false, Some("D:P(A;;GA;;;WD)"))
+            .unwrap()
+            .unwrap();
+        file.write_all(b"untrusted test bytes").unwrap();
+        assert_eq!(
+            require_review_intake_acl(&file, false).err().as_deref(),
+            Some("WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED")
+        );
+        drop(file);
+        drop(parent);
+        std::fs::remove_file(root.join("receipt.json")).unwrap();
+        std::fs::remove_dir(root).unwrap();
     }
     #[test]
     fn bootstrap_native_relative_create_is_once_only_and_retains_existing_bytes() {

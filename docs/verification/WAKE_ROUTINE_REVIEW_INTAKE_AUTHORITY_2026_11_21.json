@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T04:17:25.6099352Z",
+  "scope": "WINDOWS_REVIEW_INTAKE_ACL_CLASSIFICATION_AND_NATIVE_SOURCE_QUALIFICATION",
+  "parentCommit": "c5a6118b4fed36d429b138d4ab6aafa71c349ccd",
+  "testedFileSha256": {
+    "install_broker_bootstrap_files.rs": "8681df99022550a810530a5f6e6cc633d4581adf1783d88e36a7fc488670f501",
+    "install_broker_offline_pins.rs": "1970ad1650bcd2fb2b4ba4c70e23f2f606687c35bba6157323071ee38a8f26a3",
+    "install_broker_policy.rs": "78c2e3acf536303b21c6e9b5654a9568e7f6db0d12ee132249d4f4d28799e888",
+    "runtime_same_state_install.rs": "c359cdf9197f2c1e6525e34ba6052acf86b6e8c38eebf6aa2694e3026321b054"
+  },
+  "actualReadOnly": {
+    "intakeObservationUtc": "2026-11-22T04:14:47.2370533Z",
+    "enrolledEnvironmentElevated": false,
+    "brokerStopped": true,
+    "fixedIntakePresent": false,
+    "parentClassificationUtc": "2026-11-22T04:16:01.3172127Z",
+    "parentCount": 3,
+    "parentsWithTrustedOwner": 3,
+    "parentsWithDangerousNamespaceGrants": 0,
+    "parentsWithMetadataOrCreateGrants": 3,
+    "protectedWrites": 0
+  },
+  "authority": {
+    "enrolledLocalAccountCanSubmitUnderPolicy": true,
+    "stagePublisherWithGenuineReviewAuthorityDemonstrated": false,
+    "admitsUnsignedReceiptWithoutProtectedProvenance": false,
+    "recheckHeldIntakeAndReceiptsBeforeIntentAndDuringTransaction": true,
+    "existingSignedRequestContinuesExistingBindingChecks": true,
+    "aclProofIsIndependentOfReceiptDigest": true
+  },
+  "tests": {
+    "nativeAclCases": "PASS",
+    "realWritableFileRejected": true,
+    "bootstrapParentAclCompatibility": "PASS",
+    "signedReconstructionFixture": "PASS",
+    "finalScopedSuite": {
+      "passed": 4,
+      "failed": 1,
+      "exitCode": 101,
+      "refusal": "WAKE_SAME_STATE_LEGACY_OWNER_UNPROVEN",
+      "legacyReason": "SPLIT_ROOT_CANDIDATES",
+      "matchingProcesses": 1,
+      "stopPhase": "FIXTURE_ROLLBACK_ACQUIRE"
+    },
+    "format": "PASS",
+    "clippyAllTargetsWithWarningsDenied": "PASS"
+  },
+  "limits": {
+    "installedBrokerChanged": false,
+    "protectedIntakeCreated": false,
+    "publisherProvisioned": false,
+    "firstSelectionExecuted": false,
+    "installedRoutineReleaseVerified": false,
+    "backendReviewCompleted": false,
+    "webCycleVerified": false
+  }
+}

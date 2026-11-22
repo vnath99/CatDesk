@@ -718,3 +718,11 @@ Evidence: [docs/verification/WAKE_RETAIN_WORKING_CURRENT_2026_11_21.json](docs/v
 Agent: CatDesk Codex. Source: 93d655e5f86c0abd06f36bade488c0c63b269ba2. Outcome: partial. Routine local Wake selection now reuses the exact installed rollback package with identity and launch exclusion preserved. The native Windows fixture completed selection and rollback without a duplicate fallback intake, and four compatibility cases passed. Next: Verify first signed Wake selection after the existing operator step and continue the exact compatible backend review and producer independently. Qualify genuine candidate and receipt staging under the enrolled account and a reviewed broker release before production routine acceptance.
 
 Evidence: [docs/verification/WAKE_ROUTINE_INSTALLED_FALLBACK_REUSE_2026_11_21.json](docs/verification/WAKE_ROUTINE_INSTALLED_FALLBACK_REUSE_2026_11_21.json); command: Run the Windows native fallback reuse fixture, four serial same-state compatibility tests, formatting and strict Clippy; exit 0; SHA-256 ab7c0ef44f7ff4ca8a92a53e1bb0dc7d21b2017aba244effe1e215b0ed7882b2.
+
+<!-- catdesk-activity:nov21-wake-routine-review-intake-authority sha256:1d176de8048ff18e84e9fdd0e710b08ee61cc04586d496801210ba1fa5ca2d4b -->
+
+## 2026-11-22T04:17:25.6099352Z — WAKE-LIFECYCLE
+
+Agent: CatDesk Codex. Source: c5a6118b4fed36d429b138d4ab6aafa71c349ccd. Outcome: partial. The development Wake broker now requires independently protected review intake for unsigned routine requests. Native ACL cases and signed reconstruction passed. The local rollback fixture stopped at the existing legacy owner guard and the read-only installed observation found no published intake. Next: Verify first signed Wake selection after the existing operator procedure and continue the exact compatible backend review and producer independently. Qualify the trusted publisher and reviewed broker under the enrolled account before installed routine updates.
+
+Evidence: [docs/verification/WAKE_ROUTINE_REVIEW_INTAKE_AUTHORITY_2026_11_21.json](docs/verification/WAKE_ROUTINE_REVIEW_INTAKE_AUTHORITY_2026_11_21.json); command: Run native intake ACL cases, signed reconstruction and local fallback fixture plus read-only installed ACL classification; exit 101; SHA-256 ff1d1789120d0ee8327cf38096a5c1729aff25405fd9c8800fe2327f1eb5713f.

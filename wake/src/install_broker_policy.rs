@@ -356,7 +356,18 @@ impl<'p> PolicyVerifiedSameStateSelectionV3<'p> {
             }
             _ => {}
         }
-        self.pins_mut()?.revalidate_for_payload(self.payload())
+        let mut pins = self.pins_mut()?;
+        pins.revalidate_for_payload(self.payload())?;
+        if self.authorization.local_user() {
+            #[cfg(test)]
+            if self.policy.is_fixture_root() {
+                // Fixtures can exercise real native files without requiring
+                // LocalSystem ownership. The ACL boundary has its own tests.
+                return Ok(());
+            }
+            pins.require_protected_review_intake()?;
+        }
+        Ok(())
     }
     pub(crate) fn require_acceptance_time(&self, now: u64) -> Result<()> {
         let p = self.payload();

@@ -339,6 +339,11 @@ impl OfflineObjectPinV2 {
         &self.identity
     }
 
+    pub(crate) fn require_review_intake_acl(&self, ancestor: bool) -> Result<()> {
+        self.matches(&self.identity)?;
+        crate::install_broker_bootstrap_files::require_review_intake_acl(&self.file, ancestor)
+    }
+
     pub(crate) fn read_bounded(&mut self, maximum: usize) -> Result<Vec<u8>> {
         if self.directory {
             return Err("WAKE_OFFLINE_PIN_FILE_REQUIRED".into());

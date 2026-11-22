@@ -275,6 +275,7 @@ pub(crate) struct SameStateReadPinsV3 {
     resume: Option<SameStateRetainedResumeV3>,
     _receipt_directory: Option<OfflineObjectPinV2>,
     receipt_root: PathBuf,
+    receipt_ancestors: Vec<(PathBuf, OfflineObjectPinV2)>,
 }
 
 enum SameStateIntakeV3 {
@@ -473,6 +474,7 @@ impl SameStateReadPinsV3 {
             resume,
             _receipt_directory: None,
             receipt_root,
+            receipt_ancestors: Vec::new(),
         })
     }
     #[cfg(test)]
@@ -729,6 +731,40 @@ impl SameStateReadPinsV3 {
             payload.rollback_authority.release(),
         )?;
         self.pin_receipts(payload)
+    }
+
+    pub(crate) fn require_protected_review_intake(&mut self) -> Result<()> {
+        if self.receipt_ancestors.is_empty() {
+            self.receipt_ancestors = self
+                .receipt_root
+                .ancestors()
+                .skip(1)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .map(|parent| {
+                    OfflineObjectPinV2::same_state_directory(parent)
+                        .map(|pin| (parent.to_path_buf(), pin))
+                })
+                .collect::<Result<Vec<_>>>()?;
+        }
+        let count = self.receipt_ancestors.len();
+        for (index, (path, pin)) in self.receipt_ancestors.iter().enumerate() {
+            pin.revalidate_path(path)?;
+            // The immediate parent is the fixed intake itself.
+            pin.require_review_intake_acl(index + 1 != count)?;
+        }
+        let directory = self
+            ._receipt_directory
+            .as_ref()
+            .ok_or("WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED")?;
+        directory.revalidate_path(&self.receipt_root)?;
+        directory.require_review_intake_acl(false)?;
+        for (path, pin, _) in &self.receipts {
+            pin.revalidate_path(path)?;
+            pin.require_review_intake_acl(false)?;
+        }
+        Ok(())
     }
     pub(crate) fn revalidate(&mut self) -> Result<()> {
         for (index, path) in self

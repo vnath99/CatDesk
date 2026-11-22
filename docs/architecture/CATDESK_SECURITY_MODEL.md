@@ -1,5 +1,7 @@
 # CatDesk — Security and Authority Model
 
+**Decision 2026-11-22T04:17:25Z.** For unsigned local-user Wake requests, require trusted ownership and write protection on pinned review intake and receipts in addition to exact content digests. Permissible outer parent permissions preserve ordinary creates and metadata operations while the intake and evidence remain protected. The existing signed procedure retains its independent source and exact signature bindings. [Evidence](../verification/WAKE_ROUTINE_REVIEW_INTAKE_AUTHORITY_2026_11_21.json).
+
 **Decision 2026-11-22T02:52:27Z.** Standing authorization covers ordinary eligible releases. One-time privilege enrollment, trust changes and legacy reconstruction retain their established controls. The installed policy already permits authorized local-user Wake updates. Keep the fixed broker image and trusted intake protected: unsigned request data and caller-written PASS labels cannot establish independent review. Preserve existing task and no-replay fences. [Qualification and evidence](../verification/ROUTINE_PROMOTION_AND_V3_OWNER_RECONCILIATION_2026_11_21.json).
 
 **Decision November 21, 16:57 UTC:** Standing development authorization does not supply an external private-key signature, elevated operator token or independent review verdict. Keep unknown review/delivery outcomes fenced. A material checkpoint-scope successor remains inert until ordinary admission; it cannot reset uncertain historical work. [Evidence](../verification/INSTALLED_WEB_CYCLE_RELEASE_PREPARATION_2026_11_21.json).
