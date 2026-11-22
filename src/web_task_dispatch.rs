@@ -2016,6 +2016,45 @@ pub(crate) mod tests {
         if let Some(image) = frozen_image.as_deref() {
             qualify_frozen_manual_wake_admission(Path::new(image), &f, &wake, &event, event_id)
                 .await;
+        } else {
+            // Keep the transport and verification real. Only the first
+            // delivery receipt is synthetic, and the test must never send.
+            assert_eq!(
+                fs::read(wake.root().join("runtime/python.exe")).unwrap(),
+                b"inert fixture Python"
+            );
+            wake.complete_timer(&event.event_id).unwrap();
+            let queue_path = wake.root().join("queue").join(format!("{event_id}.json"));
+            let before = fs::read(&queue_path).unwrap();
+            let assigned_file = f.task.join("src/lib.rs");
+            let mut changed = fs::read(&assigned_file).unwrap();
+            changed.extend_from_slice(b"\n// Unverified change after the queued Wake\n");
+            fs::write(&assigned_file, changed).unwrap();
+            assert_eq!(
+                crate::web_work::deliver_next_manual_wake(&f.control, project).unwrap_err(),
+                "PROJECT_TASK_END_TURN_CHECKPOINT_REQUIRED"
+            );
+            assert_eq!(
+                crate::web_work::deliver_manual_wake(
+                    &f.control,
+                    project,
+                    "request-a",
+                    "end-turn",
+                    event_id
+                )
+                .unwrap_err(),
+                "PROJECT_TASK_END_TURN_CHECKPOINT_REQUIRED"
+            );
+            assert_eq!(fs::read(queue_path).unwrap(), before);
+            assert!(wake.delivery(event_id).unwrap().is_none());
+            assert!(wake.timer(event_id).unwrap().is_none());
+            assert!(
+                !wake
+                    .root()
+                    .join("logs")
+                    .join(format!("submission-start-{event_id}.json"))
+                    .exists()
+            );
         }
         drop(client);
         if let Some((stop, server)) = local_server {
@@ -2036,19 +2075,23 @@ pub(crate) mod tests {
         }
         assert!(tokio::net::TcpStream::connect(addr).await.is_err());
 
+        // Only the UUID-owned temporary root returned by the fixture is
+        // eligible for cleanup. Drop the exact fixture key first.
+        let fixture_root = assignment.parent().unwrap().canonicalize().unwrap();
+        let temp = std::env::temp_dir().canonicalize().unwrap();
+        assert_eq!(fixture_root.parent(), Some(temp.as_path()));
+        let leaf = fixture_root.file_name().unwrap().to_str().unwrap();
+        assert!(uuid::Uuid::parse_str(leaf.strip_prefix("project-task-").unwrap()).is_ok());
+        drop((wake, f));
+        fs::remove_dir_all(&fixture_root).unwrap();
+        assert!(!fixture_root.exists());
         if child.is_some() {
-            // Only the UUID-owned temporary root returned by the fixture is
-            // eligible for cleanup. Drop the exact fixture key first.
-            let fixture_root = assignment.parent().unwrap().canonicalize().unwrap();
-            let temp = std::env::temp_dir().canonicalize().unwrap();
-            assert_eq!(fixture_root.parent(), Some(temp.as_path()));
-            let leaf = fixture_root.file_name().unwrap().to_str().unwrap();
-            assert!(uuid::Uuid::parse_str(leaf.strip_prefix("project-task-").unwrap()).is_ok());
-            drop((wake, f));
-            fs::remove_dir_all(&fixture_root).unwrap();
-            assert!(!fixture_root.exists());
             println!(
                 "frozen backend: exact image, authenticated edit, sandbox verification, Git checkpoint, exact manual Wake admission and refusal, natural exit and fixture cleanup"
+            );
+        } else {
+            println!(
+                "development backend: authenticated edit, sandbox verification, Git checkpoint, queued manual Wake held after worktree change, listener and fixture cleanup"
             );
         }
     }

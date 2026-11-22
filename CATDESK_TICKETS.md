@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** The Windows sandbox-backed loopback fixture now covers checkpoint drift between queuing and delivery. The exact and next-event entry points both held the same event before browser ownership. Full installed Web acceptance remains open. [Verification](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** Checkpoint-bound manual Wake now revalidates the original assignment and current verified Git state at delivery time. This development change supports the first-cycle proof and adds no installed acceptance. [Verification](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** The review route and original disposable Git backing are separate prerequisites. Existing review and task records are preserved. The development promotion reader rejects non-scalar or unbound identity and uses one read-only lookup for an unusable exited reply. Production remains on the frozen installed release. [Evidence](docs/verification/FIRST_WEB_RELEASE_PREREQUISITES_2026_11_22.json).

@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — direct-Web path qualification.** Authenticated local MCP and the Windows sandbox verified the development checkpoint gate through real edit, check, checkpoint and queued-Wake refusal after drift. Installed v5 delivery and exact next-turn continuation remain open. [Evidence](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).
+
 **November 22 — manual continuation proof.** Development now refuses a queued checkpoint-bound manual Wake when the task worktree has changed since its verified checkpoint. The first installed v5 edit, verification, scoped Git checkpoint, self-Wake and verified next-turn continuation remain open. [Evidence](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).
 
 **November 22 first installed Web milestone.** The exact review workspace is restored and the original DRAFT remains eligible for an authorized idle reviewer once one is available. The original disposable checkout pair still needs its missing shared Git metadata. After those prerequisites and the compatible installed backend/Wake transitions, qualify one actual v5 edit, verification, Git checkpoint, task-issued self-Wake delivery and same-task next-turn continuation with zero Codex model calls. [Evidence](docs/verification/FIRST_WEB_RELEASE_PREREQUISITES_2026_11_22.json).
