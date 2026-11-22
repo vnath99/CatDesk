@@ -1191,6 +1191,13 @@ function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$
                 $reply = ConvertFrom-CatDeskLiteralJson $wire
                 if ($process.ExitCode -eq 0) { return $reply }
                 $fields = @($reply.PSObject.Properties.Name)
+                if ($verb -ceq 'promote-resolve' -and $reply -is [pscustomobject] -and
+                    $fields.Count -eq 1 -and $fields[0] -ceq 'status' -and
+                    $reply.status -is [string] -and $reply.status -ceq 'attention') {
+                    # Legacy controllers use this undifferentiated refusal.
+                    # It carries no candidate or transaction authority.
+                    throw 'REVIEWED_PROMOTION_RESOLVER_PROTOCOL_UNAVAILABLE'
+                }
                 if ($reply -is [pscustomobject] -and $fields.Count -eq 2 -and
                     $fields -ccontains 'status' -and $fields -ccontains 'errorCode' -and
                     $reply.status -is [string] -and $reply.status -ceq 'attention' -and
@@ -1374,7 +1381,8 @@ function Invoke-LifecycleReviewedPromotion {
         Write-LifecycleStatus $receipt.state $detail
     } catch {
         $reason = [string]$_.Exception.Message
-        if ($reason -cin $script:PromotionNativeRefusals) {
+        if ($reason -cin $script:PromotionNativeRefusals -or
+            ($phase -ceq 'RESOLVE_CANDIDATE' -and $reason -ceq 'REVIEWED_PROMOTION_RESOLVER_PROTOCOL_UNAVAILABLE')) {
             Write-LifecycleStatus $reason $phase
             return
         }

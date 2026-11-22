@@ -608,7 +608,7 @@ static class PromotionRefusal {
         }
         string mode = File.ReadAllText("refusal-mode.txt");
         File.AppendAllText("refusal-invocations.txt", args[1] + "\n");
-        if ((mode == "candidate" || mode == "stopped-source" || mode == "listener-owner" || mode == "source-pair" || mode == "pipe-held") && args[1] == "promote-resolve") {
+        if ((mode == "candidate" || mode == "legacy-candidate" || mode == "stopped-source" || mode == "listener-owner" || mode == "source-pair" || mode == "pipe-held") && args[1] == "promote-resolve") {
             Console.WriteLine("{\"state\":\"PROMOTION_CANDIDATE_RESOLVED\",\"candidateSha256\":\"" + args[2] + "\",\"buildAttemptId\":\"" + new string('a', 32) + "\"}");
             return 0;
         }
@@ -621,6 +621,10 @@ static class PromotionRefusal {
                 Console.WriteLine("{\"state\":\"PROMOTION_IN_PROGRESS\",\"candidateSha256\":\"" + args[2] + "\"}");
                 return 0;
             }
+        }
+        if (mode == "legacy-resolver" || mode == "legacy-candidate" || mode == "legacy-malformed") {
+            Console.WriteLine(mode == "legacy-malformed" ? "{\"status\":\"attention\",\"other\":true}" : "{\"status\":\"attention\"}");
+            return 2;
         }
         string code = mode == "candidate" ? "REVIEWED_PROMOTION_REVIEW_REQUIRED" : "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD";
         if (mode == "stopped-source") code = "REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED";
@@ -643,6 +647,9 @@ static class PromotionRefusal {
     [IO.File]::WriteAllText($realFingerprint, $digest)
     $invocations = Join-Path $realCanonicalRoot 'refusal-invocations.txt'
     $cases = @(
+        @{ Mode = 'legacy-resolver'; State = 'REVIEWED_PROMOTION_RESOLVER_PROTOCOL_UNAVAILABLE'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
+        @{ Mode = 'legacy-candidate'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve,promote' }
+        @{ Mode = 'legacy-malformed'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
         @{ Mode = 'resolver'; State = 'REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
         @{ Mode = 'candidate'; State = 'REVIEWED_PROMOTION_REVIEW_REQUIRED'; Phase = 'RUN_CANDIDATE'; Actions = 'promote-resolve,promote' }
         @{ Mode = 'stopped-source'; State = 'REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED'; Phase = 'RUN_CANDIDATE'; Actions = 'promote-resolve,promote' }
