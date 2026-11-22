@@ -417,6 +417,11 @@ pub(crate) fn promote_active_backend(
     let workspace = workspace
         .canonicalize()
         .map_err(|_| "reviewed promotion workspace is unavailable".to_string())?;
+    if let Some(receipt) =
+        crate::daemon_reload::existing_local_promotion_receipt(&workspace, expected_sha256)?
+    {
+        return Ok(receipt);
+    }
     let release =
         crate::reviewed_build::active_reviewed_promotion_candidate(&workspace, expected_sha256)?;
     let candidate = workspace.join(&release.candidate_relative_path);
@@ -425,17 +430,6 @@ pub(crate) fn promote_active_backend(
         .map_err(|_| "REVIEWED_PROMOTION_CONTROLLER_UNPROVEN".to_string())?;
     if candidate.canonicalize().ok().as_ref() != Some(&current) {
         return Err("REVIEWED_PROMOTION_USE_ATTESTED_CANDIDATE_CONTROLLER".into());
-    }
-    if let Some(result) =
-        crate::daemon_reload::existing_local_promotion_result(&workspace, expected_sha256)?
-    {
-        return Ok(json!({
-            "state": result.state,
-            "candidateSha256": result.candidate_sha256,
-            "existingResult": true,
-            "authorizationGeneration": result.authorization_generation,
-            "servingState": result.serving_state,
-        }));
     }
     let supervisor = AutonomousSupervisorV1::open(&workspace)?;
     let reviewed =

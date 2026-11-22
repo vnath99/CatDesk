@@ -1288,6 +1288,12 @@ pub(crate) async fn execute_operator_action(
         OperatorAction::ResolveReviewedBackendPromotion { candidate_sha256 } => {
             #[cfg(windows)]
             {
+                if let Some(receipt) = crate::daemon_reload::existing_local_promotion_receipt(
+                    workspace,
+                    &candidate_sha256,
+                )? {
+                    return Ok(receipt);
+                }
                 let release = crate::reviewed_build::active_reviewed_promotion_candidate(
                     workspace,
                     &candidate_sha256,

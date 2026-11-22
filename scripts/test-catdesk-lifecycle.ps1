@@ -332,6 +332,53 @@ try {
     Require ($driftObservations.Count -eq 2 -and $authProbed.Count -eq 1 -and ($actions -join ',') -ceq 'promote-resolve,promote') 'owner drift produces no retry or another lifecycle operation'
     $actions.Clear()
 
+    # A terminal retained transaction is readable after the staging path goes
+    # away. The facade must use only the pinned canonical resolver in this case.
+    [IO.File]::Delete($candidate)
+    try {
+        $retained = $promotedResolver.Clone()
+        $retained.ScheduledTaskGet = { $null }
+        $retained.AutostartRunKeyGet = { $null }
+        $retained.PromotionInvokeNative = {
+            param($image,$root,$verb,$hash)
+            [void]$actions.Add($verb)
+            Require ($verb -ceq 'promote-resolve' -and $image -ceq $realBinary) 'a retained result is read only through the canonical resolver'
+            [pscustomobject]@{state=$retainedState;candidateSha256=$hash;existingResult=$retainedMarker
+                authorizationGeneration=7;servingState=$retainedServingState}
+        }
+        $retainedState = 'PROMOTION_COMPLETED'
+        $retainedMarker = $true
+        $retainedServingState = 'STOPPED_AFTER_BOUNDED_OWNER'
+        $done = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $retained | ConvertFrom-Json
+        Require ($done.state -ceq 'PROMOTION_COMPLETED' -and $actions.Count -eq 1) 'retained completion needs no staged candidate launch'
+        $actions.Clear()
+        $retainedMarker = 'true'
+        $malformed = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $retained | ConvertFrom-Json
+        Require ($malformed.state -ceq 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED' -and $actions.Count -eq 1) 'an unbound terminal projection refuses before another launch'
+        $actions.Clear()
+        $retainedMarker = $true
+        $retainedState = 'PROMOTION_FAILED_OR_AMBIGUOUS'
+        $retainedServingState = $null
+        $ambiguous = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $retained | ConvertFrom-Json
+        Require ($ambiguous.state -ceq 'PROMOTION_FAILED_OR_AMBIGUOUS' -and $actions.Count -eq 1) 'a retained ambiguous outcome never starts another promotion'
+        $actions.Clear()
+        $retainedState = 'PROMOTION_COMPLETED'
+        $retainedServingState = 'STOPPED_AFTER_BOUNDED_OWNER'
+        $prior = [IO.File]::ReadAllBytes($realBinary)
+        try {
+            [IO.File]::WriteAllText($realBinary, 'already-restored-previous-release')
+            [IO.File]::WriteAllText($realFingerprint, (Get-FileHash -LiteralPath $realBinary).Hash.ToLowerInvariant())
+            $rolledBack = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $retained | ConvertFrom-Json
+            Require ($rolledBack.state -ceq 'REVIEWED_PROMOTION_CANONICAL_READBACK_UNVERIFIED' -and $actions.Count -eq 1) 'completed history cannot certify a different current selection'
+        } finally {
+            [IO.File]::WriteAllBytes($realBinary,$prior)
+            [IO.File]::WriteAllText($realFingerprint,$digest)
+        }
+    } finally {
+        [IO.File]::Copy($realBinary,$candidate,$false)
+    }
+    $actions.Clear()
+
     $invalidResolver = $resolver.Clone()
     $invalidResolver.PromotionInvokeNative = {
         param($image,$root,$verb,$hash)

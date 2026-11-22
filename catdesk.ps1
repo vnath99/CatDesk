@@ -1239,15 +1239,24 @@ function Invoke-LifecycleReviewedPromotion {
         . $metadata
         Initialize-DevLocalTargetMetadata
         $selection = Invoke-PinnedPromotionController $root $canonical.Binary $canonical.Hash 'promote-resolve' $digest
-        if ($selection.state -cne 'PROMOTION_CANDIDATE_RESOLVED' -or $selection.candidateSha256 -cne $digest -or
-            $selection.buildAttemptId -cnotmatch '^[0-9a-f]{32}$') {
-            throw 'REVIEWED_PROMOTION_RESOLUTION_UNPROVEN'
+        if ($selection.state -cin @('PROMOTION_COMPLETED','PROMOTION_FAILED_OR_AMBIGUOUS')) {
+            if ($selection.existingResult -isnot [bool] -or -not $selection.existingResult -or
+                ($selection.authorizationGeneration -isnot [int] -and $selection.authorizationGeneration -isnot [long]) -or
+                $selection.authorizationGeneration -lt 1) {
+                throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
+            }
+            $receipt = $selection
+        } else {
+            if ($selection.state -cne 'PROMOTION_CANDIDATE_RESOLVED' -or $selection.candidateSha256 -cne $digest -or
+                $selection.buildAttemptId -cnotmatch '^[0-9a-f]{32}$') {
+                throw 'REVIEWED_PROMOTION_RESOLUTION_UNPROVEN'
+            }
+            # The canonical resolver has exited and its file pin was released.
+            # Keep only the exact noncanonical attested controller pinned.
+            $candidate = Join-Path $root ("target\reviewed-builds\" + $selection.buildAttemptId + "\catdesk.exe")
+            $phase = 'RUN_CANDIDATE'
+            $receipt = Invoke-PinnedPromotionController $root $candidate $digest 'promote' $digest
         }
-        # The canonical resolver has exited and its file pin was released.
-        # Keep only the exact noncanonical attested controller pinned.
-        $candidate = Join-Path $root ("target\reviewed-builds\" + $selection.buildAttemptId + "\catdesk.exe")
-        $phase = 'RUN_CANDIDATE'
-        $receipt = Invoke-PinnedPromotionController $root $candidate $digest 'promote' $digest
         if ($receipt.candidateSha256 -cne $digest -or $receipt.state -cnotin @(
             'PROMOTION_COMPLETED','PROMOTION_FAILED_OR_AMBIGUOUS','PROMOTION_IN_PROGRESS','PROMOTION_CLAIMED_PENDING_UNPROVEN')) {
             throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'

@@ -1153,6 +1153,26 @@ pub(crate) fn existing_local_promotion_result(
     }
 }
 
+/// Project only the fields needed by the one-hash command to reuse a
+/// retained terminal result. This does not attest the current installed pair.
+#[cfg(windows)]
+pub(crate) fn existing_local_promotion_receipt(
+    workspace: &Path,
+    candidate_sha256: &str,
+) -> Result<Option<serde_json::Value>, String> {
+    Ok(
+        existing_local_promotion_result(workspace, candidate_sha256)?.map(|result| {
+            serde_json::json!({
+                "state": result.state,
+                "candidateSha256": result.candidate_sha256,
+                "existingResult": true,
+                "authorizationGeneration": result.authorization_generation,
+                "servingState": result.serving_state,
+            })
+        }),
+    )
+}
+
 #[cfg(windows)]
 pub(crate) fn reviewed_promotion_result_for_transaction(
     workspace: &Path,
@@ -3662,13 +3682,15 @@ mod tests {
         let digest = authorization.candidate_sha256.clone();
         let reenter = |sha: &str| existing_local_promotion_result(&root, sha);
         let reconcile = "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED";
-        let run = |sha: &str| {
-            let action =
-                parse_operator_action(["operator", "promote-result", sha].map(str::to_owned))
-                    .unwrap()
-                    .unwrap();
+        let command = |verb: &str, sha: &str| {
+            let action = parse_operator_action(["operator", verb, sha].map(str::to_owned))
+                .unwrap()
+                .unwrap();
             execute_operator_action(action, &root)
         };
+        let run = |sha: &str| command("promote-result", sha);
+        let resolve = |sha: &str| command("promote-resolve", sha);
+        assert!(resolve(&digest).await.is_err());
         assert_eq!(
             run(&digest).await.unwrap()["state"],
             "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
@@ -3720,6 +3742,9 @@ mod tests {
         let pending = run(&digest).await.unwrap();
         assert_eq!(pending["state"], "PROMOTION_RESULT_PENDING_NO_RETRY");
         assert_eq!(pending["transactionId"], authorization.transaction_id);
+        for hash in [&digest, &"0".repeat(64)] {
+            assert_eq!(resolve(hash).await.unwrap_err(), reconcile);
+        }
         assert_eq!(
             run(&"0".repeat(64)).await.unwrap()["state"],
             "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
@@ -3733,12 +3758,30 @@ mod tests {
         assert_eq!(read["recordedServingState"], "STOPPED_AFTER_BOUNDED_OWNER");
         assert_eq!(read["authorizationGeneration"], authorization.generation);
         assert_eq!(read["readOnly"], true);
+        let resolved = resolve(&digest).await.unwrap();
+        assert_eq!(resolved["state"], "PROMOTION_COMPLETED");
+        assert_eq!(resolved["candidateSha256"], digest);
+        assert_eq!(resolved["existingResult"], true);
+        assert_eq!(
+            resolved["authorizationGeneration"],
+            authorization.generation
+        );
+        assert_eq!(resolved["servingState"], "STOPPED_AFTER_BOUNDED_OWNER");
+        assert!(resolved.get("buildAttemptId").is_none());
+        assert!(resolve(&"0".repeat(64)).await.is_err());
+        assert_eq!(command("promote", &digest).await.unwrap(), resolved);
         assert_eq!(
             [&auth_path, &claim_path, &result_path].map(|path| fs::read(path).unwrap()),
             before
         );
         assert_eq!(fs::read_dir(&control).unwrap().count(), 3);
         assert!(!root.join("target").exists());
+        result.state = "PROMOTION_FAILED_OR_AMBIGUOUS".into();
+        result.serving_state = None;
+        atomic_json_write(&result_path, &result).unwrap();
+        let ambiguous = resolve(&digest).await.unwrap();
+        assert_eq!(ambiguous["state"], "PROMOTION_FAILED_OR_AMBIGUOUS");
+        assert_eq!(ambiguous["existingResult"], true);
         for (transaction, generation) in [
             ("9".repeat(32), authorization.generation),
             (
