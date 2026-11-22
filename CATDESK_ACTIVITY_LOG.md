@@ -950,3 +950,11 @@ Evidence: [docs/verification/WAKE_LOCAL_REPLY_RECOVERY_AND_EXIT_2026_11_22.json]
 Agent: CatDesk development. Source: d808747ac39d4e3b8064c2884422186bfcf52d82. Outcome: partial. The development Wake controller can preflight a frozen routine request, start the existing broker, verify the connected owner and submit once under a durable generation fence. 336 Windows library and CLI tests passed. Installed qualification remains open. Next: Verify the original first Wake V3 selection when an operator result arrives and qualify genuine protected receipt publication. Admit an eligible independent reviewer for the frozen backend through the existing review-only route.
 
 Evidence: [docs/verification/WAKE_ONE_COMMAND_ROUTINE_UPDATE_2026_11_22.json](docs/verification/WAKE_ONE_COMMAND_ROUTINE_UPDATE_2026_11_22.json); command: cargo test --manifest-path wake/Cargo.toml --locked --offline --target-dir target --lib --bin CatDeskWakeHost install_broker -- --test-threads=1 --quiet; exit 0; SHA-256 eb48ad29806036775f2f64c556fb2bffe13cadd87e9542d99f201622dd480d98.
+
+<!-- catdesk-activity:wake-routine-pre-intent-refusal-20261122T073048Z sha256:39dac624b5b1d384cc7d21560658cfcd018958ff3543a6e80cc6cd27390cf54d -->
+
+## 2026-11-22T07:30:48Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 43c0772c44c9e92f7471dfb1f2cf2ac91e704bd7. Outcome: partial. Development Wake keeps the original attempt and records a verified refusal before INTENT after the broker exits. A different request can then reach the existing protected preflight. 338 Windows tests passed. The dedicated producer still lacks a usable endpoint for Wake receipt publication. Next: Verify the original first Wake V3 selection after operator execution and qualify a reviewed publisher for genuine protected Wake receipts through existing release authority. Complete the frozen backend review through an eligible existing reviewer.
+
+Evidence: [docs/verification/WAKE_ROUTINE_PRE_INTENT_REFUSAL_2026_11_22.json](docs/verification/WAKE_ROUTINE_PRE_INTENT_REFUSAL_2026_11_22.json); command: cargo test --manifest-path wake/Cargo.toml --locked --offline --target-dir target --lib --bin CatDeskWakeHost install_broker -- --test-threads=1 --quiet; exit 0; SHA-256 e4e6482194bac53c77231ceb9658c8c60aa103e88de672e44d1fbcd25dc3fa1b.

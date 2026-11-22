@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T07:30:48Z",
+  "sourceCommit": "43c0772c44c9e92f7471dfb1f2cf2ac91e704bd7",
+  "scope": "WINDOWS_WAKE_LOCAL_CLIENT_AND_DISPOSABLE_FILESYSTEM_FIXTURES",
+  "behavior": {
+    "sameFixedBrokerAndProtectedPolicy": true,
+    "ordinalZeroPreservesOriginalAttemptPath": true,
+    "terminalProofNeedsExactNativeResponseBeforeIntent": true,
+    "requiresOriginalProcessExitAndScmStopped": true,
+    "preservesOriginalAttemptBytesAndBindsProofToTheirDigest": true,
+    "laterDistinctRequestStillRequiresProtectedPreflightAndIndependentBrokerAdmission": true,
+    "originalDigestReplayAllowed": false,
+    "missingMalformedOrUnknownProofFencesGeneration": true,
+    "readOnlyPreflightChecksTheSameLocalHistory": true,
+    "localHistoryInspectionMaximumAttemptsPerGeneration": 32,
+    "brokerAuthorityChanged": false
+  },
+  "tests": {
+    "command": "cargo test --manifest-path wake/Cargo.toml --locked --offline --target-dir target --lib --bin CatDeskWakeHost install_broker -- --test-threads=1 --quiet",
+    "exitStatus": 0,
+    "brokerLibraryPassed": 336,
+    "brokerLibraryIgnored": 2,
+    "wakeHostCliPassed": 2,
+    "wrongDigestUnverifiedExitAndRunningScmRefused": true,
+    "originalFenceAndClosedProofCannotBeOverwritten": true,
+    "tamperedAndOrphanProofRefused": true,
+    "differentDigestCanObtainNextSlotAfterExactRefusal": true,
+    "testProcessesRemaining": 0
+  },
+  "publicationEvidence": {
+    "dedicatedProducerScope": "BACKEND_REVIEWED_BUILD",
+    "dedicatedProducerServiceSourceState": "REVIEWED_BUILD_DEDICATED_PRODUCER_SERVICE_IPC_UNAVAILABLE",
+    "existingProtectedWakePublisherQualified": false
+  },
+  "productionActions": 0,
+  "installedAcceptance": false
+}
