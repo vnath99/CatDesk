@@ -250,6 +250,15 @@ try {
     }
     $invalid = & $facade promote '56aa9912' -Workspace $realCanonicalRoot -TestSeams $resolver | ConvertFrom-Json
     Require ($invalid.state -ceq 'REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED' -and $actions.Count -eq 0) 'promotion rejects short and Git source hashes before resolving'
+    $retiredResolver = $resolver.Clone()
+    $retiredResolver.PromotionInvokeNative = {
+        param($image,$root,$verb,$hash)
+        [void]$actions.Add($verb)
+        throw 'REVIEWED_PROMOTION_ALREADY_RETIRED_INSPECT_RESULT'
+    }
+    $retired = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $retiredResolver | ConvertFrom-Json
+    Require ($retired.state -ceq 'REVIEWED_PROMOTION_ALREADY_RETIRED_INSPECT_RESULT' -and $retired.detail -ceq 'RESOLVE_CANDIDATE' -and ($actions -join ',') -ceq 'promote-resolve') 'retired promotion refusal stops before launching a candidate'
+    $actions.Clear()
     $staleReceipt = & $facade promote $digest.ToUpperInvariant() -Workspace $realCanonicalRoot -TestSeams $resolver | ConvertFrom-Json
     Require ($staleReceipt.state -ceq 'REVIEWED_PROMOTION_CANONICAL_READBACK_UNVERIFIED') 'a matching terminal receipt cannot prove an unchanged installed pair is the candidate'
     Require (($actions -join ',') -ceq 'promote-resolve,promote') 'the one-argument facade invokes each native phase once'

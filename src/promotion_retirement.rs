@@ -2061,6 +2061,10 @@ mod tests {
         assert_eq!(pending["state"], "PROMOTION_RESULT_PENDING_NO_RETRY");
         assert_eq!(pending["retirementPhase"], "PREPARED");
         assert_eq!(pending["transactionId"], auth.transaction_id);
+        assert_eq!(
+            existing_local_promotion_receipt(&root, &auth.candidate_sha256).unwrap_err(),
+            "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED"
+        );
 
         let parent = metadata(&root).unwrap();
         archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
@@ -2074,8 +2078,13 @@ mod tests {
             observe_local_reviewed_promotion(&root, &"a".repeat(64)).unwrap()["state"],
             "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
         );
+        assert_eq!(
+            existing_local_promotion_receipt(&root, &auth.candidate_sha256.to_uppercase())
+                .unwrap_err(),
+            "REVIEWED_PROMOTION_ALREADY_RETIRED_INSPECT_RESULT"
+        );
         assert!(
-            existing_local_promotion_receipt(&root, &auth.candidate_sha256)
+            existing_local_promotion_receipt(&root, &"a".repeat(64))
                 .unwrap()
                 .is_none()
         );
@@ -2089,6 +2098,10 @@ mod tests {
         );
         fs::write(archived.join("result.json"), b"changed receipt").unwrap();
         assert!(observe().is_err());
+        assert_eq!(
+            existing_local_promotion_receipt(&root, &auth.candidate_sha256).unwrap_err(),
+            "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED"
+        );
         assert!(!control.exists());
         cleanup_fixture(root);
     }

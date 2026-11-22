@@ -1170,17 +1170,27 @@ pub(crate) fn existing_local_promotion_receipt(
     workspace: &Path,
     candidate_sha256: &str,
 ) -> Result<Option<serde_json::Value>, String> {
-    Ok(
-        existing_local_promotion_result(workspace, candidate_sha256)?.map(|result| {
-            serde_json::json!({
-                "state": result.state,
-                "candidateSha256": result.candidate_sha256,
-                "existingResult": true,
-                "authorizationGeneration": result.authorization_generation,
-                "servingState": result.serving_state,
-            })
-        }),
-    )
+    let sha = normalize_sha256(candidate_sha256)?;
+    if let Some(result) = existing_local_promotion_result(workspace, &sha)? {
+        return Ok(Some(serde_json::json!({
+            "state": result.state,
+            "candidateSha256": result.candidate_sha256,
+            "existingResult": true,
+            "authorizationGeneration": result.authorization_generation,
+            "servingState": result.serving_state,
+        })));
+    }
+    // A hash alone cannot distinguish an old invocation from a deliberate
+    // request to reinstall a retired release. Keep retirement read-only here.
+    let retired = retirement::observe_retired_promotion(workspace, &sha)
+        .map_err(|_| "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED")?;
+    match retired {
+        Some(result) if result["archived"] == true => {
+            Err("REVIEWED_PROMOTION_ALREADY_RETIRED_INSPECT_RESULT".into())
+        }
+        Some(_) => Err("REVIEWED_PROMOTION_RECONCILIATION_REQUIRED".into()),
+        None => Ok(None),
+    }
 }
 
 #[cfg(windows)]
