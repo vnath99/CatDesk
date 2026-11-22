@@ -534,7 +534,7 @@ fn missing_review_receipt_refuses_a_fresh_request_before_intent() {
     assert!(admission.resume_binding.is_none());
     let receipt_dir = fixture.intake.join("receipts");
     let mut review = SameStateReviewIntakeV3::new(receipt_dir.clone());
-    review.pin_receipts(&fixture.payload, false).unwrap();
+    review.pin_receipts(&fixture.payload, false, false).unwrap();
     review.revalidate().unwrap();
     // The real fixture is user-writable. Correct bytes alone do not establish
     // the protected review publisher's ownership.
@@ -547,7 +547,7 @@ fn missing_review_receipt_refuses_a_fresh_request_before_intent() {
     .unwrap();
     assert_eq!(
         SameStateReviewIntakeV3::new(receipt_dir)
-            .pin_receipts(&fixture.payload, false)
+            .pin_receipts(&fixture.payload, false, false)
             .unwrap_err(),
         "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE"
     );
@@ -893,7 +893,7 @@ fn earlier_signed_selection_supplies_its_exact_manual_rollback_qualification() {
             .unwrap_err(),
         "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE"
     );
-    pins.local_rollback = true;
+    pins.local_user = true;
     pins.observed(&fixture.policy, &fixture.payload, &admission)
         .unwrap();
     pins.require_protected_review_intake().unwrap();
@@ -919,6 +919,179 @@ fn earlier_signed_selection_supplies_its_exact_manual_rollback_qualification() {
     assert!(retained.join("previous-review.json").is_file());
     fixture.preserved();
     drop(ledger);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
+fn first_local_update_reuses_only_exact_signed_predecessor_review() {
+    let mut fixture = Fixture::with_local_updates(true);
+    let signed_candidate = fixture.payload.candidate.clone();
+    let handle = fixture.handle.try_clone().unwrap();
+    let current_path = fixture.state.join("current.json");
+    {
+        let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+        let envelope = fixture.signed(&guard);
+        let admission = guard
+            .same_state_admission_v3(&digest(&envelope), 1000)
+            .unwrap();
+        let resources = acquire_fixture_resources(fixture.grant(&admission, envelope)).unwrap();
+        let original = resources.grant().original_selection_bytes().unwrap();
+        let mut ledger = guard
+            .begin_same_state_v3(resources.grant(), &admission, &original)
+            .unwrap();
+        assert_eq!(
+            resources.commit_selection(&mut ledger).unwrap()["status"],
+            "SELECTED_STOPPED"
+        );
+        assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+    }
+    let before = std::fs::read(&current_path).unwrap();
+    let protected_records = std::fs::read_dir(&fixture.broker).unwrap().count();
+    let candidate_path = fixture.intake.join("candidate");
+    let receipts = fixture.intake.join("receipts");
+    std::fs::rename(&candidate_path, fixture.path.join("signed-candidate")).unwrap();
+    let prior_receipts = fixture.path.join("signed-receipts");
+    std::fs::rename(&receipts, &prior_receipts).unwrap();
+    std::fs::create_dir(&receipts).unwrap();
+    let mut previous = signed_candidate.clone();
+    previous.working_evidence = Some(SameStateWorkingEvidenceV3 {
+        source_commit: previous.source_commit.clone(),
+        manifest_sha256: same_state_manifest_sha256(&previous.manifest).unwrap(),
+        observed_utc_seconds: 1001,
+        ..fixture
+            .payload
+            .rollback_authority
+            .release()
+            .working_evidence
+            .clone()
+            .unwrap()
+    });
+    fixture.payload.candidate = write_package(&candidate_path, "1.0.0-dev.893", 49, false);
+    fixture.payload.approval_id = "first-local-update-after-signed".into();
+    fixture.payload.rollback_authority =
+        SameStateRollbackAuthorityV3::VerifiedWorkingPrevious { release: previous };
+    let mandatory = [
+        "candidate-local.json",
+        "candidate-review.json",
+        "previous-working.json",
+    ];
+    for role in mandatory {
+        let raw = serde_json::to_vec(&receipt(role, &fixture.payload)).unwrap();
+        let hash = digest(&raw);
+        std::fs::write(receipts.join(role), raw).unwrap();
+        match role {
+            "candidate-local.json" => {
+                fixture.payload.candidate.local_qualification.receipt_sha256 = hash
+            }
+            "candidate-review.json" => {
+                fixture.payload.candidate.independent_review.receipt_sha256 = hash
+            }
+            _ => {
+                let SameStateRollbackAuthorityV3::VerifiedWorkingPrevious { release } =
+                    &mut fixture.payload.rollback_authority
+                else {
+                    unreachable!()
+                };
+                release.working_evidence.as_mut().unwrap().receipt_sha256 = hash;
+            }
+        }
+    }
+    let previous_id = &signed_candidate.manifest.package_id;
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let preliminary = guard
+        .same_state_admission_v3(&"0".repeat(64), 1001)
+        .unwrap();
+    fixture.payload.install_generation = preliminary.install_generation;
+    let mut pins = fixture.observe(&preliminary, Some(previous_id)).unwrap();
+    fixture.payload.state_snapshot = pins.snapshot().clone();
+    assert_eq!(
+        pins.observed(&fixture.policy, &fixture.payload, &preliminary)
+            .unwrap_err(),
+        "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE"
+    );
+    drop(pins);
+    let mut changed = fixture.payload.clone();
+    let SameStateRollbackAuthorityV3::VerifiedWorkingPrevious { release } =
+        &mut changed.rollback_authority
+    else {
+        unreachable!()
+    };
+    release.independent_review.receipt_sha256 = "e".repeat(64);
+    let mut pins = fixture.observe(&preliminary, Some(previous_id)).unwrap();
+    pins.local_user = true;
+    assert_eq!(
+        pins.observed(&fixture.policy, &changed, &preliminary)
+            .unwrap_err(),
+        "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE"
+    );
+    drop(pins);
+    for role in mandatory {
+        let receipt_path = receipts.join(role);
+        let removed = fixture.path.join(role);
+        std::fs::rename(&receipt_path, &removed).unwrap();
+        let mut pins = fixture.observe(&preliminary, Some(previous_id)).unwrap();
+        pins.local_user = true;
+        assert_eq!(
+            pins.observed(&fixture.policy, &fixture.payload, &preliminary)
+                .unwrap_err(),
+            "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE",
+            "{role}"
+        );
+        drop(pins);
+        std::fs::rename(&removed, &receipt_path).unwrap();
+    }
+    assert_eq!(std::fs::read(&current_path).unwrap(), before);
+    assert_eq!(
+        std::fs::read_dir(&fixture.broker).unwrap().count(),
+        protected_records
+    );
+    let mut pins = fixture.observe(&preliminary, Some(previous_id)).unwrap();
+    pins.local_user = true;
+    fixture.payload.planned_selection_sha256 = pins
+        .observed(&fixture.policy, &fixture.payload, &preliminary)
+        .unwrap()
+        .planned_selection_sha256;
+    assert!(pins.require_protected_review_intake().is_err());
+    drop(pins);
+
+    let request = encode_local_user_selection_request_v1(&fixture.payload).unwrap();
+    let admission = guard
+        .same_state_admission_v3(&digest(&request), 1001)
+        .unwrap();
+    let mut pins = fixture.observe(&admission, Some(previous_id)).unwrap();
+    pins.local_user = true;
+    let resources =
+        acquire_fixture_resources(fixture.grant_with_pins(&admission, request, pins)).unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    assert_eq!(original, before);
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    assert_eq!(
+        resources.commit_selection(&mut ledger).unwrap()["status"],
+        "SELECTED_STOPPED"
+    );
+    assert!(ledger.binding().local_user_authorized());
+    assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+    drop(ledger);
+    let selected: Value = serde_json::from_slice(&std::fs::read(&current_path).unwrap()).unwrap();
+    assert_eq!(
+        selected["selection"]["current"]["pointer"],
+        same_state_release_pointer_v3(&fixture.payload.candidate).unwrap()
+    );
+    let fallback = fixture.payload.rollback_authority.release();
+    assert_eq!(
+        selected["selection"]["previous"]["pointer"],
+        same_state_release_pointer_v3(fallback).unwrap()
+    );
+    assert_eq!(
+        selected["selection"]["previous"]["qualificationSha256"],
+        same_state_release_qualification_sha256(fallback).unwrap()
+    );
+    assert!(prior_receipts.join("candidate-local.json").is_file());
+    assert!(prior_receipts.join("candidate-review.json").is_file());
+    fixture.preserved();
     drop(handle);
     fixture.cleanup();
 }

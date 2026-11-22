@@ -265,20 +265,16 @@ fn rollback_authority_sha256(payload: &SameStateRootSelectionApprovalV3) -> Resu
     Ok(digest(&bytes))
 }
 
-fn retained_local_rollback_review_sha256(
+fn matching_retained_signed_selection(
     admission: &SameStateLedgerAdmissionV3,
     original: &[u8],
     payload: &SameStateRootSelectionApprovalV3,
     approval_key_sha256: &str,
-) -> Result<Option<String>> {
+) -> Result<Option<SameStateRootSelectionApprovalV3>> {
     let Some((prior, envelope)) = &admission.previous_completed_signed_select else {
         return Ok(None);
     };
-    // This is the predecessor's qualification, already consumed and committed
-    // by the same protected broker. It cannot qualify a new candidate.
-    if payload.operation != "ROLLBACK_SAME_STATE_RELEASE"
-        || payload.rollback_authority.is_reconstruction()
-        || payload.candidate != *payload.rollback_authority.release()
+    if payload.rollback_authority.is_reconstruction()
         || admission.install_generation != payload.install_generation
         || prior.install_generation.checked_add(1) != Some(payload.install_generation)
         || prior.policy_sha256 != payload.policy_sha256
@@ -303,10 +299,52 @@ fn retained_local_rollback_review_sha256(
     {
         return Err("WAKE_SAME_STATE_ENVELOPE_ESCROW_INVALID".into());
     }
-    if signed.rollback_authority.release() != payload.rollback_authority.release() {
+    Ok(Some(signed))
+}
+
+fn retained_local_rollback_review_sha256(
+    admission: &SameStateLedgerAdmissionV3,
+    original: &[u8],
+    payload: &SameStateRootSelectionApprovalV3,
+    approval_key_sha256: &str,
+) -> Result<Option<String>> {
+    if payload.operation != "ROLLBACK_SAME_STATE_RELEASE"
+        || payload.candidate != *payload.rollback_authority.release()
+    {
         return Ok(None);
     }
-    Ok(Some(rollback_authority_sha256(payload)?))
+    let Some(signed) =
+        matching_retained_signed_selection(admission, original, payload, approval_key_sha256)?
+    else {
+        return Ok(None);
+    };
+    if signed.rollback_authority.release() == payload.rollback_authority.release() {
+        return Ok(Some(rollback_authority_sha256(payload)?));
+    }
+    Ok(None)
+}
+
+fn retained_local_predecessor_review_sha256(
+    admission: &SameStateLedgerAdmissionV3,
+    original: &[u8],
+    payload: &SameStateRootSelectionApprovalV3,
+    approval_key_sha256: &str,
+) -> Result<Option<String>> {
+    if payload.operation != "SELECT_SAME_STATE_RELEASE" {
+        return Ok(None);
+    }
+    let Some(signed) =
+        matching_retained_signed_selection(admission, original, payload, approval_key_sha256)?
+    else {
+        return Ok(None);
+    };
+    // Only the exact signed candidate's source/review evidence carries forward.
+    // Its new working receipt is still required, as are all new candidate receipts.
+    let mut previous = payload.rollback_authority.release().clone();
+    if previous.working_evidence.take().is_some() && previous == signed.candidate {
+        return Ok(Some(rollback_authority_sha256(payload)?));
+    }
+    Ok(None)
 }
 
 /// Actual read handles only. Its factory derives all paths from fixed policy
@@ -326,8 +364,9 @@ pub(crate) struct SameStateReadPinsV3 {
     planned: Vec<u8>,
     resume: Option<SameStateRetainedResumeV3>,
     review_intake: SameStateReviewIntakeV3,
-    local_rollback: bool,
+    local_user: bool,
     retained_rollback_review_sha256: Option<String>,
+    retained_predecessor_review_sha256: Option<String>,
 }
 
 enum SameStateIntakeV3 {
@@ -352,13 +391,15 @@ impl SameStateReadPinsV3 {
                 let id = rollback_authority["release"]["manifest"]["packageId"]
                     .as_str()
                     .ok_or("WAKE_SAME_STATE_LOCAL_PREDECESSOR_INVALID")?;
-                Self::observe_with_mode(
+                let mut pins = Self::observe_with_mode(
                     policy,
                     admission,
                     SameStateIntakeV3::Fixed,
                     false,
                     Some(id),
-                )
+                )?;
+                pins.local_user = true;
+                Ok(pins)
             }
             "SELECT_SAME_STATE_RELEASE" => Self::observe(policy, admission),
             "ROLLBACK_SAME_STATE_RELEASE" => {
@@ -369,7 +410,7 @@ impl SameStateReadPinsV3 {
                     true,
                     None,
                 )?;
-                pins.local_rollback = request["authorization"] == "LOCAL_USER_POLICY";
+                pins.local_user = request["authorization"] == "LOCAL_USER_POLICY";
                 Ok(pins)
             }
             _ => Err("WAKE_SAME_STATE_OPERATION_INVALID".into()),
@@ -531,8 +572,9 @@ impl SameStateReadPinsV3 {
             planned: Vec::new(),
             resume,
             review_intake: SameStateReviewIntakeV3::new(receipt_root),
-            local_rollback: false,
+            local_user: false,
             retained_rollback_review_sha256: None,
+            retained_predecessor_review_sha256: None,
         })
     }
     #[cfg(test)]
@@ -573,13 +615,23 @@ impl SameStateReadPinsV3 {
         {
             return Err("WAKE_SAME_STATE_PACKAGE_MISMATCH".into());
         }
-        if self.local_rollback {
-            self.retained_rollback_review_sha256 = retained_local_rollback_review_sha256(
-                admission,
-                &self.original_raw,
-                payload,
-                &policy.readback()?.approval_public_key_sha256,
-            )?;
+        if self.local_user {
+            let key = policy.readback()?.approval_public_key_sha256;
+            if self.rollback {
+                self.retained_rollback_review_sha256 = retained_local_rollback_review_sha256(
+                    admission,
+                    &self.original_raw,
+                    payload,
+                    &key,
+                )?;
+            } else {
+                self.retained_predecessor_review_sha256 = retained_local_predecessor_review_sha256(
+                    admission,
+                    &self.original_raw,
+                    payload,
+                    &key,
+                )?;
+            }
         }
         self.verify_review_receipts(payload)?;
         let candidate_qualification = digest(
@@ -736,7 +788,16 @@ impl SameStateReadPinsV3 {
             }
             return Err("WAKE_SAME_STATE_RECEIPT_MISMATCH".into());
         }
-        self.review_intake.pin_receipts(payload, self.rollback)
+        if let Some(expected) = &self.retained_predecessor_review_sha256
+            && *expected != rollback_authority_sha256(payload)?
+        {
+            return Err("WAKE_SAME_STATE_RECEIPT_MISMATCH".into());
+        }
+        self.review_intake.pin_receipts(
+            payload,
+            self.rollback,
+            self.retained_predecessor_review_sha256.is_some(),
+        )
     }
 
     pub(crate) fn require_protected_review_intake(&mut self) -> Result<()> {
@@ -811,6 +872,7 @@ impl SameStateReviewIntakeV3 {
         &mut self,
         payload: &SameStateRootSelectionApprovalV3,
         rollback: bool,
+        reuse_predecessor_review: bool,
     ) -> Result<()> {
         let previous = payload.rollback_authority.release();
         let working = previous
@@ -842,6 +904,10 @@ impl SameStateReviewIntakeV3 {
         ];
         if rollback {
             roles.retain(|(name, _)| name.starts_with("previous-"));
+        } else if reuse_predecessor_review {
+            roles.retain(|(name, _)| {
+                !matches!(*name, "previous-local.json" | "previous-review.json")
+            });
         }
         if let crate::install_broker_approval::same_state::SameStateRollbackAuthorityV3::ReviewedSourceReconstruction{reconstruction_receipt_sha256,..}=&payload.rollback_authority {
             roles.push(("reconstruction.json",reconstruction_receipt_sha256));
@@ -933,7 +999,11 @@ pub(crate) fn inspect_fixed_local_review_intake(
     payload: &SameStateRootSelectionApprovalV3,
 ) -> Result<()> {
     let mut intake = SameStateReviewIntakeV3::new(PathBuf::from(FIXED_REVIEW_INTAKE));
-    intake.pin_receipts(payload, payload.operation == "ROLLBACK_SAME_STATE_RELEASE")?;
+    intake.pin_receipts(
+        payload,
+        payload.operation == "ROLLBACK_SAME_STATE_RELEASE",
+        false,
+    )?;
     intake.require_protected_review_intake()?;
     intake.revalidate()
 }
