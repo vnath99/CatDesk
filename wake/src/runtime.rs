@@ -1800,14 +1800,17 @@ fn finish_browser_processes(
     child: &mut Child,
     browser_session_lock: &mut Option<File>,
 ) -> Result<()> {
-    if let Err(reason) = job.terminate_and_wait_empty(Duration::from_secs(10)) {
+    let result = job
+        .terminate_and_wait_empty(Duration::from_secs(10))
+        .and_then(|()| match child.try_wait() {
+            Ok(Some(_)) => Ok(()),
+            _ => Err("BROWSER_JOB_EXIT_UNPROVEN".into()),
+        });
+    if let Err(reason) = result {
         let _ = child.kill();
         retain_unproven_browser_lock(browser_session_lock);
         return Err(reason);
     }
-    // Zero active processes in the retained Job proves this exact child is
-    // terminal too. Do not do an unbounded child wait on the failure branch.
-    let _ = child.wait();
     Ok(())
 }
 

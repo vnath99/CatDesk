@@ -91,11 +91,9 @@ pub(super) fn run_with_deadline(
         }
     });
     // Normal host exit must not leave descendants behind either. Retain the
-    // Job until accounting proves the exact owned tree empty.
-    let cleanup = job.terminate_and_wait_empty(Duration::from_secs(10));
-    let _ = child.kill();
-    let _ = child.wait();
-    cleanup.map_err(|_| "DEV_RUNTIME_FOREGROUND_EXIT_UNPROVEN")?;
+    // Job through handle-based exit proof for its exact owned tree.
+    job.terminate_and_wait_empty(Duration::from_secs(10))
+        .map_err(|_| "DEV_RUNTIME_FOREGROUND_EXIT_UNPROVEN")?;
     result
 }
 

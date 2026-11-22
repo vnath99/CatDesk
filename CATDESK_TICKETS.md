@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** Corrected the intermittent forced-retirement fixture failure from the expired-Wake regression run. The adapter keeps its browser lock when exit proof is incomplete. Qualify real Chrome ownership and cleanup during installed self-Wake acceptance. [Evidence](docs/verification/WAKE_JOB_PROCESS_EXIT_PROOF_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** Expired manual Wakes now have a scoped, receipt-free retirement. Interrupted archive writes keep their evidence and can finish using the same exact request. Claimed or ambiguous sends stay fenced. [Evidence](docs/verification/WEB_EXPIRED_TASK_WAKE_RETIREMENT_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** An untouched manual Wake can be parked without retiring its request. A claim or partial submission witness keeps the existing fence. The release and live acceptance gates remain open. [Evidence](docs/verification/WEB_SERIAL_LANE_PARKED_WAKE_2026_11_22.json).

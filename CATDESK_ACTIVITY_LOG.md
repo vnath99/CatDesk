@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 22:48 UTC — require process-handle exit proof before releasing the Wake browser lock.** A Windows fixture exposed a descendant whose handle was still unsignaled when the old Job accounting check passed. The shared cleanup now waits for the original helper and captured descendants within the existing deadline. [Evidence](docs/verification/WAKE_JOB_PROCESS_EXIT_PROOF_2026_11_22.json).
+
 **2026-11-22 22:40 UTC — archive an expired, untouched self-Wake through its original journal.** The scoped operator path preserves receipt-free evidence and keeps the original task open for a new authorized turn. [Evidence](docs/verification/WEB_EXPIRED_TASK_WAKE_RETIREMENT_2026_11_22.json).
 
 **2026-11-22 22:33 UTC — prove a queued self-Wake can be paused before submission.** The original envelope stays in the Wake queue while the next project takes the lane. The proof checks exact task identity and the absence of any claim or submission evidence. [Evidence](docs/verification/WEB_SERIAL_LANE_PARKED_WAKE_2026_11_22.json).

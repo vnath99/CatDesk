@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T22:48:00Z",
+  "scope": "WINDOWS_DEVELOPMENT_WAKE_JOB_PROCESS_EXIT_PROOF",
+  "baseline": "6653f3346a16cda5c7564c3bb03d80827c7e5b8c",
+  "priorFailure": "The forced-retirement fixture observed WAIT_TIMEOUT (258) on a retained descendant handle after the previous cleanup reported success.",
+  "change": "Set a one-process ceiling on the exact private Job during teardown. Capture the remaining members and open handles before requesting termination. Require the original helper and captured handles to signal within the shared deadline, then check that Job accounting is empty. Keep the adapter browser lock when cleanup proof fails.",
+  "verification": {
+    "jobFixturesPassed": 2,
+    "adapterTeardownFixturesPassed": 3,
+    "additionalConsecutiveForcedRetirementPasses": 5,
+    "developmentForegroundFixturesPassed": 5,
+    "readinessProbeFixturesPassed": 21,
+    "retirementFilterPassed": 10,
+    "actualWindowsProcesses": true,
+    "seleniumOrChromeStarted": false
+  },
+  "proofScope": "The original helper and the members captured in the private Job at teardown. This does not independently enumerate historically exited or out-of-Job processes.",
+  "references": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-terminatejobobject",
+    "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess",
+    "https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information",
+    "https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list"
+  ],
+  "productionChanges": false,
+  "installedWebAcceptance": false
+}
