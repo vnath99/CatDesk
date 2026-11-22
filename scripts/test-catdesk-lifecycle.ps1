@@ -302,6 +302,21 @@ try {
     Require ($authProbed.Count -eq 1 -and $authProbed[0] -and ($actions -join ',') -ceq 'promote-resolve,promote') 'serving proof requires bearer and calls no other lifecycle operation'
     $actions.Clear()
     $authProbed.Clear()
+    $inactiveMonitor = $servingObservation.Clone()
+    $inactiveMonitor.AutostartSupervisorRunning = { $false }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $inactiveMonitor | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_READY') "the exact serving backend remains ready after the monitor exits (observed $($observed.detail))"
+    Require ($authProbed.Count -eq 1 -and $authProbed[0] -and ($actions -join ',') -ceq 'promote-resolve,promote') 'monitor exit cannot skip authenticated serving proof or advance another operation'
+    $actions.Clear()
+    $authProbed.Clear()
+
+    $unregistered = $inactiveMonitor.Clone()
+    $unregistered.AutostartRunKeyGet = { $null }
+    $unregistered.LocalMcpReadiness = { $false }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $unregistered | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_READBACK_UNVERIFIED') 'an unauthenticated existing listener does not read back as stopped or ready'
+    $actions.Clear()
+
     $servingObservation.Listener = { $null }
     $pendingBackend = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $servingObservation | ConvertFrom-Json
     Require ($pendingBackend.state -ceq 'PROMOTION_COMPLETED' -and $pendingBackend.detail -ceq 'LOCAL_BACKEND_STARTUP_PENDING' -and $authProbed.Count -eq 0 -and ($actions -join ',') -ceq 'promote-resolve,promote') 'unavailable listener leaves disk completion separate from serving'

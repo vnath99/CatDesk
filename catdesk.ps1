@@ -1176,19 +1176,17 @@ function Assert-LifecyclePromotedPair($Canonical, [string]$Digest, $Pins) {
 function Get-LifecyclePromotionServingReadback([string]$Root, $Canonical, [string]$Digest) {
     $unverified = 'LOCAL_BACKEND_READBACK_UNVERIFIED'
     try {
-        # Registration and the existing kernel signal only decide whether it
-        # is worth waiting. They never prove the identity of a serving process.
-        $registration = Get-AutostartRegistration
-        if ($registration.Conflict -or -not ($registration.TaskOwned -or $registration.RunOwned) -or
-            -not $registration.Definition.BackendOnly -or
-            -not (Test-AutostartSupervisorRunning -Definition $registration.Definition)) {
-            return 'STOPPED_AFTER_BOUNDED_OWNER'
-        }
         $local = Get-LifecycleLocalMcp
         $identity = [pscustomobject]@{ Path = $Canonical.Binary; Sha256 = $Digest }
         $clock = [Diagnostics.Stopwatch]::StartNew()
         $waitSeconds = [Math]::Min(90, [Math]::Max(0, $ReadyTimeoutSeconds))
-        do {
+        $registration = $null
+        while ($true) {
+            # The monitor can exit after starting a persistent backend. Its
+            # signal permits waiting, but neither proves nor disproves serving.
+            $waitForMonitor = $null -ne $registration -and -not $registration.Conflict -and
+                ($registration.TaskOwned -or $registration.RunOwned) -and $registration.Definition.BackendOnly -and
+                (Test-AutostartSupervisorRunning -Definition $registration.Definition)
             $gate = Get-CatDeskReleaseStartupGate -Root $Root
             if ($gate -ceq 'RECOVERY_RELEASE_AUTHORITY_REQUIRED') { return $unverified }
             if ($gate -ceq 'READY') {
@@ -1208,11 +1206,20 @@ function Get-LifecyclePromotionServingReadback([string]$Root, $Canonical, [strin
                     } finally { $pins.Dispose() }
                 }
             }
-            if ($clock.Elapsed.TotalSeconds -ge $waitSeconds -or
-                -not (Test-AutostartSupervisorRunning -Definition $registration.Definition)) { break }
+            if ($null -eq $registration) {
+                $registration = Get-AutostartRegistration
+                if ($null -eq $registration) { return $unverified }
+                # Sample again after checking the monitor so its exit cannot
+                # hide a listener that appeared during registration readback.
+                continue
+            }
+            if (-not $waitForMonitor) {
+                if ($gate -cne 'READY') { return $unverified }
+                return 'STOPPED_AFTER_BOUNDED_OWNER'
+            }
+            if ($clock.Elapsed.TotalSeconds -ge $waitSeconds) { return 'LOCAL_BACKEND_STARTUP_PENDING' }
             Start-Sleep -Milliseconds 1000
-        } while ($clock.Elapsed.TotalSeconds -lt $waitSeconds)
-        return 'LOCAL_BACKEND_STARTUP_PENDING'
+        }
     } catch {
         return $unverified
     }
