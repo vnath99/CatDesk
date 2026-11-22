@@ -725,6 +725,127 @@ fn same_state_local_user_gives_current_a_working_fallback_under_exclusive_pins()
 }
 
 #[test]
+fn same_state_local_user_can_update_after_completed_rollback() {
+    let mut fixture = Fixture::qualified_selection(true, true);
+    let handle = fixture.handle.try_clone().unwrap();
+    let current_path = fixture.state.join("current.json");
+    let working = fixture.payload.rollback_authority.release().clone();
+    let working_pointer = same_state_release_pointer_v3(&working).unwrap();
+    let working_qualification = same_state_release_qualification_sha256(&working).unwrap();
+    let (rollback_request, rollback_generation) = {
+        let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+        let request = fixture.local_request(&guard);
+        let admission = guard
+            .same_state_admission_v3(&digest(&request), 1000)
+            .unwrap();
+        let resources =
+            SameStateInstallResources::acquire(fixture.grant(&admission, request.clone())).unwrap();
+        let original = resources.grant().original_selection_bytes().unwrap();
+        let mut ledger = guard
+            .begin_same_state_v3(resources.grant(), &admission, &original)
+            .unwrap();
+        assert_eq!(
+            resources.commit_selection(&mut ledger).unwrap()["status"],
+            "ROLLED_BACK_STOPPED"
+        );
+        assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+        (request, admission.install_generation)
+    };
+    let rollback_records: Vec<_> = std::fs::read_dir(&fixture.broker)
+        .unwrap()
+        .map(|file| {
+            let path = file.unwrap().path();
+            let bytes = std::fs::read(&path).unwrap();
+            (path, bytes)
+        })
+        .collect();
+    let restored_raw = std::fs::read(&current_path).unwrap();
+    let restored: Value = serde_json::from_slice(&restored_raw).unwrap();
+    assert_eq!(restored["selection"]["current"]["pointer"], working_pointer);
+    assert!(restored["selection"]["previous"].is_null());
+    fixture.preserved();
+
+    let candidate_path = fixture.intake.join("candidate");
+    std::fs::rename(&candidate_path, fixture.path.join("earlier-candidate")).unwrap();
+    fixture.payload.candidate = write_package(&candidate_path, "1.0.0-dev.893", 49, false);
+    fixture.payload.operation = "SELECT_SAME_STATE_RELEASE".into();
+    fixture.payload.approval_id = "post-rollback-qualified-update".into();
+    for role in ["candidate-local.json", "candidate-review.json"] {
+        let raw = serde_json::to_vec(&receipt(role, &fixture.payload)).unwrap();
+        std::fs::write(fixture.intake.join("receipts").join(role), &raw).unwrap();
+        if role == "candidate-local.json" {
+            fixture.payload.candidate.local_qualification.receipt_sha256 = digest(&raw);
+        } else {
+            fixture.payload.candidate.independent_review.receipt_sha256 = digest(&raw);
+        }
+    }
+    assert!(!fixture.intake.join("previous").exists());
+    let next_pointer = same_state_release_pointer_v3(&fixture.payload.candidate).unwrap();
+    let previous_id = &working.manifest.package_id;
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let preliminary = guard
+        .same_state_admission_v3(&"0".repeat(64), 1001)
+        .unwrap();
+    assert_eq!(preliminary.install_generation, rollback_generation + 1);
+    fixture.payload.install_generation = preliminary.install_generation;
+    let mut pins = fixture.observe(&preliminary, Some(previous_id)).unwrap();
+    fixture.payload.state_snapshot = pins.snapshot().clone();
+    fixture.payload.planned_selection_sha256 = pins
+        .observed(&fixture.policy, &fixture.payload, &preliminary)
+        .unwrap()
+        .planned_selection_sha256;
+    drop(pins);
+    let request = encode_local_user_selection_request_v1(&fixture.payload).unwrap();
+    let admission = guard
+        .same_state_admission_v3(&digest(&request), 1001)
+        .unwrap();
+    assert!(admission.resume_binding.is_none());
+    let pins = fixture.observe(&admission, Some(previous_id)).unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant_with_pins(&admission, request, pins))
+            .unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    assert_eq!(original, restored_raw);
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    let result = resources.commit_selection(&mut ledger).unwrap();
+    assert_eq!(result["status"], "SELECTED_STOPPED");
+    assert_eq!(result["workingAcceptance"], false);
+    assert!(ledger.binding().local_user_authorized());
+    assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+    drop(ledger);
+
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let historical = guard
+        .same_state_admission_v3(&digest(&rollback_request), 1001)
+        .unwrap();
+    assert_eq!(historical.install_generation, rollback_generation);
+    assert_eq!(
+        historical.original_envelope.as_deref(),
+        Some(rollback_request.as_slice())
+    );
+    drop(guard);
+    for (path, bytes) in rollback_records {
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
+    let selected: Value = serde_json::from_slice(&std::fs::read(&current_path).unwrap()).unwrap();
+    assert_eq!(selected["selection"]["generation"], 9);
+    assert_eq!(selected["selection"]["current"]["pointer"], next_pointer);
+    assert_eq!(
+        selected["selection"]["previous"]["pointer"],
+        working_pointer
+    );
+    assert_eq!(
+        selected["selection"]["previous"]["qualificationSha256"],
+        working_qualification
+    );
+    fixture.preserved();
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
 fn same_state_local_user_pointer_interruptions_resume_only_the_original_request() {
     for rollback in [false, true] {
         for stop in [
