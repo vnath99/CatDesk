@@ -1206,3 +1206,11 @@ Evidence: [docs/verification/BACKEND_SUPERVISED_PROMOTION_ROLLBACK_2026_11_22.js
 Agent: Codex. Source: 47ff8a9de90217defd9e07dc033a479ff112cf22. Outcome: partial. The existing one-hash retirement admission now permits the exact later canonical loopback owner when the original promotion and handoff are terminal. Native Windows inspection preserved a private serving owner and kept identical durable proof after exit. Fifty-nine native tests passed. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/PROMOTION_RETIREMENT_WITH_SERVING_SOURCE_2026_11_22.json](docs/verification/PROMOTION_RETIREMENT_WITH_SERVING_SOURCE_2026_11_22.json); command: cargo test --locked --offline --bin catdesk daemon_reload:: -- --test-threads=1; exit 0; SHA-256 8a2cd0028f9240d7d6dd4e6d55472c84ad84c9e9677cce91f03dd88338f68f95.
+
+<!-- catdesk-activity:wake-signed-predecessor-next-update-20261122 sha256:c915f9a28a8f2ab0f422d2ee3357ff96959239f72303ff4dce341ffb479b3dc9 -->
+
+## 2026-11-22T12:00:11Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: ca8f69d12091e9e62ee9faf2a0fd901500efad45. Outcome: partial. The enrolled routine Wake update can carry forward the exact signed predecessor source qualification and independent review. Windows fixtures selected the next candidate and retained the working fallback while enforcing all three remaining protected receipt roles. Broker image review and trusted receipt publication still gate installed use.. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/WAKE_SIGNED_PREDECESSOR_NEXT_UPDATE_2026_11_22.json](docs/verification/WAKE_SIGNED_PREDECESSOR_NEXT_UPDATE_2026_11_22.json); command: cargo test --locked --offline --manifest-path wake/Cargo.toml --lib runtime::same_state_install; exit 0; SHA-256 fdd58a8b6b255a593b9e69234069432b469569262ecb52ac4cb2b6316d849d52.

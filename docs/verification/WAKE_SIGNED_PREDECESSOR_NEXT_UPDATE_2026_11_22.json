@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T12:00:11Z",
+  "scope": "DISPOSABLE_WINDOWS_SELECTION_WITH_RETAINED_SIGNED_PREDECESSOR_REVIEW",
+  "sourceCommit": "ca8f69d12091e9e62ee9faf2a0fd901500efad45",
+  "baselineSourceCommit": "e6e9b1dcffadee7ac7f52c0af20420b4c7c12857",
+  "observations": {
+    "signedSelection": "SELECTED_STOPPED",
+    "signedLedgerPhase": "COMPLETE",
+    "enrolledLocalUpdate": "SELECTED_STOPPED",
+    "localLedgerPhase": "COMPLETE",
+    "currentAndPredecessorPointersVerified": true,
+    "predecessorQualificationDigestVerified": true,
+    "omittedOnlyForExactSignedPredecessor": [
+      "previous-local.json",
+      "previous-review.json"
+    ],
+    "remainingProtectedReceipts": [
+      "candidate-local.json",
+      "candidate-review.json",
+      "previous-working.json"
+    ],
+    "eachMissingRequiredReceiptRefusedBeforeIntent": true,
+    "changedPredecessorReviewRefusedBeforeIntent": true,
+    "writableReviewIntakeRejected": true,
+    "signedOriginalCandidateReceiptsPreserved": true,
+    "fixtureConfigControlProfileAndUnresolvedJournalPreserved": true,
+    "onlyEnrolledLocalUpdateUsesThisReuseRule": true
+  },
+  "tests": {
+    "regression": {
+      "passed": 1,
+      "failed": 0
+    },
+    "windowsBroker": {
+      "passed": 336,
+      "failed": 0,
+      "ignored": 2
+    },
+    "windowsSameStateRuntime": {
+      "passed": 31,
+      "failed": 0
+    },
+    "clippyAllTargetsWithWarningsDenied": "PASS",
+    "format": "PASS",
+    "initialFixtureRejectedWrongWorkingEvidenceBinding": true,
+    "testBuildCacheCleaned": true,
+    "initialFixtureCleanup": "The command runner refused the recursive cleanup with blocked by policy. Its test process had exited. The passing fixture removed its own files."
+  },
+  "dependencies": {
+    "initialSignedSelectionStillRequiresExistingApprovedCeremony": true,
+    "routineUseRequiresSupportingBrokerRelease": true,
+    "genuineProtectedReceiptPublisherDemonstrated": false
+  },
+  "productionActions": 0,
+  "installedAcceptance": false,
+  "limits": "The test used an isolated policy, test-only Ed25519 authority and inert executables. It exercised real Windows file leases and ledger writes. The fixture separately verified refusal of the actual user-writable intake before using fixture authority for the selection. The installed broker, protected intake, routine production update, backend promotion and Web acceptance were outside the test."
+}
