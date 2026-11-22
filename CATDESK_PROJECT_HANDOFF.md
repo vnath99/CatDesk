@@ -308,5 +308,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"ORIGINAL_D22_PLATFORM_DELIVERY_UNKNOWN_AND_SEPARATE_PROTECTED_RELEASE_GATES","next_action":"Retain the unchanged V3 operator handoff and verify the installed selection with the prepared observer once genuine completion exists"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"ORIGINAL_D22_PLATFORM_DELIVERY_UNKNOWN_AND_SEPARATE_PROTECTED_RELEASE_GATES","next_action":"Verify the signed Wake V3 selection when the operator result arrives. Obtain attributable checkpoint-capable backend review and native attestation through the existing producer before guarded promotion"}
 ```

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-11-22T00:23:52.7410743+00:00",
+  "scope": "LOCAL_RETAINED_PRODUCER_AND_SOURCE_SNAPSHOT_RECORDS",
+  "attestedGenerations": 3,
+  "attested": [
+    {
+      "candidateSha256": "91eea19e6e030e80900d43114f800c3642f5cc063ef2c969b83eb20d2c28d14b",
+      "sourceSnapshotManifestSha256": "ef06abb5fe213b369e978a141765935247551f50d90d36d82221bbaaf6f5a923",
+      "includesCheckpointModule": false,
+      "sourceCapability": "DISPATCH_NO_CHECKPOINT",
+      "exactD22Bytes": false
+    },
+    {
+      "candidateSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+      "sourceSnapshotManifestSha256": "1c86402f1b48ed5f7b0b30b6397039c5cb6784e1f02f33d48afc2c3f7cc81d62",
+      "includesCheckpointModule": false,
+      "sourceCapability": "DISPATCH_NO_CHECKPOINT",
+      "exactD22Bytes": false
+    },
+    {
+      "candidateSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+      "sourceSnapshotManifestSha256": "c97401ef2e31187cad71b05344b10e96476b64767a5ccf5886b980011fb13711",
+      "includesCheckpointModule": false,
+      "sourceCapability": "DISPATCH_NO_CHECKPOINT",
+      "exactD22Bytes": false
+    }
+  ],
+  "d22CompiledSha256": "625feffdd31dfaa33a22c15f91b4b5d1560074be71eedcc0586e771b79896ab1",
+  "d22ProducerAuthority": false,
+  "protectedWrites": 0,
+  "d22SourceCommit": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+  "conclusion": "None of the three retained attested generations includes the scoped Git checkpoint dispatcher capability required for the installed Web cycle.",
+  "nextGate": "Attributable review and native BUILD_ATTESTED for a checkpoint-capable backend, followed by guarded promotion.",
+  "originalReviewDelivery": "UNKNOWN_PRESERVED",
+  "installedWebCycleVerified": false
+}
