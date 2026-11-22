@@ -1570,6 +1570,59 @@ mod tests {
     }
 
     #[test]
+    fn local_confirmation_refuses_drifted_source_pair_without_consuming_claim() {
+        let root =
+            std::env::temp_dir().join(format!("CatDesk-Retirement-Fixture-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("target/release")).unwrap();
+        fs::create_dir_all(root.join("scripts")).unwrap();
+        let control = reviewed_promotion_control_dir(&root);
+        fs::create_dir_all(&control).unwrap();
+        let (_, mut preflight, ..) = terminal_fixture();
+        let candidate = root.join(&preflight.authorization.candidate_relative_path);
+        fs::create_dir(candidate.parent().unwrap()).unwrap();
+        fs::write(&candidate, b"fixture candidate").unwrap();
+        let binary = root.join("target/release/catdesk.exe");
+        let sidecar = root.join("target/release/catdesk.exe.sha256");
+        fs::write(&binary, b"fixture prior").unwrap();
+        let script = root.join("scripts/promote-reviewed-catdesk-build.ps1");
+        fs::write(&script, b"# inert fixture").unwrap();
+        preflight.expires_at_unix = now_unix() + 120;
+        preflight.authorization.expires_at_unix = preflight.expires_at_unix;
+        preflight.authorization.candidate_sha256 = sha256_file(&candidate).unwrap();
+        preflight.authorization.prior_canonical_sha256 = sha256_file(&binary).unwrap();
+        preflight.authorization.promotion_script_sha256 = sha256_file(&script).unwrap();
+        let preflight_path = reviewed_promotion_preflight_path(&root);
+        let prepared = serde_json::to_vec(&preflight).unwrap();
+        fs::write(&preflight_path, &prepared).unwrap();
+        let confirm = || {
+            confirm_reviewed_promotion(
+                &root,
+                &candidate,
+                &preflight.authorization.candidate_sha256,
+                &preflight.confirmation_token,
+            )
+            .unwrap_err()
+        };
+
+        assert_eq!(confirm(), LOCAL_PROMOTION_PAIR_UNPROVEN);
+        fs::write(&sidecar, "f".repeat(64)).unwrap();
+        assert_eq!(confirm(), LOCAL_PROMOTION_PAIR_UNPROVEN);
+        let expected = &preflight.authorization.prior_canonical_sha256;
+        fs::write(&sidecar, format!("{}\r\n", expected.to_ascii_uppercase())).unwrap();
+        let pins = pin_local_promotion_source_pair(&root, expected).unwrap();
+        assert!(fs::write(&binary, b"unexpected binary write").is_err());
+        assert!(fs::write(&sidecar, b"unexpected fingerprint write").is_err());
+        drop(pins);
+        assert_eq!(confirm(), "reviewed promotion evidence drifted");
+        assert!(!reviewed_promotion_authorization_path(&root).exists());
+        assert!(!reviewed_promotion_claim_path(&root).exists());
+        assert!(!reviewed_promotion_worker_owner_path(&root).exists());
+        assert_eq!(fs::read(preflight_path).unwrap(), prepared);
+        assert_eq!(sha256_file(&binary).unwrap(), *expected);
+        cleanup_fixture(root);
+    }
+
+    #[test]
     fn completed_handoff_requires_exact_success_profile_current_pair_and_workspace() {
         let (root, _) = fixture();
         fs::create_dir_all(root.join("target/release")).unwrap();

@@ -580,6 +580,57 @@ pub fn prepare_reviewed_promotion_with_profile(
     Ok(preflight)
 }
 
+#[cfg(windows)]
+const LOCAL_PROMOTION_PAIR_UNPROVEN: &str = "REVIEWED_PROMOTION_SOURCE_PAIR_UNPROVEN";
+
+#[cfg(windows)]
+struct LocalPromotionSourcePair {
+    _release: crate::windows_protected_fs::ProtectedDirectoryGuard,
+    _sidecar: crate::windows_protected_fs::RetainedReviewedArtifact,
+    _binary: crate::windows_protected_fs::RetainedReviewedArtifact,
+}
+
+#[cfg(windows)]
+fn pin_local_promotion_source_pair(
+    workspace: &Path,
+    expected_sha256: &str,
+) -> Result<LocalPromotionSourcePair, String> {
+    use crate::windows_protected_fs::{
+        ProtectedDirectoryGuard, read_relative_regular, retain_reviewed_regular_artifact,
+    };
+
+    let label = LOCAL_PROMOTION_PAIR_UNPROVEN;
+    let pins = (|| -> Result<_, String> {
+        let mut release = ProtectedDirectoryGuard::acquire(workspace, label)?;
+        release.descend_existing("target", label)?;
+        release.descend_existing("release", label)?;
+        let fingerprint = read_relative_regular(&release, "catdesk.exe.sha256", 128, label)?;
+        if release_sidecar_value(&fingerprint)? != expected_sha256 {
+            return Err(label.into());
+        }
+        let sidecar = retain_reviewed_regular_artifact(
+            &release,
+            "catdesk.exe.sha256",
+            &sha256_bytes(&fingerprint),
+            128,
+            label,
+        )?;
+        let binary = retain_reviewed_regular_artifact(
+            &release,
+            "catdesk.exe",
+            expected_sha256,
+            128 * 1024 * 1024,
+            label,
+        )?;
+        Ok(LocalPromotionSourcePair {
+            _release: release,
+            _sidecar: sidecar,
+            _binary: binary,
+        })
+    })();
+    pins.map_err(|_| label.into())
+}
+
 pub fn confirm_reviewed_promotion(
     workspace: &Path,
     candidate: &Path,
@@ -614,6 +665,15 @@ pub fn confirm_reviewed_promotion(
     {
         return Err("reviewed promotion evidence drifted".into());
     }
+    #[cfg(windows)]
+    let source_pair = if preflight.authorization.local_backend_only {
+        Some(pin_local_promotion_source_pair(
+            &workspace,
+            &preflight.authorization.prior_canonical_sha256,
+        )?)
+    } else {
+        None
+    };
     let canonical = canonical_workspace_file(
         &workspace,
         &workspace.join("target/release/catdesk.exe"),
@@ -648,7 +708,9 @@ pub fn confirm_reviewed_promotion(
     {
         return Err("reviewed promotion evidence drifted".into());
     }
-    if sha256_file(&canonical)? != preflight.authorization.prior_canonical_sha256
+    let pair_already_verified = cfg!(windows) && preflight.authorization.local_backend_only;
+    if (!pair_already_verified
+        && sha256_file(&canonical)? != preflight.authorization.prior_canonical_sha256)
         || sha256_file(&script)? != preflight.authorization.promotion_script_sha256
     {
         return Err("reviewed promotion evidence drifted".into());
@@ -688,6 +750,10 @@ pub fn confirm_reviewed_promotion(
         }
         Err(_) => return Err("reviewed promotion claim is unavailable".into()),
     }
+    // Keep both files stable through claim publication. The guarded worker
+    // repeats its own checks and must be free to replace the exact old pair.
+    #[cfg(windows)]
+    drop(source_pair);
     let current = std::env::current_exe()
         .map_err(|_| "reviewed promotion helper is unavailable".to_string())?;
     let mut command = Command::new(current);
