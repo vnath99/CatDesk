@@ -69,9 +69,37 @@
     "documentationCheckPassed": true,
     "protectedIntakeObserverArchivedBytesModePassed": true,
     "protectedIntakeObserverNonElevatedRefusalPassed": true,
-    "protectedIntakeObserverElevatedLiveViewPerformed": false
+    "protectedIntakeObserverElevatedLiveViewPerformedByEnrolledOperator": true
   },
-  "next": "Use the hash-checked read-only protected-intake check under the existing enrolled administrator to verify retained stage bytes and ACL, with no key, starts, writes or resubmission.",
+  "elevatedProtectedIntakeFollowup": {
+    "evidenceOrigin": "Enrolled operator returned output from the hash-checked read-only observer",
+    "recordedUtc": "2026-11-22T17:13:16Z",
+    "state": "V3_EXACT_PROTECTED_INTAKE_STILL_MATCHES",
+    "originalSignedEnvelopeDigestMatched": true,
+    "artifactAndReceiptFilesVerified": 16,
+    "originalIntakeAclChecksPassed": true,
+    "generationOneRecordsObserved": 0,
+    "serviceStopped": true,
+    "servicePid": 0,
+    "submissionCalls": 0,
+    "protectedWrites": 0
+  },
+  "installedSourceFollowup": {
+    "retainedSourceCommitFromBuildRecord": "5965face75d42931eaac8d0a7dc995db8bf9a5bf",
+    "retainedServiceRuntimeSourceSha256": "2064d6fcc7d97b670cfa33b3dd977f2ed97d87bd65bcf67f9978bc7d7a14afbf",
+    "serviceStatusConsumesOnlyErrorFlag": true,
+    "matchingApplicationEventsAroundFailure": 0,
+    "failingInternalCheckRecoverable": false
+  },
+  "independentBackendReviewPath": {
+    "contractId": "nov21-independent-56aa-backend-review",
+    "originalExactWorkspacePresentAtFollowup": false,
+    "retainedWorkspaceHead": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "retainedWorkspaceClean": true,
+    "retainedContractSha256": "9cdd8134c1e046c86f7786328931a5b90e323e0a0220bc02bcfcb320ffcb26f2",
+    "workspaceRestoredOrRebound": false
+  },
+  "next": "Preserve the closed Wake attempt and its protected stage. Re-establish the exact frozen backend review workspace through authorized restoration or the supported review binding workflow before qualified reviewer admission and exact start authority.",
   "protectedWritesDuringDiagnosis": 0,
   "servicesStartedDuringDiagnosis": 0,
   "signingKeyReadsDuringDiagnosis": 0,
