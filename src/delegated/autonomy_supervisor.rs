@@ -444,6 +444,7 @@ pub(crate) fn promote_active_backend(
     {
         return Err("independent review authority is unavailable".into());
     }
+    crate::daemon_reload::source_bridge::check_local_source_before_claim(&workspace, None)?;
     crate::daemon_reload::retirement::archive_completed_predecessor(&workspace, expected_sha256)
         .map_err(|_| "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED".to_string())?;
     crate::daemon_reload::require_new_local_promotion(&workspace, expected_sha256)?;
@@ -456,6 +457,10 @@ pub(crate) fn promote_active_backend(
     }))?;
     let token = required_str(&prepared, "confirmationToken")?;
     let binding = crate::daemon_reload::reviewed_promotion_preflight_authority(&workspace)?;
+    crate::daemon_reload::source_bridge::check_local_source_before_claim(
+        &workspace,
+        Some(&binding),
+    )?;
     let confirmation = supervisor.reviewed_build_promotion(&json!({
         "action":"CONFIRM",
         "buildPath":candidate,

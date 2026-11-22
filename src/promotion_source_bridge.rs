@@ -4,7 +4,7 @@
 use super::*;
 use crate::reviewed_candidate_owner::OwnedCandidateChild;
 use crate::windows_protected_fs::{
-    ProtectedDirectoryGuard as Guard, retain_reviewed_regular_artifact,
+    ProtectedDirectoryGuard as Guard, read_relative_regular, retain_reviewed_regular_artifact,
 };
 use std::os::windows::fs::OpenOptionsExt;
 
@@ -32,11 +32,17 @@ pub(super) fn lifecycle_lease(workspace: &Path) -> Result<fs::File, String> {
 fn qualified_config(workspace: &Path, prior: &str) -> Result<(PathBuf, String), String> {
     let proof =
         stopped::result(workspace)?.ok_or("promotion source has no stopped qualification")?;
-    let path = workspace.join(".catdesk/release-pair-control/qualification-config.toml");
-    let observed =
-        fs::read_to_string(&path).map_err(|_| "promotion source qualified config unavailable")?;
-    validate_qualified_config(&proof, prior, &observed)?;
-    Ok((path, format!("{:x}", Sha256::digest(observed.as_bytes()))))
+    let mut control = Guard::acquire(workspace, "promotion source config")?;
+    control.descend_existing(".catdesk", "promotion source config")?;
+    control.descend_existing("release-pair-control", "promotion source config")?;
+    let name = "qualification-config.toml";
+    let observed = read_relative_regular(&control, name, 65536, "promotion source config")?;
+    let text = std::str::from_utf8(&observed).map_err(|_| "promotion source config is invalid")?;
+    validate_qualified_config(&proof, prior, text)?;
+    Ok((
+        control.path().join(name),
+        format!("{:x}", Sha256::digest(&observed)),
+    ))
 }
 
 fn validate_qualified_config(
@@ -177,6 +183,39 @@ pub(super) fn prepare_local_source(
     })
 }
 
+pub(crate) fn check_local_source_before_claim(
+    workspace: &Path,
+    preflight: Option<&ReviewedPromotionAuthorizationV1>,
+) -> Result<(), String> {
+    check_source_readiness(workspace, preflight, listener_possible())
+}
+
+fn check_source_readiness(
+    workspace: &Path,
+    preflight: Option<&ReviewedPromotionAuthorizationV1>,
+    listener_available: bool,
+) -> Result<(), String> {
+    if listener_available {
+        return Ok(());
+    }
+    let canonical = canonical_workspace_file(
+        workspace,
+        &workspace.join("target/release/catdesk.exe"),
+        "canonical release",
+    )?;
+    let prior = sha256_file(&canonical)?;
+    qualified_config(workspace, &prior)
+        .map_err(|_| "REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED".to_string())?;
+    if let Some(authorized) = preflight {
+        if authorized.prior_canonical_sha256 != prior {
+            return Err("REVIEWED_PROMOTION_RECONCILIATION_REQUIRED".into());
+        }
+        retirement::check_stopped_source_history(workspace, authorized)
+            .map_err(|_| "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED".to_string())?;
+    }
+    Ok(())
+}
+
 fn listener_possible() -> bool {
     [
         IpAddr::V4(Ipv4Addr::LOCALHOST),
@@ -288,6 +327,23 @@ mod tests {
         drop(lease);
         drop(lifecycle_lease(&root).unwrap());
         assert_eq!(fs::read(path).unwrap(), b"existing lifecycle lock");
+        assert_eq!(root.canonicalize().unwrap().parent(), Some(temp.as_path()));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn missing_stopped_source_qualification_is_reported_before_any_claim() {
+        let temp = std::env::temp_dir().canonicalize().unwrap();
+        let root = temp.join(format!("CatDesk-SourcePreclaimFixture-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("target/release")).unwrap();
+        let image = root.join("target/release/catdesk.exe");
+        fs::write(&image, b"disposable canonical bytes").unwrap();
+        let error = check_source_readiness(&root, None, false).unwrap_err();
+        assert_eq!(error, "REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED");
+        assert!(!root.join(".catdesk").exists());
+        assert_eq!(fs::read(image).unwrap(), b"disposable canonical bytes");
+        check_source_readiness(&root, None, true).unwrap();
+        assert!(!root.join(".catdesk").exists());
         assert_eq!(root.canonicalize().unwrap().parent(), Some(temp.as_path()));
         fs::remove_dir_all(root).unwrap();
     }

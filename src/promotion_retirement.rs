@@ -563,8 +563,7 @@ pub(super) fn admit_stopped_source(
     workspace: &Path,
     auth: &ReviewedPromotionAuthorizationV1,
 ) -> Result<(), String> {
-    let parent = metadata(workspace)?;
-    validate_stopped_source_history(&parent, auth)?;
+    check_stopped_source_history(workspace, auth)?;
     inspect_owners_context(
         workspace,
         auth,
@@ -575,6 +574,13 @@ pub(super) fn admit_stopped_source(
         None,
     )
     .map(|_| ())
+}
+
+pub(super) fn check_stopped_source_history(
+    workspace: &Path,
+    auth: &ReviewedPromotionAuthorizationV1,
+) -> Result<(), String> {
+    validate_stopped_source_history(&metadata(workspace)?, auth)
 }
 
 fn validate_stopped_source_history(
