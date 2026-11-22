@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_WINDOWS_DEVELOPMENT_CLI_READ_ONLY_WITH_DISPOSABLE_DURABLE_RECORDS",
+  "verifiedUtc": "2026-11-22T06:31:37Z",
+  "sourceCommit": "12e7b8fa7c4bc90b1f1b98e318a047438de7e584",
+  "developmentImageSha256": "13b2143c92a3afc1d219f1fa8aba887b5a362e6c2444aabcdd52bef7d28b8f3d",
+  "tests": {
+    "routinePromoteNativePassed": 5,
+    "legacyServingProjectionPassed": 1,
+    "isolatedBuildExit": 0,
+    "changedRustFilesFormatCheckExit": 0
+  },
+  "compiledCommand": {
+    "invalidArgument": {
+      "exit": 2,
+      "state": "REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED"
+    },
+    "noClaim": {
+      "exit": 0,
+      "state": "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
+    },
+    "pending": {
+      "exit": 0,
+      "state": "PROMOTION_RESULT_PENDING_NO_RETRY"
+    },
+    "matching": {
+      "exit": 0,
+      "state": "PROMOTION_COMPLETED",
+      "recordedServingState": "STOPPED_AFTER_BOUNDED_OWNER"
+    },
+    "wrongHash": {
+      "exit": 0,
+      "state": "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
+    },
+    "staleGeneration": {
+      "exit": 2,
+      "state": "REVIEWED_PROMOTION_RESULT_UNVERIFIED_NO_RETRY"
+    },
+    "terminalAmbiguous": {
+      "exit": 0,
+      "state": "PROMOTION_FAILED_OR_AMBIGUOUS"
+    }
+  },
+  "actualChecks": {
+    "canonicalFixturePairAbsent": true,
+    "resultBoundToActiveClaimAuthorizationAndCandidate": true,
+    "existingFixtureRecordsByteIdenticalAfterRead": true,
+    "freshWorkspaceRemainedEmptyAfterRead": true,
+    "privateAuthorizationFieldsOmitted": true,
+    "isolatedFixtureDirectoryRemoved": true
+  },
+  "scopeLimits": "Reads the active transaction only. The operation reports a durable observation, never current serving health or permission to repeat a submission.",
+  "installedProductionActions": 0,
+  "installedAcceptance": false
+}

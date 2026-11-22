@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22 — offline promotion result.** A verified development controller can read the exact active promotion by original artifact SHA-256 without the daemon or a usable canonical pair. The compiled Windows command distinguished missing, pending, matching, ambiguous, and stale results with redacted output and preserved records. The installed binary has not been upgraded with this command. [Evidence](docs/verification/PROMOTION_OFFLINE_RESULT_READBACK_2026_11_22.json).
+
 **November 22 — bounded promotion receipt collection.** A compiled Windows fixture controller exited while a descendant held the response pipes. The development facade returned the existing reconciliation state with the candidate phase while the descendant remained alive. Both PowerShell editions passed and the fixture owner exited after release. GitHub [PR #32](https://github.com/vnath99/CatDesk/pull/32) confirms the exact merge with zero submitted reviews and zero pending review requests. The original CatDesk review and installed qualification remain open. [Evidence](docs/verification/PROMOTION_RETAINED_OUTPUT_PIPE_2026_11_22.json).
 
 **November 22 — status agrees with interrupted-promotion recovery.** Public status now checks the existing journal before probing health and again before reporting readiness. The disposable Windows fixture reproduced the old false READY and verified the refusal in both PowerShell editions. Installed qualification remains open. [Evidence](docs/verification/INTERRUPTED_PROMOTION_PUBLIC_STATUS_2026_11_22.json).

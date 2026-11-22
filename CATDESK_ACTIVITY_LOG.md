@@ -894,3 +894,11 @@ Evidence: [docs/verification/INTERRUPTED_PROMOTION_PUBLIC_STATUS_2026_11_22.json
 Agent: CatDesk development. Source: 28a99b815e813e9ab71c446d5dd9b6d8e44bea51. Outcome: partial. The development promotion command reports reconciliation when a native descendant keeps the output pipe open after controller exit. Both Windows PowerShell editions passed the process fixture. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
 
 Evidence: [docs/verification/PROMOTION_RETAINED_OUTPUT_PIPE_2026_11_22.json](docs/verification/PROMOTION_RETAINED_OUTPUT_PIPE_2026_11_22.json); command: scripts/test-catdesk-lifecycle.ps1 in PowerShell 7 and Windows PowerShell 5.1; exit 0; SHA-256 0bafaa4eda6d2cf3022fb88d16e0f660f61bcf341e5b61752d0af2510a2346a3.
+
+<!-- catdesk-activity:nov22-offline-promotion-result-readback sha256:92f1c3b89cd289ad734b34f1cdb431bebe864032e5b4ca7986f3415b657acf80 -->
+
+## 2026-11-22T06:31:37Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 12e7b8fa7c4bc90b1f1b98e318a047438de7e584. Outcome: partial. The development CLI reads a bound promotion outcome while the daemon is stopped. Seven compiled Windows command cases and six focused native tests passed against disposable records. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
+
+Evidence: [docs/verification/PROMOTION_OFFLINE_RESULT_READBACK_2026_11_22.json](docs/verification/PROMOTION_OFFLINE_RESULT_READBACK_2026_11_22.json); command: Native routine_promote tests and disposable Windows operator promote-result invocation; exit 0; SHA-256 8ffd228dc894b429344138e3d6963ab7ecf540b6e498c2e88b6e05dba55b8bfa.
