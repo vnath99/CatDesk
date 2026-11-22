@@ -758,3 +758,11 @@ Evidence: [docs/verification/BACKEND_PROMOTE_NATIVE_REFUSALS_2026_11_21.json](do
 Agent: Codex. Source: cde55f2d3f2f7365c29709f35f1eed8df73ebe93. Outcome: partial. Local promotion now holds the existing startup lease through the receipt on both listener branches. Windows native and supervisor regressions passed. Next: Use the prepared first Wake selection and the existing independent backend review. Qualify persistent supervisor recovery and exact rollback after a protected candidate promotion.
 
 Evidence: [docs/verification/BACKEND_PROMOTION_STARTUP_LEASE_2026_11_21.json](docs/verification/BACKEND_PROMOTION_STARTUP_LEASE_2026_11_21.json); command: Windows daemon_reload native suite and existing PowerShell autostart suite; exit 0; SHA-256 110bd63b0bc3d024ea6523217b6563932df0945013a6032572de98adada5e213.
+
+<!-- catdesk-activity:nov21-promotion-supervisor-busy-handoff sha256:25c0a032f1c710aa66ef83ec1729357787f751d881048af869939b4850a83d60 -->
+
+## 2026-11-22T04:54:08.3266311Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 7adb55a79f9a04dcfa6c109471ecf0fc818b3662. Outcome: partial. The supervisor distinguishes a busy release lease from invalid authority and rechecks readiness before another recovery. Two Windows child processes and both PowerShell editions passed. Next: Use the prepared first Wake selection and existing independent backend review. After protected promotion, verify persistent supervisor recovery and installed rollback.
+
+Evidence: [docs/verification/PROMOTION_SUPERVISOR_BUSY_HANDOFF_2026_11_21.json](docs/verification/PROMOTION_SUPERVISOR_BUSY_HANDOFF_2026_11_21.json); command: Windows public lifecycle lock and PowerShell bootstrap, lifecycle and supervisor suites; exit 0; SHA-256 760707cfe79ce500bc3fb004ae7bfbf37104be66a39167616a642f882b94bfcd.

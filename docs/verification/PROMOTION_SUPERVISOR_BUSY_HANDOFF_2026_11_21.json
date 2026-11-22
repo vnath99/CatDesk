@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T04:54:08.3266311Z",
+  "sourceCommit": "7adb55a79f9a04dcfa6c109471ecf0fc818b3662",
+  "scope": "WINDOWS_PUBLIC_RELEASE_LEASE_CONTENTION_AND_SUPERVISOR_RECOVERY_ORDER",
+  "originalRegression": {
+    "command": "pwsh.exe -NoProfile -File scripts/test-catdesk-lifecycle.ps1",
+    "exitCode": 1,
+    "failedAssertion": "Public backend recovery distinguishes a real Windows lease from missing authority"
+  },
+  "processTest": {
+    "startedUtc": "2026-11-22T04:53:21.8448687Z",
+    "finishedUtc": "2026-11-22T04:53:22.7647450Z",
+    "parentHeldExclusiveWindowsFileLease": true,
+    "command": "catdesk.ps1 recover -BackendOnly with a disposable workspace and absent fixture configuration",
+    "powerShell7": {"state": "RELEASE_LIFECYCLE_BUSY", "exitCode": 0, "processExited": true},
+    "windowsPowerShell51": {"state": "RELEASE_LIFECYCLE_BUSY", "exitCode": 0, "processExited": true},
+    "fixtureFilesChanged": 0,
+    "fixtureRemoved": true
+  },
+  "supervisorFixture": {
+    "commands": ["status", "recover", "status", "recover", "status"],
+    "states": ["RELEASE_LIFECYCLE_BUSY", "RECOVERED", "READY", "MONITORING_COMPLETE"],
+    "delaysSeconds": [2, 15],
+    "unsafeLeaseNamespaceRemainedAuthorityRefusal": true,
+    "malformedBusyGateRefused": true
+  },
+  "testsPassedInBothPowerShellEditions": [
+    "scripts/test-start-catdesk-stack.ps1",
+    "scripts/test-catdesk-lifecycle.ps1",
+    "scripts/test-catdesk-autostart-supervisor.ps1"
+  ],
+  "productionLifecycleActions": 0,
+  "installedAcceptance": false
+}

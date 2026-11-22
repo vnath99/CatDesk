@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 21 — startup contention during promotion.** `RELEASE_LIFECYCLE_BUSY` from the development `catdesk.ps1 recover` or `start` means Windows refused the exclusive lease while it was held by another caller. An already running supervisor waits briefly and checks status before another recovery. An invalid lease namespace still requires recovery authority. [Verification](docs/verification/PROMOTION_SUPERVISOR_BUSY_HANDOFF_2026_11_21.json).
+
 **November 21 — local promotion and startup.** The development worker uses the same startup lease as `catdesk.ps1 start`, `recover`, and the existing supervisor. Promotion retains its consumed claim on a refusal. Read the supported promotion result before taking further action. A completed disk transaction still needs authenticated readiness from the persistent owner. [Lease evidence](docs/verification/BACKEND_PROMOTION_STARTUP_LEASE_2026_11_21.json).
 
 **November 21 — one-hash promotion refusal.** The development facade reports native refusal codes from a verified controller with `RESOLVE_CANDIDATE` or `RUN_CANDIDATE` in the detail. `REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD` requires a genuine active reviewed build. `REVIEWED_PROMOTION_REVIEW_REQUIRED` requires resolving independent review authority. `REVIEWED_PROMOTION_RECONCILIATION_REQUIRED` calls for reading the existing promotion result and transaction. [Windows fixture evidence](docs/verification/BACKEND_PROMOTE_NATIVE_REFUSALS_2026_11_21.json).
