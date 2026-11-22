@@ -686,3 +686,11 @@ Evidence: [docs/verification/BACKEND_PROMOTE_WINDOWS_PROCESS_HANDOFF_2026_11_21.
 Agent: CatDesk Codex. Source: c9442f95d121c218f108e4d6f8d645098b492896. Outcome: partial. The isolated development controller selected and served the exact compatible backend, then automatically restored and served the verified fallback after Windows denied access to the selected image. All three real processes drained and seven protected pins matched. Next: Verify the already prepared signed first Wake selection after the enrolled administrator completes it. Assign the frozen compatible backend contract to an eligible independent reviewer, then produce the attestation and qualify protected promotion, persistent serving, rollback and the installed Web cycle.
 
 Evidence: [docs/verification/DEVELOPMENT_SELECTION_AND_REAL_ROLLBACK_2026_11_21.json](docs/verification/DEVELOPMENT_SELECTION_AND_REAL_ROLLBACK_2026_11_21.json); command: operator web-dev-runtime prepare, run-backend, record-verification and update-package against a disposable Windows store; exit 0; SHA-256 c0b5b9cf2c6eafd32184ecdae551eb530083795d1aaef1ca9f9694cad87fe445.
+
+<!-- catdesk-activity:nov21-promotion-canonical-pair-readback sha256:62a2747d63b891c015422f52b714d6531421f9f0b47bd9f6dca568d1db881093 -->
+
+## 2026-11-22T03:43:04.0154013Z — WAKE-LIFECYCLE
+
+Agent: CatDesk Codex. Source: caf1562a7e3ea8b0ebddffa54d960dd179d94d6e. Outcome: partial. The one-hash facade now pins and remeasures the installed executable and fingerprint before presenting completion. Both PowerShell editions pass the stale receipt and split pair regressions. Exact source confirms the installed image and 56aa candidate both need the existing reviewed promotion route. Next: Verify the signed first Wake selection after the enrolled administrator completes it. Assign the exact 56aa backend contract to an eligible independent reviewer, then produce the attestation and use the existing reviewed promotion route before installed startup, rollback and Web work qualification.
+
+Evidence: [docs/verification/BACKEND_PROMOTE_CANONICAL_READBACK_2026_11_21.json](docs/verification/BACKEND_PROMOTE_CANONICAL_READBACK_2026_11_21.json); command: Run scripts/test-catdesk-lifecycle.ps1 separately on PowerShell 7 and Windows PowerShell 5.1; exit 0; SHA-256 bc133bbe5a1139a0fdeccbfe17e1364698c5c338b0b63b378e1665bcc9134dfc.

@@ -170,9 +170,36 @@ try {
     }
     $invalid = & $facade promote '56aa9912' -Workspace $realCanonicalRoot -TestSeams $resolver | ConvertFrom-Json
     Require ($invalid.state -ceq 'REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED' -and $actions.Count -eq 0) 'promotion rejects short and Git source hashes before resolving'
-    $promoted = & $facade promote $digest.ToUpperInvariant() -Workspace $realCanonicalRoot -TestSeams $resolver | ConvertFrom-Json
-    Require ($promoted.state -ceq 'PROMOTION_COMPLETED' -and $promoted.detail -ceq 'STOPPED_AFTER_BOUNDED_OWNER') 'promotion preserves the observed terminal result without claiming running health'
+    $staleReceipt = & $facade promote $digest.ToUpperInvariant() -Workspace $realCanonicalRoot -TestSeams $resolver | ConvertFrom-Json
+    Require ($staleReceipt.state -ceq 'REVIEWED_PROMOTION_CANONICAL_READBACK_UNVERIFIED') 'a matching terminal receipt cannot prove an unchanged installed pair is the candidate'
     Require (($actions -join ',') -ceq 'promote-resolve,promote') 'the one-argument facade invokes each native phase once'
+    $actions.Clear()
+    $servingResolver = $resolver.Clone()
+    $nativeFixture = $resolver.PromotionInvokeNative
+    $servingResolver.PromotionInvokeNative = {
+        param($image,$root,$verb,$hash)
+        $receipt = & $nativeFixture $image $root $verb $hash
+        if ($verb -ceq 'promote') { [IO.File]::Copy($candidate, $realBinary, $true) }
+        $receipt
+    }
+    $splitPair = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $servingResolver | ConvertFrom-Json
+    Require ($splitPair.state -ceq 'REVIEWED_PROMOTION_CANONICAL_READBACK_UNVERIFIED') 'a candidate image with the old fingerprint cannot prove selection'
+    Require (($actions -join ',') -ceq 'promote-resolve,promote') 'unverified readback does not initiate another promotion'
+    $actions.Clear()
+    [IO.File]::WriteAllBytes($realBinary, [Text.Encoding]::UTF8.GetBytes('fixture-catdesk-binary'))
+    $promotedResolver = $resolver.Clone()
+    $promotedResolver.PromotionInvokeNative = {
+        param($image,$root,$verb,$hash)
+        $receipt = & $nativeFixture $image $root $verb $hash
+        if ($verb -ceq 'promote') {
+            [IO.File]::Copy($candidate, $realBinary, $true)
+            [IO.File]::WriteAllText($realFingerprint, $hash)
+        }
+        $receipt
+    }
+    $promoted = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $promotedResolver | ConvertFrom-Json
+    Require ($promoted.state -ceq 'PROMOTION_COMPLETED' -and $promoted.detail -ceq 'STOPPED_AFTER_BOUNDED_OWNER') 'promotion confirms the exact installed pair without claiming running health'
+    Require (($actions -join ',') -ceq 'promote-resolve,promote') 'verified readback does not initiate another promotion'
     $actions.Clear()
     $invalidResolver = $resolver.Clone()
     $invalidResolver.PromotionInvokeNative = {

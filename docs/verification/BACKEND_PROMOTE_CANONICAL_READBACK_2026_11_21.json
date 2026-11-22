@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T03:43:04.0154013Z",
+  "scope": "WINDOWS_SOURCE_FIXTURE_CANONICAL_PAIR_READBACK_AND_EXACT_SOURCE_COMPATIBILITY",
+  "sourceParent": "caf1562a7e3ea8b0ebddffa54d960dd179d94d6e",
+  "testedFileSha256": {
+    "catdesk.ps1": "0098ffeae058c87af09b8e3eada7201566173cb368d1a9231507cece8a6e4238",
+    "scripts/test-catdesk-lifecycle.ps1": "fbdc0e723c9da0de564038ea45b2dbd30abc0a37d1af28ce8b533c5764518c20"
+  },
+  "regression": {
+    "preFix": "PROMOTION_COMPLETED_WITH_PREVIOUS_PAIR_STILL_INSTALLED",
+    "postFix": {
+      "previousPair": "REVIEWED_PROMOTION_CANONICAL_READBACK_UNVERIFIED",
+      "candidateWithOldFingerprint": "REVIEWED_PROMOTION_CANONICAL_READBACK_UNVERIFIED",
+      "matchingCandidatePair": "PROMOTION_COMPLETED",
+      "matchingPairServingDetail": "STOPPED_AFTER_BOUNDED_OWNER",
+      "nativeInvocationsPerCase": 2,
+      "pinsBothCurrentFilesAgainstWritesAndReplacement": true
+    },
+    "files": "REAL_WINDOWS_DISPOSABLE_FILES",
+    "nativeReceiptAndSwap": "FIXTURE"
+  },
+  "tests": {
+    "command": "scripts/test-catdesk-lifecycle.ps1",
+    "powerShell7_6_9": {
+      "redExitCode": 1,
+      "greenExitCode": 0
+    },
+    "windowsPowerShell5_1_26100_9818": {
+      "parallelExitCode": 1,
+      "parallelFailure": "THE_EXISTING_UNREGISTERED_MONITOR_FIXTURE_SHARED_THE_WORKSPACE_MUTEX",
+      "standaloneExitCode": 0
+    }
+  },
+  "compatibility": {
+    "installedReleaseSource": {
+      "commit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+      "nativeOneHashCommands": false,
+      "existingReviewedPromotionHandler": true
+    },
+    "firstCompatibleCandidateSource": {
+      "commit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+      "nativeOneHashCommands": false,
+      "existingReviewedPromotionHandler": true
+    },
+    "developmentSource": {
+      "commit": "caf1562a7e3ea8b0ebddffa54d960dd179d94d6e",
+      "nativeOneHashCommands": true,
+      "existingReviewedPromotionHandler": true
+    },
+    "firstCompatibleBackendPath": "EXISTING_REVIEW_PRODUCER_AND_REVIEWED_BUILD_PROMOTION",
+    "oneHashActivation": "REVIEWED_INSTALLED_RESOLVER_AND_REVIEWED_CANDIDATE_CONTROLLER_MUST_BOTH_SUPPORT_THEIR_NATIVE_COMMANDS"
+  },
+  "protectedPromotionInvoked": false,
+  "persistentStartupVerified": false,
+  "installedRollbackVerified": false,
+  "installedWebCycleVerified": false
+}

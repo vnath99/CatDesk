@@ -1110,6 +1110,22 @@ function Invoke-LifecycleReviewedPromotion {
         if ($null -ne $receipt.servingState -and $receipt.servingState -cnotin @('STOPPED_AFTER_BOUNDED_OWNER','UNVERIFIED')) {
             throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
         }
+        if ($receipt.state -ceq 'PROMOTION_COMPLETED') {
+            # A terminal receipt can describe an earlier selection. Pin both
+            # current files together before reporting the artifact installed.
+            $pins = [CatDesk.DevLocalTarget.ReadOnlyScope]::new()
+            try {
+                [void]$pins.File($canonical.Manifest, 128, $false)
+                $installed = $pins.File($canonical.Binary, 128MB, $false)
+                $recorded = [IO.File]::ReadAllText($canonical.Manifest).Trim().ToLowerInvariant()
+                if ($installed.Sha256 -cne $digest -or $recorded -cne $digest) {
+                    throw 'installed pair does not match the completed promotion'
+                }
+            } catch {
+                Write-LifecycleStatus 'REVIEWED_PROMOTION_CANONICAL_READBACK_UNVERIFIED' 'INSPECT_EXISTING_PROMOTION_RESULT'
+                return
+            } finally { $pins.Dispose() }
+        }
         $detail = if ($receipt.servingState) { $receipt.servingState } else { 'INSPECT_EXISTING_PROMOTION_RESULT' }
         Write-LifecycleStatus $receipt.state $detail
     } catch {
