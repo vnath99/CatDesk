@@ -900,6 +900,11 @@ function Get-NonMutatingStatus {
 function Invoke-LayeredDiagnosis {
     $layers = [Collections.Generic.List[object]]::new()
     [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LIFECYCLE_ENGINE' -State 'READY' -Gate 'READY'))
+    if (-not (Test-CatDeskPromotionStartupReady -Root $Workspace)) {
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'FAILED' -Gate 'RECOVERY_AUTHORITY_REQUIRED'))
+        Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'RECOVERY_AUTHORITY' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
+        return
+    }
 
     $canonical = $null
     try {

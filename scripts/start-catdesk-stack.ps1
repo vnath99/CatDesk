@@ -50,7 +50,6 @@ $script:MaxRecoveryHelperOutputBytes = 65536
 $script:MaxWakeRuntimeProbeMilliseconds = 5000
 $script:MaxWakeRepairMilliseconds = 1500000
 $script:MaxOfficialMigrationMilliseconds = 30000
-$script:MaxInterruptedPromotionRecoveryMilliseconds = 30000
 # Windows networking/CIM providers are external observation dependencies. Keep
 # their recovery-facing inventory probes behind the same finite child boundary
 # used for other one-command recovery helpers.
@@ -1055,42 +1054,11 @@ function Save-RedactedRecoveryEvidence {
     if($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -gt 1024){throw 'recovery evidence write validation failed'}
 }
 
-function Invoke-InterruptedPromotionPairRecovery([string]$Root) {
-    $transaction = Join-Path $Root '.catdesk\promotion-recovery\promotion-transaction.json'
-    if (-not (Test-Path -LiteralPath $transaction -PathType Leaf)) { return $false }
-    $promotion = Resolve-TrustedBootstrapHelperPath -Path (Join-Path $Root 'scripts\promote-reviewed-catdesk-build.ps1') -FailureMessage "promotion recovery helper identity is invalid"
-    # BuildPath is syntactically mandatory for the promotion helper, but an
-    # interrupted transaction is resolved before that path is consulted.
-    # T-0342: this mutation-capable recovery helper is a native child boundary,
-    # not an in-process extension of recover. Give it the same trusted interpreter,
-    # bounded output, bounded drain, and parent-side deadline as the other
-    # one-command recovery helpers.
-    $placeholder = Join-Path $Root 'target\release\catdesk.exe'
-    $powerShell = Resolve-TrustedWindowsPowerShellPath
-    $result = Invoke-BoundedRecoveryHelper -FileName $powerShell -Arguments @(
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy', 'Bypass',
-        '-File', $promotion,
-        '-BuildPath', $placeholder,
-        '-Workspace', $Root,
-        '-Execute',
-        '-RecoveryRollbackOnly'
-    ) -TimeoutMilliseconds $script:MaxInterruptedPromotionRecoveryMilliseconds -FailureMessage "interrupted promotion recovery helper failed"
-    $text = [string]$result.Stdout
-    if ($text.Length -gt 4096) { throw "promotion recovery result is oversized" }
-    if ($text -notmatch '"(?:State|state)"\s*:\s*"RECOVERED_PRIOR_CANONICAL"') {
-        throw "interrupted promotion recovery was not proven"
-    }
-    return $true
-}
-
 function Get-CanonicalReleaseRecoveryAssessment([string]$Root, [string]$ExpectedHash) {
-    # This is deliberately read-only.  It proves only that the existing
-    # persistent LKG authority can repair a broken canonical pair; it never
-    # invokes the promotion helper, starts a daemon, or touches the external
-    # runtime.  An interrupted promotion is executed only by the existing
-    # bounded recovery route, which can fall back to this exact LKG authority.
+    # LKG assessment applies to a broken pair outside a reviewed transaction.
+    if (-not (Test-CatDeskPromotionStartupReady -Root $Root)) {
+        return [pscustomobject]@{ State = 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'; RecoverySource = '' }
+    }
     try {
         $trusted = Get-CatDeskLastKnownGoodRelease -Root $Root
     } catch {
@@ -1115,15 +1083,8 @@ function Stop-CanonicalPathCatDeskForReleaseRepair([string]$Root, [string]$Confi
 }
 
 function Repair-CanonicalReleaseForRecovery([string]$Root, [string]$Config, [string]$ExpectedHash) {
-    try {
-        if (Invoke-InterruptedPromotionPairRecovery -Root $Root) {
-            return [pscustomobject]@{ Source = 'INTERRUPTED_PROMOTION'; RestoredBinary = $true; RestoredManifest = $true }
-        }
-    } catch {
-        # The interrupted-promotion helper is not recovery authority by itself.
-        # If it cannot prove completion, continue only with the independently
-        # validated persistent LKG pair below.  Missing or ambiguous LKG still
-        # fails closed through the existing bounded categories.
+    if (-not (Test-CatDeskPromotionStartupReady -Root $Root)) {
+        throw 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'
     }
     try { $trusted = Get-CatDeskLastKnownGoodRelease -Root $Root } catch { throw (Get-CatDeskLkgAuthorityFailure -Root $Root) }
     if ($ExpectedHash -and $ExpectedHash.ToLowerInvariant() -ne $trusted.Hash) {
@@ -1271,6 +1232,12 @@ function Invoke-CanonicalStackBootstrapCore {
         Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'same-transaction stopped reconciliation recovery is required before startup'
         return
     }
+    # The original reviewed transaction owns a split pair as well as a
+    # matching one. Do this before ordinary LKG recovery can change either leaf.
+    if (-not (Test-CatDeskPromotionStartupReady -Root $root)) {
+        Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'reviewed promotion must be reconciled before recovery or startup'
+        return
+    }
     $releaseRestored=$false;$releaseRecoverySource=''
     try {
         $canonical=Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
@@ -1291,8 +1258,7 @@ function Invoke-CanonicalStackBootstrapCore {
             return
         }
     }
-    # Matching executable and fingerprint bytes alone cannot settle an
-    # interrupted handoff. Even trusted disk repair can leave it unresolved.
+    # Detect a journal that appeared during the identity or recovery checks.
     if (-not (Test-CatDeskPromotionStartupReady -Root $root)) {
         Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'reviewed promotion must be reconciled before startup'
         return
