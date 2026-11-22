@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T10:33:35.4881454Z",
+  "scope": "NATIVE_WINDOWS_DISPOSABLE_WAKE_LEDGER_AND_CLIENT_RETAINED_RESULT",
+  "sourceCommit": "a437dc7ac050da7748878581d76d0fa801fc8263",
+  "previousSourceCommit": "2282b517f6069fa98958c8f345ef40b0ee2b3f83",
+  "entry": "install-broker update-local-once --request-file <exact-original-file>",
+  "result": "WAKE_LOCAL_UPDATE_COMPLETE_RECORDED_ONLY",
+  "checks": {
+    "actualWindowsFixtureVerifiedLedgerWithBoundGenerationRequestAndPlannedSelection": true,
+    "singleInvokerRetainsStrongerExitProof": true,
+    "laterInvocationReportsHistoricalCompletionOnly": true,
+    "currentSelectionClaimed": false,
+    "originalBrokerExitClaimed": false,
+    "serviceStartOrSendInRetainedBranch": false,
+    "wrongOrIncompleteHistoryContinuesNoReplayFence": true,
+    "unchangedPolicyReadbackRequired": true,
+    "windowsBrokerPassed": 336,
+    "windowsBrokerIgnored": 2,
+    "wakeHostCliPassed": 2,
+    "strictClippy": "PASS",
+    "format": "PASS"
+  },
+  "limits": "The actual Windows file-handle ledger fixture exercised the exact terminal projection. The development WakeHost was not installed, the fixed production pipe was not connected, and no protected runtime release was selected. The first signed V3 selection, independent backend review, and verified protected publisher for routine Wake review receipts remain separate prerequisites.",
+  "installedAcceptance": false,
+  "productionActions": 0
+}

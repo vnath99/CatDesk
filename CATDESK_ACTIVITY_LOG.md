@@ -1134,3 +1134,11 @@ Evidence: [docs/verification/PROMOTION_REGISTERED_BACKEND_OWNER_2026_11_22.json]
 Agent: Codex. Source: 9c1a8d97b5079cd2201e4948bef022386ffa750b. Outcome: partial. Fixed recognition of native Windows Task Scheduler principal and settings fields. The one-hash facade demand-started a real disposable task and verified the exact backend on authenticated private loopback after return. The bounded task and backend exited, and the test registration was removed. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/PROMOTION_REAL_SCHEDULER_DEMAND_START_2026_11_22.json](docs/verification/PROMOTION_REAL_SCHEDULER_DEMAND_START_2026_11_22.json); command: Actual limited Windows Task Scheduler demand start with a disposable workspace and real private MCP; exit 0; SHA-256 8365d8182f068d579fb7f4bacef03ee80a2c5573529de50ce8c21c8281a60218.
+
+<!-- catdesk-activity:nov22-wake-routine-retained-complete sha256:c09aa26a8c3934e3a242319cbd6c30d9d26e1b182e2dd3d060e67427c7a47435 -->
+
+## 2026-11-22T10:33:35.4881454Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: a437dc7ac050da7748878581d76d0fa801fc8263. Outcome: partial. A later invocation of the frozen routine Wake request can observe its exact protected terminal receipt without service startup or request replay. A real Windows ledger fixture and 336 broker tests verified the bound result. Original owner exit, present selection and installed acceptance remain separate. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/WAKE_ROUTINE_UPDATE_RETAINED_COMPLETE_2026_11_22.json](docs/verification/WAKE_ROUTINE_UPDATE_RETAINED_COMPLETE_2026_11_22.json); command: Windows install broker native ledger fixture, WakeHost CLI regressions and strict Clippy; exit 0; SHA-256 bb05bb083c46ca04bad05abd0a7ca7f49b1d15465dda43f45de062af6b7252fe.
