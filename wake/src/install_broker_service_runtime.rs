@@ -213,11 +213,25 @@ fn run_one_service_submission() -> Result<()> {
                 // The global ledger lock is still held, and this fresh request
                 // never reached INTENT. Do not describe a resumed or later
                 // failure as a refused first attempt.
-                let fresh_local_request = admission.resume_binding.is_none()
-                    && purpose["authorization"] == "LOCAL_USER_POLICY"
-                    && policy.local_user_updates_enabled().unwrap_or(false);
-                if let Some(reply) = crate::install_broker_client::local_intake_refusal_reply(
-                    fresh_local_request,
+                use crate::install_broker_client::IntakeRefusalAuthority;
+                let fresh_authority = if admission.resume_binding.is_some() {
+                    None
+                } else {
+                    match purpose.get("authorization") {
+                        Some(mode)
+                            if mode == "LOCAL_USER_POLICY"
+                                && policy.local_user_updates_enabled().unwrap_or(false) =>
+                        {
+                            Some(IntakeRefusalAuthority::LocalUser)
+                        }
+                        None if frame.operator_evidence().is_ok() => {
+                            Some(IntakeRefusalAuthority::Signed)
+                        }
+                        _ => None,
+                    }
+                };
+                if let Some(reply) = crate::install_broker_client::same_state_intake_refusal_reply(
+                    fresh_authority,
                     &envelope_sha256,
                     &error,
                 ) {

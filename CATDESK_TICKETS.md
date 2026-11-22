@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**Wake lifecycle checkpoint, November 22.** The original signed V3 operation ended with `NOT_FOUND_NO_RETRY` in the protected ledger. Existing packages and project state matched. The immediate diagnostic is a read-only elevated inventory of that exact stage. Fresh signed pre-intent refusal reporting is source-only. Later routine upgrades continue to use the existing reviewed local policy and qualified predecessor, with installation and producer gates tracked separately. [Evidence](docs/verification/WAKE_V3_ORIGINAL_ATTEMPT_RECONCILIATION_2026_11_22.json).
+
 Current ticket index. Status is workflow state; maturity is separate. Historical mention alone is not acceptance. Unreconciled historical tickets remain OPEN / UNVERIFIED with owner UNKNOWN; this does not authorize execution or claim that old work is unfinished. Consult the linked original for retained claims. Source inventory covers every T-ID found in tracked Markdown, plus the existing C1/UI acceptance identity.
 
 | ID | Title | Milestone | Priority | Status | Maturity | Owner | Last verified progress / blocker / next action | Detail |

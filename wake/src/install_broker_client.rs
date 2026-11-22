@@ -980,13 +980,15 @@ impl FixedBrokerApprovalClient<'_> {
             &std::sync::atomic::AtomicBool::new(false),
         )
         .map_err(|_| "WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY")?;
+        let request_sha256 = format!("{:x}", Sha256::digest(approval));
+        if let Some(code) =
+            same_state_intake_refusal_code(&raw, &request_sha256, IntakeRefusalAuthority::Signed)
+        {
+            return Err(code.into());
+        }
         let result: serde_json::Value =
             serde_json::from_slice(&raw).map_err(|_| "WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY")?;
-        if !same_state_complete_reply_matches(
-            &result,
-            payload,
-            &format!("{:x}", Sha256::digest(approval)),
-        ) {
+        if !same_state_complete_reply_matches(&result, payload, &request_sha256) {
             return Err("WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY".into());
         }
         // The original connected instance was attested before the only write.
@@ -1173,7 +1175,22 @@ pub(crate) fn recover_local_result_for_fixture(
     )
 }
 
-fn allowed_local_intake_refusal(code: &str) -> Option<&'static str> {
+#[derive(Clone, Copy)]
+pub(crate) enum IntakeRefusalAuthority {
+    LocalUser,
+    Signed,
+}
+
+impl IntakeRefusalAuthority {
+    fn wire_name(self) -> &'static str {
+        match self {
+            Self::LocalUser => "LOCAL_USER_POLICY",
+            Self::Signed => "SIGNED_V3",
+        }
+    }
+}
+
+fn allowed_same_state_intake_refusal(code: &str) -> Option<&'static str> {
     const CODES: &[&str] = &[
         "WAKE_SAME_STATE_CANDIDATE_INTAKE_UNAVAILABLE",
         "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE",
@@ -1184,18 +1201,16 @@ fn allowed_local_intake_refusal(code: &str) -> Option<&'static str> {
     CODES.iter().copied().find(|&candidate| candidate == code)
 }
 
-pub(crate) fn local_intake_refusal_reply(
-    fresh_local_request: bool,
+pub(crate) fn same_state_intake_refusal_reply(
+    fresh_authority: Option<IntakeRefusalAuthority>,
     request_sha256: &str,
     error: &str,
 ) -> Option<serde_json::Value> {
-    if !fresh_local_request {
-        return None;
-    }
-    let code = allowed_local_intake_refusal(error)?;
+    let authority = fresh_authority?;
+    let code = allowed_same_state_intake_refusal(error)?;
     Some(serde_json::json!({
         "schemaVersion": 3,
-        "authorization": "LOCAL_USER_POLICY",
+        "authorization": authority.wire_name(),
         "phase": "REFUSED_BEFORE_INTENT",
         "requestSha256": request_sha256,
         "errorCode": code,
@@ -1203,6 +1218,14 @@ pub(crate) fn local_intake_refusal_reply(
 }
 
 fn local_intake_refusal_code(raw: &[u8], request_sha256: &str) -> Option<&'static str> {
+    same_state_intake_refusal_code(raw, request_sha256, IntakeRefusalAuthority::LocalUser)
+}
+
+fn same_state_intake_refusal_code(
+    raw: &[u8],
+    request_sha256: &str,
+    authority: IntakeRefusalAuthority,
+) -> Option<&'static str> {
     #[derive(serde::Deserialize)]
     #[serde(deny_unknown_fields, rename_all = "camelCase")]
     struct Reply {
@@ -1214,13 +1237,13 @@ fn local_intake_refusal_code(raw: &[u8], request_sha256: &str) -> Option<&'stati
     }
     let reply: Reply = serde_json::from_slice(raw).ok()?;
     if reply.schema_version != 3
-        || reply.authorization != "LOCAL_USER_POLICY"
+        || reply.authorization != authority.wire_name()
         || reply.phase != "REFUSED_BEFORE_INTENT"
         || reply.request_sha256 != request_sha256
     {
         return None;
     }
-    allowed_local_intake_refusal(&reply.error_code)
+    allowed_same_state_intake_refusal(&reply.error_code)
 }
 
 fn decode_local_user_request(
@@ -2080,8 +2103,8 @@ mod tests {
         let raw = std::fs::read(&attempt.path).unwrap();
         let refused = |digest| {
             serde_json::to_vec(
-                &local_intake_refusal_reply(
-                    true,
+                &same_state_intake_refusal_reply(
+                    Some(IntakeRefusalAuthority::LocalUser),
                     digest,
                     "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE",
                 )
@@ -2166,9 +2189,12 @@ mod tests {
         ));
         std::fs::remove_file(&refusal_path).unwrap();
         let marker = attempt.record().unwrap();
-        let reply =
-            local_intake_refusal_reply(true, &request, "WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED")
-                .unwrap();
+        let reply = same_state_intake_refusal_reply(
+            Some(IntakeRefusalAuthority::LocalUser),
+            &request,
+            "WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED",
+        )
+        .unwrap();
         attempt
             .record_refusal(
                 &marker,
@@ -2321,9 +2347,10 @@ mod tests {
     fn local_intake_refusal_requires_fresh_request_and_exact_closed_reply() {
         let hash = "a".repeat(64);
         let code = "WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED";
-        assert!(local_intake_refusal_reply(false, &hash, code).is_none());
-        assert!(local_intake_refusal_reply(true, &hash, "private fixture data").is_none());
-        let reply = local_intake_refusal_reply(true, &hash, code).unwrap();
+        let local = Some(IntakeRefusalAuthority::LocalUser);
+        assert!(same_state_intake_refusal_reply(None, &hash, code).is_none());
+        assert!(same_state_intake_refusal_reply(local, &hash, "private fixture data").is_none());
+        let reply = same_state_intake_refusal_reply(local, &hash, code).unwrap();
         let wire = serde_json::to_string(&reply).unwrap();
         assert_eq!(
             local_intake_refusal_code(wire.as_bytes(), &hash),
@@ -2350,6 +2377,35 @@ mod tests {
             changed[field] = value;
             let bytes = serde_json::to_vec(&changed).unwrap();
             assert_eq!(local_intake_refusal_code(&bytes, &hash), None, "{field}");
+        }
+    }
+
+    #[test]
+    fn signed_intake_refusal_requires_exact_request_mode_and_phase() {
+        let hash = "a".repeat(64);
+        let code = "WAKE_SAME_STATE_CANDIDATE_INTAKE_UNAVAILABLE";
+        let signed = IntakeRefusalAuthority::Signed;
+        let reply = same_state_intake_refusal_reply(Some(signed), &hash, code).unwrap();
+        let wire = serde_json::to_vec(&reply).unwrap();
+        assert_eq!(
+            same_state_intake_refusal_code(&wire, &hash, signed),
+            Some(code)
+        );
+        assert_eq!(local_intake_refusal_code(&wire, &hash), None);
+        assert_eq!(
+            same_state_intake_refusal_code(&wire, &"b".repeat(64), signed),
+            None
+        );
+        for (field, value) in [
+            ("authorization", serde_json::json!("LOCAL_USER_POLICY")),
+            ("phase", serde_json::json!("INCOMPLETE_NO_RETRY")),
+            ("errorCode", serde_json::json!("unreviewed internal error")),
+            ("replayAuthorized", serde_json::json!(true)),
+        ] {
+            let mut changed = reply.clone();
+            changed[field] = value;
+            let raw = serde_json::to_vec(&changed).unwrap();
+            assert_eq!(same_state_intake_refusal_code(&raw, &hash, signed), None);
         }
     }
 
