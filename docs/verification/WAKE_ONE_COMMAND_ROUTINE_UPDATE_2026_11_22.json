@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "scope": "WINDOWS_ROUTINE_WAKE_CONTROLLER_AND_NATIVE_FIXTURES",
+  "verifiedUtc": "2026-11-22T07:23:56Z",
+  "sourceCommit": "d808747ac39d4e3b8064c2884422186bfcf52d82",
+  "entry": "install-broker update-local-once --request-file <absolute-request-path>",
+  "behavior": {
+    "usesExistingProtectedProspectiveReviewAndLedgerChecks": true,
+    "requiresNewLocalUserScmOwner": true,
+    "checksConnectedPidAndProcessCreationWindow": true,
+    "generationFenceBindsExactRequestSha256": true,
+    "atomicFenceCannotReplaceAnExistingRecord": true,
+    "manualLocalSubmitChecksSameFenceBeforeConnecting": true,
+    "holdsExactFenceAndParentIdentityThroughSingleWrite": true,
+    "signedBootstrapAndFirstSelectionUnchanged": true,
+    "automaticRetryAuthorized": false
+  },
+  "fixtures": {
+    "disposableRootIdentityMismatchRefused": true,
+    "concurrentDifferentRequestsForOneGenerationHadOneWriter": true,
+    "reopenedFenceAndMalformedFenceRefusedReplacement": true,
+    "realChildCreationMatchedWindowsStartWindow": true,
+    "testProcessesRemaining": 0
+  },
+  "tests": {
+    "command": "cargo test --manifest-path wake/Cargo.toml --locked --offline --target-dir target --lib --bin CatDeskWakeHost install_broker -- --test-threads=1 --quiet",
+    "exitStatus": 0,
+    "brokerLibraryPassed": 334,
+    "brokerLibraryIgnored": 2,
+    "wakeHostCliPassed": 2,
+    "compiledWakeHostEarlyRefusals": [
+      "WAKE_INSTALL_BROKER_ARGUMENTS_INVALID",
+      "WAKE_INSTALL_APPROVAL_UNAVAILABLE",
+      "WAKE_SAME_STATE_REQUEST_INVALID"
+    ]
+  },
+  "windowsApiReferences": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw",
+    "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes"
+  ],
+  "productionBrokerStarts": 0,
+  "installedAcceptance": false
+}

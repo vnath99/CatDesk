@@ -942,3 +942,11 @@ Evidence: [docs/verification/WAKE_FRESH_LOCAL_UPDATE_PREFLIGHT_2026_11_22.json](
 Agent: CatDesk development. Source: ebf4e4c2e24a0d18b271e7125a2c31a2017a457e. Outcome: partial. The development Wake client can recover a lost reply from the exact completed protected ledger after the original broker exits. Twenty-six Windows client, ledger and CLI tests passed. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
 
 Evidence: [docs/verification/WAKE_LOCAL_REPLY_RECOVERY_AND_EXIT_2026_11_22.json](docs/verification/WAKE_LOCAL_REPLY_RECOVERY_AND_EXIT_2026_11_22.json); command: Windows Wake broker client, same-state ledger and WakeHost CLI tests; exit 0; SHA-256 e0661cbca584db1ef4c9d949bcc6173f60ae284935fe53f0e313211808da2734.
+
+<!-- catdesk-activity:wake-one-command-routine-update-20261122T072356Z sha256:cc123b110bf2d6b69169f2e9de4784b37d71e5616d3b14ebeafb33f6137196c3 -->
+
+## 2026-11-22T07:23:56Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: d808747ac39d4e3b8064c2884422186bfcf52d82. Outcome: partial. The development Wake controller can preflight a frozen routine request, start the existing broker, verify the connected owner and submit once under a durable generation fence. 336 Windows library and CLI tests passed. Installed qualification remains open. Next: Verify the original first Wake V3 selection when an operator result arrives and qualify genuine protected receipt publication. Admit an eligible independent reviewer for the frozen backend through the existing review-only route.
+
+Evidence: [docs/verification/WAKE_ONE_COMMAND_ROUTINE_UPDATE_2026_11_22.json](docs/verification/WAKE_ONE_COMMAND_ROUTINE_UPDATE_2026_11_22.json); command: cargo test --manifest-path wake/Cargo.toml --locked --offline --target-dir target --lib --bin CatDeskWakeHost install_broker -- --test-threads=1 --quiet; exit 0; SHA-256 eb48ad29806036775f2f64c556fb2bffe13cadd87e9542d99f201622dd480d98.
