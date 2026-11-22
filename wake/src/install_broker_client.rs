@@ -1030,8 +1030,6 @@ impl FixedBrokerApprovalClient<'_> {
             return Err("WAKE_BROKER_CLIENT_IDENTITY_CHANGED".into());
         }
         let write = write_one_message(&self.pipe, request);
-        drop(marker);
-        drop(attempt);
         let raw = write.and_then(|()| {
             crate::install_broker_pipe_io::read_once(
                 self.pipe.as_handle(),
@@ -1045,8 +1043,9 @@ impl FixedBrokerApprovalClient<'_> {
             .ok()
             .and_then(|bytes| local_intake_refusal_code(bytes, &request_sha256));
         let reply = raw
+            .as_ref()
             .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .and_then(|bytes| serde_json::from_slice(bytes).ok())
             .filter(|reply| local_user_complete_reply_matches(reply, &payload, &request_sha256));
         // Keep the exact connected process handle through cleanup. Release the
         // request pipe so an exiting service can observe client closure.
@@ -1058,8 +1057,16 @@ impl FixedBrokerApprovalClient<'_> {
             || service_status(&self.service),
         );
         if let Some(code) = refusal {
+            if let Ok(bytes) = &raw
+                && self.policy.revalidate().is_ok()
+            {
+                // Failure to persist the proof keeps this generation fenced.
+                // Return the exact server error regardless of local bookkeeping.
+                let _ = attempt.record_refusal(&marker, bytes, owner_exit);
+            }
             return Err(code.into());
         }
+        drop((marker, attempt));
         if let Some(mut reply) = reply {
             reply["clientObservedBrokerExit"] = owner_exit.process_exited.into();
             reply["clientObservedBrokerStopped"] = owner_exit.service_stopped.into();
@@ -1234,6 +1241,10 @@ pub fn inspect_local_user_review_intake(request: &[u8]) -> Result<serde_json::Va
 pub fn inspect_fresh_local_user_update(request: &[u8]) -> Result<serde_json::Value> {
     let payload = decode_local_user_request(request)?;
     let policy = load_fixed_broker_policy_read_only()?;
+    policy.current_process_local_updater()?;
+    let request_sha256 = format!("{:x}", Sha256::digest(request));
+    let _attempt =
+        LocalUpdateAttempt::for_policy(&policy, payload.install_generation, &request_sha256)?;
     inspect_local_update_request(request, &payload, &policy, true)
 }
 
@@ -1306,12 +1317,45 @@ fn inspect_local_update_request(
     Ok(result)
 }
 
-/// A client-side no-replay fence. The protected broker ledger remains the
-/// authority on whether the request was accepted and what it changed.
+const LOCAL_ATTEMPT_HISTORY_LIMIT: usize = 32;
+const LOCAL_ATTEMPT_RECORD_LIMIT: usize = 4096;
+const LOCAL_ATTEMPT_FENCED: &str = "WAKE_LOCAL_UPDATE_ATTEMPT_EXISTS_NO_RETRY";
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LocalAttemptMarker {
+    schema_version: u64,
+    state: String,
+    install_generation: u64,
+    request_sha256: String,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LocalAttemptRefusal {
+    schema_version: u64,
+    attempt_sha256: String,
+    broker_exited_and_stopped: bool,
+    broker_reply: String,
+}
+
+impl LocalAttemptRefusal {
+    fn validates(&self, attempt_bytes: &[u8], request_sha256: &str) -> bool {
+        self.schema_version == 1
+            && self.broker_exited_and_stopped
+            && self.attempt_sha256 == format!("{:x}", Sha256::digest(attempt_bytes))
+            && local_intake_refusal_code(self.broker_reply.as_bytes(), request_sha256).is_some()
+    }
+}
+
+/// Local records can prevent replay but cannot authorize installation. The
+/// protected broker still independently verifies review, state and admission.
 struct LocalUpdateAttempt {
     root_pins: Vec<OfflineObjectPinV2>,
+    history_pins: Vec<(PathBuf, OfflineObjectPinV2)>,
     path: PathBuf,
     record_bytes: Vec<u8>,
+    request_sha256: String,
 }
 
 impl LocalUpdateAttempt {
@@ -1345,11 +1389,36 @@ impl LocalUpdateAttempt {
         if root_pins.last().map(|pin| &pin.identity().full) != Some(expected_identity) {
             return Err("WAKE_SAME_STATE_ROOT_MISMATCH".into());
         }
-        let attempt = Self {
+        let mut history_pins = Vec::new();
+        // Keep the original ordinal-zero path so a pre-upgrade attempt still
+        // fences the generation. Each successor requires a closed predecessor.
+        let stem = format!("broker-local-update-attempt-v1-{generation:020}");
+        let path = (0..LOCAL_ATTEMPT_HISTORY_LIMIT)
+            .find_map(|ordinal| {
+                let path = if ordinal == 0 {
+                    root.join(format!("{stem}.json"))
+                } else {
+                    root.join(format!("{stem}-{ordinal:02}.json"))
+                };
+                match Self::is_absent(&path) {
+                    Ok(true) => Some(Self::require_unused(&path).map(|()| path)),
+                    Ok(false) => match Self::retain_refused(
+                        &path,
+                        generation,
+                        request_sha256,
+                        &mut history_pins,
+                    ) {
+                        Ok(()) => None,
+                        Err(error) => Some(Err(error)),
+                    },
+                    Err(error) => Some(Err(error)),
+                }
+            })
+            .ok_or("WAKE_LOCAL_UPDATE_ATTEMPT_HISTORY_LIMIT_NO_SEND")??;
+        Ok(Self {
             root_pins,
-            path: root.join(format!(
-                "broker-local-update-attempt-v1-{generation:020}.json"
-            )),
+            history_pins,
+            path,
             record_bytes: serde_json::to_vec(&serde_json::json!({
                 "schemaVersion":1,
                 "state":"SUBMISSION_MAY_HAVE_STARTED",
@@ -1357,27 +1426,81 @@ impl LocalUpdateAttempt {
                 "requestSha256":request_sha256
             }))
             .map_err(|_| "WAKE_LOCAL_UPDATE_ATTEMPT_RECORD_FAILED_NO_SEND")?,
-        };
-        attempt.require_absent()?;
-        Ok(attempt)
+            request_sha256: request_sha256.into(),
+        })
     }
 
-    fn require_absent(&self) -> Result<()> {
-        match std::fs::symlink_metadata(&self.path) {
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Ok(_) => Err("WAKE_LOCAL_UPDATE_ATTEMPT_EXISTS_NO_RETRY".into()),
+    fn is_absent(path: &Path) -> Result<bool> {
+        match std::fs::symlink_metadata(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+            Ok(_) => Ok(false),
             Err(_) => Err("WAKE_LOCAL_UPDATE_ATTEMPT_UNREADABLE_NO_SEND".into()),
         }
     }
 
-    fn record(&self) -> Result<OfflineObjectPinV2> {
+    fn require_unused(path: &Path) -> Result<()> {
+        if !Self::is_absent(path)? || !Self::is_absent(&path.with_extension("refused.json"))? {
+            return Err(LOCAL_ATTEMPT_FENCED.into());
+        }
+        Ok(())
+    }
+
+    fn retain_refused(
+        path: &Path,
+        generation: u64,
+        next_request_sha256: &str,
+        history_pins: &mut Vec<(PathBuf, OfflineObjectPinV2)>,
+    ) -> Result<()> {
+        let fenced = |_| LOCAL_ATTEMPT_FENCED.to_string();
+        let mut marker = OfflineObjectPinV2::open(path, false).map_err(fenced)?;
+        let marker_bytes = marker
+            .read_bounded(LOCAL_ATTEMPT_RECORD_LIMIT)
+            .map_err(fenced)?;
+        let attempt: LocalAttemptMarker =
+            serde_json::from_slice(&marker_bytes).map_err(|_| LOCAL_ATTEMPT_FENCED)?;
+        if attempt.schema_version != 1
+            || attempt.state != "SUBMISSION_MAY_HAVE_STARTED"
+            || attempt.install_generation != generation
+            || attempt.request_sha256 == next_request_sha256
+            || attempt.request_sha256.len() != 64
+            || !attempt
+                .request_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(LOCAL_ATTEMPT_FENCED.into());
+        }
+        let refusal_path = path.with_extension("refused.json");
+        let mut refusal = OfflineObjectPinV2::open(&refusal_path, false).map_err(fenced)?;
+        let refusal_bytes = refusal
+            .read_bounded(LOCAL_ATTEMPT_RECORD_LIMIT)
+            .map_err(fenced)?;
+        let typed: LocalAttemptRefusal =
+            serde_json::from_slice(&refusal_bytes).map_err(|_| LOCAL_ATTEMPT_FENCED)?;
+        if !typed.validates(&marker_bytes, &attempt.request_sha256) {
+            return Err(LOCAL_ATTEMPT_FENCED.into());
+        }
+        history_pins.push((path.to_path_buf(), marker));
+        history_pins.push((refusal_path, refusal));
+        Ok(())
+    }
+
+    fn revalidate_namespace(&self) -> Result<()> {
         let parent = self.path.parent().ok_or("WAKE_SAME_STATE_ROOT_INVALID")?;
         for (pin, ancestor) in self.root_pins.iter().rev().zip(parent.ancestors()) {
             pin.revalidate_path(ancestor)?;
         }
-        self.require_absent()?;
+        for (path, pin) in &self.history_pins {
+            pin.revalidate_path(path)?;
+        }
+        Ok(())
+    }
+
+    fn record(&self) -> Result<OfflineObjectPinV2> {
+        self.revalidate_namespace()?;
+        Self::require_unused(&self.path)?;
         if crate::store::atomic_create_bytes(&self.path, &self.record_bytes).is_err() {
-            self.require_absent()?;
+            Self::require_unused(&self.path)?;
             return Err("WAKE_LOCAL_UPDATE_ATTEMPT_RECORD_FAILED_NO_SEND".into());
         }
         let mut marker = OfflineObjectPinV2::open(&self.path, false)
@@ -1389,6 +1512,34 @@ impl LocalUpdateAttempt {
             return Err("WAKE_LOCAL_UPDATE_ATTEMPT_READBACK_FAILED_NO_SEND".into());
         }
         Ok(marker)
+    }
+
+    fn record_refusal(
+        &self,
+        marker: &OfflineObjectPinV2,
+        reply: &[u8],
+        exit: LocalBrokerExit,
+    ) -> Result<()> {
+        let unproven = "WAKE_LOCAL_UPDATE_REFUSAL_UNPROVEN_NO_RETRY";
+        if !exit.process_exited
+            || !exit.service_stopped
+            || local_intake_refusal_code(reply, &self.request_sha256).is_none()
+        {
+            return Err(unproven.into());
+        }
+        self.revalidate_namespace()?;
+        marker.revalidate_path(&self.path)?;
+        let evidence = LocalAttemptRefusal {
+            schema_version: 1,
+            attempt_sha256: format!("{:x}", Sha256::digest(&self.record_bytes)),
+            broker_exited_and_stopped: true,
+            broker_reply: std::str::from_utf8(reply).map_err(|_| unproven)?.into(),
+        };
+        let bytes = serde_json::to_vec(&evidence).map_err(|_| unproven)?;
+        if bytes.len() > LOCAL_ATTEMPT_RECORD_LIMIT {
+            return Err(unproven.into());
+        }
+        crate::store::atomic_create_bytes(&self.path.with_extension("refused.json"), &bytes)
     }
 }
 
@@ -1853,6 +2004,132 @@ mod tests {
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
         drop((first, second, root_pin));
         std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn terminal_refusal_preserves_the_old_request_and_unblocks_a_new_digest() {
+        let root = local_update_fixture_root("attempt-confirmed-refusal");
+        let root_pin = OfflineObjectPinV2::same_state_directory(&root).unwrap();
+        let identity = &root_pin.identity().full;
+        let request = "a".repeat(64);
+        let new_request = "b".repeat(64);
+        let attempt = LocalUpdateAttempt::prepare(&root, identity, 3, &request).unwrap();
+        let marker = attempt.record().unwrap();
+        let raw = std::fs::read(&attempt.path).unwrap();
+        let refused = |digest| {
+            serde_json::to_vec(
+                &local_intake_refusal_reply(
+                    true,
+                    digest,
+                    "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE",
+                )
+                .unwrap(),
+            )
+            .unwrap()
+        };
+        let exact_reply = refused(&request);
+        let wrong_digest = refused(&new_request);
+        let finished = LocalBrokerExit {
+            process_exited: true,
+            service_stopped: true,
+        };
+        let refusal_path = attempt.path.with_extension("refused.json");
+        for (reply, exit) in [
+            (&wrong_digest, finished),
+            (
+                &exact_reply,
+                LocalBrokerExit {
+                    process_exited: false,
+                    ..finished
+                },
+            ),
+            (
+                &exact_reply,
+                LocalBrokerExit {
+                    service_stopped: false,
+                    ..finished
+                },
+            ),
+        ] {
+            assert!(attempt.record_refusal(&marker, reply, exit).is_err());
+            assert!(!refusal_path.exists());
+            assert!(matches!(
+                LocalUpdateAttempt::prepare(&root, identity, 3, &new_request),
+                Err(code) if code == LOCAL_ATTEMPT_FENCED
+            ));
+        }
+        attempt
+            .record_refusal(&marker, &exact_reply, finished)
+            .unwrap();
+        assert!(
+            attempt
+                .record_refusal(&marker, &exact_reply, finished)
+                .is_err()
+        );
+        assert_eq!(std::fs::read(&attempt.path).unwrap(), raw);
+        assert!(matches!(
+            LocalUpdateAttempt::prepare(&root, identity, 3, &request),
+            Err(code) if code == LOCAL_ATTEMPT_FENCED
+        ));
+        let next = LocalUpdateAttempt::prepare(&root, identity, 3, &new_request).unwrap();
+        assert_ne!(next.path, attempt.path);
+        assert!(std::fs::remove_file(&refusal_path).is_err());
+        let next_marker = next.record().unwrap();
+        assert!(matches!(
+            LocalUpdateAttempt::prepare(&root, identity, 3, &"c".repeat(64)),
+            Err(code) if code == LOCAL_ATTEMPT_FENCED
+        ));
+        let paths = [attempt.path.clone(), refusal_path, next.path.clone()];
+        drop((next_marker, marker, next, attempt, root_pin));
+        for path in paths {
+            std::fs::remove_file(path).unwrap();
+        }
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn refused_proof_requires_the_exact_attempt_and_no_orphan_record() {
+        let root = local_update_fixture_root("attempt-tampered-refusal");
+        let root_pin = OfflineObjectPinV2::same_state_directory(&root).unwrap();
+        let identity = &root_pin.identity().full;
+        let request = "a".repeat(64);
+        let new_request = "b".repeat(64);
+        let attempt = LocalUpdateAttempt::prepare(&root, identity, 3, &request).unwrap();
+        let refusal_path = attempt.path.with_extension("refused.json");
+        std::fs::write(&refusal_path, b"{}").unwrap();
+        assert!(attempt.record().is_err());
+        assert!(matches!(
+            LocalUpdateAttempt::prepare(&root, identity, 3, &new_request),
+            Err(code) if code == LOCAL_ATTEMPT_FENCED
+        ));
+        std::fs::remove_file(&refusal_path).unwrap();
+        let marker = attempt.record().unwrap();
+        let reply =
+            local_intake_refusal_reply(true, &request, "WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED")
+                .unwrap();
+        attempt
+            .record_refusal(
+                &marker,
+                &serde_json::to_vec(&reply).unwrap(),
+                LocalBrokerExit {
+                    process_exited: true,
+                    service_stopped: true,
+                },
+            )
+            .unwrap();
+        let mut proof: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&refusal_path).unwrap()).unwrap();
+        proof["attemptSha256"] = "d".repeat(64).into();
+        std::fs::write(&refusal_path, serde_json::to_vec(&proof).unwrap()).unwrap();
+        assert!(matches!(
+            LocalUpdateAttempt::prepare(&root, identity, 3, &new_request),
+            Err(code) if code == LOCAL_ATTEMPT_FENCED
+        ));
+        let marker_path = attempt.path.clone();
+        drop((marker, attempt, root_pin));
+        std::fs::remove_file(marker_path).unwrap();
+        std::fs::remove_file(refusal_path).unwrap();
         std::fs::remove_dir(root).unwrap();
     }
 
