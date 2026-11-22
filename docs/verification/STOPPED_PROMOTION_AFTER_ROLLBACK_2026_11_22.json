@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T11:19:30Z",
+  "scope": "DISPOSABLE_WINDOWS_SUCCESSOR_PROMOTION_ADMISSION_AFTER_EXACT_ROLLBACK",
+  "sourceCommit": "303d1ee86f6b9e973a9e54058f387e7faff93a26",
+  "baselineSourceCommit": "33e7362ea402cff12565bf9a97586101e174ef04",
+  "qualification": {
+    "realWindowsFilePinsAndArchiveMoves": true,
+    "archivesOriginalCompletedResultAndHandoff": true,
+    "qualifiedSuccessorMayUseExactRestoredPredecessor": true,
+    "replayOfDisplacedArtifactRefusedBySourceBinding": true,
+    "rollbackSelectorAndBothSlotsPinnedDuringArchival": true,
+    "selectorOrDisplacedArtifactDriftRefusedBeforeNewClaim": true,
+    "legacyPlanBytesPreserved": true
+  },
+  "powershellReadback": {
+    "state": "ROLLBACK_ESCROW_BINDING_VERIFIED",
+    "selectedGeneration": 1,
+    "displacedGeneration": 2,
+    "refusedMissingHandoffPredecessorOrDisplacedIdentity": 3,
+    "unchangedFiles": 9,
+    "fixtureRemoved": true
+  },
+  "tests": {
+    "windowsNativeReleaseTestsPassed": 59,
+    "windowsNativeReleaseTestsFailed": 0,
+    "format": "PASS",
+    "gitWhitespace": "PASS"
+  },
+  "limits": "The native Windows test used disposable release and review records. It exercised actual journal and archive writes and file pins. The PowerShell probe exercised the fixed read-only rollback selector expression against disposable escrow. Stopped-source qualification, independent review and producer attestation are required for an actual successor. This run did not promote an installed executable.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}

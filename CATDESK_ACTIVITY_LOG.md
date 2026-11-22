@@ -1174,3 +1174,11 @@ Evidence: [docs/verification/PROMOTION_MCP_STARTUP_TIMEOUT_2026_11_22.json](docs
 Agent: Codex. Source: 0b63ede00d45a02af75fcd7953b812908797b865. Outcome: partial. Explicit backend-only recovery now requires exact current and previous artifact pins and a failed owned startup before restoring an intact pair. A real Windows child exited nonzero and a frozen predecessor passed authenticated MCP before selection in disposable state. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/BACKEND_EXACT_INTACT_ROLLBACK_2026_11_22.json](docs/verification/BACKEND_EXACT_INTACT_ROLLBACK_2026_11_22.json); command: pwsh -NoProfile -File scripts/test-catdesk-lifecycle.ps1; exit 0; SHA-256 888c1ec47bd82c9759c7b3106035341b7c8c85978386b65819d01468acf3c237.
+
+<!-- catdesk-activity:stopped-promotion-after-rollback-20261122 sha256:1709746a3a06f05041cbfc340904ca825d18d856c15681878b804f89795e2332 -->
+
+## 2026-11-22T11:19:30Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 303d1ee86f6b9e973a9e54058f387e7faff93a26. Outcome: partial. Native retirement can now archive a completed promotion after exact rollback and bind a different successor to the verified restored predecessor. Both retained artifacts and the selection pointer were pinned in Windows fixtures. Fifty-nine native release tests passed. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/STOPPED_PROMOTION_AFTER_ROLLBACK_2026_11_22.json](docs/verification/STOPPED_PROMOTION_AFTER_ROLLBACK_2026_11_22.json); command: cargo test --locked --offline --bin catdesk daemon_reload:: -- --test-threads=1; exit 0; SHA-256 aadf940b082354a72cd3cd1a6259670c21588c49deffcca9e0cc234c3029d6a6.
