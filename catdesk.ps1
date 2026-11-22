@@ -1176,7 +1176,7 @@ function Assert-LifecyclePromotedPair($Canonical, [string]$Digest, $Pins) {
     }
 }
 
-function Get-LifecyclePromotionServingReadback([string]$Root, $Canonical, [string]$Digest) {
+function Get-LifecyclePromotionServingReadback([string]$Root, $Canonical, [string]$Digest, [string]$RecordedServingState) {
     $unverified = 'LOCAL_BACKEND_READBACK_UNVERIFIED'
     try {
         $local = Get-LifecycleLocalMcp
@@ -1218,7 +1218,8 @@ function Get-LifecyclePromotionServingReadback([string]$Root, $Canonical, [strin
             }
             if (-not $waitForMonitor) {
                 if ($gate -cne 'READY') { return $unverified }
-                return 'STOPPED_AFTER_BOUNDED_OWNER'
+                if ($RecordedServingState -ceq 'STOPPED_AFTER_BOUNDED_OWNER') { return $RecordedServingState }
+                return $unverified
             }
             if ($clock.Elapsed.TotalSeconds -ge $waitSeconds) { return 'LOCAL_BACKEND_STARTUP_PENDING' }
             Start-Sleep -Milliseconds 1000
@@ -1279,8 +1280,8 @@ function Invoke-LifecycleReviewedPromotion {
             } finally { $pins.Dispose() }
         }
         $detail = if ($receipt.servingState) { $receipt.servingState } else { 'INSPECT_EXISTING_PROMOTION_RESULT' }
-        if ($receipt.state -ceq 'PROMOTION_COMPLETED' -and $detail -ceq 'STOPPED_AFTER_BOUNDED_OWNER') {
-            $detail = Get-LifecyclePromotionServingReadback -Root $root -Canonical $canonical -Digest $digest
+        if ($receipt.state -ceq 'PROMOTION_COMPLETED' -and $detail -cin @('STOPPED_AFTER_BOUNDED_OWNER','UNVERIFIED')) {
+            $detail = Get-LifecyclePromotionServingReadback -Root $root -Canonical $canonical -Digest $digest -RecordedServingState $detail
         }
         Write-LifecycleStatus $receipt.state $detail
     } catch {

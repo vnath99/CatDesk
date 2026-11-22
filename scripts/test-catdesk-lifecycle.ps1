@@ -310,6 +310,25 @@ try {
     $actions.Clear()
     $authProbed.Clear()
 
+    $uncertainHandoff = $inactiveMonitor.Clone()
+    $promoteFixture = $promotedResolver.PromotionInvokeNative
+    $uncertainHandoff.PromotionInvokeNative = {
+        param($image,$root,$verb,$hash)
+        $receipt = & $promoteFixture $image $root $verb $hash
+        if ($verb -ceq 'promote') { $receipt.servingState = 'UNVERIFIED' }
+        $receipt
+    }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $uncertainHandoff | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_READY') "an initially unverified handoff can prove exact current serving (observed $($observed.detail))"
+    Require ($authProbed.Count -eq 1 -and $authProbed[0] -and ($actions -join ',') -ceq 'promote-resolve,promote') 'unverified receipt readback requires authentication and introduces no launch'
+    $actions.Clear()
+    $authProbed.Clear()
+
+    $uncertainHandoff.Listener = { $null }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $uncertainHandoff | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_READBACK_UNVERIFIED' -and $authProbed.Count -eq 0) 'no listener after an ambiguous handoff cannot be projected as a confirmed stopped owner'
+    $actions.Clear()
+
     $unregistered = $inactiveMonitor.Clone()
     $unregistered.AutostartRunKeyGet = { $null }
     $unregistered.LocalMcpReadiness = { $false }
@@ -351,6 +370,14 @@ try {
         $retainedServingState = 'STOPPED_AFTER_BOUNDED_OWNER'
         $done = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $retained | ConvertFrom-Json
         Require ($done.state -ceq 'PROMOTION_COMPLETED' -and $actions.Count -eq 1) 'retained completion needs no staged candidate launch'
+        $actions.Clear()
+        $retainedServingState = 'UNVERIFIED'
+        $retained.Listener = $inactiveMonitor.Listener
+        $retained.LocalMcpReadiness = $inactiveMonitor.LocalMcpReadiness
+        $authProbed.Clear()
+        $done = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $retained | ConvertFrom-Json
+        Require ($done.state -ceq 'PROMOTION_COMPLETED' -and $done.detail -ceq 'LOCAL_BACKEND_READY' -and
+            ($actions -join ',') -ceq 'promote-resolve' -and $authProbed.Count -eq 1 -and $authProbed[0]) 'a retained ambiguous serving receipt is reconciled with live evidence without rerunning the candidate'
         $actions.Clear()
         $retainedMarker = 'true'
         $malformed = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $retained | ConvertFrom-Json
