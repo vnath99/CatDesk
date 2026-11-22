@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T00:57:09.703030Z",
+  "scope": "READ_ONLY_INSTALLED_STATE_AUDIT_AND_INERT_FIRST_CYCLE_INPUTS",
+  "preSubmit": {
+    "oldTaskState": "OPEN",
+    "exactQueuedMessageMatchesWorkLedger": true,
+    "onlyOldAssignmentPresent": true,
+    "deliveryTimerArchiveAndSubmissionFenceAbsent": true,
+    "positiveWitnessesReadAndRechecked": 12,
+    "absenceWitnessesReadAndRechecked": 12,
+    "oldQueueSha256": "d7ee730855089baa82469d4351943ed0e0bd02cc55948554f4c0f332cee44ab4",
+    "historicalRequestMutated": false
+  },
+  "preparedInputs": {
+    "retirementSha256": "a300f8353c2411b27297f6fc6908e241cdda73e37ad1b674b461ce888cdfe701",
+    "successorRequestSha256": "a79202398d5aecfb36663151b8595c8f500d367d8c2e6a54b9964b3ae0a5e90d",
+    "assignmentSha256": "ac2f7e3f3c4f00171f479b63bfe4f6e7f84ce4fb976bb0a98e6ad2469e18241e",
+    "associationAndGrantPinsSha256": "1eee8af0bdf70c436f40cdfcca04b054afbad7b5116a181c0d2b2fbcfe94e274",
+    "auditedTargetGeneration": 1,
+    "derivedEventMatchesCurrentSourceAlgorithm": true,
+    "checkpointPaths": [
+      "CATDESK_IMPORTANT_COMMANDS.md"
+    ],
+    "grantFlagsAfterExactDelivery": [
+      "--allow-git-checkpoint",
+      "--allow-manual-wake"
+    ],
+    "nativeDispatchGranted": false,
+    "gitSyncGranted": false
+  },
+  "ordering": [
+    "Revalidate installed releases, the exact paired target and the old event's no-submit witnesses.",
+    "Use the existing exact retirement operation. Check archived original queue bytes and receipt-free STALE, CLOSED, and the preserved original assignment.",
+    "Record the successor request and associate the exact assignment. Then deliver the new ordinary invitation once and verify its exact SENT receipt.",
+    "Grant the narrowly scoped checkpoint and manual Wake, prepare and send the exact private context once, then use the supported continuation path.",
+    "Verify the actual Web edit, verifier receipt, checkpoint, task-issued Wake and same-task next turn before completion."
+  ],
+  "pendingQualifiedWakeAndBackendReleases": true,
+  "retirementExecuted": false,
+  "grantCreated": false,
+  "newRequestAdmitted": false,
+  "browserStarts": 0,
+  "externalMessagesSent": 0,
+  "runtimeWrites": 0,
+  "installedAcceptance": false
+}
