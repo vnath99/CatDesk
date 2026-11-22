@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "scope": "DISPOSABLE_WINDOWS_INTERRUPTED_PROMOTION_ESCROW_ROLLBACK_AND_REAL_AUTHENTICATED_PREDECESSOR",
+  "sourceCommit": "42946497df32f36f20a88da4d038e2a8c759e20b",
+  "baselineSourceCommit": "7c49abad438040f969f2391af7a3dbc1ee9b89fe",
+  "privateFixtureSha256": "92cd29c442d39fc05c7764f01583717dcdded307ef83d0bc71f5b9ff527a4d37",
+  "baseline": "The existing recovery reported RECOVERED_PRIOR_CANONICAL and cleared the journal while the valid pointer still selected the interrupted candidate.",
+  "tests": {
+    "promotionPowerShell7": "PASS",
+    "promotionWindowsPowerShell51": "PASS",
+    "bootstrapPowerShell7": "PASS",
+    "bootstrapWindowsPowerShell51": "PASS",
+    "missingVerifiedPredecessorRefusedBeforeMutation": true,
+    "wrongReceiptRefusedBeforeMutation": true,
+    "wrongJournalCandidateRefusedBeforeMutation": true,
+    "legacyPathSeparatorsAccepted": true
+  },
+  "actualWindows": {
+    "startedUtc": "2026-11-22T10:13:24.8514104+00:00",
+    "phases": [
+      "AFTER_ROLLBACK_MANIFEST_REPLACEMENT",
+      "AFTER_ROLLBACK_ESCROW_SELECTION"
+    ],
+    "journalStayedExactAtBoth": true,
+    "startupFencedAtBoth": true,
+    "result": "RECOVERED_PRIOR_CANONICAL",
+    "laterUnpinnedRecoveryMatched": true,
+    "retainedHistoryPinsMatched": 7,
+    "retainedSourceImagesUnchanged": 2,
+    "anonymousHttp": 401,
+    "authenticatedHttp": 200,
+    "toolCount": 79,
+    "ownedBackendExitedNaturally": true,
+    "privateListenerReleased": true,
+    "productionUsed": false,
+    "fixtureRemoved": true,
+    "finishedUtc": "2026-11-22T10:13:53.0706276+00:00"
+  },
+  "limits": "The authorized recovery engine operated on real Windows files and retained executable bytes in a disposable workspace. The test used its own protected-authorization seam and injected failures at two durable checkpoints. The restored image then served actual authenticated MCP on private loopback. This did not exercise installed release authority, fixed-port promotion or Web continuation.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}

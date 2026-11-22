@@ -1110,3 +1110,11 @@ Evidence: [docs/verification/PROMOTION_RETIRED_ONE_HASH_REFUSAL_2026_11_22.json]
 Agent: Codex. Source: f5fa41cc781c1dcee3e4c9155bf5b1ed4d327d68. Outcome: partial. Promotion and escrow capture now refuse ambiguous retained slots. A disposable Windows rollback activated generation 1, then the successor used generation 3 and preserved the verified fallback byte-for-byte. Both private backends verified authenticated MCP and exited. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/BACKEND_ESCROW_AMBIGUITY_AND_SUCCESSOR_2026_11_22.json](docs/verification/BACKEND_ESCROW_AMBIGUITY_AND_SUCCESSOR_2026_11_22.json); command: Disposable Windows escrow capture, rollback and successor startup on private loopback; exit 0; SHA-256 f9b2188f53323fc31df2ccf50c056bcc9cf7db0cb44a51bece88ad02a86c87e1.
+
+<!-- catdesk-activity:nov22-interrupted-release-rollback-selection sha256:ac40932122d6bbb2d7d546a5a74bcc19f2bd96ba63c659bf406fcdff61cf326f -->
+
+## 2026-11-22T10:13:53.0706276+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 42946497df32f36f20a88da4d038e2a8c759e20b. Outcome: partial. Authorized interrupted rollback now restores the matching release selector before clearing the journal. Disposable Windows tests preserved both slots across two interruptions. A later unpinned recovery selected the exact predecessor, which passed authenticated MCP and exited cleanly. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/BACKEND_INTERRUPTED_ROLLBACK_SELECTION_2026_11_22.json](docs/verification/BACKEND_INTERRUPTED_ROLLBACK_SELECTION_2026_11_22.json); command: Disposable Windows promotion rollback at two durable checkpoints and authenticated predecessor startup; exit 0; SHA-256 69085f6f2c03e2f324a3950c5c3a6945095e6a6da82182496f4d579f1ec76a41.
