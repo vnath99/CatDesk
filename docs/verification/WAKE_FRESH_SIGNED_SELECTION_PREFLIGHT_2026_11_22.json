@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T23:24:23Z",
+  "scope": "WINDOWS_DEVELOPMENT_READ_ONLY_FRESH_SIGNED_WAKE_SELECTION_PREFLIGHT",
+  "baseline": "507fee8d78daa2011c868d75cea6d83a35357153",
+  "entry": "install-broker preflight-signed-selection --approval-file <absolute-fresh-signed-envelope>",
+  "behavior": {
+    "fixedEnrolledOperatorAndProtectedPolicy": true,
+    "usesExistingReadOnlyLedgerLock": true,
+    "recordsNoIntentOrApproval": true,
+    "candidateAndFallbackAndReviewInputsChecked": true,
+    "exactRequestHashAndObservationTimeReturned": true,
+    "brokerEndpointOrTransportQualified": false,
+    "installationAuthorized": false,
+    "replayAuthorized": false
+  },
+  "fixture": {
+    "signedReconstructionSnapshotVerified": true,
+    "changedSignatureRefused": true,
+    "missingCandidateReviewReceiptRefused": true,
+    "exactSelectorAndOtherPreservationPinsUnchanged": true,
+    "nativeLibraryBrokerTestsPassed": 337,
+    "nativeLibraryBrokerTestsIgnored": 2,
+    "wakeHostCliTestsPassed": 2,
+    "isolatedSignedReadbackPassed": 1,
+    "existingSignedReconstructionFixturePassed": 1,
+    "broaderSameStateSuite": "STOPPED_AFTER_180_SECONDS_OWNED_TEST_PROCESS_EXIT_VERIFIED",
+    "developmentCliSha256": "4449639c627c211bdd8a5a514f78800cc9f3373ca2559dee56086cf937766ba7",
+    "developmentCliRefused": [
+      "WAKE_INSTALL_APPROVAL_UNAVAILABLE",
+      "WAKE_SAME_STATE_REQUEST_INVALID",
+      "WAKE_INSTALL_BROKER_ARGUMENTS_INVALID"
+    ]
+  },
+  "originalV3ReexaminedOrSubmitted": false,
+  "productionServiceStarts": 0,
+  "protectedWrites": 0,
+  "newReleaseSignatures": 0,
+  "installedSelectionAccepted": false,
+  "installedWebCycleAccepted": false
+}

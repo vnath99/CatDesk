@@ -24,6 +24,7 @@ enum InstallBrokerAction {
     },
     Submit(std::path::PathBuf),
     SubmitLocal(std::path::PathBuf),
+    PreflightSignedSelection(std::path::PathBuf),
     PreflightLocalIntake(std::path::PathBuf),
     PreflightLocalUpdate(std::path::PathBuf),
     UpdateLocalOnce(std::path::PathBuf),
@@ -88,7 +89,8 @@ fn parse_install_broker_action(args: &[String]) -> Result<Option<InstallBrokerAc
             }))
         }
         [_, action, flag, path]
-            if ((action == "submit" && flag == "--approval-file")
+            if ((matches!(action.as_str(), "submit" | "preflight-signed-selection")
+                && flag == "--approval-file")
                 || (matches!(
                     action.as_str(),
                     "submit-local"
@@ -102,6 +104,9 @@ fn parse_install_broker_action(args: &[String]) -> Result<Option<InstallBrokerAc
         {
             Ok(Some(match action.as_str() {
                 "submit-local" => InstallBrokerAction::SubmitLocal(path.into()),
+                "preflight-signed-selection" => {
+                    InstallBrokerAction::PreflightSignedSelection(path.into())
+                }
                 "preflight-local-intake" => InstallBrokerAction::PreflightLocalIntake(path.into()),
                 "preflight-local-update" => InstallBrokerAction::PreflightLocalUpdate(path.into()),
                 "update-local-once" => InstallBrokerAction::UpdateLocalOnce(path.into()),
@@ -192,6 +197,11 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
     }
     if action == InstallBrokerAction::StartLocalOnce {
         return catdesk_wake::install_broker_lifecycle::start_fixed_broker_for_local_update()
+            .map(Some);
+    }
+    if let InstallBrokerAction::PreflightSignedSelection(path) = &action {
+        let request = read_frozen_broker_request(path)?;
+        return catdesk_wake::install_broker_client::inspect_fresh_signed_selection(&request)
             .map(Some);
     }
     if let InstallBrokerAction::PreflightLocalIntake(path) = &action {
@@ -622,6 +632,32 @@ mod install_broker_cli_tests {
                     "update-local-once",
                     flag,
                     path
+                ]))
+                .is_err()
+            );
+        }
+        let preflight = [
+            "install-broker",
+            "preflight-signed-selection",
+            "--approval-file",
+            r"C:\frozen.json",
+        ];
+        assert_eq!(
+            parse_install_broker_action(&args(&preflight)).unwrap(),
+            Some(InstallBrokerAction::PreflightSignedSelection(
+                r"C:\frozen.json".into()
+            ))
+        );
+        for (flag, file) in [
+            ("--root", r"C:\state"),
+            ("--approval-file", "relative.json"),
+        ] {
+            assert!(
+                parse_install_broker_action(&args(&[
+                    "install-broker",
+                    "preflight-signed-selection",
+                    flag,
+                    file
                 ]))
                 .is_err()
             );

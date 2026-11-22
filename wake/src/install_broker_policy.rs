@@ -916,6 +916,35 @@ impl BrokerProtectedPolicyV1 {
             "resourceQualificationPerformed":false,"installationAuthorized":false}))
     }
 
+    /// Check a fresh signed selection against read-only state pins. Only the
+    /// actual broker's admitted transport can construct a transaction grant.
+    pub(crate) fn inspect_fresh_signed_selection_v3(
+        &self,
+        envelope: &[u8],
+        payload: &crate::install_broker_approval::same_state::SameStateRootSelectionApprovalV3,
+        mut pins: crate::runtime::SameStateReadPinsV3,
+        admission: &crate::install_broker_ledger::SameStateLedgerAdmissionV3,
+    ) -> Result<(String, String)> {
+        if admission.resume_binding.is_some()
+            || payload.operation != "SELECT_SAME_STATE_RELEASE"
+            || format!("{:x}", Sha256::digest(envelope)) != admission.envelope_sha256()
+        {
+            return Err("WAKE_SIGNED_SELECTION_PREFLIGHT_SCOPE_INVALID".into());
+        }
+        let observed = pins.observed(self, payload, admission)?;
+        let proof =
+            crate::install_broker_approval::same_state::verify_same_state_selection_approval_v3(
+                envelope,
+                &self.approval_key,
+                &observed,
+            )?;
+        pins.revalidate_for_payload(proof.payload())?;
+        Ok((
+            proof.payload().approval_id.clone(),
+            proof.signed_payload_sha256().into(),
+        ))
+    }
+
     pub(crate) fn verify_same_state_selection_v3<'p>(
         &'p self,
         frame: &crate::install_broker_request::AdmittedBrokerApprovalFrameV1,

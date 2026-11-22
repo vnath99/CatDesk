@@ -1303,6 +1303,70 @@ pub fn inspect_fresh_local_user_update(request: &[u8]) -> Result<serde_json::Val
     inspect_local_update_request(request, &payload, &policy, true)
 }
 
+/// Read the currently enrolled policy and prospective generation for a fresh
+/// signed selection. Never opens the broker pipe or acquires a writable ledger.
+pub fn inspect_fresh_signed_selection(request: &[u8]) -> Result<serde_json::Value> {
+    if request.is_empty() || request.len() > MAX_APPROVAL_BYTES {
+        return Err("WAKE_SAME_STATE_REQUEST_INVALID".into());
+    }
+    let outer: serde_json::Value =
+        serde_json::from_slice(request).map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID")?;
+    let payload: crate::install_broker_approval::same_state::SameStateRootSelectionApprovalV3 =
+        serde_json::from_value(outer["payload"].clone())
+            .map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID")?;
+    if outer.get("authorization").is_some()
+        || !outer["signatureHex"].as_str().is_some_and(|hex| {
+            hex.len() == 128
+                && hex
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+        || payload.schema_version != 3
+        || payload.operation != "SELECT_SAME_STATE_RELEASE"
+        || !crate::protocol::valid_id(&payload.approval_id)
+        || payload.install_generation == 0
+    {
+        return Err("WAKE_SAME_STATE_REQUEST_INVALID".into());
+    }
+    let policy = load_fixed_broker_policy_read_only()?;
+    policy.current_process_operator()?;
+    let before = policy.readback()?;
+    let request_sha256 = format!("{:x}", Sha256::digest(request));
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "WAKE_SELECTION_TIME_INVALID")?
+        .as_secs();
+    crate::install_broker_ledger::with_fixed_fresh_same_state_readback(
+        &before.protected_root,
+        payload.install_generation,
+        &request_sha256,
+        now,
+        |admission| {
+            let pins = crate::runtime::SameStateReadPinsV3::observe_for_operation(
+                &policy,
+                admission,
+                &payload.operation,
+                &outer,
+            )?;
+            policy.inspect_fresh_signed_selection_v3(request, &payload, pins, admission)
+        },
+    )?;
+    if policy.readback()? != before {
+        return Err("WAKE_SAME_STATE_PROTECTED_POLICY_CHANGED".into());
+    }
+    Ok(serde_json::json!({
+        "state":"WAKE_SIGNED_SELECTION_PREFLIGHT_ONLY",
+        "observedAtUtcSeconds":now,
+        "requestSha256":request_sha256,
+        "installGeneration":payload.install_generation,
+        "readOnly":true,
+        "serviceStarted":false,
+        "ledgerAdmissionPerformed":false,
+        "installationAuthorized":false,
+        "replayAuthorized":false
+    }))
+}
+
 fn inspect_local_update_request(
     request: &[u8],
     payload: &crate::install_broker_approval::same_state::SameStateRootSelectionApprovalV3,
@@ -1345,7 +1409,10 @@ fn inspect_local_update_request(
                     )?;
                 pins.revalidate_for_payload(payload)?;
                 pins.require_protected_review_intake()?;
-                Ok(verified)
+                Ok((
+                    verified.payload().approval_id.clone(),
+                    verified.payload_sha256().into(),
+                ))
             },
         )?;
     } else {

@@ -676,29 +676,25 @@ pub(crate) fn with_fixed_fresh_same_state_readback(
     generation: u64,
     request_sha256: &str,
     now: u64,
-    inspect: impl FnOnce(
-        &SameStateLedgerAdmissionV3,
-    ) -> Result<
-        crate::install_broker_approval::same_state::VerifiedLocalUserSelectionV1,
-    >,
+    inspect: impl FnOnce(&SameStateLedgerAdmissionV3) -> Result<(String, String)>,
 ) -> Result<()> {
     let root = crate::install_broker_preflight::acquire_fixed_protected_root_for_reader()?;
     if root.root_identity() != expected_root {
         return Err("WAKE_LEDGER_ROOT_CHANGED".into());
     }
     with_fresh_same_state_readback(root.root(), generation, request_sha256, now, |observed| {
-        let request = inspect(observed)?;
+        let (approval_id, payload_sha256) = inspect(observed)?;
         require_no_other_approval(
             root.root(),
             expected_root,
-            &request.payload().approval_id,
-            request.payload_sha256(),
+            &approval_id,
+            &payload_sha256,
             None,
         )
     })
 }
 
-fn with_fresh_same_state_readback<T>(
+pub(crate) fn with_fresh_same_state_readback<T>(
     root: &OwnedHandle,
     generation: u64,
     request_sha256: &str,

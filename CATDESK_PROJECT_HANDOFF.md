@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 6:23 p.m. EST.** Use the new source-level signed preflight for a separately authorized fresh Wake selection. It checks signature, generation, selection, artifacts and review receipts before a broker start. Preserve the closed V3 attempt and continue using the existing signed release workflow. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
+
 **November 22, 6:16 p.m. EST.** The development promotion facade bounds stored process output during capture. It continues draining the pipes within the existing owner deadlines and preserves the exact-result path for an exited candidate. Use the compatible authenticated release procedure for frozen `56aa9912` once review and producer evidence exist. [Evidence](docs/verification/PROMOTION_BOUNDED_NATIVE_OUTPUT_2026_11_22.json).
 
 **November 22, 6:12 p.m. EST.** A private manifest now pins the three original linked Git entries and the exact assigned task branch and commit. Use it with the read-only backup checker as soon as an authoritative original backup is available. The frozen review, original task and installed release retain their existing state. [Evidence](docs/verification/WEB_WORKTREE_BACKUP_INTAKE_2026_11_22.json).

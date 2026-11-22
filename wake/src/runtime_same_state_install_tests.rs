@@ -1407,6 +1407,65 @@ fn same_state_local_user_reconstruction_refuses_before_intent() {
 }
 
 #[test]
+fn fresh_signed_selection_readback_verifies_exact_intake_without_intent() {
+    let mut fixture = Fixture::new();
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let envelope = fixture.signed(&guard);
+    drop(guard);
+    let inspect = |bytes: &[u8]| {
+        crate::install_broker_ledger::with_fresh_same_state_readback(
+            &handle,
+            fixture.payload.install_generation,
+            &digest(bytes),
+            1000,
+            |admission| {
+                let pins = fixture.pins(admission);
+                fixture.policy.inspect_fresh_signed_selection_v3(
+                    bytes,
+                    &fixture.payload,
+                    pins,
+                    admission,
+                )
+            },
+        )
+    };
+    let pair = inspect(&envelope).unwrap();
+    assert_eq!(pair.0, fixture.payload.approval_id);
+    assert_eq!(pair.1.len(), 64);
+
+    let mut changed = envelope.clone();
+    let last_digit = changed.len() - 3;
+    changed[last_digit] = if changed[last_digit] == b'0' {
+        b'1'
+    } else {
+        b'0'
+    };
+    assert_eq!(
+        inspect(&changed).unwrap_err(),
+        "WAKE_SELECTION_SIGNATURE_INVALID"
+    );
+
+    std::fs::rename(
+        fixture.intake.join("receipts/candidate-review.json"),
+        fixture.path.join("original-candidate-review.json"),
+    )
+    .unwrap();
+    assert_eq!(
+        inspect(&envelope).unwrap_err(),
+        "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE"
+    );
+    assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), 2);
+    assert_eq!(
+        std::fs::read(fixture.state.join("current.json")).unwrap(),
+        fixture.before
+    );
+    fixture.preserved();
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
 fn same_state_real_files_signed_reconstruction_selects_stopped_and_preserves_state() {
     let mut fixture = Fixture::new();
     let handle = fixture.handle.try_clone().unwrap();

@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 22.** Fresh signed Wake selections now have a read-only native check before submission. It reuses the current protected policy, exact artifact and review checks, and existing replay ledger. A preflight result creates no release authority. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
+
 **RELEASE-RECOVERY, November 22.** Oversized native controller output can no longer grow the one-command promotion buffers. A resolved candidate runs once, and ambiguous output still requires the original result. The developer-cache normalization fixture has a separate baseline mismatch. [Evidence](docs/verification/PROMOTION_BOUNDED_NATIVE_OUTPUT_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** Backup intake checks original linked Git metadata in scratch before restoring a missing Web workspace. Wrong backlinks, redirected common directories, wrong branches, missing or corrupt indexes, alternates and the in-place original path fail admission. [Evidence](docs/verification/WEB_WORKTREE_BACKUP_INTAKE_2026_11_22.json).

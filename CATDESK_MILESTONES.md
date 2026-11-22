@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — qualify the fresh signed Wake preflight in development.** A disposable native fixture verified the signed candidate and fallback without writing an intent. A tampered signature and missing review receipt each refused. Installed Wake selection and the first Web cycle remain open. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
+
 **November 22 — qualify bounded promotion reply handling in development.** The Windows PowerShell and PowerShell 7 lifecycle fixtures passed for huge stdout and stderr, exact-result observation and refusal with an inherited pipe still open. Installed promotion remains open. [Evidence](docs/verification/PROMOTION_BOUNDED_NATIVE_OUTPUT_2026_11_22.json).
 
 **November 22 — qualify read-only backup intake for the first Web cycle.** Three real linked worktrees passed in a scratch copy. The checked retained independent repository lacks the required entries. Restoring the actual shared Git store and running the installed Web cycle remain open. [Evidence](docs/verification/WEB_WORKTREE_BACKUP_INTAKE_2026_11_22.json).
