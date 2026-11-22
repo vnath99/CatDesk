@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T00:31:30.9822161+00:00",
+  "scope": "ISOLATED_WINDOWS_NATIVE_PREFLIGHT_EXACT_REVIEWED_WAKE_PACKAGE_BYTES",
+  "wakePackage": {
+    "candidateSource": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "fallbackSource": "5a939df267719322758df0598fd46532f07b8126",
+    "candidateManifestFileSha256": "9ffa6ccaa12478c0e96efea3c11cfdb5d1c721d82c709ef1f5b04e2185b383d2",
+    "fallbackManifestFileSha256": "91e7bfd36667bf8fac7c90146c1ea602ffcba2614506a3ffba8b66045bc69d3a",
+    "protocolVersion": 1,
+    "bothRolesHaveSameNormalizedPair": true,
+    "adapterSha256Lf": "6d7c8b08bb993fa3e50c549337d701d09da3c35d19bf0a85f608f5d2e11708ad",
+    "bridgeSha256Lf": "f2d4c63bcedbfbdf6f234c586a7db2da68e2337dae736e4a17c551e057568d4e"
+  },
+  "existingCompatibilityChange": "302fcff721c2bfd61f66915fb66aff860bd92e5c",
+  "runtimeEntrypoints": [
+    "run_scoped_work_request",
+    "run_scoped_manual_end_turn_handoff"
+  ],
+  "test": {
+    "disposableCopiesOfActualWakePackages": true,
+    "releaseSourceUnchanged": true,
+    "testsPassed": 2,
+    "sourceRoleRouteComparisons": 8,
+    "durableClaimsCreated": 0,
+    "submissionWitnessesCreated": 0,
+    "browserStarts": 0,
+    "protectedWrites": 0,
+    "externalReviewSends": 0
+  },
+  "d22": {
+    "sourceCommit": "d22e96ca8df48786737ca0a7b78e3e7439531e5a",
+    "bothPackagesOrdinaryIntegrityPassed": true,
+    "bothRoutesRefusedBeforeClaim": "SCOPED_WORK_INSTALLED_ADAPTER_UPGRADE_REQUIRED",
+    "callsAfterCompatibility": 0,
+    "testLogSha256": "f6fdf9cf11801225d5546404a0682fbafd9df86e14872ef572c9d7a538b763db",
+    "originalReviewOutcome": "UNKNOWN_PRESERVED",
+    "eligibleForPairedFirstCycle": false
+  },
+  "integratedSource": {
+    "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "bothPackagesOrdinaryIntegrityPassed": true,
+    "bothRoutesPassedPackageGateThenStoppedAtHarnessGuard": true,
+    "callsAfterCompatibility": 4,
+    "checkpointDispatcherPresent": true,
+    "testLogSha256": "98f52efb18e77ebfb8edd5b4e191f1d2fbeb58f669ce74d7b5d98b708711f772",
+    "headlessBackendBuildAttested": false
+  },
+  "disposition": "Qualify an exact headless backend source that includes both scoped Git checkpoint and the existing Wake package compatibility change. Preserve original d22 review evidence and the reviewed V3 operator selection.",
+  "installedEndToEndAccepted": false
+}

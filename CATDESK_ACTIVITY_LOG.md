@@ -558,3 +558,11 @@ Evidence: [docs/verification/WAKE_V3_INSTALLED_READBACK_PREPARATION_2026_11_21.j
 Agent: CatDesk development. Source: 972b1c5dffe505443a6a01c9ae64253ce86c97e8. Outcome: partial. All three retained backend attestations were reconciled to immutable source snapshots. None contains scoped git.checkpoint. Exact d22 compiled bytes are retained without native producer authority. Next: Verify the signed Wake V3 selection when the operator result arrives. Obtain attributable checkpoint-capable backend review and native attestation through the existing producer before guarded promotion.
 
 Evidence: [docs/verification/BACKEND_CHECKPOINT_ATTESTATION_RECONCILIATION_2026_11_21.json](docs/verification/BACKEND_CHECKPOINT_ATTESTATION_RECONCILIATION_2026_11_21.json); command: Retained producer attestation and immutable source snapshot capability comparison; exit 0; SHA-256 e31b34a7a05e3c490b3b7696dfebf44480aa298ec73203f20f0d485b8764cd39.
+
+<!-- catdesk-activity:backend-wake-pair-native-preflight-nov21 sha256:07836ed707765ba89cd3ff1994fd2e9c55db1f50f671aa0629269882e0b24fa0 -->
+
+## 2026-11-22T00:31:30Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 8f41eadf1d242a155f5ddbffd6c1d5f8a3c55ab2. Outcome: partial. Two isolated Windows native preflight tests used the byte-exact Wake candidate and fallback. The frozen d22 source refused both ordinary delivery and manual Wake before claim. Integrated 56aa source passed the package gate on both routes. Next: Complete attributable review and native build attestation for an exact backend source containing both scoped Git checkpoint and the existing 302fcff7 adapter pair change. Verify installed Wake V3 selection on receipt and keep the original d22 outcome UNKNOWN.
+
+Evidence: [docs/verification/BACKEND_WAKE_PAIR_COMPATIBILITY_2026_11_21.json](docs/verification/BACKEND_WAKE_PAIR_COMPATIBILITY_2026_11_21.json); command: Two offline native preflight tests against retained candidate and fallback copies; exit 0; SHA-256 2ddf4bbbaff15fc5c112216566e026aa4b55f2e7589e5467c7361ce53a80e236.
