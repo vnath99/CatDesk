@@ -405,6 +405,83 @@ fn registration_runtime_error(error: super::runtime::RuntimeError) -> String {
     super::codex_app_server::registration_error_code(code).into()
 }
 
+/// Local-only convenience entry. Keep the review, producer, resource and
+/// transaction checks in the same paths used by the existing promoter.
+#[cfg(windows)]
+pub(crate) fn promote_active_backend(workspace: &Path, expected_sha256: &str) -> Result<Value, String> {
+    use std::time::{Duration, Instant};
+
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "reviewed promotion workspace is unavailable".to_string())?;
+    let release =
+        crate::reviewed_build::active_reviewed_promotion_candidate(&workspace, expected_sha256)?;
+    let candidate = workspace.join(&release.candidate_relative_path);
+    let current = std::env::current_exe()
+        .and_then(|path| path.canonicalize())
+        .map_err(|_| "REVIEWED_PROMOTION_CONTROLLER_UNPROVEN".to_string())?;
+    if candidate.canonicalize().ok().as_ref() != Some(&current) {
+        return Err("REVIEWED_PROMOTION_USE_ATTESTED_CANDIDATE_CONTROLLER".into());
+    }
+    if let Some(result) = crate::daemon_reload::reviewed_promotion_result(&workspace)?
+        && result.candidate_sha256 == expected_sha256
+    {
+        return Ok(json!({
+            "state": result.state,
+            "candidateSha256": result.candidate_sha256,
+            "existingResult": true,
+            "servingState": result.serving_state,
+        }));
+    }
+    crate::daemon_reload::require_new_local_promotion(&workspace, expected_sha256)?;
+    let supervisor = AutonomousSupervisorV1::open(&workspace)?;
+    let prepared = supervisor.reviewed_build_promotion(&json!({
+        "action":"PREFLIGHT",
+        "buildPath":candidate,
+        "expectedSha256":expected_sha256,
+        "recordId":release.review_record_id,
+        "localBackendOnly":true
+    }))?;
+    let token = required_str(&prepared, "confirmationToken")?;
+    let binding = crate::daemon_reload::reviewed_promotion_preflight_authority(&workspace)?;
+    let confirmation = supervisor.reviewed_build_promotion(&json!({
+        "action":"CONFIRM",
+        "buildPath":candidate,
+        "expectedSha256":expected_sha256,
+        "confirmationToken":token
+    }))?;
+    if confirmation["state"] != "PROMOTION_SCHEDULED" {
+        return Ok(confirmation);
+    }
+    let generation = confirmation["authorizationGeneration"]
+        .as_u64()
+        .filter(|generation| *generation == binding.generation)
+        .ok_or("REVIEWED_PROMOTION_RECONCILIATION_REQUIRED")?;
+    // Keep the invoking owner alive while the existing bounded worker runs.
+    // The worker itself preserves its inherited Windows Job and writes the
+    // only terminal receipt. An observation deadline never reschedules it.
+    let deadline = Instant::now() + Duration::from_secs(660);
+    loop {
+        if let Some(result) = crate::daemon_reload::reviewed_promotion_result_for_transaction(
+            &workspace,
+            &binding.transaction_id,
+            generation,
+            expected_sha256,
+        )? {
+            return Ok(json!({
+                "state":result.state,
+                "candidateSha256":result.candidate_sha256,
+                "authorizationGeneration":generation,
+                "servingState":result.serving_state,
+            }));
+        }
+        if Instant::now() >= deadline {
+            return Err("REVIEWED_PROMOTION_RECONCILIATION_REQUIRED".into());
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+}
+
 pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, String> {
     let workspace = workspace
         .canonicalize()

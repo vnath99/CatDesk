@@ -1,5 +1,7 @@
 # CatDesk — System Architecture
 
+**Decision 2026-11-22T02:52:27Z.** Use one local artifact-hash promotion interface and the existing backend promoter and Wake broker. GitHub identifies the reviewed source. The native producer binds that source to immutable release bytes. Keep one canonical v5 connection and preserve the current and prior verified releases. Standing authorization covers routine eligible promotion within enrolled policy. The first installed Web cycle remains the product milestone. [Qualification and evidence](../verification/ROUTINE_PROMOTION_AND_V3_OWNER_RECONCILIATION_2026_11_21.json).
+
 **Decision November 21, 16:57 UTC:** Execution order is one installed direct-Web work cycle first, then two projects in one serialized active lane, then broader recovery/context rollover. Keep one canonical v5 connection and the frozen-release/current-development model; this preparation adds no new architecture or owner. [Evidence](../verification/INSTALLED_WEB_CYCLE_RELEASE_PREPARATION_2026_11_21.json).
 
 **Decision 2026-11-16T01:38:56.316414+00:00:** The existing development observer now also accepts the original approved public-review context through its native claim and frozen consent. No competing approval registry, owner, service, profile, tunnel or Wake binding is created. A successful context preflight is not a successful external review or release proof. [Evidence](../verification/APPROVED_REVIEW_CONTEXT_OBSERVATION_2026_11_15.json).

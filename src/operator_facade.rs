@@ -136,6 +136,7 @@ pub(crate) enum OperatorAction {
         expected_current_target_sha256: String,
     },
     ReviewedBuild(ReviewedBuildOperatorAction),
+    PromoteReviewedBackend { candidate_sha256: String },
     ReleasePair(ReleasePairOperatorAction),
     RepairWakeBridgeEnvironment,
     CoreHostAcceptancePreflight,
@@ -326,6 +327,15 @@ pub(crate) fn parse_operator_action(
         Some("wake-target") => parse_wake_target_action(&args),
         Some("designated-chat-target") => parse_designated_chat_target_action(&args),
         Some("reviewed-build") => parse_reviewed_build_action(&args),
+        Some("promote") if args.len() == 3
+            && args[2].len() == 64
+            && args[2].bytes().all(|byte| byte.is_ascii_hexdigit()) =>
+        {
+            Ok(Some(OperatorAction::PromoteReviewedBackend {
+                candidate_sha256: args[2].to_ascii_lowercase(),
+            }))
+        }
+        Some("promote") => Err("operator promote requires one full artifact SHA-256".into()),
         Some("release-pair") => parse_release_pair_action(&args),
         Some("repair-wake-bridge-environment") if args.len() == 2 => {
             Ok(Some(OperatorAction::RepairWakeBridgeEnvironment))
@@ -1256,6 +1266,19 @@ pub(crate) async fn execute_operator_action(
                 "targetSha256": result.sha256,
                 "targetUrl": result.url,
             }))
+        }
+        OperatorAction::PromoteReviewedBackend { candidate_sha256 } => {
+            #[cfg(windows)]
+            {
+                crate::delegated::autonomy_supervisor::promote_active_backend(
+                    workspace, &candidate_sha256,
+                )
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = candidate_sha256;
+                Err("reviewed backend promotion requires Windows".into())
+            }
         }
         OperatorAction::ReviewedBuild(action) => {
             let workspace = workspace
@@ -3589,6 +3612,25 @@ mod tests {
             parse_operator_action(["--native-daemon"].map(str::to_string)),
             Ok(None)
         );
+    }
+
+    #[test]
+    fn routine_promote_operator_only_accepts_an_exact_artifact_hash() {
+        let digest = "Ab".repeat(32);
+        assert_eq!(
+            parse_operator_action(["operator", "promote", &digest].map(str::to_string)),
+            Ok(Some(OperatorAction::PromoteReviewedBackend {
+                candidate_sha256: digest.to_ascii_lowercase(),
+            }))
+        );
+        for args in [
+            vec!["operator", "promote"],
+            vec!["operator", "promote", "56aa9912fe790bc50084329aa4932b02c0bbfc4e"],
+            vec!["operator", "promote", "./target/release/catdesk.exe"],
+            vec!["operator", "promote", &digest, "--force"],
+        ] {
+            assert!(parse_operator_action(args.into_iter().map(str::to_string)).is_err());
+        }
     }
 
     #[test]

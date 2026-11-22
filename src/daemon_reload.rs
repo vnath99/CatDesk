@@ -730,6 +730,28 @@ pub fn reviewed_promotion_preflight_authority(
     Ok(preflight.authorization)
 }
 
+#[cfg(windows)]
+pub(crate) fn require_new_local_promotion(
+    workspace: &Path,
+    candidate_sha256: &str,
+) -> Result<(), String> {
+    if reviewed_promotion_claim_path(workspace)
+        .try_exists()
+        .map_err(|_| "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED")?
+    {
+        return Err("REVIEWED_PROMOTION_RECONCILIATION_REQUIRED".into());
+    }
+    let canonical = canonical_workspace_file(
+        workspace,
+        &workspace.join("target/release/catdesk.exe"),
+        "canonical release",
+    )?;
+    if sha256_file(&canonical)? == candidate_sha256 {
+        return Err("REVIEWED_PROMOTION_CANDIDATE_ALREADY_AT_CANONICAL_PATH".into());
+    }
+    Ok(())
+}
+
 pub fn run_reviewed_promotion_worker(args: ReviewedPromotionWorkerArgsV1) -> Result<(), String> {
     let workspace = canonical_directory(&args.workspace, "reviewed promotion workspace")?;
     let authorization: ReviewedPromotionAuthorizationV1 = read_bounded_json(
@@ -919,6 +941,20 @@ pub fn reviewed_promotion_result(
         return Err("reviewed promotion result is malformed".into());
     }
     Ok(Some(result))
+}
+
+#[cfg(windows)]
+pub(crate) fn reviewed_promotion_result_for_transaction(
+    workspace: &Path,
+    transaction_id: &str,
+    generation: u64,
+    candidate_sha256: &str,
+) -> Result<Option<ReviewedPromotionResultV1>, String> {
+    Ok(reviewed_promotion_result(workspace)?.filter(|result| {
+        result.transaction_id == transaction_id
+            && result.authorization_generation == generation
+            && result.candidate_sha256 == candidate_sha256
+    }))
 }
 
 #[cfg(windows)]
@@ -3303,6 +3339,32 @@ mod tests {
         root
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn routine_promote_preserves_an_existing_claim_and_selected_binary() {
+        let root = temp_workspace("promotion-reconciliation");
+        let root = root.canonicalize().unwrap();
+        let binary = root.join("target/release/catdesk.exe");
+        fs::create_dir_all(binary.parent().unwrap()).unwrap();
+        fs::write(&binary, b"previously installed test fixture").unwrap();
+        let digest = sha256_file(&binary).unwrap();
+        assert_eq!(
+            require_new_local_promotion(&root, &digest).unwrap_err(),
+            "REVIEWED_PROMOTION_CANDIDATE_ALREADY_AT_CANONICAL_PATH"
+        );
+        assert!(require_new_local_promotion(&root, &"1".repeat(64)).is_ok());
+        let claim = reviewed_promotion_claim_path(&root);
+        fs::create_dir_all(claim.parent().unwrap()).unwrap();
+        fs::write(&claim, b"unresolved exact claim").unwrap();
+        assert_eq!(
+            require_new_local_promotion(&root, &"1".repeat(64)).unwrap_err(),
+            "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED"
+        );
+        assert_eq!(fs::read(&claim).unwrap(), b"unresolved exact claim");
+        assert_eq!(sha256_file(&binary).unwrap(), digest);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn reviewed_promotion_serving_projection_preserves_legacy_and_refuses_false_health() {
         let root = temp_workspace("promotion-serving-projection");
@@ -3350,6 +3412,31 @@ mod tests {
         )
         .unwrap();
         assert!(reviewed_promotion_result(&root).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn routine_promote_wait_matches_the_confirmed_transaction() {
+        let root = temp_workspace("promotion-result-binding");
+        let path = reviewed_promotion_result_path(&root);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let result = ReviewedPromotionResultV1 {
+            schema_version: 1,
+            state: "PROMOTION_COMPLETED".into(),
+            authorization_generation: 42,
+            candidate_sha256: "a".repeat(64),
+            transaction_id: "b".repeat(32),
+            serving_state: Some("STOPPED_AFTER_BOUNDED_OWNER".into()),
+        };
+        atomic_json_write(&path, &result).unwrap();
+        let read = |id: &str, generation, sha: &str| {
+            reviewed_promotion_result_for_transaction(&root, id, generation, sha).unwrap()
+        };
+        assert!(read(&result.transaction_id, 42, &result.candidate_sha256).is_some());
+        assert!(read(&"c".repeat(32), 42, &result.candidate_sha256).is_none());
+        assert!(read(&result.transaction_id, 41, &result.candidate_sha256).is_none());
+        assert!(read(&result.transaction_id, 42, &"d".repeat(64)).is_none());
         fs::remove_dir_all(root).unwrap();
     }
 

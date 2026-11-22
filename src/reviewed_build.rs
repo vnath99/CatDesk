@@ -5528,19 +5528,48 @@ pub fn reviewed_build_result(workspace: &Path) -> Result<ReviewedBuildPublicOutc
     let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
     let outcome = outcome_from_existing_state(&control, &attempt)?;
     if outcome.state == "BUILD_ATTESTED" {
-        let attestation: ReviewedBuildAttestationV2 =
-            control_read_json(&control, "attestation.json")?;
-        validate_producer_attestation(
-            workspace,
-            &attempt.review_session_id,
-            &attempt.review_record_id,
-            &attempt.review_authority_sha256,
-            &attempt.snapshot_expected,
-            &attestation.candidate_relative_path,
-            &attestation.candidate_sha256,
-        )?;
+        validate_active_candidate(workspace, &control, &attempt, None)?;
     }
     Ok(outcome)
+}
+
+/// Resolve only the producer's selected, terminal, remeasured build. A caller
+/// cannot select an older audit, alternate workspace path, or raw Git object.
+#[cfg(windows)]
+pub(crate) fn active_reviewed_promotion_candidate(
+    workspace: &Path,
+    expected_sha256: &str,
+) -> Result<ReviewedBuildAttestationV2, String> {
+    if !valid_sha256(expected_sha256) {
+        return Err("REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED".into());
+    }
+    let control = existing_control_root(workspace)?;
+    let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
+    if outcome_from_existing_state(&control, &attempt)?.state != "BUILD_ATTESTED" {
+        return Err("REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD".into());
+    }
+    validate_active_candidate(workspace, &control, &attempt, Some(expected_sha256))
+}
+
+fn validate_active_candidate(
+    workspace: &Path,
+    control: &BuildControlRoot,
+    attempt: &ReviewedBuildAttemptV1,
+    expected_sha256: Option<&str>,
+) -> Result<ReviewedBuildAttestationV2, String> {
+    let attestation: ReviewedBuildAttestationV2 = control_read_json(control, "attestation.json")?;
+    if expected_sha256.is_some_and(|expected| attestation.candidate_sha256 != expected) {
+        return Err("REVIEWED_PROMOTION_ACTIVE_ARTIFACT_MISMATCH".into());
+    }
+    validate_producer_attestation(
+        workspace,
+        &attempt.review_session_id,
+        &attempt.review_record_id,
+        &attempt.review_authority_sha256,
+        &attempt.snapshot_expected,
+        &attestation.candidate_relative_path,
+        &attestation.candidate_sha256,
+    )
 }
 
 /// The worker is invoked only by the closed supervisor helper.  It rebuilds all
@@ -11833,6 +11862,26 @@ mod tests {
         assert!(reachable_producer_control(&root, &orphan.build_attempt_id).is_err());
         drop(orphan_control);
         drop(active);
+        drop(control);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn routine_promote_resolves_only_the_active_remeasured_candidate() {
+        let (root, _, attempt, attestation, _) = end_to_end_attestation_fixture().unwrap();
+        let active =
+            active_reviewed_promotion_candidate(&root, &attestation.candidate_sha256).unwrap();
+        assert_eq!(active, attestation);
+        assert_eq!(
+            active_reviewed_promotion_candidate(&root, &"0".repeat(64)).unwrap_err(),
+            "REVIEWED_PROMOTION_ACTIVE_ARTIFACT_MISMATCH"
+        );
+        let control = existing_control_root(&root).unwrap();
+        let next = fresh_attempt_for_authority(&attempt, 'd', 'e', "next-review");
+        let audit = successful_producer_audit(&root, &control, &attempt).unwrap();
+        prepare_successful_succession(&control, &attempt, audit, next).unwrap();
+        assert!(active_reviewed_promotion_candidate(&root, &attestation.candidate_sha256).is_err());
         drop(control);
         fs::remove_dir_all(root).unwrap();
     }

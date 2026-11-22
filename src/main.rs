@@ -2966,6 +2966,24 @@ fn operator_release_pair_error_code(error: &str) -> &'static str {
     }
 }
 
+fn operator_promote_error_code(error: &str) -> &'static str {
+    match error {
+        "operator promote requires one full artifact SHA-256"
+        | "REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED" => "REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED",
+        "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD" => "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD",
+        "REVIEWED_PROMOTION_ACTIVE_ARTIFACT_MISMATCH" => "REVIEWED_PROMOTION_ACTIVE_ARTIFACT_MISMATCH",
+        "REVIEWED_PROMOTION_USE_ATTESTED_CANDIDATE_CONTROLLER" => {
+            "REVIEWED_PROMOTION_USE_ATTESTED_CANDIDATE_CONTROLLER"
+        }
+        "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED" => "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED",
+        "REVIEWED_PROMOTION_CANDIDATE_ALREADY_AT_CANONICAL_PATH" => {
+            "REVIEWED_PROMOTION_CANDIDATE_ALREADY_AT_CANONICAL_PATH"
+        }
+        "independent review authority is unavailable" => "REVIEWED_PROMOTION_REVIEW_REQUIRED",
+        _ => "REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT",
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -2982,6 +3000,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         && args.get(1).is_some_and(|arg| arg == "installed-backend");
     let operator_release_pair = args.first().is_some_and(|arg| arg == "operator")
         && args.get(1).is_some_and(|arg| arg == "release-pair");
+    let operator_promote = args.first().is_some_and(|arg| arg == "operator")
+        && args.get(1).is_some_and(|arg| arg == "promote");
     match operator_facade::parse_operator_action(args.clone()) {
         Ok(Some(action)) => {
             let workspace = std::env::current_dir()?;
@@ -3022,6 +3042,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             "{}",
                             serde_json::json!({"status":"attention","errorCode":operator_release_pair_error_code(&error)})
                         );
+                    } else if operator_promote {
+                        println!(
+                            "{}",
+                            serde_json::json!({"status":"attention","errorCode":operator_promote_error_code(&error)})
+                        );
                     } else {
                         println!("{{\"status\":\"attention\"}}");
                     }
@@ -3055,6 +3080,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "{}",
                     serde_json::json!({"status":"attention","errorCode":operator_release_pair_error_code(&error)})
+                );
+            } else if operator_promote {
+                println!(
+                    "{}",
+                    serde_json::json!({"status":"attention","errorCode":operator_promote_error_code(&error)})
                 );
             } else {
                 println!("{{\"status\":\"attention\"}}");

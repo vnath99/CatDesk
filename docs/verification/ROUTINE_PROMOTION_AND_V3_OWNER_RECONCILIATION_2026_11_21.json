@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T02:52:27.4869805Z",
+  "scope": "RELEASE_MODEL_DECISION_SOURCE_TESTS_AND_INSTALLED_READBACK",
+  "baselineCommit": "23f2375cb457da09b540040647454129e8fe0d9d",
+  "v3": {
+    "reportedRefusal": "V3_WAKE_OWNER_PRESENT",
+    "refusalBeforeSigningStagingOrSubmit": true,
+    "fixedIntakePresent": false,
+    "durableWrapperAttemptPresent": false,
+    "protectedSelectionGenerationCreated": false,
+    "selectedPointerAndConfigMatchFrozenBytes": true,
+    "controlBytesMatchFrozenInputs": false,
+    "actualWakeOwnerObserved": true,
+    "reportedSubmittingAttemptPredatesCurrentHost": true,
+    "stopPreflight": "EXACT_WAKE_QUIESCENCE_NOT_PROVEN",
+    "pythonChildObserved": true,
+    "stopIssued": false
+  },
+  "broker": {
+    "installedPolicySha256": "6508ffc30ade16dddf0de652d56c9fbb6d9ff3d3cbef492c8caa733560517dc9",
+    "nativeReadOnlyPreflightPassed": true,
+    "operatorStartAuthorized": true,
+    "localUserUpdatesAuthorized": true,
+    "reconstructionEnabled": true,
+    "unsignedLocalSelectionSupportsReconstruction": false,
+    "serviceStartedByPreflight": false,
+    "routineSubmissionStillRequiresProtectedTrustedIntake": true,
+    "enrolledNonAdministratorOpenedRequiredScmHandle": true,
+    "scmHandleReadbackStartedService": false
+  },
+  "backend": {
+    "interface": "operator promote <artifact-sha256>",
+    "implementedInDevelopmentSource": true,
+    "exactAttestedCandidateControllerRequired": true,
+    "existingIndependentReviewAndProducerRequired": true,
+    "usesExistingBackendOnlyPromotionPreflightAndConfirmation": true,
+    "ifExistingClaimRequiresReconciliation": true,
+    "canonicalAlreadySelectedRefusesNewMutation": true,
+    "externalConnectorUsed": false,
+    "promotionScheduledInThisQualification": false,
+    "tests": {
+      "command": "cargo test --offline --locked --bin catdesk routine_promote_",
+      "passed": 4,
+      "failed": 0,
+      "exitCode": 0,
+      "firstCompileFailedInTestFixture": true
+    },
+    "boundedOwnerWaitSeconds": 660,
+    "terminalReceiptMustMatchGenerationTransactionAndArtifact": true,
+    "healthyPersistentStartupQualified": false
+  },
+  "acceptance": {
+    "successfulInstalledPromotion": false,
+    "liveRollbackRepeated": false,
+    "v5OrInstalledWebCycleQualified": false
+  }
+}
