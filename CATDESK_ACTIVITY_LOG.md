@@ -1238,3 +1238,11 @@ Evidence: [docs/verification/BACKEND_PROMOTION_LEGACY_RESOLVER_PROTOCOL_2026_11_
 Agent: Codex. Source: 37ae571a09a37aedb05f82b77e85967fd13c7d53. Outcome: partial. Native promotion confirmation now reads the exact consumed transaction before publishing any authorization. The Windows regression preserved the original claim, authorization and result while refusing conflicting or unbound records. Sixty release tests passed.. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and use the existing authenticated reviewed promotion for this legacy candidate. Verify installed startup and rollback, and confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/BACKEND_PROMOTION_EXACT_CONFIRMATION_READBACK_2026_11_22.json](docs/verification/BACKEND_PROMOTION_EXACT_CONFIRMATION_READBACK_2026_11_22.json); command: cargo test --locked --offline --bin catdesk daemon_reload::; exit 0; SHA-256 dcb9dc9523d5bf7d63600dedc9d008de1f7e7d0b483979db350de57d63dfc17c.
+
+<!-- catdesk-activity:installed-legacy-promotion-result-20261122 sha256:f26ce66711d43a3e1655dac02456dd196c363cf8444b21c45586b9a2aec77ca5 -->
+
+## 2026-11-22T12:23:57Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 028436c522694f3c7d445f2c43047cd73a78dd8f. Outcome: partial. The exact installed listener passed authenticated readiness and returned the retained promotion result over loopback. Its result matches the installed artifact. The frozen successor still has an unapproved draft, and the Wake selection remains at the original pointer.. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and use the existing authenticated reviewed promotion for this legacy candidate. Verify installed startup and rollback, and confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/INSTALLED_LEGACY_PROMOTION_RESULT_2026_11_22.json](docs/verification/INSTALLED_LEGACY_PROMOTION_RESULT_2026_11_22.json); command: Authenticated canonical loopback catdesk_reviewed_build_promotion action RESULT; exit 0; SHA-256 b2d57f04c42a33b700515a1cf737138abd639bd2be041727dc6a5a34b462c04b.

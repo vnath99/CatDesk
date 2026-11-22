@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T12:23:57.4572655Z",
+  "scope": "ACTUAL_INSTALLED_LEGACY_AUTHENTICATED_PROMOTION_RESULT_READ_ONLY",
+  "observationSourceCommit": "028436c522694f3c7d445f2c43047cd73a78dd8f",
+  "installedBackend": {
+    "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "imageSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "canonicalFingerprintMatched": true,
+    "loopbackListenerMatchedCanonical": true,
+    "anonymousRejectionAndAuthenticatedMcpPassed": true,
+    "legacyResultCalls": 1,
+    "httpStatus": 200,
+    "rpcErrorCode": null,
+    "toolError": false,
+    "result": "PROMOTION_COMPLETED",
+    "samePidAndCreationAfterProbe": true,
+    "diskReceiptMatchesInstalledArtifact": true,
+    "diskReceiptMatchesFrozenCandidate": false
+  },
+  "releasePrerequisites": {
+    "backendFrozenSource": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "originalContractHashMatched": true,
+    "originalState": "DRAFT",
+    "approvedHashPresent": false,
+    "draftExpired": false,
+    "reportPresent": false,
+    "pullRequestSubmittedReviewCount": 0,
+    "wakePolicyHashMatched": true,
+    "wakeSelectionMatchesOriginal": true,
+    "wakeSelectionMatchesPlanned": false,
+    "operatorAttemptDirectoriesObserved": 0,
+    "operatorFinalReadbacksObserved": 0,
+    "brokerStoppedPidZero": true
+  },
+  "canonicalV5": {
+    "previouslyObservedResultErrorWasUnclassified": true,
+    "externallyRetried": false,
+    "thisObservationAttributesNoExternalCause": true
+  },
+  "productionMutations": 0,
+  "productProcessStarts": 0,
+  "settingsChanges": 0,
+  "frozenCandidateInstalled": false,
+  "wakeV3SelectionAccepted": false,
+  "installedWebCycleAccepted": false
+}
