@@ -926,3 +926,11 @@ Evidence: [docs/verification/WAKE_LOCAL_REVIEW_INTAKE_PREFLIGHT_2026_11_22.json]
 Agent: CatDesk development. Source: c9e2642ec80354acc97a6ca2e3bd3de0f926642e. Outcome: partial. The development local Wake client waits briefly for the pipe of the observed running broker before any request write. Fourteen Windows client and CLI tests passed. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
 
 Evidence: [docs/verification/WAKE_LOCAL_BROKER_PIPE_READINESS_2026_11_22.json](docs/verification/WAKE_LOCAL_BROKER_PIPE_READINESS_2026_11_22.json); command: Wake Windows install broker client and CatDeskWakeHost CLI tests; exit 0; SHA-256 6483f699fc24b91170d9996500d95f0ffedb9ddda1a50fb64cdcf73b4b17be4d.
+
+<!-- catdesk-activity:nov22-wake-fresh-local-update-preflight sha256:e25fa14ff68cbe89c55104922e72bbdb179ff7bed9c7c6c61940ea5d0e1179c9 -->
+
+## 2026-11-22T07:04:10Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 75d5f9b5fa672fea035c8fb71caa9adcb4ec8ee9. Outcome: partial. The development Wake controller checks a frozen local update against the protected generation and release inputs before broker start. Twenty-five Windows ledger, client, CLI and rollback tests passed. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
+
+Evidence: [docs/verification/WAKE_FRESH_LOCAL_UPDATE_PREFLIGHT_2026_11_22.json](docs/verification/WAKE_FRESH_LOCAL_UPDATE_PREFLIGHT_2026_11_22.json); command: Windows Wake ledger, client, CLI and enrolled selection plus rollback regression tests; exit 0; SHA-256 c4f0d64eb6387fffa463d970dce01fb178434aac5c795d1d5534d542b4b0caaa.

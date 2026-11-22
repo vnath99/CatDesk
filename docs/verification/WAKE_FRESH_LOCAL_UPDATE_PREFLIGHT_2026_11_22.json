@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "scope": "WINDOWS_DEVELOPMENT_WAKE_PRESTART_REQUEST_PREFLIGHT",
+  "verifiedUtc": "2026-11-22T07:04:10Z",
+  "sourceCommit": "75d5f9b5fa672fea035c8fb71caa9adcb4ec8ee9",
+  "developmentWakeHostSha256": "633e97bf96d116b3cfd931771ec0a9dcd15376cf46e93e0aa998bd5509d1d97c",
+  "readbackDesign": {
+    "usesExistingFixedPolicyAndEnrolledIdentity": true,
+    "sharesExistingProtectedLedgerGenerationAndDuplicateRules": true,
+    "usesExistingCandidateFallbackAndSelectionValidation": true,
+    "usesExistingProtectedReviewIntake": true,
+    "createsNoIntentOrSubmissionAuthority": true,
+    "provesTransportHistory": false,
+    "provesActiveOwnerExited": false
+  },
+  "actualWindowsFixture": {
+    "freshGenerationReadWhileConcurrentWriterRefused": true,
+    "staleGeneration": "WAKE_LOCAL_UPDATE_GENERATION_CHANGED",
+    "exactRetainedRequest": "WAKE_LOCAL_UPDATE_REQUEST_ALREADY_RECORDED_NO_RETRY",
+    "differentRequestWhilePriorIncomplete": "WAKE_LEDGER_PRIOR_INCOMPLETE",
+    "differentRequestWithReusedApproval": "WAKE_LEDGER_APPROVAL_REPLAY",
+    "originalIntentUnchanged": true,
+    "noNewIntentCreated": true,
+    "existingEnrolledSelectionAndRollbackPassed": true,
+    "testProcessesRemaining": 0
+  },
+  "compiledCommandRefusals": {
+    "missingRequest": "WAKE_INSTALL_APPROVAL_UNAVAILABLE",
+    "malformedRequest": "WAKE_SAME_STATE_REQUEST_INVALID",
+    "mutationOverride": "WAKE_INSTALL_BROKER_ARGUMENTS_INVALID"
+  },
+  "tests": {
+    "sameStateLedgerPassed": 10,
+    "clientPassed": 12,
+    "wakeHostCliPassed": 2,
+    "selectionAndRollbackPassed": 1,
+    "formatCheckExit": 0
+  },
+  "productionBrokerStarts": 0,
+  "trustedInstalledIntakePass": false,
+  "installedAcceptance": false
+}
