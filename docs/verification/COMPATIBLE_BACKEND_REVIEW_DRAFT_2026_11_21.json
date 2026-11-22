@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T00:43:35.629445Z",
+  "scope": "ACTUAL_ISOLATED_NATIVE_REVIEW_DRAFT_CREATION_AND_VALIDATION",
+  "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "sourceTree": "4a83da9f2daa22e1ecabcf000beb6899fc5e60d1",
+  "draft": {
+    "contractId": "nov21-independent-56aa-backend-review",
+    "nativeHash": "fnv1a64:62f007ba83fc1791",
+    "fileSha256": "9cdd8134c1e046c86f7786328931a5b90e323e0a0220bc02bcfcb320ffcb26f2",
+    "nativeState": "DRAFT",
+    "stateVersion": 1,
+    "startReadiness": "APPROVAL_REQUIRED",
+    "expiresAtUtc": "2026-11-29T00:43:07Z",
+    "providerTurns": 0,
+    "gitMutationsAllowed": false,
+    "reportPresent": false,
+    "approved": false,
+    "claimed": false
+  },
+  "owner": {
+    "previouslyQualifiedControllerSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+    "loopbackOnly": true,
+    "ephemeralLocalBearer": true,
+    "job": "KILL_ON_JOB_CLOSE",
+    "maximumOwnerMilliseconds": 65000,
+    "exitCode": 0,
+    "naturalExitVerified": true,
+    "timeout": false,
+    "terminationFailed": false,
+    "listenerClosed": true
+  },
+  "preservation": {
+    "pinCount": 1733,
+    "changedCanonicalRolloverAutoStatusFiles": 6,
+    "otherPinsUnchanged": 1727,
+    "pinInventoryUnchanged": true,
+    "profileIdentitiesUnchanged": true,
+    "taskInventoryUnchanged": true,
+    "isolatedSourceTrackedFilesClean": true,
+    "fullByteEquality": false,
+    "note": "The six changed files were canonical scheduler status metadata. The canonical port-3200 owner predated the draft and was distinct from the isolated no-web-auto backend. The specific writer was not traced."
+  },
+  "evidenceHashes": {
+    "readbackSha256": "fe797323c6a98880f035d1495f8cbae858be1e46bb77cc143f73b43839ee95fb",
+    "ownerReceiptSha256": "d69f17b4a01fd26ce032dc7e6c375aafefd4b027aebaf21b5a692c6011fa0c20",
+    "preservationReadbackSha256": "7ea7da68cd796adf229ca04649e2cb3bb5dd17c1902d7fa420f68f993a337e96"
+  },
+  "reviewDestinationAdmitted": false,
+  "independentReviewStarted": false,
+  "nativeSourceSnapshotCreated": false,
+  "producerInvoked": false,
+  "externalMessagesSent": 0,
+  "browserStarts": 0,
+  "wakeStarts": 0,
+  "originalD22Resent": false,
+  "installedAcceptance": false,
+  "nextGate": "Verify a usable independent reviewer and supported destination, then obtain the exact draft start decision. Continue with independent report verification, acknowledgment, native snapshot and reviewed build. The draft is not release authority."
+}
