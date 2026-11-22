@@ -630,3 +630,11 @@ Evidence: [docs/verification/FIRST_WEB_CACHED_NATIVE_CYCLE_2026_11_21.json](docs
 Agent: CatDesk development. Source: 039e6ffe2adc905e1573a1f6b4daf4d523e2c95b. Outcome: partial. Authenticated native MCP carried a scoped edit, real Windows verification, Git checkpoint and one queued manual Wake in a disposable workspace. It rejected missing authentication, early Wake and duplicate calls. The listener and test processes exited. This check used loopback and no Web delivery. Next: After the reviewed signed Wake V3 selection, verify the installed selection. Obtain eligible independent review and producer authority for the compatible backend. Then perform and observe the first actual v5 Web work cycle using the prepared assignment.
 
 Evidence: [docs/verification/FIRST_WEB_AUTHENTICATED_LOCAL_MCP_CYCLE_2026_11_21.json](docs/verification/FIRST_WEB_AUTHENTICATED_LOCAL_MCP_CYCLE_2026_11_21.json); command: cargo test --offline --locked --bin catdesk web_task_dispatch::tests::cached_http_checkpoint_precedes_manual_wake -- --exact --ignored; exit 0; SHA-256 80d6837261209ad4c17fe16310a8599d00499c9e977177258382356757ff5cff.
+
+<!-- catdesk-activity:installed-producer-readback-nov21 sha256:d25dcb0791117aec54dc58d4812cf62809150eabb0caa180fc76ac00f60fc641 -->
+
+## 2026-11-22T01:31:30.2555308Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 67a26425a780091f8373aabcb9f804d6207f2183. Outcome: partial. The installed backend and its active producer lineage agree. Local RESULT returned BUILD_ATTESTED for the exact serving release once the contained process inherited the canonical working directory. The v5 RESULT call from Codex returned UNAUTHORIZED. No new review, build or promotion was executed. Next: Obtain an eligible independent reviewer for the frozen compatible backend draft and complete the exact review and snapshot before local producer preparation. Independently verify the reviewed signed Wake selection after the operator executes it, then proceed to the prepared installed Web cycle.
+
+Evidence: [docs/verification/INSTALLED_REVIEWED_BUILD_RESULT_2026_11_21.json](docs/verification/INSTALLED_REVIEWED_BUILD_RESULT_2026_11_21.json); command: operator reviewed-build result; exit 0; SHA-256 4727b582098119da46bf64dd41d86f3c07e71f01853d9e05861b111c45865ea9.

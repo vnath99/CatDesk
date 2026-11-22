@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T01:31:30.2555308Z",
+  "observedLocal": "2026-11-21T20:31:30.2555308-05:00",
+  "scope": "ACTUAL_INSTALLED_REVIEWED_BUILD_RESULT_READ_ONLY",
+  "installedSourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+  "installedImageSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+  "v5ConnectorFromCodex": {
+    "action": "RESULT",
+    "requests": 1,
+    "errorCode": "UNAUTHORIZED",
+    "reasonEstablished": false,
+    "authoritativeForOtherTools": false
+  },
+  "firstLocalObservation": {
+    "exitCode": 2,
+    "state": "attention",
+    "ownerReceiptSha256": "e549ce30a7257bc2632fc201356106031592ab5526d95ba2a28f9008c2e755a1",
+    "finding": "The PowerShell provider location changed but the Win32 current directory did not. The existing contained launcher inherits the latter. The initial observation did not read the canonical control root."
+  },
+  "verifiedLocalObservation": {
+    "command": "operator reviewed-build result",
+    "startedUtc": "2026-11-22T01:31:21.6559368Z",
+    "maximumMilliseconds": 25000,
+    "win32WorkingDirectoryVerified": true,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "state": "BUILD_ATTESTED",
+    "samePort3200OwnerBeforeAndAfter": true,
+    "remainingReadbackProcesses": 0,
+    "ownerReceiptSha256": "eeedc62bdbb53e67603d3e31a2bca0a88fa14fe740c24b556354e826d3069a90"
+  },
+  "retainedState": {
+    "activePointerAttemptAndDigestMatched": true,
+    "resultClaimAndWorkerOwnerMatched": true,
+    "activeCandidateIsCurrentServingRelease": true,
+    "activeCandidateLengthAndSha256Matched": true,
+    "recordedCargoAndRustcLengthsAndSha256Matched": true
+  },
+  "limits": {
+    "connectorSettingsChanged": false,
+    "prepareOrConfirmInvoked": false,
+    "newBuildAttempts": 0,
+    "promotionActions": 0,
+    "independentReviewFor56aaCreated": false,
+    "producerAttestationFor56aaCreated": false,
+    "installedFirstWebCycleVerified": false,
+    "next": "Use the existing managed independent review, acknowledgment and immutable snapshot for 56aa. The local producer can then prepare a new generation for that exact approved source. Producer PREFLIGHT shares the PREPARE operation and can create an attempt, so it is excluded from this readback."
+  }
+}
