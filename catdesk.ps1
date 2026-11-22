@@ -138,10 +138,10 @@ function Get-LifecycleCanonicalFailureGate {
 }
 
 function Get-LifecycleLocalMcpReadinessResult {
-    param($LocalMcp, $Canonical)
-    $observed = Invoke-LifecycleSeam -Name 'LocalMcpReadiness' -Arguments @($LocalMcp, $Canonical) -Default {
-        param($endpoint, $identity)
-        Get-LocalMcpReadiness -LocalMcp $endpoint -Canonical $identity
+    param($LocalMcp, $Canonical, [switch]$RequireBearer)
+    $observed = Invoke-LifecycleSeam -Name 'LocalMcpReadiness' -Arguments @($LocalMcp, $Canonical, [bool]$RequireBearer) -Default {
+        param($endpoint, $identity, $requireAuth)
+        Get-LocalMcpReadiness -LocalMcp $endpoint -Canonical $identity -RequireBearer:$requireAuth
     }
     if ($observed -is [bool]) {
         return [pscustomobject]@{
@@ -1165,6 +1165,60 @@ function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$
     } finally { $pins.Dispose() }
 }
 
+function Assert-LifecyclePromotedPair($Canonical, [string]$Digest, $Pins) {
+    [void]$Pins.File($Canonical.Manifest, 128, $false)
+    $installed = $Pins.File($Canonical.Binary, 128MB, $false)
+    $recorded = [IO.File]::ReadAllText($Canonical.Manifest).Trim().ToLowerInvariant()
+    if ($installed.Sha256 -cne $Digest -or $recorded -cne $Digest) {
+        throw 'installed pair does not match the completed promotion'
+    }
+}
+
+function Get-LifecyclePromotionServingReadback([string]$Root, $Canonical, [string]$Digest) {
+    $unverified = 'LOCAL_BACKEND_READBACK_UNVERIFIED'
+    try {
+        # Registration and the existing kernel signal only decide whether it
+        # is worth waiting. They never prove the identity of a serving process.
+        $registration = Get-AutostartRegistration
+        if ($registration.Conflict -or -not ($registration.TaskOwned -or $registration.RunOwned) -or
+            -not $registration.Definition.BackendOnly -or
+            -not (Test-AutostartSupervisorRunning -Definition $registration.Definition)) {
+            return 'STOPPED_AFTER_BOUNDED_OWNER'
+        }
+        $local = Get-LifecycleLocalMcp
+        $identity = [pscustomobject]@{ Path = $Canonical.Binary; Sha256 = $Digest }
+        $clock = [Diagnostics.Stopwatch]::StartNew()
+        $waitSeconds = [Math]::Min(90, [Math]::Max(0, $ReadyTimeoutSeconds))
+        do {
+            $gate = Get-CatDeskReleaseStartupGate -Root $Root
+            if ($gate -ceq 'RECOVERY_RELEASE_AUTHORITY_REQUIRED') { return $unverified }
+            if ($gate -ceq 'READY') {
+                $listener = Get-LifecycleListener -LocalMcp $local -Canonical $identity
+                if ($null -ne $listener) {
+                    if (-not $listener.MatchesCanonical -or $listener.Sha256 -cne $Digest -or
+                        [int]$listener.Pid -lt 1 -or -not $listener.CreationTimeUtc) { return $unverified }
+                    $pins = [CatDesk.DevLocalTarget.ReadOnlyScope]::new()
+                    try {
+                        Assert-LifecyclePromotedPair $Canonical $Digest $pins
+                        $mcp = Get-LifecycleLocalMcpReadinessResult -LocalMcp $local -Canonical $identity -RequireBearer
+                        $after = Get-LifecycleListener -LocalMcp $local -Canonical $identity
+                        if ($mcp.Ready -and $null -ne $after -and $after.MatchesCanonical -and $after.Sha256 -ceq $Digest -and
+                            $after.Pid -eq $listener.Pid -and $after.CreationTimeUtc -ceq $listener.CreationTimeUtc -and
+                            (Get-CatDeskReleaseStartupGate -Root $Root) -ceq 'READY') { return 'LOCAL_BACKEND_READY' }
+                        return $unverified
+                    } finally { $pins.Dispose() }
+                }
+            }
+            if ($clock.Elapsed.TotalSeconds -ge $waitSeconds -or
+                -not (Test-AutostartSupervisorRunning -Definition $registration.Definition)) { break }
+            Start-Sleep -Milliseconds 1000
+        } while ($clock.Elapsed.TotalSeconds -lt $waitSeconds)
+        return 'LOCAL_BACKEND_STARTUP_PENDING'
+    } catch {
+        return $unverified
+    }
+}
+
 function Invoke-LifecycleReviewedPromotion {
     if ($AutostartAction -cnotmatch '^[0-9a-fA-F]{64}$' -or $WakeTerminalTaskId) {
         Write-LifecycleStatus 'REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED'
@@ -1200,18 +1254,16 @@ function Invoke-LifecycleReviewedPromotion {
             # current files together before reporting the artifact installed.
             $pins = [CatDesk.DevLocalTarget.ReadOnlyScope]::new()
             try {
-                [void]$pins.File($canonical.Manifest, 128, $false)
-                $installed = $pins.File($canonical.Binary, 128MB, $false)
-                $recorded = [IO.File]::ReadAllText($canonical.Manifest).Trim().ToLowerInvariant()
-                if ($installed.Sha256 -cne $digest -or $recorded -cne $digest) {
-                    throw 'installed pair does not match the completed promotion'
-                }
+                Assert-LifecyclePromotedPair $canonical $digest $pins
             } catch {
                 Write-LifecycleStatus 'REVIEWED_PROMOTION_CANONICAL_READBACK_UNVERIFIED' 'INSPECT_EXISTING_PROMOTION_RESULT'
                 return
             } finally { $pins.Dispose() }
         }
         $detail = if ($receipt.servingState) { $receipt.servingState } else { 'INSPECT_EXISTING_PROMOTION_RESULT' }
+        if ($receipt.state -ceq 'PROMOTION_COMPLETED' -and $detail -ceq 'STOPPED_AFTER_BOUNDED_OWNER') {
+            $detail = Get-LifecyclePromotionServingReadback -Root $root -Canonical $canonical -Digest $digest
+        }
         Write-LifecycleStatus $receipt.state $detail
     } catch {
         $reason = [string]$_.Exception.Message

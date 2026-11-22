@@ -857,9 +857,9 @@ function Get-LocalMcpProbeHeaders {
 }
 
 function Get-LocalMcpReadiness {
-    param($LocalMcp,$Canonical,$ExpectedDaemonProcess=$null)
-    $observed=Invoke-BootstrapSeam -Name "LocalMcp" -Arguments @($LocalMcp,$Canonical,$ExpectedDaemonProcess) -Default {
-        param($endpoint,$identity,$expectedProcess)
+    param($LocalMcp,$Canonical,$ExpectedDaemonProcess=$null,[switch]$RequireBearer)
+    $observed=Invoke-BootstrapSeam -Name "LocalMcp" -Arguments @($LocalMcp,$Canonical,$ExpectedDaemonProcess,[bool]$RequireBearer) -Default {
+        param($endpoint,$identity,$expectedProcess,$requireAuth)
         try { $headers = Get-LocalMcpProbeHeaders -LocalMcp $endpoint } catch {
             $gate = if ($_.Exception.Message -eq 'LOCAL_MCP_AUTH_SCOPE_INVALID') { 'LOCAL_MCP_AUTH_SCOPE_INVALID' } else { 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
             return New-LocalMcpReadinessResult -Ready $false -Gate $gate
@@ -875,12 +875,32 @@ function Get-LocalMcpReadiness {
             if([int]$listener.Pid -ne [int]$expectedProcess.Id){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH'}
             if(-not(Test-CatDeskPinnedProcessMatchesRecoveryIdentity -Process $expectedProcess -SelectedCreation ([string]$listener.CreationTimeUtc) -SelectedPath ([string]$identity.Path))){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH'}
         }
+        if ($requireAuth) {
+            if (-not $headers.ContainsKey('Authorization')) {
+                return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_AUTH_TOKEN_INVALID'
+            }
+            $negativeProbe = '{"jsonrpc":"2.0","id":"catdesk-bootstrap-anonymous","method":"tools/list","params":{}}'
+            $unauthorized = $false
+            try {
+                $response = Invoke-BootstrapSeam -Name 'LocalMcpHttp' -Arguments @($endpoint.Uri,$negativeProbe,@{}) -Default {
+                    param($uri,$body,$probeHeaders)
+                    Invoke-SilentLoopbackHttp -Uri $uri -Method Post -ContentType 'application/json' -Body $body -TimeoutSeconds 3 -Headers $probeHeaders
+                }
+                $unauthorized = $null -ne $response -and [int]$response.StatusCode -eq 401
+            } catch {
+                $failure = $_.Exception.PSObject.Properties['Response']
+                $unauthorized = $null -ne $failure -and $null -ne $failure.Value -and [int]$failure.Value.StatusCode -eq 401
+            }
+            if (-not $unauthorized) {
+                return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'
+            }
+        }
         foreach($request in @(
             @{jsonrpc="2.0";id="catdesk-bootstrap-initialize";method="initialize";params=@{protocolVersion="2025-03-26";capabilities=@{};clientInfo=@{name="catdesk-bootstrap";version="1"}}},
             @{jsonrpc="2.0";id="catdesk-bootstrap-tools";method="tools/list";params=@{}}
         )) {
             try {
-                $response=Invoke-BootstrapSeam -Name "LocalMcpHttp" -Arguments @($endpoint.Uri,($request|ConvertTo-Json -Compress -Depth 5)) -Default { param($uri,$body) Invoke-SilentLoopbackHttp -Uri $uri -Method Post -ContentType "application/json" -Body $body -TimeoutSeconds 5 -Headers $headers }
+                $response=Invoke-BootstrapSeam -Name "LocalMcpHttp" -Arguments @($endpoint.Uri,($request|ConvertTo-Json -Compress -Depth 5),$headers) -Default { param($uri,$body,$probeHeaders) Invoke-SilentLoopbackHttp -Uri $uri -Method Post -ContentType "application/json" -Body $body -TimeoutSeconds 5 -Headers $probeHeaders }
             } catch {
                 $exception=$_.Exception
                 $timedOut=($exception -is [System.Net.WebException] -and $exception.Status -eq [System.Net.WebExceptionStatus]::Timeout) -or ([string]$exception.Message -match '(?i)timed out|timeout')

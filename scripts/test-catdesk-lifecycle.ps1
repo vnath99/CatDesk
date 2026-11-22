@@ -281,6 +281,42 @@ try {
     Require ($promoted.state -ceq 'PROMOTION_COMPLETED' -and $promoted.detail -ceq 'STOPPED_AFTER_BOUNDED_OWNER') 'promotion confirms the exact installed pair without claiming running health'
     Require (($actions -join ',') -ceq 'promote-resolve,promote') 'verified readback does not initiate another promotion'
     $actions.Clear()
+
+    $servingObservation = $promotedResolver.Clone()
+    $servingObservation.ScheduledTaskGet = { $null }
+    $servingObservation.AutostartRunKeyGet = { param($definition) $definition.RunKeyValue + ' -BackendOnly' }
+    $servingObservation.AutostartSupervisorRunning = { $true }
+    $servingObservation.Listener = {
+        param($endpoint,$identity)
+        Require ($identity.Path -ceq $realBinary -and $identity.Sha256 -ceq $digest) 'observer binds the actual new canonical pair'
+        [pscustomobject]@{Pid=3001;CreationTimeUtc='fixture-owner';MatchesCanonical=$true;Sha256=$digest}
+    }
+    $authProbed = [Collections.Generic.List[bool]]::new()
+    $servingObservation.LocalMcpReadiness = {
+        param($endpoint,$identity,$requireAuth)
+        [void]$authProbed.Add($requireAuth)
+        $true
+    }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $servingObservation | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_READY') 'one command reports exact authenticated observed serving'
+    Require ($authProbed.Count -eq 1 -and $authProbed[0] -and ($actions -join ',') -ceq 'promote-resolve,promote') 'serving proof requires bearer and calls no other lifecycle operation'
+    $actions.Clear()
+    $authProbed.Clear()
+    $servingObservation.Listener = { $null }
+    $pendingBackend = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $servingObservation | ConvertFrom-Json
+    Require ($pendingBackend.state -ceq 'PROMOTION_COMPLETED' -and $pendingBackend.detail -ceq 'LOCAL_BACKEND_STARTUP_PENDING' -and $authProbed.Count -eq 0 -and ($actions -join ',') -ceq 'promote-resolve,promote') 'unavailable listener leaves disk completion separate from serving'
+    $actions.Clear()
+
+    $driftObservations = [Collections.Generic.List[int]]::new()
+    $servingObservation.Listener = {
+        [void]$driftObservations.Add(1)
+        [pscustomobject]@{Pid=3001;CreationTimeUtc=[string]$driftObservations.Count;MatchesCanonical=$true;Sha256=$digest}
+    }
+    $driftedBackend = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $servingObservation | ConvertFrom-Json
+    Require ($driftedBackend.state -ceq 'PROMOTION_COMPLETED' -and $driftedBackend.detail -ceq 'LOCAL_BACKEND_READBACK_UNVERIFIED') 'same PID at a new creation time cannot confirm readiness'
+    Require ($driftObservations.Count -eq 2 -and $authProbed.Count -eq 1 -and ($actions -join ',') -ceq 'promote-resolve,promote') 'owner drift produces no retry or another lifecycle operation'
+    $actions.Clear()
+
     $invalidResolver = $resolver.Clone()
     $invalidResolver.PromotionInvokeNative = {
         param($image,$root,$verb,$hash)

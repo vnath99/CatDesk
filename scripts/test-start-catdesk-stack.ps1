@@ -193,7 +193,32 @@ try {
     if($script:authRequests[2].headers.Count -ne 0){throw 'native MCP auth attached to official runtime health'}
     Remove-Item Env:CATDESK_MCP_AUTH_TOKEN -ErrorAction SilentlyContinue
     if(-not (Get-LocalMcpReadiness -LocalMcp $authLocal -Canonical ([pscustomobject]@{})).Ready -or $script:authRequests[3].headers.Count -ne 0){throw 'absent native token changed legacy local probes'}
+    $beforeStrict = $script:authRequests.Count
+    $missingBearer = Get-LocalMcpReadiness -LocalMcp $authLocal -Canonical ([pscustomobject]@{}) -RequireBearer
+    if ($missingBearer.Ready -or $missingBearer.Gate -cne 'LOCAL_MCP_AUTH_TOKEN_INVALID' -or $script:authRequests.Count -ne $beforeStrict) {throw 'strict readiness accepted a legacy unauthenticated endpoint'}
+    $env:CATDESK_MCP_AUTH_TOKEN = ('t' * 32)
+    $script:strictCalls = [Collections.Generic.List[string]]::new()
+    $script:allowAnonymous = $false
+    $strictHttp = {
+        param($uri,$json,$headers)
+        $method = ($json|ConvertFrom-Json).method
+        if (-not $headers.ContainsKey('Authorization')) {
+            [void]$script:strictCalls.Add('anonymous')
+            return [pscustomobject]@{StatusCode=$(if($script:allowAnonymous){200}else{401});Content='{}'}
+        }
+        [void]$script:strictCalls.Add($method)
+        if ($method -ceq 'initialize') {return [pscustomobject]@{StatusCode=200;Content='{"result":{"serverInfo":{}}}'}}
+        return [pscustomobject]@{StatusCode=200;Content='{"result":{"tools":[{"name":"catdesk_instruction"},{"name":"delegated_run_list"}]}}'}
+    }
+    $script:BootstrapSeams.LocalMcpHttp = $strictHttp
+    $strict = Get-LocalMcpReadiness -LocalMcp $authLocal -Canonical ([pscustomobject]@{}) -RequireBearer
+    if (-not $strict.Ready -or ($script:strictCalls -join ',') -cne 'anonymous,initialize,tools/list') {throw "strict readiness gate=$($strict.Gate) calls=$($script:strictCalls -join ',')"}
+    $script:strictCalls.Clear()
+    $script:allowAnonymous = $true
+    $unsafe = Get-LocalMcpReadiness -LocalMcp $authLocal -Canonical ([pscustomobject]@{}) -RequireBearer
+    if ($unsafe.Ready -or ($script:strictCalls -join ',') -cne 'anonymous') {throw 'strict readiness accepted a backend that allowed anonymous access'}
   } finally {
+    [void]$script:BootstrapSeams.Remove('LocalMcpHttp')
     Remove-Item Function:\Invoke-WebRequest
     if($hadNativeAuth){[Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$savedNativeAuth,'Process')}else{Remove-Item Env:CATDESK_MCP_AUTH_TOKEN -ErrorAction SilentlyContinue}
   }
