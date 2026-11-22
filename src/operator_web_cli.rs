@@ -1491,7 +1491,6 @@ fn inspect_review_response(
                     receipt.clone(),
                     &delivery,
                 )?;
-                wake.record_exact_receipt_timer(event_id, &receipt)?;
                 value["deliveryPhase"] = json!(sent.phase);
                 value["receipt"] = json!(receipt);
                 value["receiptCreated"] = json!(true);

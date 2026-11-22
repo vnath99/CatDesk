@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** Timer preparation failure preserves the original submitting event and replay fence. A prior exact receipt with a missing timer can recover it through the existing response observer. [Verification](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** Receipt recovery now includes an exact journaled task-issued manual Wake whose submission is unresolved. A recovered USER receipt leaves response completion as a separate observation. [Verification](docs/verification/MANUAL_WAKE_RECEIPT_RECOVERY_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** Candidate resolution now uses scalar artifact and build-attempt fields before launching the reviewed controller. A malformed reply stays in the resolution phase. This change qualifies the development facade only. [Verification](docs/verification/PROMOTION_CANDIDATE_SELECTION_SHAPE_2026_11_22.json).

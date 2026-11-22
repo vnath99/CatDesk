@@ -111,13 +111,23 @@ where
     guard()?;
     let _owner = store.host_lock()?;
     guard()?;
-    let (_, timer) = store.sent_response_scope(project, target, event)?;
-    if timer.response_state == ResponseState::Complete {
-        return Ok(
-            json!({"responseState":"COMPLETE","alreadyComplete":true,"browserStarted":false,"sendAttempted":false}),
-        );
-    }
+    let missing_timer = match store.sent_response_scope(project, target, event) {
+        Ok((_, timer)) if timer.response_state == ResponseState::Complete => {
+            return Ok(
+                json!({"responseState":"COMPLETE","alreadyComplete":true,"browserStarted":false,"sendAttempted":false}),
+            );
+        }
+        Ok(_) => false,
+        Err(reason) if reason == "RESPONSE_REOBSERVE_TIMER_REQUIRED" => true,
+        Err(reason) => return Err(reason),
+    };
     ensure_source_snapshot_available(store, project, target, Some(event))?;
+    let timer_restored = if missing_timer {
+        guard()?;
+        store.restore_missing_sent_response_timer(project, target, event)?
+    } else {
+        false
+    };
     let attempt = store.begin_response_reobservation(project, target, event)?;
     let result: Result<Value> = (|| {
         guard()?;
@@ -131,6 +141,9 @@ where
         })?;
         let mut result = json!({"responseState":if complete {"COMPLETE"} else {"PENDING"},
             "alreadyComplete":false,"browserStarted":true,"sendAttempted":false});
+        if timer_restored {
+            result["timerRestoredFromReceipt"] = json!(true);
+        }
         if let Some(reason) = witness.get("diagnosticReason") {
             result["diagnosticReason"] = reason.clone();
         }
@@ -404,6 +417,60 @@ mod tests {
             assert_eq!(timer_bytes(&store), before);
             assert_eq!(log_count(&store), 2);
         }
+    }
+
+    #[test]
+    fn reobserve_restores_a_missing_timer_only_from_a_witnessed_exact_receipt() {
+        let (store, delivery) = ready_fixture("reobserve-missing-timer");
+        let event = &delivery.event.event_id;
+        let timer_path = store.root().join(format!("turns/{event}.json"));
+        let witness_path = store
+            .root()
+            .join(format!("logs/submission-start-{event}.json"));
+        let receipt = delivery.receipt.as_ref().unwrap();
+        let witness_bytes = std::fs::read(&witness_path).unwrap();
+        std::fs::remove_file(&timer_path).unwrap();
+        std::fs::remove_file(&witness_path).unwrap();
+        let refused = reobserve_with_observer(
+            &store,
+            "alpha",
+            &delivery.target,
+            event,
+            &|| Ok(()),
+            |_| panic!("missing witness cannot commit"),
+            |_, _, _| panic!("missing witness cannot open a browser"),
+        );
+        assert_eq!(
+            refused.unwrap_err(),
+            "RESPONSE_REOBSERVE_SUBMISSION_WITNESS_REQUIRED"
+        );
+        assert!(!timer_path.exists());
+        assert_eq!(log_count(&store), 0);
+        std::fs::write(&witness_path, &witness_bytes).unwrap();
+
+        let result = reobserve_with_observer(
+            &store,
+            "alpha",
+            &delivery.target,
+            event,
+            &|| Ok(()),
+            |commit| commit(),
+            |current, _, _| {
+                assert_eq!(current, &delivery);
+                let timer = store.timer(event).unwrap().unwrap();
+                assert_eq!(timer.response_state, ResponseState::Observing);
+                assert_eq!(timer.started_utc, receipt.sent_utc);
+                assert!(timer.completed_utc.is_none());
+                Ok(witness(current, "RESPONSE_COMPLETE"))
+            },
+        )
+        .unwrap();
+        assert_eq!(result["timerRestoredFromReceipt"], true);
+        assert_eq!(result["responseState"], "COMPLETE");
+        assert_eq!(result["sendAttempted"], false);
+        assert_eq!(store.delivery(event).unwrap(), Some(delivery.clone()));
+        assert_eq!(std::fs::read(&witness_path).unwrap(), witness_bytes);
+        assert!(!store.root().join(format!("queue/{event}.json")).exists());
     }
 
     #[test]

@@ -9,6 +9,48 @@ pub(crate) struct ResponseReobservation {
 }
 
 impl Store {
+    /// Restore only a missing derivative after an older receipt committed
+    /// before its timer. The current exact delivery and original witness are
+    /// still authority, and a restored timer does not prove a response.
+    pub(crate) fn restore_missing_sent_response_timer(
+        &self,
+        project: &str,
+        target: &Target,
+        event: &str,
+    ) -> Result<bool> {
+        target.validate()?;
+        let _lock = self.lock()?;
+        if self.read_timer(event)?.is_some() {
+            return Ok(false);
+        }
+        let delivery = self
+            .read_delivery(event)?
+            .ok_or("RESPONSE_REOBSERVE_SENT_REQUIRED")?;
+        if delivery.phase != Phase::Sent
+            || delivery.event.project_id != project
+            || delivery.target != *target
+            || self.read_config()?.targets.get(project) != Some(target)
+        {
+            return Err("RESPONSE_REOBSERVE_SCOPE_INVALID".into());
+        }
+        let receipt = delivery
+            .receipt
+            .as_ref()
+            .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
+        if !self.submission_start_path(event).is_file() {
+            return Err("RESPONSE_REOBSERVE_SUBMISSION_WITNESS_REQUIRED".into());
+        }
+        let started = self.submission_started_utc(&delivery)?;
+        if started < delivery.event.created_utc
+            || started > receipt.sent_utc
+            || receipt.sent_utc > now()
+        {
+            return Err("RESPONSE_REOBSERVE_SCOPE_INVALID".into());
+        }
+        self.record_exact_receipt_timer_locked(&delivery, receipt)?;
+        Ok(true)
+    }
+
     pub(crate) fn sent_response_scope(
         &self,
         project: &str,

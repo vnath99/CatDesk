@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — receipt recovery across interruption.** Development ensures exact reconciliation cannot commit a receipt before its timer. Windows fixtures also exercised recovery of a missing legacy timer and independent response completion. Installed Web acceptance remains open. [Evidence](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).
+
 **November 22 — self-Wake recovery.** Development can recover an exact USER receipt for an interrupted task-issued manual Wake through the existing no-resend command. Actual installed recovery and the first Web continuation remain open. [Evidence](docs/verification/MANUAL_WAKE_RECEIPT_RECOVERY_2026_11_22.json).
 
 **November 22 — qualify the development one-command promotion selection.** Windows fixture controllers exercised malformed candidate JSON and verified that the facade stops at the canonical resolver. The protected installed transition and first installed Web cycle remain open. [Evidence](docs/verification/PROMOTION_CANDIDATE_SELECTION_SHAPE_2026_11_22.json).

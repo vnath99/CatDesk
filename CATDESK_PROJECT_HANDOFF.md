@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 4:39 p.m. EST.** Exact receipt reconciliation prepares the timer inside the existing Wake transaction. For an earlier committed receipt with a missing timer, the existing reobserve command can restore it from the exact submission witness before observing a response. [Verification](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).
+
 **November 22, 4:33 p.m. EST.** A task-issued manual Wake can now use the existing proof-only submission recovery. The original receipt CAS and no-replay witness are reused. The signed-in OneDrive recycle bin was empty and the cloud Desktop had one item with no Projects folder. Recover the original common Git store and linked-worktree records from another authoritative backup. [Verification](docs/verification/MANUAL_WAKE_RECEIPT_RECOVERY_2026_11_22.json).
 
 **November 22, 4:27 p.m. EST.** The development one-command promotion facade refuses an array-valued SHA, attempt ID, state or root response before candidate execution. Its previous exact-result reconciliation remains available. The frozen backend still uses existing authenticated promotion after an eligible independent review and producer attestation. [Verification](docs/verification/PROMOTION_CANDIDATE_SELECTION_SHAPE_2026_11_22.json).

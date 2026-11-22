@@ -309,7 +309,6 @@ fn selected_work(
                 receipt.clone(),
                 prior,
             )?;
-            wake.record_exact_receipt_timer(&record.event_id, &receipt)?;
             Ok(
                 json!({"action":"web_work_reconcile","projectId":project,"requestId":request_id,
                 "eventId":record.event_id,"phase":result.phase,"receipt":result.receipt,

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T21:39:08.8242157Z",
+  "scope": "WINDOWS_DEVELOPMENT_WAKE_RECEIPT_AND_TIMER_INTERRUPTION_RECOVERY",
+  "baseline": "0c06a8877b0414f07e384818d8b7e9c13fbb4468",
+  "priorBehavior": "Exact receipt reconciliation could commit and archive the delivery before a separate response timer write. An interruption in that window left a verified SENT receipt unavailable to response reobservation.",
+  "behavior": {
+    "receiptAndTimerUseExistingStoreLock": true,
+    "timerPreparedBeforeSent": true,
+    "timerFailurePreservesSubmittingAndOriginalQueue": true,
+    "legacyTimerRestoreRequiresCurrentExactTargetReceiptAndSubmissionWitness": true,
+    "restoredTimerStart": "Original receipt sentUtc",
+    "completedTimestampRequiresFreshResponseObservation": true,
+    "retainedReceiptRewrittenDuringTimerRepair": false,
+    "sendOrRetryAuthorized": false
+  },
+  "qualification": {
+    "scope": "Disposable Windows Wake store and fixture response observations",
+    "windowsWakeReceiptAndReobservationTestsPassed": 20,
+    "windowsBackendDeliveryAndRecoveryTestsPassed": 13,
+    "strictWakeClippyPassed": true,
+    "cases": [
+      "Non-file timer destination leaves the original SUBMITTING delivery, queue bytes and witness untouched",
+      "Successful exact reconciliation supplies the bound observing timer without a second caller write",
+      "Missing original witness refuses restoration before the browser observer",
+      "A witnessed exact receipt restores its missing timer, then a separate fresh response observation completes it",
+      "Existing complete timers, failure handling and unrelated project scheduling remain covered"
+    ]
+  },
+  "release": {
+    "browserStarts": 0,
+    "externalMessagesSent": 0,
+    "historicalRecordsChanged": 0,
+    "productionMutations": 0,
+    "firstInstalledWebCycleAccepted": false
+  }
+}

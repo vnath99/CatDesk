@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — recover a missing timer for a proven delivery.** On supporting development builds, `operator web review reobserve` can restore a missing timer for the original `SENT` event when the current target and original submission witness match. The restored timer starts from the committed receipt. Only a fresh exact response observation can complete it. [Verification](docs/verification/WAKE_RECEIPT_TIMER_RECOVERY_2026_11_22.json).
+
 **November 22 — reconcile an interrupted task-issued self-Wake.** Supporting development builds accept `operator web review reconcile-submission --project-id <project> --event-id <original-manual-wake-event>`. It observes the exact conversation using the existing bounded browser owner. A committed receipt requires the original submission witness, exact task-journal identity and fresh USER proof. Observe the response timer separately. [Verification](docs/verification/MANUAL_WAKE_RECEIPT_RECOVERY_2026_11_22.json).
 
 **November 22 — identify an unproven candidate selection.** `REVIEWED_PROMOTION_RESOLUTION_UNPROVEN` at `RESOLVE_CANDIDATE` means the canonical resolver returned a result without the required exact candidate identity or shape. The supporting facade stops before starting a candidate. Use an approved native resolver and inspect the existing result for the original digest. [Verification](docs/verification/PROMOTION_CANDIDATE_SELECTION_SHAPE_2026_11_22.json).

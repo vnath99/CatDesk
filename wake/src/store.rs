@@ -2094,6 +2094,11 @@ impl Store {
         {
             return Err("RECEIPT_BINDING_MISMATCH".into());
         }
+        if expected.is_some() {
+            // Prepare the bound timer before committing the receipt. Failure
+            // leaves the original SUBMITTING fence and queued event intact.
+            self.record_exact_receipt_timer_locked(&delivery, &receipt)?;
+        }
         delivery.phase = Phase::Sent;
         delivery.receipt = Some(receipt);
         delivery.reason = None;
@@ -2158,6 +2163,14 @@ impl Store {
     pub fn record_exact_receipt_timer(&self, id: &str, receipt: &Receipt) -> Result<()> {
         let _lock = self.lock()?;
         let delivery = self.read_delivery(id)?.ok_or("TIMER_EVENT_MISSING")?;
+        self.record_exact_receipt_timer_locked(&delivery, receipt)
+    }
+
+    fn record_exact_receipt_timer_locked(
+        &self,
+        delivery: &Delivery,
+        receipt: &Receipt,
+    ) -> Result<()> {
         if !matches!(delivery.phase, Phase::Submitting | Phase::Sent)
             || receipt.schema_version != PROTOCOL_VERSION
             || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
@@ -2202,7 +2215,11 @@ impl Store {
             target_digest: delivery.target.digest.clone(),
             started_utc: receipt.sent_utc,
             completed_utc: None,
-            response_state: ResponseState::Observing,
+            response_state: if delivery.persisted_response_error().is_some() {
+                ResponseState::Attention
+            } else {
+                ResponseState::Observing
+            },
         };
         timer.validate()?;
         atomic(&path, &timer)
@@ -2969,12 +2986,30 @@ mod task_continuation_receipt_tests {
                 .is_err()
         );
         assert_eq!(store.delivery(id).unwrap(), Some(prior.clone()));
+        assert!(store.timer(id).unwrap().is_none());
         let witness = fs::read(store.submission_start_path(id)).unwrap();
+        let queued = fs::read(store.event_path(id)).unwrap();
+        // A non-file timer destination models a failed timer write/read before
+        // receipt commit. The existing submission fence remains authoritative.
+        fs::create_dir(store.timer_path(id)).unwrap();
+        assert!(
+            store
+                .reconcile_task_continuation_sent_expected(id, receipt.clone(), &prior)
+                .is_err()
+        );
+        assert_eq!(store.delivery(id).unwrap(), Some(prior.clone()));
+        assert_eq!(fs::read(store.event_path(id)).unwrap(), queued);
+        assert_eq!(fs::read(store.submission_start_path(id)).unwrap(), witness);
+        fs::remove_dir(store.timer_path(id)).unwrap();
         let recovered = store
             .reconcile_task_continuation_sent_expected(id, receipt.clone(), &prior)
             .unwrap();
         assert_eq!(recovered.phase, Phase::Sent);
         assert_eq!(recovered.receipt, Some(receipt.clone()));
+        let timer = store.timer(id).unwrap().unwrap();
+        assert_eq!(timer.response_state, ResponseState::Observing);
+        assert_eq!(timer.started_utc, receipt.sent_utc);
+        assert!(timer.completed_utc.is_none());
         assert_eq!(fs::read(store.submission_start_path(id)).unwrap(), witness);
         assert!(
             store
