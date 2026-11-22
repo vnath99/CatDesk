@@ -484,24 +484,44 @@ function Get-AutostartTask {
     }
 }
 
+function Test-AutostartPrincipalIdentity([string]$Observed, [string]$Expected) {
+    if ([string]::IsNullOrWhiteSpace($Observed) -or [string]::IsNullOrWhiteSpace($Expected)) { return $false }
+    if ($Observed -ieq $Expected) { return $true }
+    try {
+        $authority = [Security.Principal.SecurityIdentifier]
+        $expectedSid = ([Security.Principal.NTAccount]::new($Expected)).Translate($authority)
+        $observedSid = if ($Observed -cmatch '^S-1-') { [Security.Principal.SecurityIdentifier]::new($Observed) }
+        else { ([Security.Principal.NTAccount]::new($Observed)).Translate($authority) }
+        return $observedSid.Equals($expectedSid)
+    } catch { return $false }
+}
+
 function Test-OwnedAutostartTask {
     param($Task, $Definition)
     if ($null -eq $Task) { return $false }
     $actions = @($Task.Actions)
     if ($actions.Count -ne 1 -or $actions[0].Execute -ne $Definition.Execute -or $actions[0].Arguments -ne $Definition.Arguments) { return $false }
     $principal = $Task.Principal
-    if ($null -eq $principal -or [string]$principal.UserId -ne $Definition.UserId -or [string]$principal.LogonType -notmatch 'Interactive' -or [string]$principal.RunLevel -notmatch 'Limited') { return $false }
+    if ($null -eq $principal -or [string]$principal.LogonType -cnotin @('Interactive', 'InteractiveToken') -or
+        [string]$principal.RunLevel -cne 'Limited' -or -not (Test-AutostartPrincipalIdentity -Observed $principal.UserId -Expected $Definition.UserId)) { return $false }
     $triggers = @($Task.Triggers)
     if ($triggers.Count -ne 1 -or [string]$triggers[0].CimClass.CimClassName -notmatch 'Logon') { return $false }
     $settings = $Task.Settings
-    if ($null -eq $settings -or -not [bool]$settings.StartWhenAvailable -or -not [bool]$settings.AllowStartIfOnBatteries -or -not [bool]$settings.DontStopIfGoingOnBatteries -or [string]$settings.MultipleInstances -notmatch 'IgnoreNew' -or -not (Test-UnlimitedAutostartExecutionTime -Limit $settings.ExecutionTimeLimit)) { return $false }
+    if ($null -eq $settings -or $settings.StartWhenAvailable -ne $true -or
+        $settings.DisallowStartIfOnBatteries -ne $false -or $settings.StopIfGoingOnBatteries -ne $false -or
+        [string]$settings.MultipleInstances -cne 'IgnoreNew' -or
+        -not (Test-UnlimitedAutostartExecutionTime -Limit $settings.ExecutionTimeLimit)) { return $false }
     return $true
 }
 
 function Test-UnlimitedAutostartExecutionTime {
     param($Limit)
     if ($Limit -is [TimeSpan]) { return $Limit -eq [TimeSpan]::Zero }
-    try { return ([TimeSpan]$Limit) -eq [TimeSpan]::Zero } catch { return $false }
+    if ([string]::IsNullOrWhiteSpace([string]$Limit)) { return $false }
+    $duration = [TimeSpan]::Zero
+    if ([TimeSpan]::TryParse([string]$Limit, [ref]$duration)) { return $duration -eq [TimeSpan]::Zero }
+    try { return [Xml.XmlConvert]::ToTimeSpan([string]$Limit) -eq [TimeSpan]::Zero }
+    catch { return $false }
 }
 
 function Get-OwnedAutostartRunKeyValue {

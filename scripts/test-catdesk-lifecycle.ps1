@@ -50,9 +50,9 @@ function New-OwnedTask($Definition) {
         TaskPath = $Definition.TaskPath
         State = 'Ready'
         Actions = @([pscustomobject]@{ Execute = $Definition.Execute; Arguments = $Definition.Arguments })
-        Principal = [pscustomobject]@{ UserId = $Definition.UserId; LogonType = 'InteractiveToken'; RunLevel = 'Limited' }
+        Principal = [pscustomobject]@{ UserId = $Definition.UserId; LogonType = 'Interactive'; RunLevel = 'Limited' }
         Triggers = @([pscustomobject]@{ CimClass = [pscustomobject]@{ CimClassName = 'MSFT_TaskLogonTrigger' } })
-        Settings = [pscustomobject]@{ StartWhenAvailable = $true; AllowStartIfOnBatteries = $true; DontStopIfGoingOnBatteries = $true; MultipleInstances = 'IgnoreNew'; ExecutionTimeLimit = [TimeSpan]::Zero; AllowDemandStart = $true }
+        Settings = [pscustomobject]@{ StartWhenAvailable = $true; DisallowStartIfOnBatteries = $false; StopIfGoingOnBatteries = $false; MultipleInstances = 'IgnoreNew'; ExecutionTimeLimit = 'PT0S'; AllowDemandStart = $true }
     }
 }
 
@@ -331,6 +331,12 @@ try {
         if ($fixtureScheduledMode -ne 'full-stack') { $task.Actions[0].Arguments += ' -BackendOnly' }
         if ($fixtureScheduledMode -eq 'disabled') { $task.State = 'Disabled' }
         if ($fixtureScheduledMode -eq 'foreign') { $task.Principal.UserId = 'another-user' }
+        if ($fixtureScheduledMode -eq 'battery-blocked') { $task.Settings.DisallowStartIfOnBatteries = $true }
+        if ($fixtureScheduledMode -eq 'battery-policy-missing') { $task.Settings.PSObject.Properties.Remove('StopIfGoingOnBatteries') }
+        if ($fixtureScheduledMode -eq 'finite-duration') { $task.Settings.ExecutionTimeLimit = 'PT1M' }
+        if ($fixtureScheduledMode -eq 'wrong-logon') { $task.Principal.LogonType = 'InteractiveOrPassword' }
+        if ($fixtureScheduledMode -eq 'other-sid') { $task.Principal.UserId = 'S-1-5-18' }
+        if ($fixtureScheduledMode -eq 'matching-sid') { $task.Principal.UserId = $fixtureActualSid }
         $task
     }
     $coldTask.ScheduledTaskStart = {
@@ -349,12 +355,23 @@ try {
         $authProbed[0]) 'fresh promotion starts the exact stopped backend scheduler once and verifies its authenticated listener'
     $actions.Clear()
     $authProbed.Clear()
-    foreach ($fixtureScheduledMode in @('disabled', 'full-stack', 'foreign')) {
+    foreach ($fixtureScheduledMode in @('disabled', 'full-stack', 'foreign', 'battery-blocked', 'battery-policy-missing', 'finite-duration', 'wrong-logon', 'other-sid')) {
         $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 1 -TestSeams $coldTask | ConvertFrom-Json
         Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'STOPPED_AFTER_BOUNDED_OWNER' -and
             ($actions -join ',') -ceq 'promote-resolve,promote') "fresh promotion leaves the $fixtureScheduledMode task untouched"
         $actions.Clear()
     }
+    $sidTask = $coldTask.Clone()
+    $actualUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $fixtureActualSid = $actualUser.User.Value
+    $fixtureActualUser = $actualUser.Name
+    $actualUser.Dispose()
+    $sidTask.CurrentUser = { $fixtureActualUser }
+    $fixtureScheduledMode = 'matching-sid'
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 1 -TestSeams $sidTask | ConvertFrom-Json
+    Require ($observed.detail -ceq 'LOCAL_BACKEND_READY' -and ($actions -join ',') -ceq 'promote-resolve,promote,scheduled-backend-start') 'task account text and SID are equivalent only after exact Windows SID resolution'
+    $actions.Clear()
+    $authProbed.Clear()
     $fixtureScheduledMode = 'backend'
     $startUnobserved = $coldTask.Clone()
     $startUnobserved.Listener = { $null }
