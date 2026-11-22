@@ -1190,3 +1190,11 @@ Evidence: [docs/verification/STOPPED_PROMOTION_AFTER_ROLLBACK_2026_11_22.json](d
 Agent: Codex. Source: 4db84cb257bcf97609a32af82244d0ff448fd9bc. Outcome: partial. The compiled one-hash resolver suppresses replay after the retirement journal moves on. It read two original retained archives in a disposable copy, matched the newest verified generation, refused the old hash before candidate selection and preserved 19 installed file pins. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/PROMOTION_RETAINED_HISTORY_AFTER_SUCCESSOR_2026_11_22.json](docs/verification/PROMOTION_RETAINED_HISTORY_AFTER_SUCCESSOR_2026_11_22.json); command: cargo test --locked --offline --bin catdesk daemon_reload:: -- --test-threads=1; exit 0; SHA-256 38810fff94686aaa23072f6ccc16433c333d1c7167d838dd0bd4382418fc717e.
+
+<!-- catdesk-activity:backend-supervised-promotion-rollback-20261122 sha256:f6d5ec017220b48a9679917c80b445615c2a74d302a61a90381133ccad596065 -->
+
+## 2026-11-22T11:36:37Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 07d390dcd89444b7779ff0cff1d0b00c7d63e9f5. Outcome: partial. The existing backend-only supervisor now requests rollback after a verified owned failure of a completed reviewed promotion. Disposable Windows tests authenticated the real retained release after failed startup and after an interrupted pair restore, and preserved the pending-result and authentication fences. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/BACKEND_SUPERVISED_PROMOTION_ROLLBACK_2026_11_22.json](docs/verification/BACKEND_SUPERVISED_PROMOTION_ROLLBACK_2026_11_22.json); command: pwsh -NoProfile -File scripts/test-catdesk-autostart-supervisor.ps1; exit 0; SHA-256 b0e9491e11e27e1f36dca737d60e06d193458232a838b9af2950c7b294a34573.

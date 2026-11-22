@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T11:36:37Z",
+  "scope": "DISPOSABLE_WINDOWS_BACKEND_ONLY_SUPERVISED_ROLLBACK",
+  "sourceCommit": "07d390dcd89444b7779ff0cff1d0b00c7d63e9f5",
+  "baselineSourceCommit": "eb86b8b292054e2c17559172c8b08ec4840fd352",
+  "privateFixtureSha256": "1424ce9620a7897a95d2e713c7a490361ad8dfa98f955fc1c5d4682ef63dd7de",
+  "selectedPredecessorSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+  "confirmedOwnedFailure": {
+    "startedUtc": "2026-11-22T11:35:17.1844742Z",
+    "finishedUtc": "2026-11-22T11:35:50.1235425Z",
+    "candidateFixtureSha256": "95aa0dffb45b6931e9fc20f44b46deaf07f803dbf5f36cb4f2a387d677781b91",
+    "failedCurrentExitCode": 23,
+    "ownedStartsForRollback": 2,
+    "pendingNativeResultRefusedRollback": true,
+    "missingBinaryUsedExistingRepair": true,
+    "result": "LOCAL_BACKEND_READY",
+    "source": "LAST_KNOWN_GOOD"
+  },
+  "interruptedPair": {
+    "startedUtc": "2026-11-22T11:35:17.1845582Z",
+    "finishedUtc": "2026-11-22T11:35:43.8180128Z",
+    "candidateFixtureSha256": "6d477230970c6af0d3c26fef94833ef36dc10702d55bf5a74e66a42dd3b9ef22",
+    "startedOnlyTheRestoredPredecessor": true,
+    "missingBearerLeftPairAndSelectorIntact": true,
+    "result": "LOCAL_BACKEND_READY",
+    "source": "LAST_KNOWN_GOOD"
+  },
+  "bothScenarios": {
+    "anonymousMcpStatus": 401,
+    "authenticatedMcpStatus": 200,
+    "bothRetainedSlotsAndConfigPreserved": true,
+    "originalPromotionRecordsPreserved": true,
+    "repeatedRecoveryStartedNoChild": true,
+    "ownedProcessesExited": true,
+    "privateListenersClosed": true,
+    "fixturesRemoved": true
+  },
+  "tests": {
+    "windowsPowerShell51": [
+      "bootstrap",
+      "lifecycle",
+      "autostart supervisor"
+    ],
+    "powerShell7": [
+      "bootstrap",
+      "lifecycle",
+      "autostart supervisor"
+    ]
+  },
+  "limits": "The test used disposable release authority, a Windows process fixture that exits nonzero, and the real frozen predecessor over private loopback. The existing backend-only supervisor command wiring had a separate regression test. The installed full-stack startup owner, production candidate, fixed port and Web cycle were outside the run.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}
