@@ -160,6 +160,26 @@ pub(crate) fn require_completed_task_continuations(
     record: &crate::web_work_state::WorkRecord,
     wake: &Store,
 ) -> Result<(), String> {
+    require_task_continuations(project, record, wake, None)
+}
+
+/// Pausing may park an untouched intent. It leaves every original journal
+/// row and envelope available for the same task when the lane is resumed.
+pub(crate) fn require_pause_safe_task_continuations(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    wake: &Store,
+    current: &Target,
+) -> Result<(), String> {
+    require_task_continuations(project, record, wake, Some(current))
+}
+
+fn require_task_continuations(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    wake: &Store,
+    park_unclaimed_at: Option<&Target>,
+) -> Result<(), String> {
     let Some(link) = record.task_assignment.as_ref() else {
         return Ok(());
     };
@@ -180,8 +200,16 @@ pub(crate) fn require_completed_task_continuations(
             continue;
         }
         let id = manual_wake_event_id(&call)?;
-        let delivery = wake
-            .delivery(id)?
+        let observed = wake.delivery(id)?;
+        if observed.is_none()
+            && let Some(current) = park_unclaimed_at
+            && let Some(event) =
+                wake.unclaimed_task_manual_wake(id, &project.project.project_id, current)?
+        {
+            validate_selection(project, record, current, &event, &call_id, &call)?;
+            continue;
+        }
+        let delivery = observed
             .filter(|delivery| delivery.phase == Phase::Sent)
             .ok_or("WEB_WORK_CONTINUATION_PENDING")?;
         validate_selection(

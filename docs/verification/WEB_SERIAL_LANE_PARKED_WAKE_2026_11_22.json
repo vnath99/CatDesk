@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T22:33:00Z",
+  "scope": "WINDOWS_DEVELOPMENT_PARK_UNTOUCHED_TASK_WAKE",
+  "baseline": "7f2b49a50bbcf02afc357cbfe56ceafa0568cdb2",
+  "behavior": "Only explicit lane pause can park a task-owned manual Wake that is still untouched. The exact project lease is held through the transition, and the scoped sender must check that same lease and the active lane.",
+  "proof": "The original journal call validates the exact queued event, current generation and task. A delivery record, archive, response timer, submission witness or pre-edit witness is incompatible with the untouched-queue proof.",
+  "resumption": "Resume and reselect the original assignment, then use its existing one-shot delivery. The original event and call remain authoritative.",
+  "observations": {
+    "partialSubmissionWitnessPreventedPause": true,
+    "claimPreventedPause": true,
+    "untouchedWakeCouldBePausedButCouldNotBeYielded": true,
+    "pausedScopedSenderRefusedBeforeClaim": true,
+    "peerEditedOnlyItsOwnWorktree": true,
+    "resumedOriginalEventAndCallReachedSubmissionFence": true,
+    "newPauseRefusedAfterExactSubmittingFence": true,
+    "queueEnvelopePreservedByteForByte": true,
+    "browserStarted": false,
+    "userMessageSent": false
+  },
+  "wakeSchedulerRegressions": {
+    "passed": 11,
+    "failed": 0
+  },
+  "rootWindowsTests": {
+    "serialLanePassed": 3,
+    "manualDeliveryPassed": 2,
+    "failed": 0
+  },
+  "productionChanges": false,
+  "liveChatGptWebAcceptance": false
+}

@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 22:33 UTC — prove a queued self-Wake can be paused before submission.** The original envelope stays in the Wake queue while the next project takes the lane. The proof checks exact task identity and the absence of any claim or submission evidence. [Evidence](docs/verification/WEB_SERIAL_LANE_PARKED_WAKE_2026_11_22.json).
+
 **2026-11-22 22:27 UTC — pause Web assignments and skip explicitly revoked waiters.** The existing lane records a pause against the exact request and keeps unresolved active work fenced. Pending peers can advance when they have an authorized call. [Evidence](docs/verification/WEB_SERIAL_LANE_PAUSE_2026_11_22.json).
 
 **2026-11-22 22:21 UTC — advance the first waiting Web assignment after a safe release.** Queue entries use the original assignment pins and follow authenticated effect-call arrival order. A mismatched or already journaled call cannot change lane ownership. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_FIFO_2026_11_22.json).

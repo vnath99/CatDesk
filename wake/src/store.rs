@@ -1785,6 +1785,53 @@ impl Store {
         let _lock = self.read_lock()?;
         self.read_delivery(id)
     }
+
+    /// Read one untouched, task-owned manual Wake. Its caller must hold the
+    /// same project lease as the scoped sender while acting on this evidence.
+    pub fn unclaimed_task_manual_wake(
+        &self,
+        id: &str,
+        project: &str,
+        target: &Target,
+    ) -> Result<Option<Event>> {
+        if !valid_id(id) || !valid_id(project) {
+            return Err("QUEUE_EVENT_INVALID".into());
+        }
+        let _lock = self.read_lock()?;
+        if self.read_config()?.targets.get(project) != Some(target) {
+            return Err("TARGET_GENERATION_STALE".into());
+        }
+        for witness in [
+            self.delivery_path(id),
+            self.archive_path(id),
+            self.submission_start_path(id),
+            self.timer_path(id),
+            self.pre_edit_refusal_path(id),
+        ] {
+            match fs::symlink_metadata(witness) {
+                Ok(_) => return Ok(None),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err("SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE".into()),
+            }
+        }
+        let queue = self.event_path(id);
+        match fs::symlink_metadata(&queue) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err("QUEUE_UNAVAILABLE".into()),
+            Ok(_) => {}
+        }
+        let event: Event = read(&queue)?;
+        event.validate()?;
+        if event.event_id != id
+            || event.project_id != project
+            || event.target_generation != target.generation
+            || !event.requires_scoped_manual_wake()?
+        {
+            return Err("WEB_TASK_MANUAL_WAKE_SELECTION_CHANGED".into());
+        }
+        Ok(Some(event))
+    }
+
     /// A host holds a separate lifetime lock. Only after that lock is acquired
     /// can it reclaim pre-submit work. Submitting/Sent/Attention are never replayed.
     pub fn claim(&self, event: &Event, lease: &HostLease) -> Result<Delivery> {

@@ -3465,11 +3465,6 @@ pub(crate) mod tests {
         )
         .await;
         assert!(wake_queued.get("error").is_none(), "{wake_queued}");
-        assert_eq!(
-            change("alpha", "lane-pause").await.unwrap_err(),
-            "WEB_WORK_CONTINUATION_PENDING"
-        );
-        assert_eq!(execution_lane::status(root, "alpha")["status"], "ACTIVE");
         let event_id = wake_queued["result"]["structuredContent"]["eventId"]
             .as_str()
             .unwrap();
@@ -3479,6 +3474,14 @@ pub(crate) mod tests {
             .into_iter()
             .find(|event| event.event_id == event_id)
             .unwrap();
+        let host = wake.host_lock().unwrap();
+        wake.claim(&event, &host).unwrap();
+        drop(host);
+        assert_eq!(
+            change("alpha", "lane-pause").await.unwrap_err(),
+            "WEB_WORK_CONTINUATION_PENDING"
+        );
+        assert_eq!(execution_lane::status(root, "alpha")["status"], "ACTIVE");
         // Only fixture receipt/response data. Production and the browser are outside the test.
         sent(&wake, &event);
         wake.complete_timer(event_id).unwrap();
@@ -3557,6 +3560,101 @@ pub(crate) mod tests {
                 .unwrap()
                 .contains("{ 1 }")
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn serial_web_lane_parks_untouched_wake_and_resumes_its_original_event() {
+        use crate::web_work_state::execution_lane::{self, Transition};
+        let (alpha, beta) = paired_fixtures(false);
+        let wake = ready_manual_wake(&alpha);
+        let root = &alpha.control;
+        let action = |project, transition| {
+            crate::web_work::transition_execution_lane(root, project, "request-a", transition)
+        };
+        action("alpha", Transition::Select).unwrap();
+        wake.complete_timer(alpha.pins["sourceEventId"].as_str().unwrap())
+            .unwrap();
+        let queued = call(
+            &alpha,
+            manual_request(&alpha, "park-original", "alpha-turn"),
+        )
+        .await;
+        assert!(queued.get("error").is_none(), "{queued}");
+        let id = queued["result"]["structuredContent"]["eventId"]
+            .as_str()
+            .unwrap();
+        let envelope = wake.root().join("queue").join(format!("{id}.json"));
+        let original_bytes = fs::read(&envelope).unwrap();
+        let witness = wake
+            .root()
+            .join("logs")
+            .join(format!("submission-start-{id}.json"));
+        fs::write(&witness, b"incomplete fixture witness").unwrap();
+        assert_eq!(
+            action("alpha", Transition::Pause).unwrap_err(),
+            "WEB_WORK_CONTINUATION_PENDING"
+        );
+        assert_eq!(fs::read(&witness).unwrap(), b"incomplete fixture witness");
+        fs::remove_file(&witness).unwrap();
+        assert_eq!(
+            action("alpha", Transition::Yield).unwrap_err(),
+            "WEB_WORK_CONTINUATION_PENDING"
+        );
+        assert_eq!(
+            action("alpha", Transition::Pause).unwrap()["status"],
+            "PAUSED"
+        );
+        assert_eq!(execution_lane::status(root, "alpha")["status"], "PAUSED");
+        assert_eq!(
+            crate::web_work::fixture_manual_submission_fence(root, "alpha").unwrap_err(),
+            "WEB_WORK_LANE_PAUSED"
+        );
+        assert!(wake.delivery(id).unwrap().is_none());
+        assert!(wake.timer(id).unwrap().is_none());
+        assert_eq!(fs::read(&envelope).unwrap(), original_bytes);
+
+        let preview = call(&beta, request(
+            &beta, "peer-preview", "patch.preview",
+            json!({"patchId":"peer-patch","operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 65 }"}]}),
+        )).await;
+        assert!(preview.get("error").is_none(), "{preview}");
+        let edited = call(
+            &beta,
+            request(
+                &beta,
+                "peer-edit",
+                "patch.apply",
+                json!({"patchId":"peer-patch"}),
+            ),
+        )
+        .await;
+        assert!(edited.get("error").is_none(), "{edited}");
+        assert!(
+            fs::read_to_string(beta.task.join("src/lib.rs"))
+                .unwrap()
+                .contains("{ 65 }")
+        );
+        assert!(
+            fs::read_to_string(alpha.task.join("src/lib.rs"))
+                .unwrap()
+                .contains("{ 1 }")
+        );
+        action("beta", Transition::Yield).unwrap();
+        action("alpha", Transition::Resume).unwrap();
+        action("alpha", Transition::Select).unwrap();
+        assert_eq!(fs::read(&envelope).unwrap(), original_bytes);
+        let fenced = crate::web_work::fixture_manual_submission_fence(root, "alpha").unwrap();
+        assert_eq!(fenced["eventId"], id);
+        assert_eq!(fenced["taskCallId"], "park-original");
+        assert_eq!(fenced["phase"], "SUBMITTING");
+        let receiptless = wake.delivery(id).unwrap().unwrap();
+        assert!(receiptless.receipt.is_none());
+        assert_eq!(
+            action("alpha", Transition::Pause).unwrap_err(),
+            "WEB_WORK_CONTINUATION_PENDING"
+        );
+        assert_eq!(wake.delivery(id).unwrap(), Some(receiptless));
+        assert_eq!(fs::read(&envelope).unwrap(), original_bytes);
     }
 
     async fn central_http_route_fixture(cached: bool) {

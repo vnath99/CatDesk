@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** An untouched manual Wake can be parked without retiring its request. A claim or partial submission witness keeps the existing fence. The release and live acceptance gates remain open. [Evidence](docs/verification/WEB_SERIAL_LANE_PARKED_WAKE_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** A paused request cannot claim the lane on a later effect call, and revocation no longer leaves a queued task at the head. The active-owner recovery guard still applies. [Evidence](docs/verification/WEB_SERIAL_LANE_PAUSE_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** The serial lane persists deduplicated waiters. A late attempt stays behind the existing queue, and a previously recorded call cannot reenter the lane. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_FIFO_2026_11_22.json).

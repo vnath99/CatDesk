@@ -960,11 +960,21 @@ pub(crate) fn transition_execution_lane(
         let wake = catdesk_wake::store::Store::open_read_only(
             &wake_protocol_client::wake_root_for_workspace(&workspace)?,
         )?;
-        crate::project_mcp_task::require_completed_task_continuations(
-            prepared.scope(),
-            &record,
-            &wake,
-        )?;
+        if action == Transition::Pause {
+            let current = protocol::Target::new(paired.generation, paired.url.clone())?;
+            crate::project_mcp_task::require_pause_safe_task_continuations(
+                prepared.scope(),
+                &record,
+                &wake,
+                &current,
+            )?;
+        } else {
+            crate::project_mcp_task::require_completed_task_continuations(
+                prepared.scope(),
+                &record,
+                &wake,
+            )?;
+        }
     }
     mcp::with_current_project_web_target(
         &workspace,
