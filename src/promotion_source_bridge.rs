@@ -72,7 +72,6 @@ fn command(image: &Path, workspace: &Path, config: &Path, token: &str) -> Comman
 pub(super) struct SourceBridge {
     owner: OwnedCandidateChild,
     _config: crate::windows_protected_fs::RetainedReviewedArtifact,
-    _lifecycle: Option<fs::File>,
 }
 
 impl SourceBridge {
@@ -112,7 +111,6 @@ impl SourceBridge {
         let mut bridge = Self {
             owner,
             _config: config_pin,
-            _lifecycle: None,
         };
         let outcome = (|| {
             if !wait_child_ready(bridge.owner.child_mut(), 3200, Duration::from_secs(15)) {
@@ -169,30 +167,42 @@ pub(super) fn qualify(
     )
 }
 
-pub(super) fn start_if_required(
+pub(super) fn prepare_local_source(
     workspace: &Path,
     auth: &ReviewedPromotionAuthorizationV1,
-) -> Result<Option<SourceBridge>, String> {
-    if !auth.local_backend_only {
-        return Ok(None);
-    }
-    let listener_possible = [
+) -> Result<(fs::File, Option<SourceBridge>), String> {
+    with_promotion_lifecycle(workspace, listener_possible, || {
+        retirement::admit_stopped_source(workspace, auth)?;
+        SourceBridge::start(workspace, auth).map(|(bridge, _)| bridge)
+    })
+}
+
+fn listener_possible() -> bool {
+    [
         IpAddr::V4(Ipv4Addr::LOCALHOST),
         IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
     ]
     .iter()
     .any(|ip| {
         TcpStream::connect_timeout(&SocketAddr::new(*ip, 3200), Duration::from_millis(250)).is_ok()
-    });
-    if listener_possible {
-        return Ok(None);
-    }
+    })
+}
+
+fn with_promotion_lifecycle(
+    workspace: &Path,
+    listener_possible: impl FnOnce() -> bool,
+    start_bridge: impl FnOnce() -> Result<SourceBridge, String>,
+) -> Result<(fs::File, Option<SourceBridge>), String> {
     let _mutation = retirement::mutation_lease(workspace)?;
     let lifecycle = lifecycle_lease(workspace)?;
-    retirement::admit_stopped_source(workspace, auth)?;
-    let (mut bridge, _) = SourceBridge::start(workspace, auth)?;
-    bridge._lifecycle = Some(lifecycle);
-    Ok(Some(bridge))
+    // A live listener can disappear during handoff. Decide only after
+    // startup is fenced, and hold the lease through the terminal receipt.
+    let bridge = if listener_possible() {
+        None
+    } else {
+        Some(start_bridge()?)
+    };
+    Ok((lifecycle, bridge))
 }
 
 #[cfg(test)]
@@ -241,6 +251,43 @@ mod tests {
         drop(lease);
         drop(lifecycle_lease(&root).unwrap());
         assert_eq!(fs::read(&path).unwrap(), b"existing lifecycle lock");
+        assert_eq!(root.canonicalize().unwrap().parent(), Some(temp.as_path()));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn live_promotion_source_retains_public_lifecycle_lease() {
+        let temp = std::env::temp_dir().canonicalize().unwrap();
+        let root = temp.join(format!("CatDesk-LiveSourceFixture-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join(".catdesk/release-pair-control")).unwrap();
+        let path = root.join(".catdesk/release-pair-control/stopped-owner.lock");
+        fs::write(&path, b"existing lifecycle lock").unwrap();
+
+        let competing = lifecycle_lease(&root).unwrap();
+        assert!(
+            with_promotion_lifecycle(
+                &root,
+                || panic!("must not inspect a listener while startup owns the lease"),
+                || panic!("must not start a second owner"),
+            )
+            .is_err()
+        );
+        drop(competing);
+
+        let (lease, bridge) = with_promotion_lifecycle(
+            &root,
+            || {
+                assert!(lifecycle_lease(&root).is_err());
+                true
+            },
+            || panic!("a live listener must not start a bridge"),
+        )
+        .unwrap();
+        assert!(bridge.is_none());
+        assert!(lifecycle_lease(&root).is_err());
+        drop(lease);
+        drop(lifecycle_lease(&root).unwrap());
+        assert_eq!(fs::read(path).unwrap(), b"existing lifecycle lock");
         assert_eq!(root.canonicalize().unwrap().parent(), Some(temp.as_path()));
         fs::remove_dir_all(root).unwrap();
     }

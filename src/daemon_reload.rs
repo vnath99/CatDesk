@@ -835,24 +835,28 @@ pub fn run_reviewed_promotion_worker(args: ReviewedPromotionWorkerArgsV1) -> Res
     // its existing bounded headless mode. The normal handoff/promotion remains
     // the sole writer of the canonical pair and release authority.
     #[cfg(windows)]
-    let mut source_bridge = match source_bridge::start_if_required(&workspace, &authorization) {
-        Ok(bridge) => bridge,
-        Err(error) => {
-            // No promotion helper ran. Preserve a terminal ambiguous result;
-            // never replay a consumed claim or assert cleanup from this label.
-            atomic_json_write(
-                &reviewed_promotion_result_path(&workspace),
-                &ReviewedPromotionResultV1 {
-                    schema_version: 1,
-                    state: "PROMOTION_FAILED_OR_AMBIGUOUS".into(),
-                    authorization_generation: authorization.generation,
-                    candidate_sha256: authorization.candidate_sha256,
-                    transaction_id: authorization.transaction_id,
-                    serving_state: None,
-                },
-            )?;
-            return Err(error);
+    let (_lifecycle, mut source_bridge) = if authorization.local_backend_only {
+        match source_bridge::prepare_local_source(&workspace, &authorization) {
+            Ok((lease, bridge)) => (Some(lease), bridge),
+            Err(error) => {
+                // No promotion helper ran. Preserve a terminal ambiguous result;
+                // never replay a consumed claim or assert cleanup from this label.
+                atomic_json_write(
+                    &reviewed_promotion_result_path(&workspace),
+                    &ReviewedPromotionResultV1 {
+                        schema_version: 1,
+                        state: "PROMOTION_FAILED_OR_AMBIGUOUS".into(),
+                        authorization_generation: authorization.generation,
+                        candidate_sha256: authorization.candidate_sha256,
+                        transaction_id: authorization.transaction_id,
+                        serving_state: None,
+                    },
+                )?;
+                return Err(error);
+            }
         }
+    } else {
+        (None, None)
     };
     let result = crate::operator_facade::run_fixed_powershell_invocation_blocking(invocation);
     #[cfg(windows)]
