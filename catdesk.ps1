@@ -1330,11 +1330,20 @@ function Get-LifecyclePromotionServingReadback {
 }
 
 function Test-LifecycleBoundPromotionReceipt($Receipt) {
-    return ($Receipt -is [pscustomobject] -and
+    return ($Receipt -is [pscustomobject] -and $Receipt.state -is [string] -and
         $Receipt.state -cin @('PROMOTION_COMPLETED','PROMOTION_FAILED_OR_AMBIGUOUS') -and
         $Receipt.existingResult -is [bool] -and $Receipt.existingResult -and
         ($Receipt.authorizationGeneration -is [int] -or $Receipt.authorizationGeneration -is [long]) -and
         $Receipt.authorizationGeneration -gt 0)
+}
+
+function Test-LifecyclePromotionReply($Receipt, [string]$Digest) {
+    return ($Receipt -is [pscustomobject] -and $Receipt.candidateSha256 -is [string] -and
+        $Receipt.candidateSha256 -ceq $Digest -and $Receipt.state -is [string] -and
+        $Receipt.state -cin @('PROMOTION_COMPLETED','PROMOTION_FAILED_OR_AMBIGUOUS',
+            'PROMOTION_IN_PROGRESS','PROMOTION_CLAIMED_PENDING_UNPROVEN') -and
+        ($null -eq $Receipt.servingState -or ($Receipt.servingState -is [string] -and
+            $Receipt.servingState -cin @('STOPPED_AFTER_BOUNDED_OWNER','UNVERIFIED'))))
 }
 
 function Invoke-LifecycleReviewedPromotion {
@@ -1367,6 +1376,9 @@ function Invoke-LifecycleReviewedPromotion {
             $phase = 'RUN_CANDIDATE'
             try {
                 $receipt = Invoke-PinnedPromotionController $root $candidate $digest 'promote' $digest
+                if (!(Test-LifecyclePromotionReply $receipt $digest)) {
+                    throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
+                }
             } catch {
                 if ($_.Exception.Message -cne 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT') { throw }
                 # The candidate exited and both streams closed. Observe the
@@ -1382,11 +1394,7 @@ function Invoke-LifecycleReviewedPromotion {
                 }
             }
         }
-        if ($receipt.candidateSha256 -cne $digest -or $receipt.state -cnotin @(
-            'PROMOTION_COMPLETED','PROMOTION_FAILED_OR_AMBIGUOUS','PROMOTION_IN_PROGRESS','PROMOTION_CLAIMED_PENDING_UNPROVEN')) {
-            throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
-        }
-        if ($null -ne $receipt.servingState -and $receipt.servingState -cnotin @('STOPPED_AFTER_BOUNDED_OWNER','UNVERIFIED')) {
+        if (!(Test-LifecyclePromotionReply $receipt $digest)) {
             throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
         }
         if ($receipt.state -ceq 'PROMOTION_COMPLETED') {

@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T20:44:59.2131417Z",
+  "scope": "FIRST_INSTALLED_WEB_PREREQUISITES_WITH_WINDOWS_PROMOTION_RECOVERY_FIXTURES",
+  "baseline": "d782086cb60a7eb0220d46c660c8d3528aab331b",
+  "architecture": {
+    "pullRequest": 8,
+    "merged": true,
+    "mergeCommit": "2ee39c5ebff763cef1d220d2b0dd70380e10f82c",
+    "integratedCommitIsAnAncestor": true,
+    "architectureDocumentsAlreadyIntegrated": 4
+  },
+  "independentReview": {
+    "session": "nov21-independent-56aa-backend-review",
+    "exactSource": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "workspaceRestored": true,
+    "existingDraftPreserved": true,
+    "lastKnownRegisteredNoSendAdmission": "WEB_REVIEW_PROJECT_BUSY",
+    "githubAssociatedPullRequests": [
+      {
+        "number": 4,
+        "draft": true,
+        "exactSourceIsHead": false
+      },
+      {
+        "number": 32,
+        "closed": true,
+        "exactSourceIsHead": false,
+        "reviewCount": 0
+      }
+    ],
+    "prAdvisoryDoesNotSupplyNativeAcknowledgedReview": true,
+    "qualifiedAuthorizedIdleRouteFound": false,
+    "exactStartApprovalRequested": false,
+    "reviewInvoked": false,
+    "producerInvoked": false
+  },
+  "workspaceRecovery": {
+    "registeredProjectRootPresent": false,
+    "assignedLinkedWorktreePresent": false,
+    "originalSharedGitStorePresent": false,
+    "archivedRegisteredWorkingFilesVerified": 2088,
+    "archivedRegisteredWorkingBytesVerified": 54404628,
+    "retainedWorktreeMarkerFilesVerified": 2,
+    "retainedPerWorktreeAdminRecords": 0,
+    "olderBackupHasTargetWorktreeAdminRecords": false,
+    "exactEditBranchAdvertisedByOrigin": false,
+    "publicBaseCommitWasPreviouslyVerified": true,
+    "originalBindingRestored": false,
+    "reason": "Each retained pointer targets missing per-worktree metadata in the same absent shared Git repository. Reconstructing both as new clones or resetting their branches would not preserve the original worktree histories and ownership.",
+    "supportedNext": "Recover and hash-verify the original shared Git store, including both worktrees' HEAD, index and backlinks. Verify the historical branch and cleanliness before publishing the two roots or applying supported Git worktree repair."
+  },
+  "promotionQualification": {
+    "sourceOnly": true,
+    "windowsPowerShell51LifecyclePassed": true,
+    "powerShell7LifecyclePassed": true,
+    "realWindowsFixtureControllers": true,
+    "fixtures": [
+      "Malformed JSON with bound terminal result",
+      "Well-formed reply with array-valued candidate identity triggers exact readback",
+      "Valid pending reply performs no extra controller call",
+      "Unbound or mismatched retained result stays fenced",
+      "Unclosed pipe preserves the existing reconciliation path"
+    ],
+    "noCandidateReplay": true,
+    "noPromotionToInstalledPair": true,
+    "qualifiedNativeReviewAttestationStillRequired": true
+  },
+  "installed": {
+    "canonicalBackendStillServingPort3200": true,
+    "wakeDesired": "STOPPED",
+    "wakeSelected": "1.0.0-dev.84",
+    "wakeFallback": "1.0.0-dev.83",
+    "originalV3SubmissionRepeated": false,
+    "productionOrRollbackChanges": 0
+  },
+  "nextReleaseAction": "After an eligible exact review is started, verified, and acknowledged, invoke the existing reviewed producer for its record. For frozen 56aa, use the existing authenticated catdesk_reviewed_build_promotion PREFLIGHT against the exact attested build, then follow its reviewed confirmation and installed readback. Do not use the new facade with the legacy canonical controller.",
+  "firstInstalledWebCycleAccepted": false
+}

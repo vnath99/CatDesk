@@ -610,7 +610,13 @@ static class PromotionRefusal {
         File.AppendAllText("refusal-invocations.txt", args[1] + "\n");
         bool ambiguous = mode.StartsWith("ambiguous-", StringComparison.Ordinal);
         if (ambiguous && args[1] == "promote") {
-            Console.WriteLine("{invalid");
+            if (mode == "ambiguous-wrong-shape") {
+                Console.WriteLine("{\"state\":\"PROMOTION_COMPLETED\",\"candidateSha256\":[\"" + args[2] + "\"]}");
+            } else if (mode == "ambiguous-pending") {
+                Console.WriteLine("{\"state\":\"PROMOTION_IN_PROGRESS\",\"candidateSha256\":\"" + args[2] + "\"}");
+            } else {
+                Console.WriteLine("{invalid");
+            }
             return 0;
         }
         if (ambiguous && args[1] == "promote-resolve" && File.ReadAllLines("refusal-invocations.txt").Length == 3) {
@@ -663,6 +669,8 @@ static class PromotionRefusal {
         @{ Mode = 'legacy-resolver'; State = 'REVIEWED_PROMOTION_RESOLVER_PROTOCOL_UNAVAILABLE'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
         @{ Mode = 'legacy-candidate'; State = 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'; Phase = 'READ_ORIGINAL_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
         @{ Mode = 'ambiguous-complete'; State = 'PROMOTION_COMPLETED'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
+        @{ Mode = 'ambiguous-wrong-shape'; State = 'PROMOTION_COMPLETED'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
+        @{ Mode = 'ambiguous-pending'; State = 'PROMOTION_IN_PROGRESS'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote' }
         @{ Mode = 'ambiguous-failed'; State = 'PROMOTION_FAILED_OR_AMBIGUOUS'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
         @{ Mode = 'ambiguous-mismatch'; State = 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'; Phase = 'READ_ORIGINAL_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
         @{ Mode = 'ambiguous-unbound'; State = 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'; Phase = 'READ_ORIGINAL_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }

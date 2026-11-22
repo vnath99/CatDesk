@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** The review route and original disposable Git backing are separate prerequisites. Existing review and task records are preserved. The development promotion reader rejects non-scalar or unbound identity and uses one read-only lookup for an unusable exited reply. Production remains on the frozen installed release. [Evidence](docs/verification/FIRST_WEB_RELEASE_PREREQUISITES_2026_11_22.json).
+
 **November 22 WAKE-LIFECYCLE.** Restore of the exact backend review workspace passed, and its original contract stays DRAFT. The review and producer dependency applies to protected promotion. Development has a separate bounded result-readback improvement. First installed Web execution still requires a compatible installed pair and verified disposable project and linked-worktree identities. [Verification](docs/verification/WAKE_LIFECYCLE_RESUME_2026_11_22.json).
 
 **Wake lifecycle checkpoint, November 22.** The original signed V3 operation ended with `NOT_FOUND_NO_RETRY` in the protected ledger. Existing packages and project state matched, and the enrolled administrator verified all 16 retained intake files and the original ACL checks. The installed service discarded the first failing internal check. The attempt stays closed. Fresh signed pre-intent refusal reporting is source-only. Later routine upgrades retain the existing reviewed local policy and qualified predecessor. [Evidence](docs/verification/WAKE_V3_ORIGINAL_ATTEMPT_RECONCILIATION_2026_11_22.json).
