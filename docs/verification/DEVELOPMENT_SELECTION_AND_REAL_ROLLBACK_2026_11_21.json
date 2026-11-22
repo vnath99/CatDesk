@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T03:35:31.8921837Z",
+  "scope": "REAL_UNPROTECTED_DEVELOPMENT_SELECTION_MCP_SERVING_AND_AUTOMATIC_RECOVERY",
+  "sourceHead": "c9442f95d121c218f108e4d6f8d645098b492896",
+  "tools": [
+    "operator web-dev-runtime prepare",
+    "operator web-dev-runtime run-backend",
+    "operator web-dev-runtime record-verification",
+    "operator web-dev-runtime update-package"
+  ],
+  "firstPreparation": {
+    "outcome": "TIMED_OUT_DURING_RUNTIME_COPY",
+    "timeoutSeconds": 35,
+    "filesCopied": 2575,
+    "expectedFiles": 9911,
+    "selectionPublished": false,
+    "authorityPublished": false,
+    "ownedProcessExited": true,
+    "partialFixtureRetained": true
+  },
+  "qualifiedAttempt": {
+    "probeSha256": "c2bba789977f1da75b5b9fc66241e104bebebfa1b6bdbd09160f8fc505fb352c",
+    "resultSha256": "49e766f894cc5b2e22b6586681e41d801ca3c913647d26184cb8cb1e51f86155",
+    "startedUtc": "2026-11-22T03:33:17.2212015Z",
+    "maximumOwnerSeconds": 350,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "prepared": "PREPARED_STOPPED",
+    "previousVerification": "VERIFICATION_RECORDED",
+    "candidateSelection": "PACKAGE_UPDATED_STOPPED",
+    "previous": {
+      "sourceCommit": "5a939df267719322758df0598fd46532f07b8126",
+      "appSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+      "healthReceiptSha256": "5410cb50affa45a111d99822efdcdab694da7c219e4d588727d0ab125e58ed91",
+      "recovery": "CURRENT_PACKAGE_VERIFIED"
+    },
+    "candidate": {
+      "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+      "appSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+      "healthReceiptSha256": "e6b01fe8f26ef4267d76d064cfd3b8013a854af050d95b69c54ecca1296e698b",
+      "recovery": "CURRENT_PACKAGE_VERIFIED"
+    },
+    "restored": {
+      "sourceCommit": "5a939df267719322758df0598fd46532f07b8126",
+      "healthReceiptSha256": "a13b73cdf295ad489dbc352e1b54afcfe774e3b8d8ba8d70ec6f06f934f539a3",
+      "recovery": "PACKAGE_PREVIOUS_RESTORED_STOPPED",
+      "previousAndRestoredPointerByteEqual": true
+    },
+    "fault": "REVERSIBLE_EXCLUSIVE_READ_HANDLE",
+    "candidateBytesUnchangedAfterFault": true,
+    "eachBoot": {
+      "anonymousHttpStatus": 401,
+      "authenticatedHttpStatus": 200,
+      "toolCount": 78,
+      "cleanup": "FOREGROUND_BACKEND_EXITED"
+    },
+    "productionPinsBeforeAfterEqual": 7,
+    "browserStarts": 0,
+    "releaseAuthorityCreated": false
+  },
+  "firstWakeSelection": {
+    "installedPolicyAllowsLocalUpdates": true,
+    "installedSelectionGeneration": "LEGACY",
+    "fixedIntakePresent": false,
+    "ordinaryPathRefusal": "WAKE_LOCAL_USER_SELECTION_RECONSTRUCTION_REFUSED",
+    "requiredTransition": "SIGNED_REVIEWED_SOURCE_RECONSTRUCTION",
+    "operatorPacketStartByUtc": "2026-11-23T02:52:13Z",
+    "fixedParentNonAdminAddSubdirectoryAccessObserved": true,
+    "fixedParentObjectsCreated": 0,
+    "accessTestEstablishesReviewOrStagingAuthority": false
+  },
+  "compatibleBackendReview": {
+    "githubPullRequest": 32,
+    "mergeCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "submittedGitHubReviewCount": 0,
+    "draftId": "nov21-independent-56aa-backend-review",
+    "draftNativeHash": "fnv1a64:62f007ba83fc1791",
+    "draftStatus": "DRAFT",
+    "eligibleReviewerAssigned": false,
+    "existingWebRoute": "WEB_REVIEW_PROJECT_BUSY",
+    "reviewStartApprovalRequired": true,
+    "producerInvoked": false
+  },
+  "stillOpen": [
+    "Actual protected first Wake selection with verified fallback",
+    "Genuine independent review and backend producer attestation",
+    "Protected backend promotion and persistent serving verification",
+    "Installed rollback and routine broker updates",
+    "Installed ChatGPT Web edit, verification, Git checkpoint and self-Wake"
+  ]
+}

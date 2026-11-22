@@ -678,3 +678,11 @@ Evidence: [docs/verification/BACKEND_PROMOTE_FACADE_2026_11_21.json](docs/verifi
 Agent: CatDesk development. Source: e0c286f7976c2f2be9174fde78876db5699191a0. Outcome: partial. Both PowerShell editions exercised the actual promotion facade with real disposable Windows resolver and candidate executables. Both candidates proved exclusive read access to the canonical file, confirming the resolver and its pins had exited first. Test-owned processes exited and exact fixture files were cleaned up. The native responses were simulated. Next: Independently verify the refreshed Wake selection once the enrolled administrator completes it. Continue the exact compatible backend review and producer, then demonstrate the actual installed Web work cycle and guarded rollback.
 
 Evidence: [docs/verification/BACKEND_PROMOTE_WINDOWS_PROCESS_HANDOFF_2026_11_21.json](docs/verification/BACKEND_PROMOTE_WINDOWS_PROCESS_HANDOFF_2026_11_21.json); command: catdesk.ps1 promote <fixture-artifact-sha256> in each supported PowerShell edition; exit 0; SHA-256 2b30e030de8a0f3fbace82e63b679a27066f53c7c59437db987caa986ec8fd45.
+
+<!-- catdesk-activity:nov21-real-development-selection-rollback sha256:baa4ad92f7df0414c9e7427ce825e6be8b34293ecf1b3725ec06b6c831a4ea6a -->
+
+## 2026-11-22T03:35:31.8921837Z — WAKE-LIFECYCLE
+
+Agent: CatDesk Codex. Source: c9442f95d121c218f108e4d6f8d645098b492896. Outcome: partial. The isolated development controller selected and served the exact compatible backend, then automatically restored and served the verified fallback after Windows denied access to the selected image. All three real processes drained and seven protected pins matched. Next: Verify the already prepared signed first Wake selection after the enrolled administrator completes it. Assign the frozen compatible backend contract to an eligible independent reviewer, then produce the attestation and qualify protected promotion, persistent serving, rollback and the installed Web cycle.
+
+Evidence: [docs/verification/DEVELOPMENT_SELECTION_AND_REAL_ROLLBACK_2026_11_21.json](docs/verification/DEVELOPMENT_SELECTION_AND_REAL_ROLLBACK_2026_11_21.json); command: operator web-dev-runtime prepare, run-backend, record-verification and update-package against a disposable Windows store; exit 0; SHA-256 c0b5b9cf2c6eafd32184ecdae551eb530083795d1aaef1ca9f9694cad87fe445.
