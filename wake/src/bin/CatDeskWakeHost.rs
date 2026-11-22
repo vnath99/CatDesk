@@ -138,7 +138,9 @@ fn read_frozen_broker_request(path: &Path) -> Result<Vec<u8>> {
 #[cfg(windows)]
 fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
     use catdesk_wake::{
-        install_broker_client::connect_fixed_broker_for_approval,
+        install_broker_client::{
+            connect_fixed_broker_for_approval, connect_fixed_broker_for_local_update,
+        },
         install_broker_policy::load_fixed_broker_policy_read_only,
         install_broker_preflight::inspect_fixed_broker_read_only,
     };
@@ -201,11 +203,14 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
             let bytes = read_frozen_broker_request(&path)?;
             // Fixed policy/service/pipe attestation precedes the one write.
             // No state-root, service-start, signing or settings argument exists.
-            let client = connect_fixed_broker_for_approval(&policy)?;
             if local_update {
-                client.submit_local_user_selection_v1(&bytes).map(Some)
+                connect_fixed_broker_for_local_update(&policy)?
+                    .submit_local_user_selection_v1(&bytes)
+                    .map(Some)
             } else {
-                client.submit_same_state_approval_v3(&bytes).map(Some)
+                connect_fixed_broker_for_approval(&policy)?
+                    .submit_same_state_approval_v3(&bytes)
+                    .map(Some)
             }
         }
         _ => Err("WAKE_INSTALL_BROKER_ARGUMENTS_INVALID".into()),

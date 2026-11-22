@@ -30,6 +30,7 @@ use std::{
         io::{AsRawHandle, FromRawHandle, OwnedHandle},
     },
     ptr,
+    time::{Duration, Instant},
 };
 
 const SYSTEM_SID: &str = "S-1-5-18";
@@ -82,6 +83,9 @@ const MAX_SID_BYTES: usize = 68;
 const MAX_SECURITY_CHARS: usize = 2048;
 const WRITE_TIMEOUT_MS: u32 = 5000;
 const ERROR_IO_PENDING: u32 = 997;
+const LOCAL_PIPE_START_WAIT: Duration = Duration::from_secs(2);
+const LOCAL_PIPE_POLL_INTERVAL: Duration = Duration::from_millis(50);
+const ERROR_FILE_NOT_FOUND: i32 = 2;
 const WAIT_OBJECT_0: u32 = 0;
 const WAIT_TIMEOUT: u32 = 258;
 const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
@@ -1204,41 +1208,99 @@ pub(crate) fn local_user_complete_reply_matches(
 pub fn connect_fixed_broker_for_approval(
     policy: &BrokerProtectedPolicyV1,
 ) -> Result<FixedBrokerApprovalClient<'_>> {
-    connect_at(policy, FIXED_BROKER_PIPE_NAME)
+    connect_at(policy, FIXED_BROKER_PIPE_NAME, false)
+}
+
+/// An enrolled local update may arrive before a just-started service has
+/// created its pipe. Only a missing pipe is polled, before any connection.
+pub fn connect_fixed_broker_for_local_update(
+    policy: &BrokerProtectedPolicyV1,
+) -> Result<FixedBrokerApprovalClient<'_>> {
+    policy.current_process_local_updater()?;
+    connect_at(policy, FIXED_BROKER_PIPE_NAME, true)
+}
+
+fn try_open_client_pipe(pipe_name: &str) -> std::io::Result<OwnedHandle> {
+    let raw = unsafe {
+        CreateFileW(
+            wide(pipe_name).as_ptr(),
+            PIPE_CLIENT_ACCESS,
+            0,
+            ptr::null_mut(),
+            OPEN_EXISTING,
+            FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IMPERSONATION,
+            ptr::null_mut(),
+        )
+    };
+    if raw == INVALID_HANDLE_VALUE || raw.is_null() {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(unsafe { OwnedHandle::from_raw_handle(raw) })
 }
 
 fn open_client_pipe(pipe_name: &str) -> Result<OwnedHandle> {
-    owned(
-        unsafe {
-            CreateFileW(
-                wide(pipe_name).as_ptr(),
-                PIPE_CLIENT_ACCESS,
-                0,
-                ptr::null_mut(),
-                OPEN_EXISTING,
-                FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IMPERSONATION,
-                ptr::null_mut(),
-            )
-        },
-        "WAKE_BROKER_CLIENT_PIPE_UNAVAILABLE",
-    )
+    try_open_client_pipe(pipe_name).map_err(|_| "WAKE_BROKER_CLIENT_PIPE_UNAVAILABLE".into())
+}
+
+fn wait_for_local_update_pipe(
+    pipe_name: &str,
+    timeout: Duration,
+    mut check_service: impl FnMut() -> Result<()>,
+) -> Result<OwnedHandle> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        check_service()?;
+        match try_open_client_pipe(pipe_name) {
+            Ok(pipe) => {
+                check_service()?;
+                return Ok(pipe);
+            }
+            Err(error) if error.raw_os_error() == Some(ERROR_FILE_NOT_FOUND) => {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err("WAKE_BROKER_CLIENT_LOCAL_PIPE_NOT_READY_NO_REQUEST".into());
+                }
+                std::thread::sleep(remaining.min(LOCAL_PIPE_POLL_INTERVAL));
+                if Instant::now() >= deadline {
+                    return Err("WAKE_BROKER_CLIENT_LOCAL_PIPE_NOT_READY_NO_REQUEST".into());
+                }
+            }
+            Err(_) => return Err("WAKE_BROKER_CLIENT_PIPE_UNAVAILABLE".into()),
+        }
+    }
 }
 
 fn connect_at<'a>(
     policy: &'a BrokerProtectedPolicyV1,
     pipe_name: &str,
+    wait_for_local_pipe: bool,
 ) -> Result<FixedBrokerApprovalClient<'a>> {
     let (service_sid, operator_sid) = policy.checked_endpoint_sids()?;
     let expected_pipe = expected_pipe_sddl(service_sid, operator_sid)?;
     let service_sid_bytes = service_sid_bytes(service_sid)?;
     let snapshot = inspect_fixed_broker_read_only()?;
-    let pipe = open_client_pipe(pipe_name)?;
-    // The connected object, not the name or an earlier WaitNamedPipe lookup,
-    // supplies all peer facts. Nothing has yet been written to this pipe.
+    let service = fixed_service()?;
+    let (pipe, expected_local_pid) = if wait_for_local_pipe {
+        let expected_pid = service_status(&service)?.process_id;
+        let pipe = wait_for_local_update_pipe(pipe_name, LOCAL_PIPE_START_WAIT, || {
+            // Readiness only. The live process and pipe are still attested
+            // below before this connection can become a submission client.
+            if !service_matches(&service_status(&service)?, expected_pid) {
+                return Err("WAKE_BROKER_CLIENT_SERVICE_MISMATCH".into());
+            }
+            Ok(())
+        })?;
+        (pipe, Some(expected_pid))
+    } else {
+        (open_client_pipe(pipe_name)?, None)
+    };
+    // The connected object, not the pipe name or the readiness observation,
+    // supplies the peer facts. Nothing has been written to this pipe.
     let pipe_sddl = exact_pipe_security(&pipe, &expected_pipe)?;
     let server_pid = connected_server(&pipe)?;
-    let service = fixed_service()?;
-    if !service_matches(&service_status(&service)?, server_pid) {
+    if expected_local_pid.is_some_and(|pid| pid != server_pid)
+        || !service_matches(&service_status(&service)?, server_pid)
+    {
         return Err("WAKE_BROKER_CLIENT_SERVICE_MISMATCH".into());
     }
     let (process, process_creation) = pinned_process(server_pid)?;
@@ -1679,16 +1741,19 @@ mod tests {
         fn GetCurrentProcessId() -> u32;
     }
 
-    fn fixture_pipe() -> (String, OwnedHandle) {
+    fn fixture_pipe_name() -> String {
         let suffix = NEXT.fetch_add(1, Ordering::Relaxed);
-        let name = format!(
+        format!(
             r"\\.\pipe\CatDeskBrokerClientFixture-{}-{suffix}",
             std::process::id()
-        );
-        let server = owned(
+        )
+    }
+
+    fn fixture_server(name: &str) -> OwnedHandle {
+        owned(
             unsafe {
                 CreateNamedPipeW(
-                    wide(&name).as_ptr(),
+                    wide(name).as_ptr(),
                     PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
                     PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS,
                     1,
@@ -1700,8 +1765,82 @@ mod tests {
             },
             "fixture create failed",
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    fn fixture_pipe() -> (String, OwnedHandle) {
+        let name = fixture_pipe_name();
+        let server = fixture_server(&name);
         (name, server)
+    }
+
+    #[test]
+    fn local_update_waits_for_an_absent_pipe_and_opens_it_once_without_writing() {
+        let name = fixture_pipe_name();
+        assert_eq!(
+            try_open_client_pipe(&name).unwrap_err().raw_os_error(),
+            Some(ERROR_FILE_NOT_FOUND)
+        );
+        let mut service_observations = 0;
+        let mut server = None;
+        let _pipe = wait_for_local_update_pipe(&name, Duration::from_secs(1), || {
+            service_observations += 1;
+            if service_observations == 2 {
+                server = Some(fixture_server(&name));
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(service_observations, 3);
+        let mut available = u32::MAX;
+        assert_ne!(
+            unsafe {
+                PeekNamedPipe(
+                    server.unwrap().as_raw_handle(),
+                    ptr::null_mut(),
+                    0,
+                    ptr::null_mut(),
+                    &mut available,
+                    ptr::null_mut(),
+                )
+            },
+            0
+        );
+        assert_eq!(available, 0);
+    }
+
+    #[test]
+    fn local_update_pipe_wait_refuses_busy_owner_change_and_timeout() {
+        let (name, _server) = fixture_pipe();
+        let _first_client = open_client_pipe(&name).unwrap();
+        let mut service_observations = 0;
+        let busy = wait_for_local_update_pipe(&name, Duration::from_secs(1), || {
+            service_observations += 1;
+            Ok(())
+        })
+        .unwrap_err();
+        assert_eq!(busy, "WAKE_BROKER_CLIENT_PIPE_UNAVAILABLE");
+        assert_eq!(service_observations, 1);
+
+        let name = fixture_pipe_name();
+        let mut service_observations = 0;
+        let changed = wait_for_local_update_pipe(&name, Duration::from_secs(1), || {
+            service_observations += 1;
+            if service_observations == 2 {
+                return Err("WAKE_BROKER_CLIENT_SERVICE_MISMATCH".into());
+            }
+            Ok(())
+        })
+        .unwrap_err();
+        assert_eq!(changed, "WAKE_BROKER_CLIENT_SERVICE_MISMATCH");
+        assert_eq!(service_observations, 2);
+
+        let expired =
+            wait_for_local_update_pipe(&name, Duration::from_millis(10), || Ok(())).unwrap_err();
+        assert_eq!(
+            expired,
+            "WAKE_BROKER_CLIENT_LOCAL_PIPE_NOT_READY_NO_REQUEST"
+        );
     }
 
     #[test]
