@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "scope": "SOURCE_FACADE_WITH_REAL_WINDOWS_CHILD_REFUSAL_FIXTURES",
+  "verifiedUtc": "2026-11-22T04:42:58.0896346Z",
+  "sourceCommit": "3aaf313cd12d7a1203f10cf78d0cc05b6e16b4e7",
+  "testedCheckoutSha256": {
+    "catdesk.ps1": "997e91329560967a6cdaa6edc5b5b705edbb3b565579e7b121d22f12c6eba872",
+    "scripts/test-catdesk-lifecycle.ps1": "e21b18d0db87fc857b02dd39127b733fdbf09627bda1b0f1f3613a7d2c3f7fc4"
+  },
+  "before": {
+    "command": "pwsh.exe -NoProfile -File scripts/test-catdesk-lifecycle.ps1",
+    "exitCode": 1,
+    "resolverState": "REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT"
+  },
+  "after": {
+    "powerShell7ExitCode": 0,
+    "windowsPowerShell51ExitCode": 0,
+    "resolverExit2": {
+      "state": "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD",
+      "detail": "RESOLVE_CANDIDATE",
+      "nativeInvocations": ["promote-resolve"]
+    },
+    "candidateExit2": {
+      "state": "REVIEWED_PROMOTION_REVIEW_REQUIRED",
+      "detail": "RUN_CANDIDATE",
+      "nativeInvocations": ["promote-resolve", "promote"]
+    },
+    "genericRefusalCases": ["unknown code", "extra fields", "JSON array", "stderr content", "unexpected exit code"],
+    "rawDiagnosticContentPublished": false,
+    "automaticRetries": 0
+  },
+  "protectedPromotionInvoked": false,
+  "installedAcceptance": false
+}

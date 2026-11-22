@@ -742,3 +742,11 @@ Evidence: [docs/verification/WAKE_ROUTINE_BROKER_REPRODUCIBLE_BUILD_2026_11_21.j
 Agent: Codex. Source: b001f57bbeee1979bbf012234314f060ee07294f. Outcome: partial. Disposable Windows executables proved exclusive name replacement, launch exclusion and exact rollback on NTFS. The reviewed installed broker hash matched on readback. Next: Use the existing signed first Wake selection and independent backend review paths. Before deploying a later broker, qualify a durable startup block and interruption recovery with the retained fallback.
 
 Evidence: [docs/verification/WAKE_BROKER_IMAGE_REPLACEMENT_HANDLE_PROOF_2026_11_21.json](docs/verification/WAKE_BROKER_IMAGE_REPLACEMENT_HANDLE_PROOF_2026_11_21.json); command: Bounded Windows NTFS fixture with two harmless executables and a native rename; exit 0; SHA-256 4492545ae76eea5ac2c63c6e22501d6f322c11443dedc297c225e8109e3d9cf8.
+
+<!-- catdesk-activity:nov21-one-hash-native-refusals sha256:0aaee4a098b683c706e598ced7f1599930e97483b0b6975c7d5c3cf111870b5c -->
+
+## 2026-11-22T04:42:58.0896346Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 3aaf313cd12d7a1203f10cf78d0cc05b6e16b4e7. Outcome: partial. One-hash promotion now preserves the native refusal and phase. Both Windows PowerShell editions passed with disposable child processes. Next: Use the existing signed first Wake selection and independent backend review paths. Qualify a durable startup block and interrupted recovery before replacing the installed broker.
+
+Evidence: [docs/verification/BACKEND_PROMOTE_NATIVE_REFUSALS_2026_11_21.json](docs/verification/BACKEND_PROMOTE_NATIVE_REFUSALS_2026_11_21.json); command: scripts/test-catdesk-lifecycle.ps1 in PowerShell 7 and Windows PowerShell 5.1; exit 0; SHA-256 249b6179707d1baa1b5e9c697c5419265863c7d0764d80f0a015b3a0572fdcc0.
