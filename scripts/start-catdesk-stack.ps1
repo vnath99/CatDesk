@@ -5,6 +5,7 @@ param(
     [string]$ConfigPath = (Join-Path ([Environment]::GetFolderPath("UserProfile")) ".catdesk\config.toml"),
     [int]$ReadyTimeoutSeconds = 180,
     [string]$ExpectedBuildSha256 = "",
+    [string]$RollbackFromSha256 = "",
     [string]$BuildFingerprintPath = "",
     [string]$TunnelClientPath = "",
     [switch]$BackendOnly,
@@ -1211,8 +1212,43 @@ function Get-BackendOnlyUtcNow {
     [datetime](Invoke-BootstrapSeam -Name 'BackendOnlyUtcNow' -Arguments @() -Default { [DateTime]::UtcNow })
 }
 
+function Get-ExactBackendRollbackSelection {
+    param([string]$Root, [System.IO.FileStream]$Lease)
+    if ($Mode -cne 'recover' -or -not $Execute -or -not $BackendOnly -or -not $ConfirmRetainedSelection -or
+        $null -eq $Lease -or (Get-CatDeskReleaseStartupGate -Root $Root -HeldLifecycleLease $Lease) -cne 'READY') {
+        throw 'exact rollback requires the active backend-only recovery lease'
+    }
+    if ($RollbackFromSha256 -notmatch '^[a-f0-9]{64}$' -or $ExpectedBuildSha256 -notmatch '^[a-f0-9]{64}$' -or
+        $RollbackFromSha256 -eq $ExpectedBuildSha256) { throw 'exact rollback requires two distinct artifact identities' }
+    $expected = Get-RequestedCatDeskFingerprint $Root $ExpectedBuildSha256 $BuildFingerprintPath
+    $selection = Get-CatDeskRetainedReleasePredecessor -Root $Root -ExpectedHash $expected
+    if ($null -eq $selection -or $selection.Current.Hash -ne $RollbackFromSha256) {
+        throw 'requested release identities do not match the selected rollback slots'
+    }
+    return $selection
+}
+
+function Invoke-ExactBackendRollback {
+    param([string]$Root, [System.IO.FileStream]$Lease)
+    try {
+        $selection = Get-ExactBackendRollbackSelection -Root $Root -Lease $Lease
+        $canonical = Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash ''
+        if ($canonical.Sha256 -ceq $selection.Previous.Hash) {
+            # A prior rollback already restored the exact pair. Authenticate it
+            # and confirm the selection without relaunching the failed image.
+            Invoke-BackendOnlyBootstrap -Root $Root -Canonical $canonical -RetainedSelection $selection -StoppedLifecycleLease $Lease
+            return
+        }
+        if ($canonical.Sha256 -cne $selection.Current.Hash) { throw 'rollback source is not the selected release' }
+    } catch {
+        Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'exact rollback selection or canonical pair could not be verified'
+        return
+    }
+    Invoke-BackendOnlyBootstrap -Root $Root -Canonical $canonical -StoppedLifecycleLease $Lease -RollbackSelection $selection
+}
+
 function Invoke-BackendOnlyBootstrap {
-    param([string]$Root, $Canonical, $RetainedSelection, [System.IO.FileStream]$StoppedLifecycleLease)
+    param([string]$Root, $Canonical, $RetainedSelection, [System.IO.FileStream]$StoppedLifecycleLease, $RollbackSelection)
     # Release repair before this function retains its existing integrity/owner
     # gates and helper timeouts. Only local convergence is capped here; a probe
     # already in flight retains its existing finite per-call timeout.
@@ -1220,12 +1256,18 @@ function Invoke-BackendOnlyBootstrap {
     $local = Get-ConfiguredLocalMcp -Path $ConfigPath
     try {
         $headers = Get-LocalMcpProbeHeaders -LocalMcp $local
-        if ($null -ne $RetainedSelection -and !$headers.ContainsKey('Authorization')) { throw 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+        if (($null -ne $RetainedSelection -or $null -ne $RollbackSelection) -and !$headers.ContainsKey('Authorization')) {
+            throw 'LOCAL_MCP_AUTH_TOKEN_INVALID'
+        }
     } catch {
         $gate = if ($_.Exception.Message -eq 'LOCAL_MCP_AUTH_SCOPE_INVALID') { 'LOCAL_MCP_AUTH_SCOPE_INVALID' } else { 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
         Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'local MCP authentication scope refused' '' $gate; return
     }
     $existing = Get-LoopbackCatDeskListener -Port $local.Port -Canonical $Canonical
+    if ($null -ne $RollbackSelection -and ($existing -or @(Get-CatDeskDaemonProcessCandidates -Canonical $Canonical).Count)) {
+        Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'rollback cannot replace an existing or ambiguous backend owner'
+        return
+    }
     if ($existing -and -not $existing.MatchesCanonical) {
         Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'local backend owner refused' '' 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'; return
     }
@@ -1242,16 +1284,33 @@ function Invoke-BackendOnlyBootstrap {
         if (-not $supported) { Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'verified image does not support backend-only startup' '' 'LOCAL_MCP_BACKEND_ONLY_UNSUPPORTED'; return }
         # Do not retire any stale process until its verified replacement has
         # proved this closed mode. No foreign listener or same-path racer wins.
-        [void](Stop-StaleCanonicalCatDeskDaemonForRecovery -Canonical $Canonical -LocalMcp $local)
+        $launchHash = $ExpectedBuildSha256
+        $launchFingerprint = $BuildFingerprintPath
+        if ($RollbackFromSha256) {
+            if (@(Get-CatDeskDaemonProcessCandidates -Canonical $Canonical).Count) {
+                Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'a backend owner appeared before rollback launch'
+                return
+            }
+            if ($null -ne $RollbackSelection) {
+                $launchHash = $RollbackSelection.Current.Hash
+                $launchFingerprint = ''
+            }
+        } else {
+            [void](Stop-StaleCanonicalCatDeskDaemonForRecovery -Canonical $Canonical -LocalMcp $local)
+        }
         if (Get-LoopbackCatDeskListener -Port $local.Port -Canonical $Canonical) { throw 'local backend listener changed before launch' }
-        $rechecked = Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
+        $rechecked = Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash $launchHash -FingerprintPath $launchFingerprint
         if ($rechecked.Path -cne $Canonical.Path -or $rechecked.Sha256 -cne $Canonical.Sha256) { throw 'local backend release changed before launch' }
         if ((Get-BackendOnlyUtcNow) -lt $deadline) { $started = Start-BackendOnlyDaemon -Canonical $Canonical -Root $Root -Config $ConfigPath }
     }
     $lastGate = 'LOCAL_MCP_RESPONSE_UNAVAILABLE'
     while ((Get-BackendOnlyUtcNow) -lt $deadline) {
-        $ready = Get-LocalMcpReadiness -LocalMcp $local -Canonical $Canonical -ExpectedDaemonProcess $started -RequireBearer:($null -ne $RetainedSelection)
+        $ready = Get-LocalMcpReadiness -LocalMcp $local -Canonical $Canonical -ExpectedDaemonProcess $started -RequireBearer:($null -ne $RetainedSelection -or $null -ne $RollbackSelection)
         if ($ready.Ready) {
+            if ($null -ne $RollbackSelection) {
+                Write-RedactedStatus 'ROLLBACK_CURRENT_BACKEND_READY' 'the exact selected backend passed authenticated MCP'
+                return
+            }
             if ($null -ne $RetainedSelection) {
                 try {
                     Confirm-CatDeskRecoveredPredecessor -Root $Root -Selection $RetainedSelection -HeldLifecycleLease $StoppedLifecycleLease
@@ -1260,7 +1319,8 @@ function Invoke-BackendOnlyBootstrap {
                     return
                 }
             }
-            Write-RedactedStatus 'LOCAL_BACKEND_READY' 'local backend only; Wake, GUI and official runtime not examined or started'
+            $source = if ($RollbackFromSha256 -and $null -ne $RetainedSelection) { 'LAST_KNOWN_GOOD' } else { '' }
+            Write-RedactedStatus 'LOCAL_BACKEND_READY' 'local backend only; Wake, GUI and official runtime not examined or started' $source
             return
         }
         $lastGate = [string]$ready.Gate
@@ -1268,6 +1328,27 @@ function Invoke-BackendOnlyBootstrap {
         # path's external-readiness proof is deliberately not weakened here.
         if ($existing -or $lastGate -in @('LOCAL_MCP_AUTH_TOKEN_INVALID','LOCAL_MCP_AUTH_SCOPE_INVALID','LOCAL_MCP_LISTENER_IDENTITY_MISMATCH','LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH')) { break }
         if ($started -is [Diagnostics.Process] -and $started.HasExited) {
+            if ($null -ne $RollbackSelection -and $started.ExitCode -ne 0 -and $lastGate -ceq 'LOCAL_MCP_LISTENER_MISSING') {
+                try {
+                    $observed = Get-ExactBackendRollbackSelection -Root $Root -Lease $StoppedLifecycleLease
+                    if ($observed.Current.Slot -cne $RollbackSelection.Current.Slot -or
+                        $observed.Current.Generation -ne $RollbackSelection.Current.Generation -or
+                        $observed.Previous.Slot -cne $RollbackSelection.Previous.Slot -or
+                        $observed.Previous.Generation -ne $RollbackSelection.Previous.Generation -or
+                        (Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash $observed.Current.Hash).Sha256 -cne $Canonical.Sha256 -or
+                        @(Get-CatDeskDaemonProcessCandidates -Canonical $Canonical).Count -or
+                        (Get-LoopbackCatDeskListener -Port $local.Port -Canonical $Canonical)) {
+                        throw 'rollback source or process ownership changed'
+                    }
+                    [void](Restore-CatDeskCanonicalRelease -Root $Root -Trusted $observed.Previous)
+                    $restored = Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash $observed.Previous.Hash -FingerprintPath $BuildFingerprintPath
+                } catch {
+                    Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'exact rollback could not restore and verify the retained pair'
+                    return
+                }
+                Invoke-BackendOnlyBootstrap -Root $Root -Canonical $restored -RetainedSelection $observed -StoppedLifecycleLease $StoppedLifecycleLease
+                return
+            }
             Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'owned backend exited before verified readiness' '' 'LOCAL_MCP_LAUNCHED_PROCESS_EXITED'
             return
         }
@@ -1303,6 +1384,10 @@ function Invoke-CanonicalStackBootstrapCore {
     $startupGate = Get-CatDeskReleaseStartupGate -Root $root -HeldLifecycleLease $StoppedLifecycleLease
     if ($startupGate -cne 'READY') {
         Write-RedactedStatus $startupGate 'canonical startup is waiting for release ownership or reconciliation'
+        return
+    }
+    if ($RollbackFromSha256) {
+        Invoke-ExactBackendRollback -Root $root -Lease $StoppedLifecycleLease
         return
     }
     $releaseRestored=$false;$releaseRecoverySource=''

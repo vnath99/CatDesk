@@ -10,6 +10,7 @@ param(
     [string]$Workspace = '',
     [string]$ConfigPath = (Join-Path ([Environment]::GetFolderPath('UserProfile')) '.catdesk\config.toml'),
     [string]$ExpectedBuildSha256 = '',
+    [string]$RollbackFromSha256 = '',
     [string]$BuildFingerprintPath = '',
     [int]$ReadyTimeoutSeconds = 180,
     [switch]$BackendOnly,
@@ -51,6 +52,7 @@ try {
     $facadeWorkspace = $Workspace
     $facadeConfigPath = $ConfigPath
     $facadeExpectedBuildSha256 = $ExpectedBuildSha256
+    $facadeRollbackFromSha256 = $RollbackFromSha256
     $facadeBuildFingerprintPath = $BuildFingerprintPath
     $facadeReadyTimeoutSeconds = $ReadyTimeoutSeconds
     $facadeBackendOnly = [bool]$BackendOnly
@@ -58,6 +60,7 @@ try {
     $Workspace = $facadeWorkspace
     $ConfigPath = $facadeConfigPath
     $ExpectedBuildSha256 = $facadeExpectedBuildSha256
+    $RollbackFromSha256 = $facadeRollbackFromSha256
     $BuildFingerprintPath = $facadeBuildFingerprintPath
     $ReadyTimeoutSeconds = $facadeReadyTimeoutSeconds
     $BackendOnly = $facadeBackendOnly
@@ -726,15 +729,20 @@ function Invoke-CanonicalRecovery {
     # canonical release pair. Do not require canonical identity here: the
     # recovery engine first reconciles an interrupted reviewed promotion or a
     # persistent last-known-good pair, then revalidates identity before launch.
-    $raw = @(Invoke-LifecycleSeam -Name 'Recovery' -Arguments @($enginePath, $Workspace, $ConfigPath, $ExpectedBuildSha256, $BuildFingerprintPath, $ReadyTimeoutSeconds, $RequestedCommand, [bool]$BackendOnly) -Default {
-        param($engine, $root, $config, $expected, $manifest, $timeout, $requested, $backend)
+    $raw = @(Invoke-LifecycleSeam -Name 'Recovery' -Arguments @($enginePath, $Workspace, $ConfigPath, $ExpectedBuildSha256, $BuildFingerprintPath, $ReadyTimeoutSeconds, $RequestedCommand, [bool]$BackendOnly, $RollbackFromSha256) -Default {
+        param($engine, $root, $config, $expected, $manifest, $timeout, $requested, $backend, $rollbackFrom)
         # Both public start and recover use the same proven, release-only engine.
         $confirmRetainedSelection = $requested -ceq 'recover' -and $backend -and $expected
-        & $engine -Mode recover -Workspace $root -ConfigPath $config -ExpectedBuildSha256 $expected -BuildFingerprintPath $manifest -ReadyTimeoutSeconds $timeout -BackendOnly:$backend -ConfirmRetainedSelection:$confirmRetainedSelection -Execute
+        & $engine -Mode recover -Workspace $root -ConfigPath $config -ExpectedBuildSha256 $expected -BuildFingerprintPath $manifest -ReadyTimeoutSeconds $timeout -BackendOnly:$backend -ConfirmRetainedSelection:$confirmRetainedSelection -RollbackFromSha256 $rollbackFrom -Execute
     })
     $result = Get-LifecycleRecoveryResult -Raw $raw
     if ($BackendOnly -and $null -ne $result -and $result.State -eq 'LOCAL_BACKEND_READY') {
-        Write-LifecycleStatus 'LOCAL_BACKEND_READY' 'scope=LOCAL_BACKEND_ONLY; Wake, GUI and official runtime not examined or started'
+        $detail = if ($RollbackFromSha256 -and $result.RecoverySource -ceq 'LAST_KNOWN_GOOD') {
+            'scope=LOCAL_BACKEND_ONLY; retained predecessor verified and selected'
+        } else {
+            'scope=LOCAL_BACKEND_ONLY; Wake, GUI and official runtime not examined or started'
+        }
+        Write-LifecycleStatus 'LOCAL_BACKEND_READY' $detail
         return
     }
     if ($null -ne $result -and $result.State -ceq 'RELEASE_LIFECYCLE_BUSY') {
@@ -751,6 +759,10 @@ function Invoke-CanonicalRecovery {
     }
     if ($null -ne $result -and $result.State -eq 'RECOVERY_RELEASE_AUTHORITY_REQUIRED') {
         Write-LifecycleStatus 'RECOVERY_AUTHORITY_REQUIRED'
+        return
+    }
+    if ($RollbackFromSha256 -and $null -ne $result -and $result.State -ceq 'ROLLBACK_CURRENT_BACKEND_READY') {
+        Write-LifecycleStatus 'ROLLBACK_CURRENT_BACKEND_READY' 'same selected release passed authenticated MCP'
         return
     }
     if ($null -ne $result -and $result.State -eq 'CONNECTED_VERIFIED') {
@@ -786,7 +798,7 @@ function Get-LifecycleRecoveryResult {
         $state = [string]$parsed.State
         if ($parsed.PSObject.Properties['RecoverySource'] -and $parsed.RecoverySource -isnot [string]) { return $null }
         $source = if ($parsed.PSObject.Properties['RecoverySource']) { [string]$parsed.RecoverySource } else { '' }
-        if ($state -cnotin @('LOCAL_BACKEND_READY', 'CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'RECOVERY_READY', 'LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED', 'RELEASE_LIFECYCLE_BUSY', 'TRANSPORT_VERIFICATION_FAILED')) {
+        if ($state -cnotin @('LOCAL_BACKEND_READY', 'CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'RECOVERY_READY', 'LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED', 'RELEASE_LIFECYCLE_BUSY', 'TRANSPORT_VERIFICATION_FAILED', 'ROLLBACK_CURRENT_BACKEND_READY')) {
             return $null
         }
         if ($parsed.PSObject.Properties['Gate'] -and $parsed.Gate -isnot [string]) { return $null }
@@ -1371,6 +1383,12 @@ function Invoke-LifecycleReviewedPromotion {
 }
 
 try {
+    if ($RollbackFromSha256 -and ($Command -cne 'recover' -or -not $BackendOnly -or
+        $RollbackFromSha256 -notmatch '^[a-f0-9]{64}$' -or $ExpectedBuildSha256 -notmatch '^[a-f0-9]{64}$' -or
+        $RollbackFromSha256 -eq $ExpectedBuildSha256)) {
+        Write-LifecycleStatus 'RECOVERY_AUTHORITY_REQUIRED' 'scope=EXACT_BACKEND_ROLLBACK'
+        return
+    }
     if ($BackendOnly -and $Command -notin @('start', 'recover', 'autostart')) { throw 'BackendOnly is limited to start, recover and autostart' }
     if ($Command -ne 'doctor' -and ($ObservationFile -or $ProjectWorkspace -or $WakeRoot -or $Human)) { throw 'doctor options require doctor' }
     switch ($Command) {

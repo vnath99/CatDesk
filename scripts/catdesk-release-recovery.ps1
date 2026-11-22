@@ -699,6 +699,12 @@ function Restore-CatDeskCanonicalFromLastKnownGood {
     param([string]$Root, [string]$ExpectedHash = '', [switch]$AllowRetainedPredecessor)
     $rootPath = Resolve-CatDeskRecoveryRoot $Root
     $trusted = Select-CatDeskRecoveryRelease -Root $rootPath -ExpectedHash $ExpectedHash -AllowRetainedPredecessor:$AllowRetainedPredecessor
+    Restore-CatDeskCanonicalRelease -Root $rootPath -Trusted $trusted
+}
+
+function Restore-CatDeskCanonicalRelease {
+    param([string]$Root, $Trusted)
+    $rootPath = Resolve-CatDeskRecoveryRoot $Root
     $release = Join-Path $rootPath 'target\release'
     if (-not (Test-Path -LiteralPath $release -PathType Container)) { New-Item -ItemType Directory -Path $release -Force -ErrorAction Stop | Out-Null }
     $releaseItem = Get-Item -LiteralPath $release -Force -ErrorAction Stop

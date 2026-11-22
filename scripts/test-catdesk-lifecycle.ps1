@@ -152,6 +152,22 @@ try {
     Require ($observedPublicInputs -contains "recovery:$realCanonicalRoot|$realConfig|$realHash|$realFingerprint|$realTimeout|start") 'start preserves every public lifecycle identity and timeout after helper loading'
     $actions.Clear()
 
+    $retainedRollback = $realCanonical.Clone()
+    $failedPin = 'f' * 64
+    $retainedRollback.Recovery = {
+        param($engine,$root,$config,$expected,$manifest,$timeout,$requested,$backend,$failed)
+        Require ($root -ceq $realCanonicalRoot -and $config -ceq $realConfig -and $expected -ceq $realHash -and
+            $requested -ceq 'recover' -and $backend -and $failed -ceq $failedPin) 'exact rollback forwards both release pins under the correct scope'
+        [void]$actions.Add('rollback')
+        '{"State":"LOCAL_BACKEND_READY","RecoverySource":"LAST_KNOWN_GOOD"}'
+    }
+    $invalidRollback = & $facade recover -Workspace $realCanonicalRoot -ConfigPath $realConfig -RollbackFromSha256 $failedPin -TestSeams $retainedRollback | ConvertFrom-Json
+    Require ($invalidRollback.state -ceq 'RECOVERY_AUTHORITY_REQUIRED' -and $actions.Count -eq 0) 'rollback cannot broaden a full-stack recovery call'
+    $verifiedRollback = & $facade recover -BackendOnly -Workspace $realCanonicalRoot -ConfigPath $realConfig -ExpectedBuildSha256 $realHash -RollbackFromSha256 $failedPin -TestSeams $retainedRollback | ConvertFrom-Json
+    Require ($verifiedRollback.state -ceq 'LOCAL_BACKEND_READY' -and $verifiedRollback.detail -match 'predecessor verified and selected' -and
+        ($actions -join ',') -ceq 'rollback') 'the facade distinguishes confirmed predecessor serving from disk repair alone'
+    $actions.Clear()
+
     $controlRoot = Join-Path $realCanonicalRoot '.catdesk\release-pair-control'
     [void][IO.Directory]::CreateDirectory($controlRoot)
     $leasePath = Join-Path $controlRoot 'stopped-owner.lock'
