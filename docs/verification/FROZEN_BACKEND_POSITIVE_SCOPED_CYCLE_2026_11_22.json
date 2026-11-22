@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_FROZEN_BACKEND_AUTHENTICATED_PRIVATE_LOOPBACK_WITH_DISPOSABLE_GIT_AND_WAKE",
+  "testSourceCommit": "a15d2952777f5603b16eaf3c2512f6f35aa0a384",
+  "artifactSourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "artifactSha256BeforeAndAfter": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+  "verifiedUtc": "2026-11-22T08:10:08Z",
+  "testOnlyChange": true,
+  "frozenImageRebuiltOrModified": false,
+  "observedProcess": {
+    "observedUtc": "2026-11-22T08:08:30.4899704Z",
+    "exactImageOwners": 1,
+    "headless": true,
+    "webAutomationDisabled": true,
+    "maximumRuntimeSeconds": 60,
+    "exactFixtureOwnersAfterNaturalExit": 0,
+    "listenerClosed": true,
+    "uuidScopedRootRemoved": true
+  },
+  "testResults": {
+    "command": "cargo test --locked --offline --target-dir target --bin catdesk web_task_dispatch::tests::cached_http_checkpoint_precedes_manual_wake -- --exact --ignored",
+    "frozenExecutableOptInFixturePassed": true,
+    "frozenExecutableTestSeconds": 66.42,
+    "existingInProcessFixturePassed": true,
+    "existingInProcessTestSeconds": 18.93,
+    "formatAndDiffCheckPassed": true
+  },
+  "cycle": {
+    "transport": "Authenticated private loopback MCP with the existing command-only reserved task envelope",
+    "initialDeliveryReceipt": "Synthetic SENT for one new disposable project",
+    "anonymousHttpStatus": 401,
+    "earlyManualWakeRefused": "PROJECT_TASK_END_TURN_CHECKPOINT_REQUIRED",
+    "scopedPatchPreviewAndApply": true,
+    "actualWindowsSandboxVerifierSucceeded": true,
+    "sandboxCleanupProved": true,
+    "gitCheckpointContainsVerifiedEdit": true,
+    "duplicateCheckpointAndWakeCallsRefused": true,
+    "registeredSourceWorkspacePreserved": true,
+    "newWakeIntents": 1,
+    "browserDeliveryReceipts": 0,
+    "newTimers": 0,
+    "genericShellExecuted": false,
+    "nativeModelCalls": 0
+  },
+  "originalHistoricalTasksReplayed": false,
+  "protectedInstallationChanged": false,
+  "canonicalV5Invoked": false,
+  "actualChatGptWebCallerVerified": false,
+  "installedAcceptance": false
+}

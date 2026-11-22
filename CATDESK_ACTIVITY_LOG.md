@@ -990,3 +990,11 @@ Evidence: [docs/verification/ONE_HASH_PROMOTION_SERVING_READBACK_2026_11_22.json
 Agent: CatDesk development. Source: d2423b0f4548d2bd1dfde3711a934121e948e5e6. Outcome: partial. Startup now validates the recorded canonical fingerprint alongside explicit release expectations. The isolated Windows test detected a real split pair, refused two incompatible recovery requests, and restored the exact reviewed fingerprint before authenticated serving. Next: Qualify installed promotion and rollback after the frozen backend receives eligible independent review and producer evidence. Verify the existing signed Wake V3 selection and qualify protected Wake receipt publication.
 
 Evidence: [docs/verification/CANONICAL_FINGERPRINT_EXPECTATION_RECOVERY_2026_11_22.json](docs/verification/CANONICAL_FINGERPRINT_EXPECTATION_RECOVERY_2026_11_22.json); command: Bounded Windows public expectation, reviewed fallback fingerprint and authenticated MCP fixture; exit 0; SHA-256 f3df2192a09dc918180756395d8b4b6783f7026eefb2d6457590985d2f28cbfb.
+
+<!-- catdesk-activity:frozen-backend-positive-scoped-cycle-20261122T081008Z sha256:98395033d1427b6c6fb6763b4fab9b3edbceaa716decbd844b19a2bcc7766ca2 -->
+
+## 2026-11-22T08:10:08Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: a15d2952777f5603b16eaf3c2512f6f35aa0a384. Outcome: partial. The exact frozen 56aa9912 backend completed scoped edit, real Windows verification, Git checkpoint and one queued Wake on authenticated private loopback. Duplicate calls were refused and the owner exited naturally. ChatGPT Web delivery remains unverified. Next: Obtain the attributable independent review and producer evidence for the original frozen backend. Verify the signed first Wake V3 selection, then exercise the existing v5 conversation through installed edit, verification, checkpoint and actual self-Wake delivery.
+
+Evidence: [docs/verification/FROZEN_BACKEND_POSITIVE_SCOPED_CYCLE_2026_11_22.json](docs/verification/FROZEN_BACKEND_POSITIVE_SCOPED_CYCLE_2026_11_22.json); command: cargo test --locked --offline --target-dir target --bin catdesk web_task_dispatch::tests::cached_http_checkpoint_precedes_manual_wake -- --exact --ignored; exit 0; SHA-256 f98970a196f190b2834107e93e5f91644c541e00842b61c0d5cd1529d6e18d3b.
