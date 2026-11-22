@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T00:03:55.0630915Z",
+  "observedLocal": "2026-11-21T19:03:55.0630915-05:00",
+  "scope": "INDEPENDENT_WAKE_RELEASE_AND_RECONSTRUCTION_EVIDENCE_LOCAL_UNSIGNED_V3_PREPARATION",
+  "review": {
+    "reviewerIdentity": "wake_bootstrap_reviewer",
+    "checkedAgainstInstalledPolicy": true,
+    "attributableReportSha256": "972db6d20c5778fd26500cd406ca28322bd0edca3e8fcee5f1868e27a54fb1de",
+    "scope": "FULL_SOURCE_FOR_FIXED_WAKEHOST_COMPANION_BROWSER_AND_GUARDED_CONTINUATION_ROLLOVER",
+    "candidate": {
+      "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+      "nativeManifestSha256": "b0937273a9e2e706ca0c6a998a66c48fb254977e5dda137ef7b3ced3f6cfff61",
+      "verdict": "PASS"
+    },
+    "correctedWorkingFallback": {
+      "sourceCommit": "5a939df267719322758df0598fd46532f07b8126",
+      "nativeManifestSha256": "ac62635aa756aafd3340888ac6197c8b430e603dc02bebd773c3c2cae292f4d1",
+      "verdict": "PASS"
+    },
+    "reconstruction": {
+      "scope": "LEGACY_SELECTION_RECONSTRUCTION",
+      "verdict": "PASS",
+      "oldRawSelectionSha256": "25b8430dc25fdb7cf2be3465d5f6c5431f6ff274d0dfcf3e09f9c2aa3cb50185",
+      "allFourInstalledLegacyArtifactsMatch": true,
+      "legacyRuntimeManifestSha256": "f14b7092d4bea250ae34ab20bab45aea4571f6ec3986ba37959f040bc133b419"
+    },
+    "canonicalHeadlessBackendReviewIncluded": false,
+    "directProjectEditCommandOrGitExecutionReviewIncluded": false
+  },
+  "localIntake": {
+    "fourRoleArtifactCopies": 8,
+    "runtimeManifestCopies": 2,
+    "receiptSha256": {
+      "candidate-local.json": "23b3d62197d46f8639db0de9e424eac32055b33ac84b02b22a13b49f43e19fec",
+      "candidate-review.json": "33e4584f1d60dbdfb7b80634c9d578c5af526d852545f1e4d898f1d1d515073f",
+      "previous-local.json": "69efc700a215fdeedb2c81bf30b12b0f180bd2d0ffcbfec969f49f58ac28680b",
+      "previous-review.json": "6297564178ef3991412c2a14d123afedbd2b56a35a2850de35ec3c3a980020f3",
+      "previous-working.json": "5ac9fdeed4f663ddf33950515653d0602ad13fc88ea0adfbc80d80f507241275",
+      "reconstruction.json": "b2bf75ecc96fdd77d67ddc2bba12339245218bfd0b557441c420f38dc47c55dd"
+    },
+    "exactReceiptAttributionsPreserved": true,
+    "protectedSubmissionDirectoryWritten": false
+  },
+  "unsignedDraft": {
+    "operation": "SELECT_SAME_STATE_RELEASE",
+    "expectedFirstGeneration": 1,
+    "qualifiedFallbackMode": "REVIEWED_SOURCE_RECONSTRUCTION",
+    "stateFileIdentitiesAndHashesObserved": true,
+    "expectedInstalledPolicySha256": "6508ffc30ade16dddf0de652d56c9fbb6d9ff3d3cbef492c8caa733560517dc9",
+    "derivedThroughNativeSelectionPlannerAndTypedCanonicalEncoding": true,
+    "plannedSelectionSha256": "7364bc02c335c53aa972f405706e9eb1fc3de5aafb0c22f782b906f725b3540f",
+    "canonicalPayloadSha256": "867304e2dd83c26ea26a867ba87d3d2117facb4b03793bf983078a723976ef11",
+    "signingPreimageSha256": "0e1ec9c30b38e77abc13f10057730da2868d728edbf6384cec7d8c2cd38ecf36",
+    "expiresUtc": "2026-11-23T00:03:34Z",
+    "signatureCreated": false,
+    "brokerAdmissionPerformed": false,
+    "protectedWrites": 0
+  },
+  "remaining": "Complete the checked operator staging and signing handoff for the fixed intake, then use the existing one-request broker owner and signed submit. Separately finish genuine backend review and producer authority. No installed runtime switch, backend promotion, or Web task took place."
+}

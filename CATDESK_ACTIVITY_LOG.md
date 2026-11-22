@@ -526,3 +526,11 @@ Evidence: [docs/verification/WAKE_BROKER_RECOVERY_INSTALLED_2026_11_21.json](doc
 Agent: CatDesk development. Source: 36ed9d433d218878573d69feae828b5376c7c482. Outcome: partial. The exact corrected fallback built and its isolated paused WakeHost passed native startup and normal stop with zero test owners left. Local V3 receipts and old selection escrow are prepared. Next: Complete full independent Wake and reconstruction review and genuine backend producer authority before signing and installing either release. Preserve the expired d22 UNKNOWN delivery.
 
 Evidence: [docs/verification/WAKE_SELECTION_FALLBACK_QUALIFICATION_2026_11_21.json](docs/verification/WAKE_SELECTION_FALLBACK_QUALIFICATION_2026_11_21.json); command: Locked offline fallback build, dependency readback, observed Windows owner lifecycle and native state checks; exit 0; SHA-256 08635963883437db12157c49134df686321d64d4f6d77c251e9dd277ac5a03b5.
+
+<!-- catdesk-activity:wake-v3-review-intake-nov21 sha256:303639ab4446d5b297ebcb4b019f56c8aa3e6371e9df580a15a02baedccbcef0 -->
+
+## 2026-11-22T00:03:55Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 6ecd13ba07d72ab7a5b29a3af9736194cd23fe0b. Outcome: partial. Independent review passed both exact Wake packages and their legacy reconstruction. Six local V3 receipts and a native-checked unsigned generation-one draft are prepared. Next: Qualify the exact operator staging and purpose-signing handoff before starting the existing one-request broker. Continue the separate backend reviewed-build authority and installed Web test.
+
+Evidence: [docs/verification/WAKE_V3_REVIEWED_SELECTION_INTAKE_2026_11_21.json](docs/verification/WAKE_V3_REVIEWED_SELECTION_INTAKE_2026_11_21.json); command: Attributable review, exact receipt readback and offline native V3 plan and encoding verification; exit 0; SHA-256 636634e1462c4db35f3eedcbd022a4f13cc799d71bb522de05e22bb1537fc475.
