@@ -484,6 +484,7 @@ function Get-CatDeskOwnedPromotionProcessIds($Request,$Rows,[string]$Canonical,[
   }
  }
 }
+$liveCanonical=$null
 try {
  $i=[Console]::In.ReadToEnd()|ConvertFrom-Json
  . (Join-Path $i.workspace 'scripts/catdesk-release-recovery.ps1')
@@ -510,14 +511,28 @@ try {
   @{canonicalSha256=$pair.Hash;bridgePid=$i.bridgePid;listenerVerified=$true}|ConvertTo-Json -Compress
   exit 0
  }
- if(@(Get-NetTCPConnection -State Listen -ErrorAction Stop|Where-Object LocalPort -eq 3200).Count){throw 'listener'}
  $canonical=[IO.Path]::GetFullPath($pair.Binary); $candidate=[IO.Path]::GetFullPath($i.candidate)
+ $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop|Where-Object LocalPort -eq 3200)
+ if($listeners.Count){
+  if(!$i.completedHandoff){throw 'listener'}
+  $owners=@($listeners.OwningProcess | Sort-Object -Unique)
+  if($owners.Count -ne 1 -or $owners[0] -lt 1 -or @($listeners|Where-Object LocalAddress -cnotin @('127.0.0.1','::1')).Count){throw 'canonical listener scope'}
+  $liveCanonical=Get-Process -Id $owners[0] -ErrorAction Stop
+  $null=$liveCanonical.Handle
+  if(!$liveCanonical.Path -or [IO.Path]::GetFullPath($liveCanonical.Path) -ine $canonical){throw 'canonical listener image'}
+ }
  $rows=@(Get-CimInstance Win32_Process -Filter "Name='catdesk.exe' OR Name='CatDeskBinagotchy.exe'" -OperationTimeoutSec 5 -ErrorAction Stop)
  $admitted=@(Get-CatDeskOwnedPromotionProcessIds $i $rows $canonical $candidate)
+ $canonicalFound=$false
  foreach($p in $rows) {
   if(!$p.ExecutablePath -or !$p.CommandLine){throw 'unknown image'}
   if($admitted -contains [int]$p.ProcessId){continue}
   $image=[IO.Path]::GetFullPath($p.ExecutablePath)
+  if($null -ne $liveCanonical -and [int]$p.ProcessId -eq $liveCanonical.Id){
+   if($canonicalFound -or $image -ine $canonical -or $p.CommandLine -cnotmatch '^\s*(?:"[^"]+"|\S+)\s+--catdesk-daemon(?:\s+--backend-only)?\s*$'){throw 'canonical listener command'}
+   $canonicalFound=$true
+   continue
+  }
   if($image -ieq $canonical -or $image -ieq $candidate){throw 'live image'}
   if($p.CommandLine.Contains('--catdesk-reviewed-promotion-worker') -and $p.CommandLine.Contains($i.transactionId)){
    throw 'live promotion worker'
@@ -547,6 +562,13 @@ try {
    try{$p=Get-Process -Id $pidValue -ErrorAction Stop}catch{if($_.FullyQualifiedErrorId.StartsWith('NoProcessFoundForGivenId,')){$p=$null}else{throw}}
    if($p -and $p.StartTime.ToUniversalTime() -le $completed.UtcDateTime.AddSeconds(2)){throw 'completed receipt owner'}
   }
+  $after=@(Get-NetTCPConnection -State Listen -ErrorAction Stop|Where-Object LocalPort -eq 3200)
+  if($null -ne $liveCanonical){
+   if(!$canonicalFound -or $liveCanonical.HasExited -or $liveCanonical.StartTime.ToUniversalTime() -le $completed.UtcDateTime -or
+      !$after.Count -or @($after|Where-Object {$_.OwningProcess -ne $liveCanonical.Id -or $_.LocalAddress -cnotin @('127.0.0.1','::1')}).Count){
+    throw 'canonical listener identity changed or predates completed handoff'
+   }
+  }elseif($after.Count){throw 'listener appeared'}
  }
  $original=$null; $qualified=$null
  if($i.historicalPids.Count){
@@ -555,11 +577,14 @@ try {
   $q=ConvertFrom-CatDeskLiteralJson ([IO.File]::ReadAllText((Join-Path $i.workspace '.catdesk/release-pair-control/qualification.json')))
   $original=$authority.authorization.originalBinarySha256; $qualified=$q.qualifiedAtUnix
  }
+ # The durable proof excludes a separately verified steady serving owner.
+ # It remains identical if the same terminal archive resumes with no listener.
  $proof=@{canonicalSha256=$pair.Hash;slot=$trusted.Slot;generation=$trusted.Generation;metadataSha256=Get-CatDeskRecoverySha256 $trusted.Metadata;originalSha256=$original;qualifiedUnix=$qualified;ownersEmpty=$true}
  if($null -ne $intentCreated){$proof.intentCreatedUnix=$intentCreated}
  if($null -ne $rollback){$proof.rollbackEscrow=$rollback}
  $proof|ConvertTo-Json -Compress -Depth 5
 } catch { [Console]::Error.Write('PROMOTION_RETIREMENT_INSPECTION_REFUSED'); exit 2 }
+finally { if ($null -ne $liveCanonical) { $liveCanonical.Dispose() } }
 "#;
 
 #[cfg(windows)]
