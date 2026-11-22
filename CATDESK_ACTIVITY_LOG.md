@@ -766,3 +766,11 @@ Evidence: [docs/verification/BACKEND_PROMOTION_STARTUP_LEASE_2026_11_21.json](do
 Agent: Codex. Source: 7adb55a79f9a04dcfa6c109471ecf0fc818b3662. Outcome: partial. The supervisor distinguishes a busy release lease from invalid authority and rechecks readiness before another recovery. Two Windows child processes and both PowerShell editions passed. Next: Use the prepared first Wake selection and existing independent backend review. After protected promotion, verify persistent supervisor recovery and installed rollback.
 
 Evidence: [docs/verification/PROMOTION_SUPERVISOR_BUSY_HANDOFF_2026_11_21.json](docs/verification/PROMOTION_SUPERVISOR_BUSY_HANDOFF_2026_11_21.json); command: Windows public lifecycle lock and PowerShell bootstrap, lifecycle and supervisor suites; exit 0; SHA-256 760707cfe79ce500bc3fb004ae7bfbf37104be66a39167616a642f882b94bfcd.
+
+<!-- catdesk-activity:nov22-isolated-supervisor-candidate-mcp sha256:90054231c4a1fcc4d8f9fb12e81fd3fe0fda5bdf16d83ba3e90dac94afec9484 -->
+
+## 2026-11-22T05:00:03.498017Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 309c320e6e5597e5f1f752ffa0cf23636f621e9e. Outcome: partial. The real isolated Windows supervisor deferred behind the release lease, recovered through a fixture-owned launch, and verified authenticated MCP on the exact compatible candidate. Next: Use the existing signed first Wake selection and genuine independent backend review. Verify native persistent startup and retained rollback following protected promotion.
+
+Evidence: [docs/verification/ISOLATED_SUPERVISOR_CANDIDATE_MCP_2026_11_22.json](docs/verification/ISOLATED_SUPERVISOR_CANDIDATE_MCP_2026_11_22.json); command: Bounded existing Windows supervisor, native release file lease and exact isolated candidate MCP; exit 0; SHA-256 a7d3371ef832c2a9eb54b076767171eeeddfb4bf4c5a59629ee61d9d16a49c2e.

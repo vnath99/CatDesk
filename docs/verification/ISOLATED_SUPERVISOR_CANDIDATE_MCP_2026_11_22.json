@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_ISOLATED_SUPERVISOR_AND_EXACT_CANDIDATE_MCP",
+  "coordinationSourceCommit": "309c320e6e5597e5f1f752ffa0cf23636f621e9e",
+  "candidateSourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "candidateSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+  "fixtureSha256": "509eb0890d77fddd8fd2c742bfd8d68826437eb8f6691f55fcc24953ec468ad7",
+  "retainedReceiptSha256": "c77f4bffd7e43cd688cbb0629824f2ddd7d8e975f43fde6ddb2838785883357a",
+  "startedUtc": "2026-11-22T04:59:40.881869Z",
+  "finishedUtc": "2026-11-22T05:00:03.498017Z",
+  "scopeDetail": {
+    "supervisor": "Existing PowerShell supervisor with its real workspace guard and three bounded monitoring cycles",
+    "contention": "Separate parent held the actual Windows lifecycle file lease. Fixture facade delegated recovery to the actual public command while held",
+    "recovery": "Isolated facade translated the post-lease recovery request into a fixture-owned headless launch. Native production startup uses fixed port 3200",
+    "readiness": "Existing PowerShell initialize and tools/list verifier used the real checkouts, exact candidate path and hash, and local TCP owner. Fixture owner validation admitted the supported headless process only on the assigned private port"
+  },
+  "monitorStates": ["RELEASE_LIFECYCLE_BUSY", "RECOVERED", "READY", "MONITORING_COMPLETE"],
+  "toolCount": 79,
+  "anonymousHttpStatus": 401,
+  "authenticatedHttpStatus": 200,
+  "authenticatedHttpStatusAfterMonitorExit": 200,
+  "exactOwnerReadinessChecks": 2,
+  "listenerClosedAndFixtureRemoved": true,
+  "firstAttempts": [
+    "The supervisor ended after the native listener verifier rejected the headless executable, which correctly lacks the native daemon command flag. Initial ephemeral logs were removed. A diagnostic attempt reproduced and identified the refusal.",
+    "The first test-only headless owner adapter referred to a shadowed PowerShell endpoint variable. The final fixture binds the exact process record explicitly."
+  ],
+  "productionPortUsed": false,
+  "registrationChanged": false,
+  "protectedPromotionInvoked": false,
+  "installedPersistentStartupQualified": false,
+  "installedRollbackQualified": false
+}

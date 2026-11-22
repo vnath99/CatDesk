@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — isolated supervisor and exact candidate.** The bounded development monitor deferred during the Windows lease, requested recovery after release, and observed authenticated readiness. The fixture used the existing headless launch with an assigned loopback port. Installed health uses the native daemon on port 3200 and its verified owner. [Verification and scope](docs/verification/ISOLATED_SUPERVISOR_CANDIDATE_MCP_2026_11_22.json).
+
 **November 21 — startup contention during promotion.** `RELEASE_LIFECYCLE_BUSY` from the development `catdesk.ps1 recover` or `start` means Windows refused the exclusive lease while it was held by another caller. An already running supervisor waits briefly and checks status before another recovery. An invalid lease namespace still requires recovery authority. [Verification](docs/verification/PROMOTION_SUPERVISOR_BUSY_HANDOFF_2026_11_21.json).
 
 **November 21 — local promotion and startup.** The development worker uses the same startup lease as `catdesk.ps1 start`, `recover`, and the existing supervisor. Promotion retains its consumed claim on a refusal. Read the supported promotion result before taking further action. A completed disk transaction still needs authenticated readiness from the persistent owner. [Lease evidence](docs/verification/BACKEND_PROMOTION_STARTUP_LEASE_2026_11_21.json).
