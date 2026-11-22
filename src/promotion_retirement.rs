@@ -40,14 +40,62 @@ struct Plan {
     trusted_release_evidence_sha256: String,
     #[serde(default, skip_serializing_if = "is_false")]
     completed_promotion: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    rollback_escrow: Option<RollbackEscrowBinding>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RollbackEscrowBinding {
+    pointer_sha256: String,
+    selected: RollbackSlotBinding,
+    displaced: RollbackSlotBinding,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RollbackSlotBinding {
+    slot: String,
+    generation: u64,
+    metadata_sha256: String,
+    fingerprint_sha256: String,
+}
+
+impl RollbackEscrowBinding {
+    fn valid(&self) -> bool {
+        let valid_slot = |slot: &RollbackSlotBinding| {
+            matches!(slot.slot.as_str(), "slot-a" | "slot-b")
+                && slot.generation > 0
+                && valid_digest(&slot.metadata_sha256)
+                && valid_digest(&slot.fingerprint_sha256)
+        };
+        valid_digest(&self.pointer_sha256)
+            && valid_slot(&self.selected)
+            && valid_slot(&self.displaced)
+            && self.selected.slot != self.displaced.slot
+            && self.selected.generation < self.displaced.generation
+    }
 }
 
 impl Plan {
     fn canonical_sha256(&self) -> &str {
-        if self.completed_promotion {
+        if self.completed_promotion && self.rollback_escrow.is_none() {
             &self.candidate_sha256
         } else {
             &self.prior_sha256
+        }
+    }
+    fn valid_mode(&self) -> bool {
+        match (
+            self.schema_version,
+            self.completed_promotion,
+            &self.rollback_escrow,
+        ) {
+            (1, false, None) | (2, true, None) => true,
+            (3, true, Some(rollback)) => {
+                self.historical_handoff_sha256.is_some() && rollback.valid()
+            }
+            _ => false,
         }
     }
 }
@@ -193,10 +241,7 @@ fn journal(parent: &Guard) -> Result<Option<Journal>, String> {
     let value: Journal =
         serde_json::from_slice(&raw).map_err(|_| format!("{LABEL} journal invalid"))?;
     if value.schema_version != 1
-        || !matches!(
-            (value.plan.schema_version, value.plan.completed_promotion),
-            (1, false) | (2, true)
-        )
+        || !value.plan.valid_mode()
         || !valid_id(&value.plan.transaction_id)
         || !valid_digest(&value.evidence_sha256)
         || digest(&bytes(&value.plan)?) != value.evidence_sha256
@@ -384,7 +429,19 @@ try {
  . (Join-Path $i.workspace 'scripts/catdesk-release-recovery.ps1')
  $pair=Get-CatDeskCanonicalPairEvidence $i.workspace
  $trusted=Get-CatDeskLastKnownGoodRelease $i.workspace
- if(!$trusted -or $trusted.Hash -cne $pair.Hash -or $pair.Hash -cne $i.priorSha256){throw 'untrusted'}
+ if(!$trusted -or $trusted.Hash -cne $pair.Hash){throw 'untrusted'}
+ $rollback=$null
+ if($pair.Hash -cne $i.priorSha256){
+  if(!$i.completedHandoff -or !$i.rollbackPredecessorSha256 -or $pair.Hash -cne $i.rollbackPredecessorSha256){throw 'untrusted'}
+  $pointer=Read-CatDeskLkgPointer $i.workspace
+  if(!$pointer -or $pointer.Hash -cne $pair.Hash -or $pointer.Slot -cne $trusted.Slot -or $pointer.Generation -ne $trusted.Generation){throw 'rollback selector'}
+  $other=if($trusted.Slot -ceq 'slot-a'){'slot-b'}else{'slot-a'}
+  $displaced=Read-CatDeskLkgSlot -Root $i.workspace -Slot $other
+  if(!$displaced -or $displaced.Hash -cne $i.candidateSha256 -or $displaced.Generation -le $trusted.Generation){throw 'displaced release'}
+  $rollback=@{pointerSha256=Get-CatDeskRecoverySha256 $pointer.Path;
+   selected=@{slot=$trusted.Slot;generation=$trusted.Generation;metadataSha256=Get-CatDeskRecoverySha256 $trusted.Metadata;fingerprintSha256=Get-CatDeskRecoverySha256 $trusted.Manifest};
+   displaced=@{slot=$displaced.Slot;generation=$displaced.Generation;metadataSha256=Get-CatDeskRecoverySha256 $displaced.Metadata;fingerprintSha256=Get-CatDeskRecoverySha256 $displaced.Manifest}}
+ }
  if($i.bridgePid){
   $p=Get-Process -Id $i.bridgePid -ErrorAction Stop
   if(!$p.Path -or [IO.Path]::GetFullPath($p.Path) -ine [IO.Path]::GetFullPath($pair.Binary)){throw 'bridge image'}
@@ -440,7 +497,8 @@ try {
  }
  $proof=@{canonicalSha256=$pair.Hash;slot=$trusted.Slot;generation=$trusted.Generation;metadataSha256=Get-CatDeskRecoverySha256 $trusted.Metadata;originalSha256=$original;qualifiedUnix=$qualified;ownersEmpty=$true}
  if($null -ne $intentCreated){$proof.intentCreatedUnix=$intentCreated}
- $proof|ConvertTo-Json -Compress
+ if($null -ne $rollback){$proof.rollbackEscrow=$rollback}
+ $proof|ConvertTo-Json -Compress -Depth 5
 } catch { [Console]::Error.Write('PROMOTION_RETIREMENT_INSPECTION_REFUSED'); exit 2 }
 "#;
 
@@ -516,12 +574,16 @@ fn inspect_owners_for_pair(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut owner = OwnedCandidateChild::spawn(&mut command)?;
+    let rollback_predecessor = (completed_handoff.is_some()
+        && expected_canonical_sha256 == auth.candidate_sha256)
+        .then_some(auth.prior_canonical_sha256.as_str());
     let input = serde_json::json!({"workspace":crate::command::normalize_windows_verbatim_path(workspace.to_path_buf()),
         "candidate":crate::command::normalize_windows_verbatim_path(workspace.join(&auth.candidate_relative_path)),
         "priorSha256":expected_canonical_sha256,"candidateSha256":auth.candidate_sha256,"transactionId":auth.transaction_id,"historicalPids":intent.map(|v|vec![v.old_pid]).unwrap_or_else(||handoff.map(|v|vec![v.old_pid,v.new_pid.unwrap_or(0)]).unwrap_or_default()),
         "historicalCompletedUnix":handoff.map(|v|v.completed_at_unix).unwrap_or(0),
         "intentCreatedAtUtc":intent.map(|v|v.created_at_utc.as_str()),"authorizationGeneration":auth.generation,"authorizationExpires":auth.expires_at_unix,
-        "completedHandoff":completed_handoff,"bridgePid":bridge_pid,"ownedWorkerPid":owned_worker.then_some(std::process::id()),
+        "completedHandoff":completed_handoff,"rollbackPredecessorSha256":rollback_predecessor,
+        "bridgePid":bridge_pid,"ownedWorkerPid":owned_worker.then_some(std::process::id()),
         "ownedWorkerImage":if owned_worker {Some(crate::command::normalize_windows_verbatim_path(std::env::current_exe().map_err(|_|"promotion worker image unavailable")?))}else{None}});
     owner
         .child_mut()
@@ -579,10 +641,32 @@ fn inspect_owners_for_pair(
         Some(pid) => proof["listenerVerified"] == true && proof["bridgePid"] == pid,
         None => proof["ownersEmpty"] == true,
     };
-    if !scope_matches || proof["canonicalSha256"] != expected_canonical_sha256 {
+    if !scope_matches {
         return Err(format!("{LABEL} ownership proof differs"));
     }
+    retirement_rollback_proof(&proof, expected_canonical_sha256, rollback_predecessor)?;
     Ok(proof)
+}
+
+fn retirement_rollback_proof(
+    proof: &serde_json::Value,
+    expected: &str,
+    rollback_predecessor: Option<&str>,
+) -> Result<Option<RollbackEscrowBinding>, String> {
+    if proof["canonicalSha256"] == expected && proof.get("rollbackEscrow").is_none() {
+        return Ok(None);
+    }
+    if rollback_predecessor.is_some_and(|predecessor| {
+        proof["canonicalSha256"] == predecessor && predecessor != expected
+    }) {
+        let observed: RollbackEscrowBinding =
+            serde_json::from_value(proof["rollbackEscrow"].clone())
+                .map_err(|_| format!("{LABEL} rollback escrow proof invalid"))?;
+        if observed.valid() {
+            return Ok(Some(observed));
+        }
+    }
+    Err(format!("{LABEL} ownership proof differs"))
 }
 
 fn accepted_helper(
@@ -660,6 +744,7 @@ fn validate_stopped_source_history(
         return Err("promotion source retirement binding differs".into());
     }
     verify_archive(parent, &retired)?;
+    let _rollback_pins = retain_rollback_escrow(parent, plan)?;
     let handoffs = child(parent, "restart-handoff")?;
     if read_optional_relative_regular(&handoffs, "latest.json", 4096, LABEL)?.is_some() {
         return Err("promotion source has an unresolved new handoff".into());
@@ -920,9 +1005,16 @@ fn inspect_locked(
             &auth.candidate_sha256,
             completed_handoff.as_ref().map(|(receipt, _)| receipt),
         )?;
+        let rollback_escrow = retirement_rollback_proof(
+            &proof,
+            &auth.candidate_sha256,
+            completed_handoff
+                .as_ref()
+                .map(|_| auth.prior_canonical_sha256.as_str()),
+        )?;
         proof["completedReceiptSha256"] = serde_json::Value::String(digest(&raw));
         let plan = Plan {
-            schema_version: 2,
+            schema_version: if rollback_escrow.is_some() { 3 } else { 2 },
             transaction_id: transaction.into(),
             prior_sha256: auth.prior_canonical_sha256,
             candidate_sha256: auth.candidate_sha256,
@@ -930,6 +1022,7 @@ fn inspect_locked(
             historical_handoff_sha256: completed_handoff.map(|(_, sha)| sha),
             trusted_release_evidence_sha256: digest(&bytes(&proof)?),
             completed_promotion: true,
+            rollback_escrow,
         };
         if prior.is_some_and(|j| j.plan.transaction_id == transaction && j.plan != plan) {
             return Err(format!("{LABEL} recovery evidence changed"));
@@ -1020,6 +1113,7 @@ fn inspect_locked(
         historical_handoff_sha256: raw.as_ref().map(|v| digest(v)),
         trusted_release_evidence_sha256: digest(&bytes(&proof)?),
         completed_promotion: false,
+        rollback_escrow: None,
     };
     if prior.is_some_and(|j| j.plan.transaction_id == transaction && j.plan != plan) {
         return Err(format!("{LABEL} recovery evidence changed"));
@@ -1263,6 +1357,56 @@ fn automatic_predecessor<'a>(
 }
 
 #[cfg(windows)]
+fn retain_rollback_escrow(
+    parent: &Guard,
+    plan: &Plan,
+) -> Result<Vec<crate::windows_protected_fs::RetainedReviewedArtifact>, String> {
+    use crate::windows_protected_fs::retain_reviewed_regular_artifact as retain;
+    let Some(binding) = &plan.rollback_escrow else {
+        return Ok(Vec::new());
+    };
+    if !plan.valid_mode() {
+        return Err(format!("{LABEL} rollback plan invalid"));
+    }
+    let escrow = child(parent, "release-recovery")?;
+    let mut pins = vec![retain(
+        &escrow,
+        "current.json",
+        &binding.pointer_sha256,
+        2048,
+        LABEL,
+    )?];
+    for (slot, sha256) in [
+        (&binding.selected, &plan.prior_sha256),
+        (&binding.displaced, &plan.candidate_sha256),
+    ] {
+        let directory = child(&escrow, &slot.slot)?;
+        pins.push(retain(
+            &directory,
+            "catdesk.exe",
+            sha256,
+            128 * 1024 * 1024,
+            LABEL,
+        )?);
+        pins.push(retain(
+            &directory,
+            "manifest.json",
+            &slot.metadata_sha256,
+            8192,
+            LABEL,
+        )?);
+        pins.push(retain(
+            &directory,
+            "catdesk.exe.sha256",
+            &slot.fingerprint_sha256,
+            128,
+            LABEL,
+        )?);
+    }
+    Ok(pins)
+}
+
+#[cfg(windows)]
 fn publish_retirement(
     workspace: &Path,
     parent: &Guard,
@@ -1299,6 +1443,7 @@ fn publish_retirement(
         128,
         LABEL,
     )?;
+    let _rollback_pins = retain_rollback_escrow(parent, &plan)?;
     if let Some(old) = &previous {
         if old.phase == "COMPLETED" {
             verify_archive(parent, old)?;
@@ -1922,6 +2067,7 @@ mod tests {
             historical_handoff_sha256: Some(digest(receipt)),
             trusted_release_evidence_sha256: digest(b"DISPOSABLE_FIXTURE_NOT_RELEASE_AUTHORITY"),
             completed_promotion: false,
+            rollback_escrow: None,
         };
         let journal = Journal {
             schema_version: 1,
@@ -2344,6 +2490,97 @@ mod tests {
             b"changed archive",
         )
         .unwrap();
+        assert!(validate_stopped_source_history(&parent, &next).is_err());
+        drop(parent);
+        cleanup_fixture(root);
+    }
+
+    #[test]
+    fn completed_rollback_binds_the_exact_predecessor_for_the_next_artifact() {
+        let (root, mut value) = fixture();
+        let release = root.join("target/release");
+        fs::create_dir_all(&release).unwrap();
+        let escrow = root.join(".catdesk/release-recovery");
+        let older_image = b"previous immutable executable fixture";
+        let newer_image = b"displaced immutable executable fixture";
+        value.plan.prior_sha256 = digest(older_image);
+        value.plan.candidate_sha256 = digest(newer_image);
+        let slot = |name: &str, generation, image: &[u8]| {
+            let directory = escrow.join(name);
+            fs::create_dir_all(&directory).unwrap();
+            fs::write(directory.join("catdesk.exe"), image).unwrap();
+            let fingerprint = format!("{}\n", digest(image));
+            let manifest = serde_json::json!({"schemaVersion":1,"generation":generation,
+                "sha256":digest(image),"source":"reviewed_promotion","capturedAtUtc":"2026-11-22T00:00:00Z"});
+            let manifest = bytes(&manifest).unwrap();
+            fs::write(directory.join("manifest.json"), &manifest).unwrap();
+            fs::write(directory.join("catdesk.exe.sha256"), &fingerprint).unwrap();
+            serde_json::json!({"slot":name,"generation":generation,
+                "metadataSha256":digest(&manifest),"fingerprintSha256":digest(fingerprint.as_bytes())})
+        };
+        let selected = slot("slot-a", 1, older_image);
+        let displaced = slot("slot-b", 2, newer_image);
+        let pointer = bytes(&serde_json::json!({"schemaVersion":1,"slot":"slot-a",
+            "generation":1,"sha256":value.plan.prior_sha256}))
+        .unwrap();
+        let pointer_path = escrow.join("current.json");
+        fs::write(&pointer_path, &pointer).unwrap();
+        fs::copy(
+            escrow.join("slot-a/catdesk.exe"),
+            release.join("catdesk.exe"),
+        )
+        .unwrap();
+        fs::copy(
+            escrow.join("slot-a/catdesk.exe.sha256"),
+            release.join("catdesk.exe.sha256"),
+        )
+        .unwrap();
+
+        let proof = serde_json::json!({"canonicalSha256":value.plan.prior_sha256,
+            "rollbackEscrow":{"pointerSha256":digest(&pointer),"selected":selected,"displaced":displaced}});
+        let current = &value.plan.candidate_sha256;
+        let previous = &value.plan.prior_sha256;
+        assert!(retirement_rollback_proof(&proof, current, None).is_err());
+        let mut reversed = proof.clone();
+        reversed["rollbackEscrow"]["selected"]["generation"] = serde_json::json!(2);
+        assert!(retirement_rollback_proof(&reversed, current, Some(previous)).is_err());
+        value.plan.rollback_escrow =
+            retirement_rollback_proof(&proof, current, Some(previous)).unwrap();
+        value.plan.schema_version = 3;
+        value.plan.completed_promotion = true;
+        assert!(value.plan.valid_mode());
+        assert_eq!(value.plan.canonical_sha256(), value.plan.prior_sha256);
+        let mut unbound = value.plan.clone();
+        unbound.historical_handoff_sha256 = None;
+        assert!(!unbound.valid_mode());
+
+        let parent = metadata(&root).unwrap();
+        let pins = retain_rollback_escrow(&parent, &value.plan).unwrap();
+        assert_eq!(pins.len(), 7);
+        assert!(
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&pointer_path)
+                .is_err()
+        );
+        drop(pins);
+        let state = publish_retirement(&root, &parent, None, value.plan.clone()).unwrap();
+        assert_eq!(state["state"], "COMPLETED");
+        let retired = journal(&parent).unwrap().unwrap();
+        verify_archive(&parent, &retired).unwrap();
+        let (mut next, _, _, _) = terminal_fixture();
+        next.transaction_id = "e".repeat(32);
+        next.candidate_sha256 = "f".repeat(64);
+        next.prior_canonical_sha256 = value.plan.prior_sha256.clone();
+        validate_stopped_source_history(&parent, &next).unwrap();
+        let mut repeat_displaced = next.clone();
+        repeat_displaced.candidate_sha256 = value.plan.candidate_sha256.clone();
+        assert!(validate_stopped_source_history(&parent, &repeat_displaced).is_err());
+        fs::write(&pointer_path, b"drifted pointer").unwrap();
+        assert!(validate_stopped_source_history(&parent, &next).is_err());
+        verify_archive(&parent, &retired).unwrap();
+        fs::write(&pointer_path, pointer).unwrap();
+        fs::write(escrow.join("slot-b/catdesk.exe"), b"drifted slot").unwrap();
         assert!(validate_stopped_source_history(&parent, &next).is_err());
         drop(parent);
         cleanup_fixture(root);
