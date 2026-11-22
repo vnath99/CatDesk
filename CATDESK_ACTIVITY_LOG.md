@@ -854,3 +854,11 @@ Evidence: [docs/verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_2
 Agent: Codex. Source: 275e9276a4813849ccbc2bb5b2247350da14216c. Outcome: partial. The Windows broker fixture completed rollback and selected a different qualified package under the existing local-user policy. The restored package became the retained fallback and all prior ledger bytes matched. Next: Use the existing signed first Wake selection and admit an eligible independent reviewer for the frozen backend. Trusted routine receipt publication and installed promotion, rollback and Web acceptance still require proof.
 
 Evidence: [docs/verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.json](docs/verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.json); command: Exact native Windows rollback and successor selection regression; exit 0; SHA-256 5cd6222b40b861e66ab495aa811064c2e94c6fe5c635194bbf57643ab6e2dfbd.
+
+<!-- catdesk-activity:nov22-wake-local-intake-refusal sha256:2afd9d823c0a43ecf0627c67bba88e0ec81f8268245cbbdac13596fc6feb4acc -->
+
+## 2026-11-22T05:55:35.5616033Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: ab20a02760bb82c4e1f056357b7919960006820e. Outcome: partial. The development Wake broker distinguishes fixed intake refusal before a fresh ledger intent from an ambiguous submission. Fifteen Windows tests passed including a missing physical review receipt with unchanged selection and no new ledger record. Next: Use existing signed first Wake selection and independent backend review. Qualify trusted routine receipt publication and installed broker promotion and rollback before the Web cycle.
+
+Evidence: [docs/verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json](docs/verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json); command: Windows Wake broker client and service tests plus the missing receipt regression; exit 0; SHA-256 44237b6487206dc6f8c03c0e9b4ca26f38b678d1cec8c04774c98cbdcd8916ac.

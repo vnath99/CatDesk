@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — routine Wake intake refusals.** Development `install-broker submit-local --request-file <absolute-path>` can surface a fixed candidate or review intake error when the attested service proves the fresh request stopped before intent. Use the existing ledger to reconcile `WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY`. The dedicated producer's IPC still refuses and does not publish Wake receipts. [Evidence](docs/verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json).
+
 **November 22 — routine Wake release after rollback.** The disposable Windows test confirms that a fresh qualified request can retain the restored working package as fallback even when rollback cleared the previous entry. It uses the existing local-user policy and genuine releases still require trusted review intake and an eligible installed broker. [Evidence](docs/verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.json).
 
 **November 22 — interrupted promotion owns the release pair.** When the existing disk journal is present, public `recover` returns `RECOVERY_AUTHORITY_REQUIRED` before restoring either canonical file from LKG. `diagnose` identifies the recovery-authority layer. Use the original reviewed transaction's guarded recovery procedure. Ordinary LKG repair applies after the journal is settled. [Evidence](docs/verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_22.json).

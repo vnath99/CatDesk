@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-22T05:55:35Z.** Reuse the attested broker connection to return a fixed intake refusal for a fresh local request before the ledger intent. Bind the response to the exact request digest and retain unknown-outcome handling when the reply or submission phase cannot be proven. A protected publisher for genuine evidence and installed broker qualification remain required. [Windows evidence](../verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json).
+
 **Verification 2026-11-22T05:50:21Z.** The existing routine broker can select a different qualified package after a completed rollback clears the previous entry. It verifies the restored current as working, records it as the new fallback, and preserves the complete prior ledger. This was exercised with native Windows file operations and isolated policy fixtures. Trusted intake publication and installed routine promotion remain open. [Evidence](../verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.json).
 
 **Decision 2026-11-22T05:45:05Z.** The durable promotion journal has priority over generic LKG repair for either a matching or split current pair. Public recovery inspects the journal before disk repair and still checks it before launch. The reviewed transaction retains its guarded rollback path. [Windows evidence](../verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_22.json).

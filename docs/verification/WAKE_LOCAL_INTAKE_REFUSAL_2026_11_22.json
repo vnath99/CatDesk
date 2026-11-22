@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T05:55:35.5616033Z",
+  "sourceCommit": "ab20a02760bb82c4e1f056357b7919960006820e",
+  "nativeTestExecutableSha256": "3d233984fd4d6d0e1df17f1d69a0dd796c69fc7c218898c6f948d3929cccb9d6",
+  "scope": "WINDOWS_SOURCE_QUALIFICATION_OF_FRESH_LOCAL_WAKE_INTAKE_REFUSAL",
+  "behavior": {
+    "sameAttestedPipe": true,
+    "requestBinding": "SHA-256 of exact submitted bytes",
+    "freshLedgerAdmissionRequired": true,
+    "boundedFixedErrorVocabulary": true,
+    "missingCandidateAndUnreadableIntakeDistinguished": true,
+    "unknownOrResumedSubmissionStillRequiresOriginalLedgerObservation": true
+  },
+  "fixture": {
+    "missingPhysicalCandidateReviewReceipt": "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE",
+    "preexistingBrokerFilesPreserved": true,
+    "newLedgerRecords": 0,
+    "selectedPointerUnchanged": true,
+    "configControlProfileAndUnresolvedJournalUnchanged": true,
+    "clientRefusesWrongHashDuplicateFieldUnexpectedShapeAndUnrecognizedCode": true
+  },
+  "tests": [
+    {
+      "group": "install_broker_client::tests::",
+      "passed": 10
+    },
+    {
+      "group": "install_broker_service_runtime::tests::",
+      "passed": 4
+    },
+    {
+      "test": "missing_review_receipt_refuses_a_fresh_request_before_intent",
+      "passed": 1
+    }
+  ],
+  "publicationDependency": {
+    "protectedWakePublisherAvailable": false,
+    "existingDedicatedProducerIpc": "REVIEWED_BUILD_DEDICATED_PRODUCER_SERVICE_IPC_UNAVAILABLE",
+    "qualification": "Current source inspection plus retained read-only installation evidence. The dedicated producer is not a working publisher."
+  },
+  "installedBrokerActions": 0,
+  "productionActions": 0,
+  "externalMessagesSent": 0,
+  "installedAcceptance": false
+}
