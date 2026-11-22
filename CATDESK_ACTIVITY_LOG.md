@@ -918,3 +918,11 @@ Evidence: [docs/verification/ONE_HASH_BOUND_EXISTING_RESULT_2026_11_22.json](doc
 Agent: CatDesk development. Source: 5670e669558fff7647411a9714b5e48e71087ed9. Outcome: partial. The development WakeHost now verifies exact routine review intake before a broker start. Focused Windows checks passed. The broader suite and baseline comparison preserve the legacy split-root owner refusal. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
 
 Evidence: [docs/verification/WAKE_LOCAL_REVIEW_INTAKE_PREFLIGHT_2026_11_22.json](docs/verification/WAKE_LOCAL_REVIEW_INTAKE_PREFLIGHT_2026_11_22.json); command: Focused Wake native tests, compiled preflight refusals, and baseline comparison; exit 0; SHA-256 9a15d8d6faec76f303dc9b3979a2fabc9019844464760b55405ab5d3aed69c46.
+
+<!-- catdesk-activity:nov22-wake-local-pipe-readiness sha256:fd9ef88df80746a5f1b2a2db9e929774d455679f840f7eb63637a9bac83d28c4 -->
+
+## 2026-11-22T06:57:13Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: c9e2642ec80354acc97a6ca2e3bd3de0f926642e. Outcome: partial. The development local Wake client waits briefly for the pipe of the observed running broker before any request write. Fourteen Windows client and CLI tests passed. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
+
+Evidence: [docs/verification/WAKE_LOCAL_BROKER_PIPE_READINESS_2026_11_22.json](docs/verification/WAKE_LOCAL_BROKER_PIPE_READINESS_2026_11_22.json); command: Wake Windows install broker client and CatDeskWakeHost CLI tests; exit 0; SHA-256 6483f699fc24b91170d9996500d95f0ffedb9ddda1a50fb64cdcf73b4b17be4d.

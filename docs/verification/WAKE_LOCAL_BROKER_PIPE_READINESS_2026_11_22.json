@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_WINDOWS_NAMED_PIPE_FIXTURES_WITH_SCM_OBSERVATION_SEAM",
+  "verifiedUtc": "2026-11-22T06:57:13Z",
+  "sourceCommit": "c9e2642ec80354acc97a6ca2e3bd3de0f926642e",
+  "sourceObservation": "SCM RUNNING is reported before the service runtime opens the request pipe. The earlier local client attempted a single open with no readiness wait.",
+  "localClient": {
+    "pollBudgetMilliseconds": 2000,
+    "pollIntervalMilliseconds": 50,
+    "onlyOpenErrorPolled": "ERROR_FILE_NOT_FOUND",
+    "requiresStableRunningScmPidAcrossPollAndOpen": true,
+    "stillAttestsConnectedPidCreationTokenDaclAndImage": true,
+    "timeout": "WAKE_BROKER_CLIENT_LOCAL_PIPE_NOT_READY_NO_REQUEST",
+    "signedClientWaitBehaviorChanged": false,
+    "existingSingleWriteAndNoReplayPreserved": true
+  },
+  "actualFixture": {
+    "absentPipeAppearedDuringWait": true,
+    "approvalBytesObservedAfterConnectAndBeforeAttestation": 0,
+    "busyPipeRefusedWithoutWaiting": true,
+    "ownerChangeRefused": true,
+    "missingPipeExpired": true,
+    "testProcessesRemaining": 0
+  },
+  "tests": {
+    "brokerClientPassed": 12,
+    "wakeHostCliPassed": 2,
+    "formatCheckExit": 0
+  },
+  "productionBrokerStarts": 0,
+  "installedAcceptance": false,
+  "remainingGate": "Protected publication of genuine review receipts, initial V3 selection, and installed lifecycle qualification remain separate. This change does not use a missing ledger record as authority to submit."
+}
