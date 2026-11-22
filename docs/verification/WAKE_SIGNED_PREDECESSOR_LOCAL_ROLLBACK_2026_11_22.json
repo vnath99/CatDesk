@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T10:43:21.6541826+00:00",
+  "scope": "ACTUAL_DISPOSABLE_WINDOWS_SIGNED_SELECTION_AND_ENROLLED_LOCAL_ROLLBACK",
+  "sourceCommit": "8628f0c48fed608e453612d7f6d838a52dd22c2a",
+  "baselineSourceCommit": "0b60db1136a6bbab30e4e9ccff11c43cf3eedaba",
+  "qualification": {
+    "completedSignedSelectionStatus": "SELECTED_STOPPED",
+    "rollbackStatus": "ROLLED_BACK_STOPPED",
+    "retainedExactWorkingFallback": true,
+    "stagedReceiptsAbsentDuringRollback": true,
+    "retainedOriginalReceiptsPreserved": true,
+    "signedLedgerRetained": true,
+    "guardedAdmissionRemainsRequired": true,
+    "legacyOrUnsignedHistoryCannotProvideThisProof": true,
+    "policyKeyRootGenerationSelectionAndWorkingEvidenceDriftRefused": true,
+    "persistenceSchemaChanged": false
+  },
+  "tests": {
+    "targetedNativeRuntimePassed": 1,
+    "windowsBrokerPassed": 336,
+    "windowsBrokerIgnored": 2,
+    "strictClippy": "PASS",
+    "format": "PASS",
+    "exploratoryRuntimeBeforeFinalRefinement": {
+      "passed": 24,
+      "failed": 4,
+      "refusal": "WAKE_SAME_STATE_LEGACY_OWNER_UNPROVEN",
+      "nativeReason": "SPLIT_ROOT_CANDIDATES",
+      "affected": [
+        "follow-on local update after rollback",
+        "local pointer interruption resume",
+        "publication retains exact bytes",
+        "damaged-current rollback"
+      ]
+    }
+  },
+  "isolatedCargoCacheRemoved": true,
+  "limits": "The Windows fixture used its own signed test key and native ledger, package pinning and selection writes in disposable state. This verifies exact reuse for the next rollback after a completed signed selection. Fresh selections and other rollbacks still require their ordinary restored or protected receipt paths. The production broker, first operator-signed selection, genuine candidate review publisher, and live Wake and Web workflows were outside this test.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}

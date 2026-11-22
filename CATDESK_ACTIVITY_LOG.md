@@ -1142,3 +1142,11 @@ Evidence: [docs/verification/PROMOTION_REAL_SCHEDULER_DEMAND_START_2026_11_22.js
 Agent: Codex. Source: a437dc7ac050da7748878581d76d0fa801fc8263. Outcome: partial. A later invocation of the frozen routine Wake request can observe its exact protected terminal receipt without service startup or request replay. A real Windows ledger fixture and 336 broker tests verified the bound result. Original owner exit, present selection and installed acceptance remain separate. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/WAKE_ROUTINE_UPDATE_RETAINED_COMPLETE_2026_11_22.json](docs/verification/WAKE_ROUTINE_UPDATE_RETAINED_COMPLETE_2026_11_22.json); command: Windows install broker native ledger fixture, WakeHost CLI regressions and strict Clippy; exit 0; SHA-256 bb05bb083c46ca04bad05abd0a7ca7f49b1d15465dda43f45de062af6b7252fe.
+
+<!-- catdesk-activity:nov22-signed-wake-predecessor-local-rollback sha256:673a1a5a70e5ad51f5c92efd13d100aef904172e6f9a9c21f93972c32ba53c37 -->
+
+## 2026-11-22T10:43:21.6541826+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 8628f0c48fed608e453612d7f6d838a52dd22c2a. Outcome: partial. The disposable Windows broker used its immediately preceding signed terminal selection to restore the exact verified fallback without staging duplicate receipts. The targeted runtime fixture and 336 broker tests passed. Fresh selection and protected production authority remain separate. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/WAKE_SIGNED_PREDECESSOR_LOCAL_ROLLBACK_2026_11_22.json](docs/verification/WAKE_SIGNED_PREDECESSOR_LOCAL_ROLLBACK_2026_11_22.json); command: Disposable native signed selection and exact enrolled Windows rollback plus broker regression suite; exit 0; SHA-256 d79856b5ecdf6b007f545d2e6395307f354e2831c9f6bb8a94f095be3565efd3.
