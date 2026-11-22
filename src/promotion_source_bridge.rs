@@ -10,6 +10,7 @@ use std::os::windows::fs::OpenOptionsExt;
 
 const ROUTE: &str = "catdesk-qualified-stopped-v2";
 const ENDPOINT: &str = "http://127.0.0.1:3200/catdesk-qualified-stopped-v2/mcp";
+const SOURCE_LISTENER_UNPROVEN: &str = "REVIEWED_PROMOTION_SOURCE_LISTENER_UNPROVEN";
 
 pub(super) fn lifecycle_lease(workspace: &Path) -> Result<fs::File, String> {
     let mut parent = Guard::acquire(workspace, "promotion source lifecycle")?;
@@ -177,17 +178,25 @@ pub(super) fn prepare_local_source(
     workspace: &Path,
     auth: &ReviewedPromotionAuthorizationV1,
 ) -> Result<(fs::File, Option<SourceBridge>), String> {
-    with_promotion_lifecycle(workspace, listener_possible, || {
-        retirement::admit_stopped_source(workspace, auth)?;
-        SourceBridge::start(workspace, auth).map(|(bridge, _)| bridge)
-    })
+    with_promotion_lifecycle(
+        workspace,
+        || canonical_listener_available(workspace),
+        || {
+            retirement::admit_stopped_source(workspace, auth)?;
+            SourceBridge::start(workspace, auth).map(|(bridge, _)| bridge)
+        },
+    )
 }
 
 pub(crate) fn check_local_source_before_claim(
     workspace: &Path,
     preflight: Option<&ReviewedPromotionAuthorizationV1>,
 ) -> Result<(), String> {
-    check_source_readiness(workspace, preflight, listener_possible())
+    check_source_readiness(
+        workspace,
+        preflight,
+        canonical_listener_available(workspace)?,
+    )
 }
 
 fn check_source_readiness(
@@ -216,27 +225,50 @@ fn check_source_readiness(
     Ok(())
 }
 
-fn listener_possible() -> bool {
-    [
-        IpAddr::V4(Ipv4Addr::LOCALHOST),
-        IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
-    ]
-    .iter()
-    .any(|ip| {
-        TcpStream::connect_timeout(&SocketAddr::new(*ip, 3200), Duration::from_millis(250)).is_ok()
-    })
+fn canonical_listener_available(workspace: &Path) -> Result<bool, String> {
+    inspect_source_listener(
+        crate::control_plane_supervisor::FIXED_LOCAL_BACKEND_PORT,
+        || {
+            canonical_workspace_file(
+                workspace,
+                &workspace.join("target/release/catdesk.exe"),
+                "canonical release",
+            )
+        },
+    )
+}
+
+fn inspect_source_listener(
+    port: u16,
+    canonical_image: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<bool, String> {
+    let failure = || SOURCE_LISTENER_UNPROVEN.to_string();
+    let owners = windows_listener_owner_pids(port).map_err(|_| failure())?;
+    match owners.as_slice() {
+        [] => Ok(false),
+        [pid] => {
+            let canonical = canonical_image().map_err(|_| failure())?;
+            let live =
+                windows_process_is_exact_and_alive(*pid, &canonical).map_err(|_| failure())?;
+            if !live || windows_listener_owner_pids(port).map_err(|_| failure())? != owners {
+                return Err(failure());
+            }
+            Ok(true)
+        }
+        _ => Err(failure()),
+    }
 }
 
 fn with_promotion_lifecycle(
     workspace: &Path,
-    listener_possible: impl FnOnce() -> bool,
+    listener_available: impl FnOnce() -> Result<bool, String>,
     start_bridge: impl FnOnce() -> Result<SourceBridge, String>,
 ) -> Result<(fs::File, Option<SourceBridge>), String> {
     let _mutation = retirement::mutation_lease(workspace)?;
     let lifecycle = lifecycle_lease(workspace)?;
     // A live listener can disappear during handoff. Decide only after
     // startup is fenced, and hold the lease through the terminal receipt.
-    let bridge = if listener_possible() {
+    let bridge = if listener_available()? {
         None
     } else {
         Some(start_bridge()?)
@@ -317,7 +349,7 @@ mod tests {
             &root,
             || {
                 assert!(lifecycle_lease(&root).is_err());
-                true
+                Ok(true)
             },
             || panic!("a live listener must not start a bridge"),
         )
@@ -346,6 +378,23 @@ mod tests {
         assert!(!root.join(".catdesk").exists());
         assert_eq!(root.canonicalize().unwrap().parent(), Some(temp.as_path()));
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn source_listener_inspection_requires_the_exact_live_image() {
+        let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let image = std::env::current_exe().unwrap().canonicalize().unwrap();
+        assert!(inspect_source_listener(port, || Ok(image.clone())).unwrap());
+        assert_eq!(
+            inspect_source_listener(port, || Ok(image.with_file_name("another-image.exe")))
+                .unwrap_err(),
+            SOURCE_LISTENER_UNPROVEN
+        );
+        drop(listener);
+        assert!(
+            !inspect_source_listener(port, || panic!("no owner requires no image lookup")).unwrap()
+        );
     }
 
     #[test]

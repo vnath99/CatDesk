@@ -239,12 +239,13 @@ static class PromotionRefusal {
     static int Main(string[] args) {
         string mode = File.ReadAllText("refusal-mode.txt");
         File.AppendAllText("refusal-invocations.txt", args[1] + "\n");
-        if ((mode == "candidate" || mode == "stopped-source") && args[1] == "promote-resolve") {
+        if ((mode == "candidate" || mode == "stopped-source" || mode == "listener-owner") && args[1] == "promote-resolve") {
             Console.WriteLine("{\"state\":\"PROMOTION_CANDIDATE_RESOLVED\",\"candidateSha256\":\"" + args[2] + "\",\"buildAttemptId\":\"" + new string('a', 32) + "\"}");
             return 0;
         }
         string code = mode == "candidate" ? "REVIEWED_PROMOTION_REVIEW_REQUIRED" : "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD";
         if (mode == "stopped-source") code = "REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED";
+        if (mode == "listener-owner") code = "REVIEWED_PROMOTION_SOURCE_LISTENER_UNPROVEN";
         if (mode == "unknown") code = "FIXTURE_PRIVATE_PATH";
         string extra = mode == "extra" ? ",\"message\":\"FIXTURE_PRIVATE_TEXT\"" : "";
         if (mode == "stderr") Console.Error.WriteLine("FIXTURE_PRIVATE_TEXT");
@@ -265,6 +266,7 @@ static class PromotionRefusal {
         @{ Mode = 'resolver'; State = 'REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
         @{ Mode = 'candidate'; State = 'REVIEWED_PROMOTION_REVIEW_REQUIRED'; Phase = 'RUN_CANDIDATE'; Actions = 'promote-resolve,promote' }
         @{ Mode = 'stopped-source'; State = 'REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED'; Phase = 'RUN_CANDIDATE'; Actions = 'promote-resolve,promote' }
+        @{ Mode = 'listener-owner'; State = 'REVIEWED_PROMOTION_SOURCE_LISTENER_UNPROVEN'; Phase = 'RUN_CANDIDATE'; Actions = 'promote-resolve,promote' }
         @{ Mode = 'unknown'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
         @{ Mode = 'extra'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
         @{ Mode = 'array'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
