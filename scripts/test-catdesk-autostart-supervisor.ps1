@@ -292,11 +292,26 @@ param([Parameter(Position=0)][string]$Action,[string]$Workspace,[switch]$Backend
 [IO.File]::AppendAllText((Join-Path $Workspace 'backend-calls.log'),($Action+'|'+[string][bool]$BackendOnly+"`n"))
 $kind=[IO.File]::ReadAllText((Join-Path $Workspace 'backend-kind.txt'))
 if($Action -ceq 'recover'){
- if(!$BackendOnly -or $kind -cne 'missing'){throw 'UNAUTHORIZED_FIXTURE_RECOVERY'}
+ if(!$BackendOnly -or $kind -cnotin @('missing','reviewed-pair')){throw 'UNAUTHORIZED_FIXTURE_RECOVERY'}
  [IO.File]::WriteAllText((Join-Path $Workspace 'backend-kind.txt'),'healthy')
  @{command='recover';state='LOCAL_BACKEND_READY'}|ConvertTo-Json -Compress;return
 }
 if($Action -cne 'diagnose' -or $BackendOnly){throw 'UNEXPECTED_FIXTURE_COMMAND'}
+if($kind -in @('reviewed-pair','wrong-authority','duplicate-authority','conflicting-owner','unsupported-pair','wrong-next-action')){
+    $layers=@(
+        @{layer='CANONICAL_RELEASE';state='FAILED';gate='CANONICAL_HASH_MISMATCH'},
+        @{layer='RECOVERY_AUTHORITY';state='READY';gate='LAST_KNOWN_GOOD'})
+    $nextAction='RUN_RECOVER'
+    switch -CaseSensitive($kind){
+        'wrong-authority' {$layers[1].gate='RECOVERY_AUTHORITY_REQUIRED'}
+        'duplicate-authority' {$layers+=@{layer='RECOVERY_AUTHORITY';state='READY';gate='LAST_KNOWN_GOOD'}}
+        'conflicting-owner' {$layers+=@{layer='LOCAL_DAEMON';state='FAILED';gate='LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'}}
+        'unsupported-pair' {$layers[0].gate='CANONICAL_WORKSPACE_RESOLVE'}
+        'wrong-next-action' {$nextAction='OPERATOR_ATTENTION'}
+    }
+    @{command='diagnose';state='RECOVERY_AVAILABLE';primaryLayer='CANONICAL_RELEASE';nextAction=$nextAction;layers=$layers}|ConvertTo-Json -Depth 5 -Compress
+    return
+}
 $layers=@(
  @{layer='CANONICAL_RELEASE';state='READY';gate='READY'},
  @{layer='LOCAL_MCP_CONFIG';state='READY';gate='READY'},
@@ -319,7 +334,11 @@ switch -CaseSensitive($kind){
     $restarted=States (Invoke-CatDeskAutostartSupervisor -BackendOnly -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
     Require (($restarted -join ',') -ceq 'RECOVERED,READY,MONITORING_COMPLETE') 'backend-only recovery did not return to normal monitoring'
     Require (([IO.File]::ReadAllText($backendLog).Trim() -replace "`r",'') -ceq "diagnose|False`nrecover|True`ndiagnose|False") 'backend recovery widened public lifecycle scope'
-    foreach($kind in @('foreign','auth','release','duplicate')){
+    [IO.File]::WriteAllText($kindPath,'reviewed-pair');[IO.File]::WriteAllText($backendLog,'')
+    $restored=States (Invoke-CatDeskAutostartSupervisor -BackendOnly -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
+    Require (($restored -join ',') -ceq 'RECOVERED,READY,MONITORING_COMPLETE') 'reviewed pair recovery did not return to normal monitoring'
+    Require (([IO.File]::ReadAllText($backendLog).Trim() -replace "`r",'') -ceq "diagnose|False`nrecover|True`ndiagnose|False") 'reviewed rollback widened the backend-only scope or retried'
+    foreach($kind in @('foreign','auth','release','duplicate','wrong-authority','duplicate-authority','conflicting-owner','unsupported-pair','wrong-next-action')){
         [IO.File]::WriteAllText($kindPath,$kind);[IO.File]::WriteAllText($backendLog,'')
         $held=States (Invoke-CatDeskAutostartSupervisor -BackendOnly -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 1)
         Require (($held -join ',') -ceq 'DEGRADED,MONITORING_COMPLETE') 'unsafe backend evidence did not hold'

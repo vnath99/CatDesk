@@ -145,6 +145,25 @@ function Invoke-PublicLifecycle {
                 # Public diagnose is bounded and read-only. Do not restart a
                 # healthy backend for Wake or external-owner degradation.
                 if($parsed.layers -isnot [array]){return 'ACTION_REQUIRED'}
+                if ($parsed.state -ceq 'RECOVERY_AVAILABLE') {
+                    # The facade stops diagnosis at the canonical pair when it
+                    # independently verifies a reviewed recovery slot. Send
+                    # this exact result to the same lease-protected engine.
+                    $release = @($parsed.layers | Where-Object layer -CEQ 'CANONICAL_RELEASE')
+                    $authority = @($parsed.layers | Where-Object layer -CEQ 'RECOVERY_AUTHORITY')
+                    $unexpected = @($parsed.layers | Where-Object { $_.layer -cnotin @(
+                        'LIFECYCLE_ENGINE', 'CANONICAL_RELEASE', 'RECOVERY_AUTHORITY', 'CODEX_CLI'
+                    ) })
+                    if ($parsed.primaryLayer -ceq 'CANONICAL_RELEASE' -and $parsed.nextAction -ceq 'RUN_RECOVER' -and
+                        $release.Count -eq 1 -and $release[0].state -ceq 'FAILED' -and $release[0].gate -cin @(
+                            'CANONICAL_BINARY_MISSING', 'CANONICAL_FINGERPRINT_MISSING',
+                            'CANONICAL_FINGERPRINT_INVALID', 'CANONICAL_HASH_MISMATCH'
+                        ) -and $authority.Count -eq 1 -and $authority[0].state -ceq 'READY' -and
+                        $authority[0].gate -ceq 'LAST_KNOWN_GOOD' -and $unexpected.Count -eq 0) {
+                        return 'LOCAL_RELEASE_RECOVERY_PENDING'
+                    }
+                    return 'ACTION_REQUIRED'
+                }
                 foreach($id in @('CANONICAL_RELEASE','LOCAL_MCP_CONFIG','LOCAL_DAEMON','LOCAL_MCP_PROTOCOL')){
                     $matches=@($parsed.layers|Where-Object {$_.layer -ceq $id})
                     if($matches.Count -ne 1 -or $matches[0].state -isnot [string] -or $matches[0].gate -isnot [string]){return 'ACTION_REQUIRED'}
@@ -244,10 +263,10 @@ function Invoke-CatDeskAutostartSupervisor {
                 if ($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles) { Wait-SupervisorDelay -Seconds $HealthPollSeconds }
                 continue
             }
-            if($BackendOnly -and $status -cne 'LOCAL_DAEMON_PENDING'){
-                # Only a proven absent listener is eligible for this narrow
-                # owner. Authentication, release and foreign-owner failures
-                # require diagnosis, never an automatic broader recovery.
+            if ($BackendOnly -and $status -cnotin @('LOCAL_DAEMON_PENDING', 'LOCAL_RELEASE_RECOVERY_PENDING')) {
+                # A missing listener or reviewed pair recovery can use the
+                # narrow engine. Unproven release, auth and owner failures
+                # remain degraded until independent evidence changes.
                 Write-SupervisorState 'DEGRADED'
                 $cycles++
                 if($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles){Wait-SupervisorDelay -Seconds $FailureCooldownSeconds}
