@@ -814,3 +814,11 @@ Evidence: [docs/verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.js
 Agent: Codex. Source: eda236f8db78f17df1f61bf2b5e723cca653b722. Outcome: partial. One-hash promotion can archive an eligible stopped predecessor and its exact handoff after revalidating successor review. Windows tests resumed the original archive after interruption. Next: Use the existing first Wake selection and independent backend review. Verify protected one-hash activation, persistent startup and retained rollback with genuine authority.
 
 Evidence: [docs/verification/ONE_HASH_COMPLETED_PREDECESSOR_ARCHIVE_2026_11_22.json](docs/verification/ONE_HASH_COMPLETED_PREDECESSOR_ARCHIVE_2026_11_22.json); command: Windows daemon reload suite and exact independent review remeasurement; exit 0; SHA-256 98ea02d086021f29ec6cc8684f60d0f0752a944cdd69b5bfeba0c24299ca9c9a.
+
+<!-- catdesk-activity:nov22-one-hash-stopped-source-preclaim sha256:640ab32f322c8a216e37c817537e3320b4e54dc2e7246ff73b70d247228ba287 -->
+
+## 2026-11-22T05:29:02.1954626Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: aaac571e61c76d5c1043ddb4cbd0f016f9c30070. Outcome: partial. The one-hash command checks existing stopped qualification before archival and rechecks the exact predecessor before claim. Windows native tests and both PowerShell lifecycles passed. Next: Use the prepared first Wake selection and genuine independent backend review. Verify protected native startup, rollback and the installed Web cycle once eligible.
+
+Evidence: [docs/verification/ONE_HASH_STOPPED_SOURCE_PRECLAIM_2026_11_22.json](docs/verification/ONE_HASH_STOPPED_SOURCE_PRECLAIM_2026_11_22.json); command: Windows daemon reload and public PowerShell lifecycle test suites; exit 0; SHA-256 72af1c2b34457e71e52a16931d1c699af8bbe2046a74b2a54f7b4bf9b18612af.

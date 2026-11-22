@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-22T05:29:02Z.** Check existing stopped-source qualification before predecessor metadata changes. Before confirming, recheck it with the prepared release identity and exact historical archive. This preserves the reviewed claim when a stopped prerequisite is missing. The worker still repeats live ownership and authority checks. [Evidence](../verification/ONE_HASH_STOPPED_SOURCE_PRECLAIM_2026_11_22.json).
+
 **Decision 2026-11-22T05:24:57Z.** Let one-hash promotion invoke the existing archive journal for a verified stopped predecessor and its attributable completed handoff. Remeasure successor review before metadata moves. Resume an interrupted archive from its exact existing journal. Explicit and uncertain recovery routes retain their separately validated scope. [Windows fixture](../verification/ONE_HASH_COMPLETED_PREDECESSOR_ARCHIVE_2026_11_22.json).
 
 **Decision 2026-11-22T05:20:00Z.** Use the existing completed retirement archive as predecessor evidence for successive stopped promotions. Its selected hash must match the current release, and the next artifact and transaction require their own authority. Keep the exact-candidate retry rule for failed retirements and the existing handoff and stopped-health checks. [Windows release regression](../verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.json).

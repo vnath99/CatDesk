@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 12:29 a.m. EST — stopped predecessor checks before promotion.** The one-hash command verifies the existing stopped qualification before archiving a stopped predecessor. It checks the proof again and inspects the exact retirement history before confirming the new claim. The test preserved the canonical bytes and created no control directory when proof was absent. Both PowerShell editions preserve the fixed refusal. [Evidence](docs/verification/ONE_HASH_STOPPED_SOURCE_PRECLAIM_2026_11_22.json).
+
 **November 22, 12:24 a.m. EST — one-hash archival of the completed predecessor.** After revalidating the successor's independent review, the development command can archive an eligible stopped predecessor and its exact completed handoff using the existing journal. Interrupted archival resumes its recorded moves. Failed, unsettled and unrelated work retains its existing recovery path. Installed qualification remains open. [Evidence](docs/verification/ONE_HASH_COMPLETED_PREDECESSOR_ARCHIVE_2026_11_22.json).
 
 **November 22, 12:20 a.m. EST — successive stopped backend releases.** The development source accepts a verified completed retirement archive as history for a different candidate and transaction. The current release must match the archived successful candidate. Changed archives, open handoffs and reused transaction identities still refuse. The existing stopped-owner and health proofs still apply. [Windows evidence](docs/verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.json).
@@ -356,5 +358,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Use the existing first Wake selection and independent backend review. Verify protected one-hash activation, persistent startup and retained rollback with genuine authority"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Use the prepared first Wake selection and genuine independent backend review. Verify protected native startup, rollback and the installed Web cycle once eligible"}
 ```

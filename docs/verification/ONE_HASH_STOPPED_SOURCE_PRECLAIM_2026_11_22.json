@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "scope": "WINDOWS_SOURCE_PRECHECK_AND_PUBLIC_POWERSHELL_REFUSAL",
+  "verifiedUtc": "2026-11-22T05:29:02.1954626Z",
+  "sourceCommit": "aaac571e61c76d5c1043ddb4cbd0f016f9c30070",
+  "nativeTestExecutableSha256": "15c2f3bcd77ffb5315389c6869ff0d5f7ad984cac00770b93e9b06b01e0ed97d",
+  "fixedRefusal": "REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED",
+  "normalEntryPoint": "catdesk.ps1 promote <artifact-sha256>",
+  "prechecks": [
+    "If the local listener is absent, validate the current release's existing stopped qualification and exact bounded configuration before predecessor archival",
+    "Before claim confirmation, recheck the stopped evidence and exact historical binding to the prepared authority",
+    "The worker continues to evaluate listener, owner, source and review evidence at execution"
+  ],
+  "nativeFixture": {
+    "scope": "Disposable canonical bytes and absent stopped result",
+    "missingQualificationRefused": true,
+    "canonicalBytesPreserved": true,
+    "controlDirectoryCreated": false
+  },
+  "tests": [
+    {"command":"cargo test --locked --offline --bin catdesk daemon_reload:: -- --test-threads=1","passed":54,"exitCode":0},
+    {"command":"scripts/test-catdesk-lifecycle.ps1 with actual disposable child processes","powerShell7ExitCode":0,"windowsPowerShell51ExitCode":0}
+  ],
+  "productionActions": 0,
+  "installedAcceptance": false
+}

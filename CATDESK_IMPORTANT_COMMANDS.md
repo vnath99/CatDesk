@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — missing stopped-source proof.** `REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED` means the stopped route could not validate the existing qualification for the current executable. Resolve that evidence through the supported lifecycle before retrying. The development facade checks this before archival and before claim. [Verification](docs/verification/ONE_HASH_STOPPED_SOURCE_PRECLAIM_2026_11_22.json).
+
 **November 22 — routine completed predecessor retirement.** Development `catdesk.ps1 promote <artifact-sha256>` now includes existing retirement for an exact completed stopped predecessor with an eligible handoff. It first revalidates the next artifact and review. A live owner, failed promotion, or unsettled handoff still requires its supported disposition. [Windows tests and eligibility](docs/verification/ONE_HASH_COMPLETED_PREDECESSOR_ARCHIVE_2026_11_22.json).
 
 **November 22 — predecessor for a successive stopped promotion.** After the existing guarded retirement completes, the development promoter can use the archived successful release as the source for a different reviewed artifact. The current hash must match the archived selected release, and the handoff must already be settled. A retired failure still binds only the original candidate. [Verification](docs/verification/STOPPED_PROMOTION_RETIRED_PREDECESSOR_2026_11_22.json).
