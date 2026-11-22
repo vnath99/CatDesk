@@ -1166,3 +1166,11 @@ Evidence: [docs/verification/WAKE_WINDOWS_RELEASE_FIXTURE_OWNER_SCOPE_2026_11_22
 Agent: Codex. Source: 5f172ba911d220fa1cc952f31daa411ee7e22a62. Outcome: partial. One-hash promotion now allows a bounded follow-up health probe after a timeout from the same exact listener. A disposable frozen backend rejected anonymous MCP and served authenticated MCP after the facade exited. Both PowerShell editions passed. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/PROMOTION_MCP_STARTUP_TIMEOUT_2026_11_22.json](docs/verification/PROMOTION_MCP_STARTUP_TIMEOUT_2026_11_22.json); command: pwsh -NoProfile -File scripts/test-catdesk-lifecycle.ps1; exit 0; SHA-256 8c56cc2f72644c7c60914c9d4a1d45e7a0cdf5a025f1a140f56c70d3f20c8d70.
+
+<!-- catdesk-activity:backend-exact-intact-rollback-20261122 sha256:c914708ba246e3e10212a926fef9d95627b803396635393ae29dc16aff592b31 -->
+
+## 2026-11-22T11:11:45Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 0b63ede00d45a02af75fcd7953b812908797b865. Outcome: partial. Explicit backend-only recovery now requires exact current and previous artifact pins and a failed owned startup before restoring an intact pair. A real Windows child exited nonzero and a frozen predecessor passed authenticated MCP before selection in disposable state. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/BACKEND_EXACT_INTACT_ROLLBACK_2026_11_22.json](docs/verification/BACKEND_EXACT_INTACT_ROLLBACK_2026_11_22.json); command: pwsh -NoProfile -File scripts/test-catdesk-lifecycle.ps1; exit 0; SHA-256 888c1ec47bd82c9759c7b3106035341b7c8c85978386b65819d01468acf3c237.

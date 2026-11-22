@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T11:11:45Z",
+  "scope": "DISPOSABLE_WINDOWS_BACKEND_ROLLBACK_AFTER_EXACT_OWNED_STARTUP_FAILURE",
+  "sourceCommit": "0b63ede00d45a02af75fcd7953b812908797b865",
+  "baselineSourceCommit": "96d11030f04112108aec9fb47c87997369992e1f",
+  "privateFixtureSha256": "b19a10dcf216f4db36fbbc2bd6ef3926e25fea4d144019b42d261439c41e60bf",
+  "startedUtc": "2026-11-22T11:09:51.9972735Z",
+  "finishedUtc": "2026-11-22T11:10:18.7074965Z",
+  "failedFixtureSha256": "2779bf7b38b6532d1bfea6bac9b92f4c0769a90c6a3eafc68edfa5e2a25e0c70",
+  "previousArtifactSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+  "checks": {
+    "selectedCurrentPairIntactAtEntry": true,
+    "ownedCurrentProcessExitCode": 23,
+    "startedOwners": 2,
+    "outcome": "LOCAL_BACKEND_READY",
+    "anonymousHttpStatus": 401,
+    "authenticatedHttpStatus": 200,
+    "previousSelectedOnlyAfterAuthentication": true,
+    "bothEscrowSlotsPreserved": true,
+    "configurationPreserved": true,
+    "wrongActivePinRefused": true,
+    "missingBearerRefusedBeforeStart": true,
+    "repeatRefusedWithoutStart": true,
+    "bothOwnersExitedAndListenerClosed": true,
+    "fixtureRemoved": true,
+    "powershell7LifecycleAndBootstrap": "PASS",
+    "windowsPowerShell51LifecycleAndBootstrap": "PASS"
+  },
+  "limits": "The failing binary was a compiled Windows fixture and escrow authority was disposable. The retained artifact was a real frozen CatDesk release. It ran in its bounded headless mode on a private loopback port, while the recovery engine made real selection and pointer changes in the fixture. The installed port, production authority and Web cycle were outside the run.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}
