@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T01:34:28.5260564Z",
+  "scope": "ACTUAL_READ_ONLY_PREPROMOTION_BACKEND_ROLLBACK_SLOTS",
+  "recoveryHelperGitBlob": "b7864706c9da5eaf2799cd4b2e4371c0f9b0285a",
+  "previousLiveRollbackEvidence": "INSTALLED_RETAINED_RELEASE_PROMOTION_ROLLBACK_2026_11_02.json",
+  "receiptSha256": "f19ee8b15b692d91f0f94648ef0c386d5a3ed17297f000bb93dee3df0db3dcfc",
+  "current": {
+    "slot": "slot-b",
+    "generation": 4,
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "canonicalPairMatches": true,
+    "pointerMatches": true
+  },
+  "previous": {
+    "slot": "slot-a",
+    "generation": 3,
+    "sha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+    "manifestFingerprintAndBinaryAccepted": true,
+    "matchesPreviouslyExercisedRollback": true
+  },
+  "activePointerStable": true,
+  "recoveryOrLifecycleActions": 0,
+  "freshRollbackExecution": false,
+  "wakeSelectionExecuted": false,
+  "backendCandidatePromoted": false,
+  "installedWebWorkCycleVerified": false
+}

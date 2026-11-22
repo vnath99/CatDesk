@@ -638,3 +638,11 @@ Evidence: [docs/verification/FIRST_WEB_AUTHENTICATED_LOCAL_MCP_CYCLE_2026_11_21.
 Agent: CatDesk development. Source: 67a26425a780091f8373aabcb9f804d6207f2183. Outcome: partial. The installed backend and its active producer lineage agree. Local RESULT returned BUILD_ATTESTED for the exact serving release once the contained process inherited the canonical working directory. The v5 RESULT call from Codex returned UNAUTHORIZED. No new review, build or promotion was executed. Next: Obtain an eligible independent reviewer for the frozen compatible backend draft and complete the exact review and snapshot before local producer preparation. Independently verify the reviewed signed Wake selection after the operator executes it, then proceed to the prepared installed Web cycle.
 
 Evidence: [docs/verification/INSTALLED_REVIEWED_BUILD_RESULT_2026_11_21.json](docs/verification/INSTALLED_REVIEWED_BUILD_RESULT_2026_11_21.json); command: operator reviewed-build result; exit 0; SHA-256 4727b582098119da46bf64dd41d86f3c07e71f01853d9e05861b111c45865ea9.
+
+<!-- catdesk-activity:installed-rollback-readiness-readback-nov21 sha256:02b154ce9fd543fb615d0465ef5b9d232046636383c0f082f0d647624f58a5eb -->
+
+## 2026-11-22T01:34:28.5260564Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 8b56fde0975d0d7bba0d132bb1c5469bdbe6c9b6. Outcome: partial. The existing recovery validator confirmed selected slot-b generation 4 and prior slot-a generation 3 match the serving release and rollback release exercised on November 2. The canonical executable and fingerprint matched the selected slot and the active pointer was stable. This was read-only, without another recovery operation. Next: Use the prepared operator-signed Wake selection and obtain an eligible independent backend reviewer for the frozen 56aa draft. The validated serving release can serve as the preservation baseline when the separate reviewed backend promotion becomes eligible.
+
+Evidence: [docs/verification/INSTALLED_BACKEND_ROLLBACK_READBACK_2026_11_21.json](docs/verification/INSTALLED_BACKEND_ROLLBACK_READBACK_2026_11_21.json); command: Get-CatDeskCanonicalPairEvidence, Get-CatDeskLastKnownGoodRelease, Read-CatDeskLkgSlot, Read-CatDeskLkgPointer; exit 0; SHA-256 d6a73213c8c37dbb2227fcc9acf1a5f3a153f5465cfcdda2a87de5be501f9f0c.
