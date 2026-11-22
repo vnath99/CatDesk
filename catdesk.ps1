@@ -839,8 +839,13 @@ function Get-NonMutatingStatus {
     # Preserve a fixed, non-secret stage code so a consumer can distinguish
     # which bounded status gate threw without projecting exception text,
     # configured endpoints, tunnel identity, credentials, or filesystem paths.
-    $statusStage = 'CANONICAL_IDENTITY'
+    $statusStage = 'RECOVERY_AUTHORITY'
     try {
+        if (-not (Test-CatDeskPromotionStartupReady -Root $Workspace)) {
+            Write-LifecycleStatus 'RECOVERY_AUTHORITY_REQUIRED'
+            return
+        }
+        $statusStage = 'CANONICAL_IDENTITY'
         $canonical = Get-LifecycleCanonicalIdentity
         $statusStage = 'LOCAL_MCP_CONFIG'
         $local = Get-LifecycleLocalMcp
@@ -854,13 +859,21 @@ function Get-NonMutatingStatus {
             if (-not $client) { return $false }
             Test-OfficialRuntimeVerified -Root $root -TimeoutSeconds 5 -Alias $alias -ClientPath $client
         }
+        $wakeReady = $false
         if ($localReady -and $runtimeReady) {
-            $wakeReady = $false
             try {
                 $wakeReady = [bool](Invoke-LifecycleSeam -Name 'WakeRuntime' -Arguments @($Workspace) -Default {
                     param($root) Test-WakeBridgeRuntime -Root $root
                 })
             } catch {}
+        }
+        # A promotion may acquire ownership and publish its journal while the probes run.
+        $statusStage = 'RECOVERY_AUTHORITY'
+        if (-not (Test-CatDeskPromotionStartupReady -Root $Workspace)) {
+            Write-LifecycleStatus 'RECOVERY_AUTHORITY_REQUIRED'
+            return
+        }
+        if ($localReady -and $runtimeReady) {
             if ($wakeReady) { Write-LifecycleStatus 'READY' 'local daemon and external runtime verified; Wake runtime available' }
             else { Write-LifecycleStatus 'CORE_CONNECTED_WAKE_PENDING' 'gate=WAKE_RUNTIME_NOT_READY' }
             return

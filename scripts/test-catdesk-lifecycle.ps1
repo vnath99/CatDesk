@@ -163,6 +163,41 @@ try {
     }
     Require ($actions.Count -eq 0 -and -not [IO.File]::Exists($realConfig)) 'lease contention did not invoke another lifecycle action or require a configuration file'
 
+    $promotionDirectory = Join-Path $realCanonicalRoot '.catdesk\promotion-recovery'
+    [void][IO.Directory]::CreateDirectory($promotionDirectory)
+    $promotionJournal = Join-Path $promotionDirectory 'promotion-transaction.json'
+    $journalContents = '{"schemaVersion":2,"phase":"CANONICAL_MUTATION_STARTED"}'
+    $readyStatus = $realCanonical.Clone()
+    $readyStatus.LocalMcpReadiness = { $true }
+    $readyStatus.RuntimeStatus = { $true }
+    $statusArgs = @{
+        Command = 'status'
+        Seams = $readyStatus
+        FixtureWorkspace = $realCanonicalRoot
+        FixtureConfigPath = $realConfig
+        FixtureExpectedBuildSha256 = $realHash
+        FixtureFingerprintPath = $realFingerprint
+    }
+    $unfenced = Invoke-FixtureFacade @statusArgs | ConvertFrom-Json
+    Require ($unfenced.state -ceq 'READY') 'matching canonical pair and healthy probes are ready without a journal'
+    $observedPublicInputs.Clear()
+    [IO.File]::WriteAllText($promotionJournal, $journalContents)
+    $alreadyFenced = Invoke-FixtureFacade @statusArgs | ConvertFrom-Json
+    Require ($alreadyFenced.state -ceq 'RECOVERY_AUTHORITY_REQUIRED') 'matching canonical pair must not hide an unfinished promotion'
+    Require ($observedPublicInputs.Count -eq 0) 'existing promotion journal prevents status probes'
+    Require ([IO.File]::ReadAllText($promotionJournal) -ceq $journalContents) 'status preserves the existing journal'
+    [IO.File]::Delete($promotionJournal)
+
+    $readyStatus.WakeRuntime = {
+        [IO.File]::WriteAllText($promotionJournal, $journalContents)
+        $true
+    }
+    $newlyFenced = Invoke-FixtureFacade @statusArgs | ConvertFrom-Json
+    Require ($newlyFenced.state -ceq 'RECOVERY_AUTHORITY_REQUIRED') 'journal published during readiness checks invalidates the ready response'
+    Require ([IO.File]::ReadAllText($promotionJournal) -ceq $journalContents) 'status preserves the newly published journal'
+    Require ((Get-FileHash -LiteralPath $realBinary).Hash -ieq $realHash -and [IO.File]::ReadAllText($realFingerprint) -ceq $realHash) 'status preserves both release files'
+    [IO.File]::Delete($promotionJournal)
+
     # Use real file identity and hashing, with only the native child seam
     # simulated. This never launches a release controller or a backend.
     $attemptId = 'a' * 32
