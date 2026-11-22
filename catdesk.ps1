@@ -365,7 +365,7 @@ function Get-AutostartRegistration {
         (-not [string]::IsNullOrWhiteSpace([string]$runValue) -and -not $runOwned)) {
         if (-not $conflict) { $conflict = 'AUTOSTART_CONFLICT' }
     }
-    [pscustomobject]@{ Definition = $definition; TaskOwned = $taskOwned; RunOwned = $runOwned; Conflict = $conflict }
+    [pscustomobject]@{ Definition = $definition; Task = $task; TaskOwned = $taskOwned; RunOwned = $runOwned; Conflict = $conflict }
 }
 
 function Get-AutostartPowerShellHost {
@@ -1177,7 +1177,32 @@ function Assert-LifecyclePromotedPair($Canonical, [string]$Digest, $Pins) {
     }
 }
 
-function Get-LifecyclePromotionServingReadback([string]$Root, $Canonical, [string]$Digest, [string]$RecordedServingState) {
+function Request-LifecyclePromotedBackendStart([string]$Root, $Canonical, [string]$Digest, $Local, $Identity) {
+    $registration = Get-AutostartRegistration
+    if ($null -eq $registration -or $registration.Conflict -or -not $registration.TaskOwned -or
+        -not $registration.Definition.BackendOnly) { return $false }
+    $task = $registration.Task
+    $definition = $registration.Definition
+    if ($task.TaskName -ine $definition.TaskName -or $task.TaskPath -ine $definition.TaskPath -or
+        [string]$task.State -cne 'Ready' -or $task.Settings.AllowDemandStart -ne $true -or
+        (Test-AutostartSupervisorRunning -Definition $definition)) { return $false }
+    $pins = [CatDesk.DevLocalTarget.ReadOnlyScope]::new()
+    try {
+        Assert-LifecyclePromotedPair -Canonical $Canonical -Digest $Digest -Pins $pins
+        if ((Get-CatDeskReleaseStartupGate -Root $Root) -cne 'READY' -or
+            $null -ne (Get-LifecycleListener -LocalMcp $Local -Canonical $Identity)) { return $false }
+        # Ask the existing limited scheduler owner to start. A child of this
+        # caller could inherit its Windows Job and die when the caller exits.
+        [void](Invoke-LifecycleSeam -Name 'ScheduledTaskStart' -Arguments @($task) -Default {
+            param($ownedTask)
+            Start-ScheduledTask -InputObject $ownedTask -ErrorAction Stop
+        })
+        return $true
+    } finally { $pins.Dispose() }
+}
+
+function Get-LifecyclePromotionServingReadback {
+    param([string]$Root, $Canonical, [string]$Digest, [string]$RecordedServingState, [switch]$StartRegisteredBackend)
     $unverified = 'LOCAL_BACKEND_READBACK_UNVERIFIED'
     try {
         $local = Get-LifecycleLocalMcp
@@ -1185,11 +1210,12 @@ function Get-LifecyclePromotionServingReadback([string]$Root, $Canonical, [strin
         $clock = [Diagnostics.Stopwatch]::StartNew()
         $waitSeconds = [Math]::Min(90, [Math]::Max(0, $ReadyTimeoutSeconds))
         $registration = $null
+        $startRequested = $false
         while ($true) {
             # The monitor can exit after starting a persistent backend. Its
             # signal permits waiting, but neither proves nor disproves serving.
             $waitForMonitor = $null -ne $registration -and -not $registration.Conflict -and
-                ($registration.TaskOwned -or $registration.RunOwned) -and $registration.Definition.BackendOnly -and
+                ($registration.TaskOwned -or $registration.RunOwned) -and
                 (Test-AutostartSupervisorRunning -Definition $registration.Definition)
             $gate = Get-CatDeskReleaseStartupGate -Root $Root
             if ($gate -ceq 'RECOVERY_RELEASE_AUTHORITY_REQUIRED') { return $unverified }
@@ -1217,8 +1243,15 @@ function Get-LifecyclePromotionServingReadback([string]$Root, $Canonical, [strin
                 # hide a listener that appeared during registration readback.
                 continue
             }
-            if (-not $waitForMonitor) {
+            if (-not $waitForMonitor -and -not $startRequested) {
                 if ($gate -cne 'READY') { return $unverified }
+                if ($StartRegisteredBackend -and $clock.Elapsed.TotalSeconds -lt $waitSeconds -and
+                    $registration.TaskOwned -and -not $registration.Conflict -and $registration.Definition.BackendOnly) {
+                    $startRequested = Request-LifecyclePromotedBackendStart -Root $Root -Canonical $Canonical -Digest $Digest -Local $local -Identity $identity
+                    # Re-sample even if a concurrent exact owner made the start unnecessary.
+                    $StartRegisteredBackend = $false
+                    continue
+                }
                 if ($RecordedServingState -ceq 'STOPPED_AFTER_BOUNDED_OWNER') { return $RecordedServingState }
                 return $unverified
             }
@@ -1282,7 +1315,11 @@ function Invoke-LifecycleReviewedPromotion {
         }
         $detail = if ($receipt.servingState) { $receipt.servingState } else { 'INSPECT_EXISTING_PROMOTION_RESULT' }
         if ($receipt.state -ceq 'PROMOTION_COMPLETED' -and $detail -cin @('STOPPED_AFTER_BOUNDED_OWNER','UNVERIFIED')) {
-            $detail = Get-LifecyclePromotionServingReadback -Root $root -Canonical $canonical -Digest $digest -RecordedServingState $detail
+            $freshStopped = $phase -ceq 'RUN_CANDIDATE' -and $detail -ceq 'STOPPED_AFTER_BOUNDED_OWNER' -and
+                $null -eq $receipt.PSObject.Properties['existingResult'] -and
+                ($receipt.authorizationGeneration -is [int] -or $receipt.authorizationGeneration -is [long]) -and
+                $receipt.authorizationGeneration -gt 0
+            $detail = Get-LifecyclePromotionServingReadback -Root $root -Canonical $canonical -Digest $digest -RecordedServingState $detail -StartRegisteredBackend:$freshStopped
         }
         Write-LifecycleStatus $receipt.state $detail
     } catch {

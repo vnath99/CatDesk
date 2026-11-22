@@ -46,10 +46,13 @@ function Invoke-FixtureFacade(
 
 function New-OwnedTask($Definition) {
     [pscustomobject]@{
+        TaskName = $Definition.TaskName
+        TaskPath = $Definition.TaskPath
+        State = 'Ready'
         Actions = @([pscustomobject]@{ Execute = $Definition.Execute; Arguments = $Definition.Arguments })
         Principal = [pscustomobject]@{ UserId = $Definition.UserId; LogonType = 'InteractiveToken'; RunLevel = 'Limited' }
         Triggers = @([pscustomobject]@{ CimClass = [pscustomobject]@{ CimClassName = 'MSFT_TaskLogonTrigger' } })
-        Settings = [pscustomobject]@{ StartWhenAvailable = $true; AllowStartIfOnBatteries = $true; DontStopIfGoingOnBatteries = $true; MultipleInstances = 'IgnoreNew'; ExecutionTimeLimit = [TimeSpan]::Zero }
+        Settings = [pscustomobject]@{ StartWhenAvailable = $true; AllowStartIfOnBatteries = $true; DontStopIfGoingOnBatteries = $true; MultipleInstances = 'IgnoreNew'; ExecutionTimeLimit = [TimeSpan]::Zero; AllowDemandStart = $true }
     }
 }
 
@@ -246,7 +249,7 @@ try {
             return [pscustomobject]@{state='PROMOTION_CANDIDATE_RESOLVED';candidateSha256=$hash;buildAttemptId=$attemptId}
         }
         Require ($verb -ceq 'promote' -and $image -ceq $candidate) 'only the exact resolved controller starts promotion'
-        [pscustomobject]@{state='PROMOTION_COMPLETED';candidateSha256=$hash;servingState='STOPPED_AFTER_BOUNDED_OWNER'}
+        [pscustomobject]@{state='PROMOTION_COMPLETED';candidateSha256=$hash;authorizationGeneration=7;servingState='STOPPED_AFTER_BOUNDED_OWNER'}
     }
     $invalid = & $facade promote '56aa9912' -Workspace $realCanonicalRoot -TestSeams $resolver | ConvertFrom-Json
     Require ($invalid.state -ceq 'REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED' -and $actions.Count -eq 0) 'promotion rejects short and Git source hashes before resolving'
@@ -318,6 +321,73 @@ try {
     Require ($authProbed.Count -eq 1 -and $authProbed[0] -and ($actions -join ',') -ceq 'promote-resolve,promote') 'monitor exit cannot skip authenticated serving proof or advance another operation'
     $actions.Clear()
     $authProbed.Clear()
+
+    $coldTask = $inactiveMonitor.Clone()
+    $fixtureScheduledMode = 'backend'
+    $coldTask.AutostartRunKeyGet = { $null }
+    $coldTask.ScheduledTaskGet = {
+        param($definition)
+        $task = New-OwnedTask $definition
+        if ($fixtureScheduledMode -ne 'full-stack') { $task.Actions[0].Arguments += ' -BackendOnly' }
+        if ($fixtureScheduledMode -eq 'disabled') { $task.State = 'Disabled' }
+        if ($fixtureScheduledMode -eq 'foreign') { $task.Principal.UserId = 'another-user' }
+        $task
+    }
+    $coldTask.ScheduledTaskStart = {
+        param($task)
+        Require ($task.State -ceq 'Ready' -and $task.Actions[0].Arguments.EndsWith(' -BackendOnly')) 'only the exact ready backend-only task can be started'
+        [void]$actions.Add('scheduled-backend-start')
+    }
+    $coldTask.Listener = {
+        if ($actions -contains 'scheduled-backend-start') {
+            [pscustomobject]@{Pid=3001;CreationTimeUtc='fixture-scheduled-owner';MatchesCanonical=$true;Sha256=$digest}
+        }
+    }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 1 -TestSeams $coldTask | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_READY' -and
+        ($actions -join ',') -ceq 'promote-resolve,promote,scheduled-backend-start' -and $authProbed.Count -eq 1 -and
+        $authProbed[0]) 'fresh promotion starts the exact stopped backend scheduler once and verifies its authenticated listener'
+    $actions.Clear()
+    $authProbed.Clear()
+    foreach ($fixtureScheduledMode in @('disabled', 'full-stack', 'foreign')) {
+        $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 1 -TestSeams $coldTask | ConvertFrom-Json
+        Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'STOPPED_AFTER_BOUNDED_OWNER' -and
+            ($actions -join ',') -ceq 'promote-resolve,promote') "fresh promotion leaves the $fixtureScheduledMode task untouched"
+        $actions.Clear()
+    }
+    $fixtureScheduledMode = 'backend'
+    $startUnobserved = $coldTask.Clone()
+    $startUnobserved.Listener = { $null }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 1 -TestSeams $startUnobserved | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_STARTUP_PENDING' -and
+        ($actions -join ',') -ceq 'promote-resolve,promote,scheduled-backend-start') 'a delayed owner leaves serving pending without retry'
+    $actions.Clear()
+    $startUnobserved.ScheduledTaskStart = { [void]$actions.Add('attempted-start'); throw 'fixture start ambiguous' }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 1 -TestSeams $startUnobserved | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_READBACK_UNVERIFIED' -and
+        ($actions -join ',') -ceq 'promote-resolve,promote,attempted-start') 'an ambiguous start does not cause a second request or a health claim'
+    $actions.Clear()
+
+    $retainedCold = $coldTask.Clone()
+    $retainedCold.PromotionInvokeNative = {
+        param($image,$root,$verb,$hash)
+        [void]$actions.Add($verb)
+        [pscustomobject]@{state='PROMOTION_COMPLETED';candidateSha256=$hash;existingResult=$true;authorizationGeneration=7;servingState='STOPPED_AFTER_BOUNDED_OWNER'}
+    }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 1 -TestSeams $retainedCold | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'STOPPED_AFTER_BOUNDED_OWNER' -and
+        ($actions -join ',') -ceq 'promote-resolve') 'a retained receipt remains observation-only even with an eligible stopped task'
+    $actions.Clear()
+
+    $runningFullStack = $coldTask.Clone()
+    $runningFullStack.ScheduledTaskGet = { $null }
+    $runningFullStack.AutostartRunKeyGet = { param($definition) $definition.RunKeyValue }
+    $runningFullStack.AutostartSupervisorRunning = { $true }
+    $runningFullStack.Listener = { $null }
+    $observed = & $facade promote $digest -Workspace $realCanonicalRoot -ReadyTimeoutSeconds 0 -TestSeams $runningFullStack | ConvertFrom-Json
+    Require ($observed.state -ceq 'PROMOTION_COMPLETED' -and $observed.detail -ceq 'LOCAL_BACKEND_STARTUP_PENDING' -and
+        ($actions -join ',') -ceq 'promote-resolve,promote') 'an exact already-running full-stack owner is observed without a startup request'
+    $actions.Clear()
 
     $uncertainHandoff = $inactiveMonitor.Clone()
     $promoteFixture = $promotedResolver.PromotionInvokeNative
