@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T22:58:00Z",
+  "scope": "WINDOWS_DEVELOPMENT_EXACT_TASK_WAKE_STARTUP_RECOVERY",
+  "baseline": "7c5c731613363d1242c18bd4f28f45aad563195c",
+  "evidenceReused": "FROZEN_BACKEND_MANUAL_WAKE_ADMISSION_2026_11_22.json",
+  "priorBehavior": "The earlier frozen Windows backend fixture observed BROWSER_ADAPTER_START_FAILED, a receiptless ATTENTION record, and no submission witness. Re-entering the scoped sender refused the existing claim.",
+  "developmentBehavior": "The exact local operator command verifies the assignment and checkpoint, takes host and profile leases, matches the delivery bytes to the supplied SHA-256, excludes any submission witness, and retains the prior delivery before returning the event to CLAIMED. It cannot send.",
+  "verification": {
+    "wakeSchedulerTestsPassed": 11,
+    "submissionReconciliationTestsPassed": 16,
+    "catdeskManualWakeTestsPassed": 4,
+    "wrongCallAndHashRefused": true,
+    "liveHostRefused": true,
+    "submissionWitnessAndSubmittingPhaseRefused": true,
+    "genericTaskRetryRefused": true,
+    "sameEventAndQueueBytesPreserved": true,
+    "priorDeliveryEvidencePreserved": true,
+    "noReceiptOrTimerCreated": true
+  },
+  "installedProductionMutations": 0,
+  "browserStarts": 0,
+  "externalSubmissions": 0,
+  "installedWebAcceptance": false
+}

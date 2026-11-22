@@ -172,6 +172,7 @@ pub(crate) enum WebAction {
         call_id: String,
         event_id: String,
         retire_expired: bool,
+        retry_startup_sha256: Option<String>,
     },
     WorkInspect {
         project_id: String,
@@ -411,7 +412,10 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 project_id: project_id.into(),
             })
         }
-        ("work", "manual-wake-deliver" | "manual-wake-retire-expired") => {
+        (
+            "work",
+            "manual-wake-deliver" | "manual-wake-retire-expired" | "manual-wake-retry-startup",
+        ) => {
             let mut id = |option| {
                 options
                     .remove(option)
@@ -421,6 +425,22 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             let request_id = id("--request-id")?;
             let call_id = id("--call-id")?;
             let event_id = id("--event-id")?;
+            let retry_startup_sha256 = if verb == "manual-wake-retry-startup" {
+                Some(
+                    options
+                        .remove("--expected-delivery-sha256")
+                        .filter(|hash| {
+                            hash.len() == 64
+                                && hash.bytes().all(|byte| {
+                                    byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)
+                                })
+                        })
+                        .ok_or("WEB_USAGE: --expected-delivery-sha256 is required")?
+                        .to_owned(),
+                )
+            } else {
+                None
+            };
             if !options.is_empty() {
                 return Err("WEB_USAGE: unexpected manual Wake delivery option".into());
             }
@@ -430,6 +450,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 call_id: call_id.into(),
                 event_id: event_id.into(),
                 retire_expired: verb == "manual-wake-retire-expired",
+                retry_startup_sha256,
             })
         }
         ("browser", "inspect") if options.is_empty() => Ok(WebAction::BrowserInspect {
@@ -2266,7 +2287,18 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             call_id,
             event_id,
             retire_expired,
+            retry_startup_sha256,
         } => {
+            if let Some(hash) = retry_startup_sha256 {
+                return crate::web_work::retry_manual_wake_startup(
+                    &workspace,
+                    &project_id,
+                    &request_id,
+                    &call_id,
+                    &event_id,
+                    &hash,
+                );
+            }
             let operation = if retire_expired {
                 crate::web_work::retire_expired_manual_wake
             } else {
@@ -4080,7 +4112,19 @@ mod tests {
                 call_id: "wake-one".into(),
                 event_id: "wake-intent-one".into(),
                 retire_expired: false,
+                retry_startup_sha256: None,
             }
+        );
+        let mut retry = base.clone();
+        retry[3] = "manual-wake-retry-startup".into();
+        assert!(parse(&retry).is_err());
+        retry.extend(args(&["--expected-delivery-sha256", &"A".repeat(64)]));
+        assert!(parse(&retry).is_err());
+        *retry.last_mut().unwrap() = "a".repeat(64);
+        assert!(
+            matches!(parse(&retry).unwrap(), WebAction::WorkManualWakeDeliver {
+            retire_expired: false, retry_startup_sha256: Some(hash), ..
+        } if hash == "a".repeat(64))
         );
         for option in [
             "--message",

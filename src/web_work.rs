@@ -34,6 +34,7 @@ pub(crate) use manual_delivery::deliver_next as deliver_next_manual_wake;
 #[cfg(all(test, windows))]
 pub(crate) use manual_delivery::fixture_manual_submission_fence;
 pub(crate) use manual_delivery::retire_expired as retire_expired_manual_wake;
+pub(crate) use manual_delivery::retry_startup as retry_manual_wake_startup;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

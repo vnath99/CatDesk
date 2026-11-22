@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 5:58 p.m. EST.** The task-bound Wake sender has a separate local preparation command for `BROWSER_ADAPTER_START_FAILED`. It uses the original assignment, current grant, stored checkpoint, event and prior delivery hash. The existing sender still controls delivery. The installed cycle still needs the independent backend review and original disposable Git backing. [Evidence](docs/verification/WEB_TASK_WAKE_STARTUP_RECOVERY_2026_11_22.json).
+
 **November 22, 5:48 p.m. EST.** The Windows adapter, probe, and development foreground launcher share the stronger owned-process teardown proof. The fixtures exercised actual Windows processes. Frozen backend review admission and restoration of the original disposable Git backing are still prerequisites for the installed Web coding cycle. [Evidence](docs/verification/WAKE_JOB_PROCESS_EXIT_PROOF_2026_11_22.json).
 
 **November 22, 5:40 p.m. EST.** A parked manual Wake can expire without stranding its original assignment. The exact retirement command requires untouched-queue proof and preserves the archived event and original task journal. The installed Web cycle still needs the frozen review chain and original disposable Git backing. [Evidence](docs/verification/WEB_EXPIRED_TASK_WAKE_RETIREMENT_2026_11_22.json).

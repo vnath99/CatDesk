@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — recover a self-Wake startup refusal in development.** A task can keep its checkpoint and event identity after an adapter startup failure. Scoped Windows fixtures verify the recovery and the refusal of submission-witness cases. Installed Web acceptance remains open. [Evidence](docs/verification/WEB_TASK_WAKE_STARTUP_RECOVERY_2026_11_22.json).
+
 **November 22 — use Win32 process handles to verify Wake teardown.** Forced retirement now waits for the original helper and captured descendants, then checks the private Job is empty. Five consecutive attempts passed for the formerly intermittent fixture. Installed Chrome and Web self-Wake acceptance remain open. [Evidence](docs/verification/WAKE_JOB_PROCESS_EXIT_PROOF_2026_11_22.json).
 
 **November 22 — recover an expired parked Wake in development.** The original request survives the expiry. The archive records an unsubmitted retirement, and the next authorized turn selects its own fresh event. Installed Web acceptance remains open. [Evidence](docs/verification/WEB_EXPIRED_TASK_WAKE_RETIREMENT_2026_11_22.json).

@@ -114,6 +114,46 @@ pub(crate) fn retire_expired(
     })
 }
 
+/// Prepare the exact journaled Wake after a proved adapter startup refusal.
+/// Reuse normal delivery admission, with a local no-send action as the sender.
+pub(crate) fn retry_startup(
+    workspace: &Path,
+    project: &str,
+    request_id: &str,
+    call_id: &str,
+    event_id: &str,
+    expected_sha256: &str,
+) -> Result<Value, String> {
+    deliver_with_sender(
+        workspace,
+        project,
+        Selection::Exact {
+            request_id,
+            call_id,
+            event_id,
+        },
+        |wake, event, target, before, _, _| {
+            let _host = wake.host_lock()?;
+            let _browser = runtime::acquire_browser_quiescence(wake)?;
+            before(event, target)?;
+            let prior = wake
+                .delivery(event_id)?
+                .ok_or("WEB_WORK_DELIVERY_MISSING")?;
+            if prior.event != *event || prior.target != *target {
+                return Err("WEB_TASK_MANUAL_WAKE_SELECTION_CHANGED".into());
+            }
+            let recovered =
+                wake.retry_task_manual_wake_startup_expected(&prior, expected_sha256)?;
+            Ok(
+                json!({"action":"web_work_manual_wake_retry_startup","projectId":project,
+                "eventId":event_id,"phase":recovered.phase,"priorDeliverySha256":expected_sha256,
+                "priorEvidencePreserved":true,"browserStarted":false,"sendAttempted":false,
+                "hostStarted":false,"receiptCreated":false}),
+            )
+        },
+    )
+}
+
 fn deliver_selected(
     workspace: &Path,
     project: &str,
@@ -502,6 +542,86 @@ mod tests {
         let unrelated = wake.root().join("queue/unrelated-fixture.json");
         std::fs::write(&unrelated, b"unrelated corrupt queue object").unwrap();
 
+        let queue_path = wake.root().join("queue").join(format!("{event_id}.json"));
+        let original_queue = std::fs::read(&queue_path).unwrap();
+        let delivery_path = wake
+            .root()
+            .join("deliveries")
+            .join(format!("{event_id}.json"));
+        let prior_hash = || {
+            use sha2::{Digest, Sha256};
+            format!(
+                "{:x}",
+                Sha256::digest(std::fs::read(&delivery_path).unwrap())
+            )
+        };
+        let recovery = |actual_call: &str, hash: &str| {
+            retry_startup(&control, "alpha", "request-a", actual_call, event_id, hash)
+        };
+        {
+            let owner = wake.host_lock().unwrap();
+            wake.claim(&serde_json::from_slice(&original_queue).unwrap(), &owner)
+                .unwrap();
+            wake.transition(
+                event_id,
+                owner.owner(),
+                Phase::Attention,
+                None,
+                Some("BROWSER_ADAPTER_START_FAILED".into()),
+            )
+            .unwrap();
+            assert!(recovery("wake-one", &prior_hash()).is_err());
+        }
+        let original_delivery = std::fs::read(&delivery_path).unwrap();
+        let exact_hash = prior_hash();
+        assert_eq!(
+            wake.retry_pre_submit(event_id).unwrap_err(),
+            "TASK_MANUAL_WAKE_SCOPED_RETRY_REQUIRED"
+        );
+        assert_eq!(
+            recovery("wrong-call", &exact_hash).unwrap_err(),
+            "WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN"
+        );
+        assert_eq!(
+            recovery("wake-one", &"0".repeat(64)).unwrap_err(),
+            "SUBMISSION_RETRY_CAS_CHANGED"
+        );
+        let witness = wake
+            .root()
+            .join("logs")
+            .join(format!("submission-start-{event_id}.json"));
+        std::fs::write(&witness, b"unresolved fixture witness").unwrap();
+        assert_eq!(
+            recovery("wake-one", &exact_hash).unwrap_err(),
+            "SUBMISSION_RETRY_REFUSED"
+        );
+        assert_eq!(std::fs::read(&delivery_path).unwrap(), original_delivery);
+        std::fs::remove_file(witness).unwrap();
+        let recovered = recovery("wake-one", &exact_hash).unwrap();
+        assert_eq!(recovered["phase"], "CLAIMED");
+        assert_eq!(recovered["sendAttempted"], false);
+        assert_eq!(recovered["browserStarted"], false);
+        assert_eq!(recovered["receiptCreated"], false);
+        assert_eq!(std::fs::read(queue_path).unwrap(), original_queue);
+        let evidence: Value = read(
+            &wake
+                .root()
+                .join("logs")
+                .join(format!("pre-submit-retry-{event_id}-{exact_hash}.json")),
+        )
+        .unwrap();
+        assert_eq!(
+            evidence["purpose"],
+            "TASK_MANUAL_WAKE_STARTUP_RETRY_PRIOR_DELIVERY"
+        );
+        assert_eq!(evidence["deliverySha256"], exact_hash);
+        assert_eq!(
+            evidence["delivery"],
+            serde_json::from_slice::<Value>(&original_delivery).unwrap()
+        );
+        assert!(recovery("wake-one", &exact_hash).is_err());
+        assert!(wake.timer(event_id).unwrap().is_none());
+
         let output = deliver_with_sender(
             &control,
             "alpha",
@@ -572,6 +692,11 @@ mod tests {
             Phase::Submitting
         );
         assert!(wake.delivery(event_id).unwrap().unwrap().receipt.is_none());
+        assert!(recovery("wake-one", &prior_hash()).is_err());
+        assert_eq!(
+            wake.delivery(event_id).unwrap().unwrap().phase,
+            Phase::Submitting
+        );
         assert_eq!(
             crate::web_work::resolve(&control, resolution.clone()).unwrap_err(),
             "PROJECT_TASK_RECOVERY_REQUIRED"

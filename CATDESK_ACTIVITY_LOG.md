@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 22:58 UTC — recover an exact task Wake after a proved adapter startup failure.** The local recovery command verifies the original call and the delivery-record hash. It preserves the failed delivery in the existing audit log before returning the same event to `CLAIMED`. [Evidence](docs/verification/WEB_TASK_WAKE_STARTUP_RECOVERY_2026_11_22.json).
+
 **2026-11-22 22:48 UTC — require process-handle exit proof before releasing the Wake browser lock.** A Windows fixture exposed a descendant whose handle was still unsignaled when the old Job accounting check passed. The shared cleanup now waits for the original helper and captured descendants within the existing deadline. [Evidence](docs/verification/WAKE_JOB_PROCESS_EXIT_PROOF_2026_11_22.json).
 
 **2026-11-22 22:40 UTC — archive an expired, untouched self-Wake through its original journal.** The scoped operator path preserves receipt-free evidence and keeps the original task open for a new authorized turn. [Evidence](docs/verification/WEB_EXPIRED_TASK_WAKE_RETIREMENT_2026_11_22.json).

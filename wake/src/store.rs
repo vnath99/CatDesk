@@ -2485,7 +2485,8 @@ impl Store {
     }
 
     pub fn retry_pre_submit(&self, id: &str) -> Result<()> {
-        self.retry_pre_submit_inner(id, None, None).map(|_| ())
+        self.retry_pre_submit_inner(id, None, None, false)
+            .map(|_| ())
     }
 
     /// Local operator recovery after qualifying the original acknowledgment
@@ -2497,7 +2498,7 @@ impl Store {
         expected: &Delivery,
         expected_sha256: &str,
     ) -> Result<Delivery> {
-        self.retry_pre_submit_inner(id, Some((expected, expected_sha256)), None)
+        self.retry_pre_submit_inner(id, Some((expected, expected_sha256)), None, false)
     }
 
     /// Explicit recovery of an ordinary scoped timeout at the input barrier.
@@ -2516,6 +2517,22 @@ impl Store {
             id,
             Some((expected, expected_sha256)),
             Some((timeout_bytes, timeout_sha256)),
+            false,
+        )
+    }
+
+    /// Caller must retain the project, Wake host and browser leases. This only
+    /// recovers an exact startup refusal before any submission witness.
+    pub fn retry_task_manual_wake_startup_expected(
+        &self,
+        expected: &Delivery,
+        expected_sha256: &str,
+    ) -> Result<Delivery> {
+        self.retry_pre_submit_inner(
+            &expected.event.event_id,
+            Some((expected, expected_sha256)),
+            None,
+            true,
         )
     }
 
@@ -2524,6 +2541,7 @@ impl Store {
         id: &str,
         expected: Option<(&Delivery, &str)>,
         timeout_proof: Option<(&[u8], &str)>,
+        manual_startup: bool,
     ) -> Result<Delivery> {
         let _lock = self.lock()?;
         let mut delivery = self.read_delivery(id)?.ok_or("SUBMISSION_CLAIM_MISSING")?;
@@ -2577,7 +2595,19 @@ impl Store {
             {
                 return Err("SUBMISSION_RETRY_CAS_CHANGED".into());
             }
-            if delivery.event.event_type != "engineering_attention"
+            if manual_startup {
+                let control: crate::runtime::Control = read(&self.root.join("control.json"))?;
+                if control.schema_version != 1 || control.desired != "STOPPED" {
+                    return Err("WEB_WORK_RECOVERY_HOST_NOT_STOPPED".into());
+                }
+                if !delivery.event.requires_scoped_manual_wake()?
+                    || delivery.reason.as_deref() != Some("BROWSER_ADAPTER_START_FAILED")
+                    || delivery.event.is_expired_at(now())?
+                    || read::<Event>(&self.event_path(id))? != delivery.event
+                {
+                    return Err("TASK_MANUAL_WAKE_STARTUP_RETRY_REFUSED".into());
+                }
+            } else if delivery.event.event_type != "engineering_attention"
                 || !delivery.event.audit_references.is_empty()
                 || delivery.reason.as_deref()
                     != Some(if timeout.is_some() {
@@ -2604,19 +2634,36 @@ impl Store {
             self.submission_start_path(id),
             self.timer_path(id),
             self.archive_path(id),
+            self.pre_edit_refusal_path(id),
         ] {
-            if path
-                .try_exists()
-                .map_err(|_| "SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE")?
-            {
-                return Err("SUBMISSION_RETRY_REFUSED".into());
+            match fs::symlink_metadata(path) {
+                Ok(_) => return Err("SUBMISSION_RETRY_REFUSED".into()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err("SUBMISSION_RETRY_EVIDENCE_UNAVAILABLE".into()),
             }
         }
         if self.read_config()?.targets.get(&delivery.event.project_id) != Some(&delivery.target) {
             return Err("TARGET_GENERATION_STALE".into());
         }
+        if !manual_startup && delivery.event.requires_scoped_manual_wake()? {
+            return Err("TASK_MANUAL_WAKE_SCOPED_RETRY_REQUIRED".into());
+        }
+        if manual_startup
+            && self.unresolved_scoped_submission_locked(
+                &delivery.event.project_id,
+                &delivery.target,
+                id,
+            )?
+        {
+            return Err("SCOPED_PROJECT_SUBMISSION_UNRESOLVED".into());
+        }
         if let Some((_, hash)) = expected {
-            let mut evidence = serde_json::json!({"schemaVersion":1,"purpose":"ORDINARY_PRE_SUBMIT_RECOVERY_PRIOR_DELIVERY",
+            let purpose = if manual_startup {
+                "TASK_MANUAL_WAKE_STARTUP_RETRY_PRIOR_DELIVERY"
+            } else {
+                "ORDINARY_PRE_SUBMIT_RECOVERY_PRIOR_DELIVERY"
+            };
+            let mut evidence = serde_json::json!({"schemaVersion":1,"purpose":purpose,
                 "deliverySha256":hash,"delivery":delivery});
             if let Some(value) = &timeout {
                 evidence["timeoutEvidence"] = value.clone();

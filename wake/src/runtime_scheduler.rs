@@ -591,7 +591,20 @@ pub(super) mod tests {
                 Some("BROWSER_ADAPTER_START_FAILED".into()),
             )
             .unwrap();
-        store.retry_pre_submit(&event.event_id).unwrap();
+        assert_eq!(
+            store.retry_pre_submit(&event.event_id).unwrap_err(),
+            "TASK_MANUAL_WAKE_SCOPED_RETRY_REQUIRED"
+        );
+        let prior = store.delivery(&event.event_id).unwrap().unwrap();
+        let prior_path = store
+            .root()
+            .join("deliveries")
+            .join(format!("{}.json", event.event_id));
+        super::super::control(&store, "STOPPED").unwrap();
+        let bytes = std::fs::read_to_string(prior_path).unwrap();
+        store
+            .retry_task_manual_wake_startup_expected(&prior, &crate::protocol::digest(&bytes))
+            .unwrap();
         drop(lease);
 
         let base = store.root().parent().unwrap();
