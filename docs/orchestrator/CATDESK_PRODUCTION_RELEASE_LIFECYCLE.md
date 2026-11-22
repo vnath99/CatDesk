@@ -1112,6 +1112,15 @@ This uses `src/daemon_reload.rs` and the fixed
 `scripts/promote-reviewed-catdesk-build.ps1` worker. Do not invoke its internal
 `-Execute`, authorization or transaction parameters manually.
 
+**November 22, 12:12 UTC.** Both the installed executable and frozen source
+`56aa9912` returned only `{"status":"attention"}` and exit 2 to the read-only
+`promote-resolve` command in a scratch workspace. On supporting source,
+`catdesk.ps1 promote <artifact-sha256>` identifies that refusal before starting
+the candidate. Use the authenticated reviewed promotion above for the frozen
+release once independent review and attestation are available. The one-hash
+workflow requires support in both the installed resolver and the attested
+candidate. [Actual binary verification](../verification/BACKEND_PROMOTION_LEGACY_RESOLVER_PROTOCOL_2026_11_22.json).
+
 **C246 local profile — source qualified, not installed in C208:** this same tool's
 `PREFLIGHT` alone accepts the optional boolean `localBackendOnly`. To request the
 bounded local handoff, use the following argument shape with actual verified

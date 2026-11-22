@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T12:11:52.6441473Z",
+  "scope": "ACTUAL_WINDOWS_FROZEN_IMAGE_PROMOTION_RESOLVER_COMPATIBILITY",
+  "sourceCommit": "297595d87505073ecceafe7afb11b9fadf4ff965",
+  "binaryProbe": {
+    "operation": "operator promote-resolve with the exact compatible candidate artifact SHA-256",
+    "observedUtc": "2026-11-22T12:10:25.4887118Z",
+    "images": [
+      {
+        "role": "INSTALLED_CANONICAL",
+        "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+        "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901"
+      },
+      {
+        "role": "FROZEN_56AA",
+        "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+        "sha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465"
+      }
+    ],
+    "bothExitCode": 2,
+    "bothFixedStatus": "attention",
+    "bothPromotionErrorCodePresent": false,
+    "bothStderrBytes": 0,
+    "bothExitedNaturally": true,
+    "exactSourceDispatchInspected": true,
+    "scratchWorkspaceWrites": 0
+  },
+  "facadeProbe": {
+    "command": "catdesk.ps1 promote <artifact-sha256>",
+    "state": "REVIEWED_PROMOTION_RESOLVER_PROTOCOL_UNAVAILABLE",
+    "detail": "RESOLVE_CANDIDATE",
+    "input": "exact copy of installed image and matching fingerprint",
+    "candidateControllerStarted": false,
+    "stateFilesCreated": 0,
+    "fixtureRemoved": true,
+    "protectedFilesChanged": false
+  },
+  "comparison": {
+    "genericCandidatePhaseRefusalStillRequiresOriginalReconciliation": true,
+    "malformedLegacyShapeRejected": true,
+    "ordinaryTypedNativeDenialsUnchanged": true,
+    "powerShell7LifecycleSuite": "PASS",
+    "windowsPowerShell51LifecycleSuite": "PASS"
+  },
+  "canonicalV5ResultProbe": {
+    "attempts": 1,
+    "action": "RESULT",
+    "toolError": true,
+    "classifiedError": null,
+    "retryPerformed": false
+  },
+  "supportedPath": "After independent review, source acknowledgment, snapshot and attestation, use the existing authenticated reviewed build promotion PREFLIGHT, CONFIRM and RESULT workflow for the frozen backend. One-hash selection additionally requires both native controllers to support their respective verbs.",
+  "productionMutations": 0,
+  "installedPromotionAccepted": false,
+  "installedRollbackAccepted": false,
+  "actualWebCycleAccepted": false
+}

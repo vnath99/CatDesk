@@ -1222,3 +1222,11 @@ Evidence: [docs/verification/WAKE_SIGNED_PREDECESSOR_NEXT_UPDATE_2026_11_22.json
 Agent: Codex. Source: 26abdf104cac5dcc176bb92c38c83c4dda276781. Outcome: partial. The existing backend lifecycle now rechecks the exact listener after authenticated health. A private Windows fixture refused to confirm retained rollback when the actual backend exited after its authenticated reply. A fresh recovery confirmed the previous version and preserved both release slots and original records.. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/BACKEND_ROLLBACK_POST_PROBE_OWNER_2026_11_22.json](docs/verification/BACKEND_ROLLBACK_POST_PROBE_OWNER_2026_11_22.json); command: scripts/test-local-mcp-readiness-strict.ps1 and private native rollback listener fixture; exit 0; SHA-256 6f053dc2778f7e877addda1bf5bde1539146e6fdf357e850bdd623b7899acf34.
+
+<!-- catdesk-activity:backend-promotion-legacy-resolver-20261122 sha256:c56b7b79b37ecd15aec657129e447810d789da3c8dec1c06c34f57121d40ee8a -->
+
+## 2026-11-22T12:12:35Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 297595d87505073ecceafe7afb11b9fadf4ff965. Outcome: partial. The exact installed and frozen compatible backend images both refused the read-only one-hash resolver without state writes. The facade now identifies the legacy response before candidate launch. The original authenticated reviewed promotion remains the path for this candidate after review and attestation.. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and use the existing authenticated reviewed promotion for this legacy candidate. Verify installed startup and rollback, and confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/BACKEND_PROMOTION_LEGACY_RESOLVER_PROTOCOL_2026_11_22.json](docs/verification/BACKEND_PROMOTION_LEGACY_RESOLVER_PROTOCOL_2026_11_22.json); command: scripts/test-catdesk-lifecycle.ps1 and exact legacy binary probes; exit 0; SHA-256 6107d226526b3edd9933f7b02a7443991b59146212138ddc4123477e06773ae0.
