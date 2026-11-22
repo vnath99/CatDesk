@@ -29,8 +29,7 @@ $ErrorActionPreference = 'Stop'
 # facade-relative defaults only after parameter binding has completed.
 if ([string]::IsNullOrWhiteSpace($Workspace)) { $Workspace = $PSScriptRoot }
 if ([string]::IsNullOrWhiteSpace($BuildFingerprintPath)) {
-    if ($Command -eq 'doctor') { $BuildFingerprintPath = Join-Path $Workspace 'target\release\catdesk.exe.sha256' }
-    else { $BuildFingerprintPath = Join-Path $PSScriptRoot 'target\release\catdesk.exe.sha256' }
+    $BuildFingerprintPath = Join-Path $Workspace 'target\release\catdesk.exe.sha256'
 }
 $script:LifecycleSeams = $TestSeams
 $engineExpectedPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot 'scripts\start-catdesk-stack.ps1'))

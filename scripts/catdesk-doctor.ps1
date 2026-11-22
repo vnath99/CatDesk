@@ -229,7 +229,10 @@ function Invoke-CatDeskDoctor([string]$ObservationFile = '', [string]$ProjectWor
     }
     catch { $identity=$null; Set-DoctorLayer 'RELEASE_PAIR' 'FAIL' (Get-LifecycleCanonicalFailureGate $_.Exception.Message) }
     try {
-        $authority=Invoke-LifecycleSeam -Name 'DoctorAuthority' -Arguments @($Workspace,$ExpectedBuildSha256) -Default {param($root,$hash) Get-CanonicalReleaseRecoveryAssessment -Root $root -ExpectedHash $hash}
+        $authority=Invoke-LifecycleSeam -Name 'DoctorAuthority' -Arguments @($Workspace,$ExpectedBuildSha256,$BuildFingerprintPath) -Default {
+            param($root,$hash,$fingerprint)
+            Get-CanonicalReleaseRecoveryAssessment -Root $root -ExpectedHash $hash -FingerprintPath $fingerprint
+        }
         $code=[string](Get-DoctorProperty $authority 'State')
         if($code -ceq 'RECOVERY_READY'){Set-DoctorLayer 'RECOVERY_AUTHORITY' 'PASS' 'RECOVERY_AUTHORITY_AVAILABLE'}
         elseif($code -cin @('LKG_AUTHORITY_MISSING','LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED','RECOVERY_RELEASE_AUTHORITY_REQUIRED')){Set-DoctorLayer 'RECOVERY_AUTHORITY' 'FAIL' $code}

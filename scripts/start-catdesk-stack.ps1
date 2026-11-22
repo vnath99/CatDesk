@@ -321,26 +321,47 @@ function Invoke-SilentLoopbackHttp {
 }
 
 function Get-VerifiedBuildFingerprint {
-    param([string]$ExpectedHash, [string]$FingerprintPath)
-    $candidate = $ExpectedHash.Trim()
-    if (-not $candidate) {
-        if (-not (Test-Path -LiteralPath $FingerprintPath -PathType Leaf)) { throw "verified release fingerprint is unavailable" }
-        $item = Get-Item -LiteralPath $FingerprintPath -ErrorAction Stop
-        if ($item.Length -gt 128) { throw "verified release fingerprint is malformed" }
-        $candidate = [IO.File]::ReadAllText($FingerprintPath).Trim()
-    }
+    param([string]$FingerprintPath)
+    $item = Get-Item -LiteralPath $FingerprintPath -Force -ErrorAction SilentlyContinue
+    if ($item -isnot [IO.FileInfo]) { throw "verified release fingerprint is unavailable" }
+    if ($item.Length -lt 1 -or $item.Length -gt 128 -or
+        ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "verified release fingerprint is malformed" }
+    $candidate = [IO.File]::ReadAllText($item.FullName).Trim()
     if ($candidate -notmatch '^[A-Fa-f0-9]{64}$') { throw "verified release fingerprint is malformed" }
     return $candidate.ToLowerInvariant()
 }
 
+function Get-RequestedCatDeskFingerprint([string]$Root, [string]$ExpectedHash, [string]$FingerprintPath) {
+    $expected = $ExpectedHash.Trim().ToLowerInvariant()
+    if ($expected -and $expected -cnotmatch '^[a-f0-9]{64}$') { throw "verified release fingerprint is malformed" }
+    if ($FingerprintPath) {
+        $canonical = Join-Path $Root 'target\release\catdesk.exe.sha256'
+        $reference = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($FingerprintPath)
+        if (-not $reference.Equals($canonical, [StringComparison]::OrdinalIgnoreCase)) {
+            $recorded = Get-VerifiedBuildFingerprint -FingerprintPath $reference
+            if ($expected -and $recorded -cne $expected) { throw "canonical CatDesk build fingerprint did not match" }
+            return $recorded
+        }
+    }
+    return $expected
+}
+
 function Get-CanonicalCatDeskIdentity {
     param([string]$Root, [string]$ExpectedHash, [string]$FingerprintPath)
-    $path = Join-Path $Root "target\release\catdesk.exe"
+    $rootPath = Resolve-CatDeskRecoveryRoot $Root
+    $path = Join-Path $rootPath "target\release\catdesk.exe"
+    try {
+        $path = Assert-CatDeskRecoveryContainedPath $rootPath $path 'canonical release binary' -AllowMissingLeaf
+        $manifest = Assert-CatDeskRecoveryContainedPath $rootPath "$path.sha256" 'canonical release fingerprint' -AllowMissingLeaf
+    } catch { throw "canonical CatDesk release path is unsafe" }
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "canonical CatDesk executable is unavailable" }
-    $expected = Get-VerifiedBuildFingerprint -ExpectedHash $ExpectedHash -FingerprintPath $FingerprintPath
+    $expected = Get-RequestedCatDeskFingerprint $rootPath $ExpectedHash $FingerprintPath
+    $recorded = Get-VerifiedBuildFingerprint -FingerprintPath $manifest
     $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
-    if ($hash -ne $expected) { throw "canonical CatDesk build fingerprint did not match" }
-    [pscustomobject]@{ Path = (Resolve-Path -LiteralPath $path).Path; Sha256 = $hash }
+    if ($hash -cne $recorded -or ($expected -and $hash -cne $expected)) {
+        throw "canonical CatDesk build fingerprint did not match"
+    }
+    [pscustomobject]@{ Path = $path; Sha256 = $hash }
 }
 
 function Read-OfficialRuntimeProcessMode {
@@ -1074,18 +1095,20 @@ function Save-RedactedRecoveryEvidence {
     if($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -gt 1024){throw 'recovery evidence write validation failed'}
 }
 
-function Get-CanonicalReleaseRecoveryAssessment([string]$Root, [string]$ExpectedHash) {
+function Get-CanonicalReleaseRecoveryAssessment([string]$Root, [string]$ExpectedHash, [string]$FingerprintPath = '') {
     # LKG assessment applies to a broken pair outside a reviewed transaction.
     $startupGate = Get-CatDeskReleaseStartupGate -Root $Root
     if ($startupGate -cne 'READY') {
         return [pscustomobject]@{ State = $startupGate; RecoverySource = '' }
     }
+    try { $expected = Get-RequestedCatDeskFingerprint (Resolve-CatDeskRecoveryRoot $Root) $ExpectedHash $FingerprintPath }
+    catch { return [pscustomobject]@{ State = 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'; RecoverySource = '' } }
     try {
         $trusted = Get-CatDeskLastKnownGoodRelease -Root $Root
     } catch {
         return [pscustomobject]@{ State = (Get-CatDeskLkgAuthorityFailure -Root $Root); RecoverySource = '' }
     }
-    if ($ExpectedHash -and $ExpectedHash.ToLowerInvariant() -ne $trusted.Hash) {
+    if ($expected -and $expected -cne $trusted.Hash) {
         return [pscustomobject]@{ State = 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'; RecoverySource = '' }
     }
     return [pscustomobject]@{ State = 'RECOVERY_READY'; RecoverySource = 'LAST_KNOWN_GOOD' }
@@ -1260,15 +1283,20 @@ function Invoke-CanonicalStackBootstrapCore {
     try {
         $canonical=Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
     } catch {
+        if ($_.Exception.Message -ceq "canonical CatDesk release path is unsafe") {
+            Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'canonical release paths are unsafe'
+            return
+        }
         if($Mode -eq "recover" -and -not $Execute){
-            $assessment = Get-CanonicalReleaseRecoveryAssessment -Root $root -ExpectedHash $ExpectedBuildSha256
+            $assessment = Get-CanonicalReleaseRecoveryAssessment -Root $root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
             Write-RedactedStatus $assessment.State "trusted reviewed release recovery assessment" $assessment.RecoverySource
             return
         }
         if($Mode -ne "recover"){throw}
         try {
-            $recovery=Repair-CanonicalReleaseForRecovery -Root $root -Config $ConfigPath -ExpectedHash $ExpectedBuildSha256
-            $canonical=Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
+            $requested = Get-RequestedCatDeskFingerprint $root $ExpectedBuildSha256 $BuildFingerprintPath
+            $recovery=Repair-CanonicalReleaseForRecovery -Root $root -Config $ConfigPath -ExpectedHash $requested
+            $canonical=Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $requested -FingerprintPath $BuildFingerprintPath
             $releaseRestored=$true;$releaseRecoverySource=[string]$recovery.Source
         } catch {
             $authorityState = if ($_.Exception.Message -eq 'LKG_AUTHORITY_MISSING') { 'LKG_AUTHORITY_MISSING' } elseif ($_.Exception.Message -eq 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED') { 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED' } else { 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' }
