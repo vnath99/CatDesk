@@ -301,6 +301,29 @@ function Test-CatDeskReleaseWorkerCommandLine([string]$Line,[string]$Root){
  }
  return $false
 }
+function Get-CatDeskOwnedPromotionProcessIds($Request,$Rows,[string]$Canonical,[string]$Candidate){
+ if(!$Request.ownedWorkerPid){return}
+ $worker=@($Rows|Where-Object ProcessId -eq $Request.ownedWorkerPid)
+ $transaction=[regex]::Escape($Request.transactionId)
+ if($worker.Count -ne 1 -or !$worker[0].ExecutablePath -or !$worker[0].CreationDate -or
+    $worker[0].CommandLine -notmatch '(?:^|\s)--catdesk-reviewed-promotion-worker(?:\s|$)' -or
+    $worker[0].CommandLine -notmatch ('(?:^|\s)--transaction\s+'+$transaction+'(?:\s|$)')){throw 'owned promotion worker identity unproven'}
+ $image=[IO.Path]::GetFullPath($worker[0].ExecutablePath)
+ if($image -ine [IO.Path]::GetFullPath($Request.ownedWorkerImage) -or $image -ieq $Canonical){throw 'owned promotion worker image differs'}
+ [int]$worker[0].ProcessId
+ # The one-hash controller waits for this child to write a receipt. Admit
+ # only its earlier-created, same-image parent with the exact promote verb.
+ if($image -ieq $Candidate){
+  $parent=@($Rows|Where-Object ProcessId -eq $worker[0].ParentProcessId)
+  $hash=[regex]::Escape($Request.candidateSha256)
+  if($parent.Count -eq 1 -and $parent[0].ExecutablePath -and $parent[0].CreationDate -and
+     [IO.Path]::GetFullPath($parent[0].ExecutablePath) -ieq $Candidate -and
+     ([DateTime]$parent[0].CreationDate) -lt ([DateTime]$worker[0].CreationDate) -and
+     $parent[0].CommandLine -cmatch ('^\s*(?:"[^"]+"|\S+)\s+operator\s+promote\s+'+$hash+'\s*$')){
+   [int]$parent[0].ProcessId
+  }
+ }
+}
 try {
  $i=[Console]::In.ReadToEnd()|ConvertFrom-Json
  . (Join-Path $i.workspace 'scripts/catdesk-release-recovery.ps1')
@@ -317,12 +340,15 @@ try {
  }
  if(@(Get-NetTCPConnection -State Listen -ErrorAction Stop|Where-Object LocalPort -eq 3200).Count){throw 'listener'}
  $canonical=[IO.Path]::GetFullPath($pair.Binary); $candidate=[IO.Path]::GetFullPath($i.candidate)
- foreach($p in @(Get-CimInstance Win32_Process -Filter "Name='catdesk.exe' OR Name='CatDeskBinagotchy.exe'" -OperationTimeoutSec 5 -ErrorAction Stop)) {
+ $rows=@(Get-CimInstance Win32_Process -Filter "Name='catdesk.exe' OR Name='CatDeskBinagotchy.exe'" -OperationTimeoutSec 5 -ErrorAction Stop)
+ $admitted=@(Get-CatDeskOwnedPromotionProcessIds $i $rows $canonical $candidate)
+ foreach($p in $rows) {
   if(!$p.ExecutablePath -or !$p.CommandLine){throw 'unknown image'}
+  if($admitted -contains [int]$p.ProcessId){continue}
   $image=[IO.Path]::GetFullPath($p.ExecutablePath)
   if($image -ieq $canonical -or $image -ieq $candidate){throw 'live image'}
   if($p.CommandLine.Contains('--catdesk-reviewed-promotion-worker') -and $p.CommandLine.Contains($i.transactionId)){
-   if(!$i.ownedWorkerPid -or $p.ProcessId -ne $i.ownedWorkerPid -or $image -ine [IO.Path]::GetFullPath($i.ownedWorkerImage)){throw 'live promotion worker'}
+   throw 'live promotion worker'
   }
  }
  foreach($p in @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe' OR Name='pwsh.exe'" -OperationTimeoutSec 5 -ErrorAction Stop)){
@@ -437,7 +463,7 @@ fn inspect_owners_for_pair(
     let mut owner = OwnedCandidateChild::spawn(&mut command)?;
     let input = serde_json::json!({"workspace":crate::command::normalize_windows_verbatim_path(workspace.to_path_buf()),
         "candidate":crate::command::normalize_windows_verbatim_path(workspace.join(&auth.candidate_relative_path)),
-        "priorSha256":expected_canonical_sha256,"transactionId":auth.transaction_id,"historicalPids":intent.map(|v|vec![v.old_pid]).unwrap_or_else(||handoff.map(|v|vec![v.old_pid,v.new_pid.unwrap_or(0)]).unwrap_or_default()),
+        "priorSha256":expected_canonical_sha256,"candidateSha256":auth.candidate_sha256,"transactionId":auth.transaction_id,"historicalPids":intent.map(|v|vec![v.old_pid]).unwrap_or_else(||handoff.map(|v|vec![v.old_pid,v.new_pid.unwrap_or(0)]).unwrap_or_default()),
         "historicalCompletedUnix":handoff.map(|v|v.completed_at_unix).unwrap_or(0),
         "intentCreatedAtUtc":intent.map(|v|v.created_at_utc.as_str()),"authorizationGeneration":auth.generation,"authorizationExpires":auth.expires_at_unix,
         "completedHandoff":completed_handoff,"bridgePid":bridge_pid,"ownedWorkerPid":owned_worker.then_some(std::process::id()),
