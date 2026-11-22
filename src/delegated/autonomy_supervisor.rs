@@ -408,7 +408,10 @@ fn registration_runtime_error(error: super::runtime::RuntimeError) -> String {
 /// Local-only convenience entry. Keep the review, producer, resource and
 /// transaction checks in the same paths used by the existing promoter.
 #[cfg(windows)]
-pub(crate) fn promote_active_backend(workspace: &Path, expected_sha256: &str) -> Result<Value, String> {
+pub(crate) fn promote_active_backend(
+    workspace: &Path,
+    expected_sha256: &str,
+) -> Result<Value, String> {
     use std::time::{Duration, Instant};
 
     let workspace = workspace
@@ -433,8 +436,17 @@ pub(crate) fn promote_active_backend(workspace: &Path, expected_sha256: &str) ->
             "servingState": result.serving_state,
         }));
     }
-    crate::daemon_reload::require_new_local_promotion(&workspace, expected_sha256)?;
     let supervisor = AutonomousSupervisorV1::open(&workspace)?;
+    let reviewed =
+        supervisor.resolve_reviewed_promotion_review_authority(&release.review_record_id)?;
+    if reviewed.session_id != release.review_session_id
+        || reviewed.digest != release.review_authority_sha256
+    {
+        return Err("independent review authority is unavailable".into());
+    }
+    crate::daemon_reload::retirement::archive_completed_predecessor(&workspace, expected_sha256)
+        .map_err(|_| "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED".to_string())?;
+    crate::daemon_reload::require_new_local_promotion(&workspace, expected_sha256)?;
     let prepared = supervisor.reviewed_build_promotion(&json!({
         "action":"PREFLIGHT",
         "buildPath":candidate,

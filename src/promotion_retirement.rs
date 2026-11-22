@@ -615,7 +615,14 @@ pub(crate) fn qualify_stopped_source(
     let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
     let _lifecycle = super::source_bridge::lifecycle_lease(workspace)?;
     let previous = journal(&parent)?;
-    let plan = inspect_locked(workspace, &parent, transaction, previous.as_ref(), false)?;
+    let plan = inspect_locked(
+        workspace,
+        &parent,
+        transaction,
+        previous.as_ref(),
+        false,
+        false,
+    )?;
     if digest(&bytes(&plan)?) != expected {
         return Err("promotion source evidence differs".into());
     }
@@ -743,6 +750,7 @@ fn inspect_locked(
     transaction: &str,
     prior: Option<&Journal>,
     completed: bool,
+    archive_completed_handoff: bool,
 ) -> Result<Plan, String> {
     if prior.is_some_and(|v| {
         v.plan.transaction_id == transaction && v.plan.completed_promotion != completed
@@ -811,6 +819,34 @@ fn inspect_locked(
         let receipt: CompletedPromotionReceipt = serde_json::from_slice(&raw)
             .map_err(|_| format!("{LABEL} completed receipt invalid"))?;
         validate_completed_receipt(&receipt, &auth)?;
+        let completed_handoff = if archive_completed_handoff {
+            let handoffs = child(parent, "restart-handoff")?;
+            let saved = prior
+                .filter(|j| j.plan.transaction_id == transaction)
+                .and_then(|j| j.plan.historical_handoff_sha256.as_deref());
+            let raw = match read_optional_relative_regular(&handoffs, "latest.json", 4096, LABEL)? {
+                Some(raw) => raw,
+                None => read_relative_regular(
+                    &handoffs,
+                    &format!(
+                        "retired-{}.json",
+                        saved.ok_or("completed handoff unavailable")?
+                    ),
+                    4096,
+                    LABEL,
+                )?,
+            };
+            let sha = digest(&raw);
+            if saved.is_some_and(|expected| expected != sha) {
+                return Err("completed handoff changed before retirement".into());
+            }
+            Some((
+                validate_completed_canonical_handoff(&raw, workspace, &auth)?,
+                sha,
+            ))
+        } else {
+            None
+        };
         let helper = accepted_helper(workspace, &auth)?;
         let mut proof = inspect_owners_for_pair(
             workspace,
@@ -821,7 +857,7 @@ fn inspect_locked(
             None,
             None,
             &auth.candidate_sha256,
-            None,
+            completed_handoff.as_ref().map(|(receipt, _)| receipt),
         )?;
         proof["completedReceiptSha256"] = serde_json::Value::String(digest(&raw));
         let plan = Plan {
@@ -830,7 +866,7 @@ fn inspect_locked(
             prior_sha256: auth.prior_canonical_sha256,
             candidate_sha256: auth.candidate_sha256,
             records: hashes,
-            historical_handoff_sha256: None,
+            historical_handoff_sha256: completed_handoff.map(|(_, sha)| sha),
             trusted_release_evidence_sha256: digest(&bytes(&proof)?),
             completed_promotion: true,
         };
@@ -967,6 +1003,7 @@ fn inspect_for_kind(
         transaction,
         previous.as_ref(),
         completed,
+        combined_completed_retirement(previous.as_ref(), transaction),
     )?;
     Ok(summary(&Journal {
         schema_version: 1,
@@ -1081,25 +1118,98 @@ fn retire_for_kind(
         return Err(format!("{LABEL} another recovery is pending"));
     }
     // Reuse the public lifecycle's existing exclusive stopped-owner lease.
-    use std::os::windows::fs::OpenOptionsExt;
-    let lifecycle = child(&parent, "release-pair-control")?;
-    let _lease = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .share_mode(0)
-        .open(lifecycle.path().join("stopped-owner.lock"))
-        .map_err(|_| format!("{LABEL} public lifecycle owner is active"))?;
+    let _lease = super::source_bridge::lifecycle_lease(workspace)?;
     let plan = inspect_locked(
         workspace,
         &parent,
         transaction,
         previous.as_ref(),
         completed,
+        combined_completed_retirement(previous.as_ref(), transaction),
     )?;
     let evidence = digest(&bytes(&plan)?);
     if evidence != expected {
         return Err(format!("{LABEL} material evidence changed"));
     }
+    publish_retirement(workspace, &parent, previous, plan)
+}
+
+fn combined_completed_retirement(previous: Option<&Journal>, transaction: &str) -> bool {
+    previous.is_some_and(|j| {
+        j.plan.transaction_id == transaction
+            && j.plan.completed_promotion
+            && j.plan.historical_handoff_sha256.is_some()
+    })
+}
+
+/// Fold exact predecessor bookkeeping into the existing reviewed promote
+/// command. The caller has already revalidated the successor's review.
+#[cfg(windows)]
+pub(crate) fn archive_completed_predecessor(
+    workspace: &Path,
+    next_sha256: &str,
+) -> Result<(), String> {
+    let parent = metadata(workspace)?;
+    let _lock = create_delete_on_close_regular_lock(&parent, "promotion-operation.lock", LABEL)?;
+    let previous = journal(&parent)?;
+    let result = optional_child(&parent, "promotion-control")?
+        .map(|control| read_optional_relative_regular(&control, "result.json", 4096, LABEL))
+        .transpose()?
+        .flatten()
+        .map(|raw| serde_json::from_slice::<ReviewedPromotionResultV1>(&raw))
+        .transpose()
+        .map_err(|_| "completed predecessor result is unavailable")?;
+    let Some(transaction) = automatic_predecessor(previous.as_ref(), result.as_ref(), next_sha256)?
+    else {
+        return Ok(());
+    };
+    let _lease = super::source_bridge::lifecycle_lease(workspace)?;
+    let plan = inspect_locked(
+        workspace,
+        &parent,
+        transaction,
+        previous.as_ref(),
+        true,
+        true,
+    )?;
+    if plan.candidate_sha256 == next_sha256 {
+        return Err("completed predecessor is the requested artifact".into());
+    }
+    publish_retirement(workspace, &parent, previous, plan)?;
+    Ok(())
+}
+
+fn automatic_predecessor<'a>(
+    previous: Option<&'a Journal>,
+    result: Option<&'a ReviewedPromotionResultV1>,
+    next_sha256: &str,
+) -> Result<Option<&'a str>, String> {
+    if let Some(j) = previous.filter(|j| j.phase != "COMPLETED") {
+        if !combined_completed_retirement(Some(j), &j.plan.transaction_id)
+            || j.plan.candidate_sha256 == next_sha256
+        {
+            return Err("stopped promotion retirement requires explicit resume".into());
+        }
+        return Ok(Some(&j.plan.transaction_id));
+    }
+    Ok(result
+        .filter(|value| {
+            value.state == "PROMOTION_COMPLETED"
+                && value.serving_state.as_deref() == Some("STOPPED_AFTER_BOUNDED_OWNER")
+                && value.candidate_sha256 != next_sha256
+        })
+        .map(|value| value.transaction_id.as_str()))
+}
+
+#[cfg(windows)]
+fn publish_retirement(
+    workspace: &Path,
+    parent: &Guard,
+    previous: Option<Journal>,
+    plan: Plan,
+) -> Result<serde_json::Value, String> {
+    let transaction = plan.transaction_id.clone();
+    let evidence = digest(&bytes(&plan)?);
     // Retain the actual trusted disk pair through every metadata transition.
     // These handles forbid writes/deletes and never replace executable bytes.
     let mut release = Guard::acquire(workspace, LABEL)?;
@@ -1130,16 +1240,16 @@ fn retire_for_kind(
     )?;
     if let Some(old) = &previous {
         if old.phase == "COMPLETED" {
-            verify_archive(&parent, old)?;
+            verify_archive(parent, old)?;
             // Previous completion remains durable before replacing the current journal.
             let name = format!(
                 "promotion-retirement-receipt-{}.json",
                 old.plan.transaction_id
             );
             let encoded = bytes(old)?;
-            match read_optional_relative_regular(&parent, &name, 65536, LABEL)? {
+            match read_optional_relative_regular(parent, &name, 65536, LABEL)? {
                 Some(saved) if saved == encoded => {}
-                None => write_new_regular_in(&parent, &name, &encoded, LABEL)?,
+                None => write_new_regular_in(parent, &name, &encoded, LABEL)?,
                 _ => return Err(format!("{LABEL} previous completion differs")),
             }
         }
@@ -1152,8 +1262,8 @@ fn retire_for_kind(
             evidence_sha256: evidence,
             plan,
         });
-    update_journal(&parent, &value)?;
-    archive_locked(&parent, &mut value, |_| Ok(()))?;
+    update_journal(parent, &value)?;
+    archive_locked(parent, &mut value, |_| Ok(()))?;
     Ok(summary(&value))
 }
 
@@ -2037,6 +2147,70 @@ mod tests {
         )
         .unwrap();
         assert!(validate_stopped_source_history(&parent, &next).is_err());
+        drop(parent);
+        cleanup_fixture(root);
+    }
+
+    #[test]
+    fn automatic_successor_archive_only_selects_completed_stopped_history() {
+        let (root, mut value) = fixture();
+        let (_, _, _, mut result) = terminal_fixture();
+        result.transaction_id = value.plan.transaction_id.clone();
+        result.candidate_sha256 = value.plan.candidate_sha256.clone();
+        result.state = "PROMOTION_COMPLETED".into();
+        result.serving_state = Some("STOPPED_AFTER_BOUNDED_OWNER".into());
+        let next = "f".repeat(64);
+        assert_eq!(
+            automatic_predecessor(None, Some(&result), &next).unwrap(),
+            Some(value.plan.transaction_id.as_str())
+        );
+        assert!(
+            automatic_predecessor(None, Some(&result), &result.candidate_sha256)
+                .unwrap()
+                .is_none()
+        );
+        assert!(automatic_predecessor(Some(&value), Some(&result), &next).is_err());
+        let mut other = result.clone();
+        other.state = "PROMOTION_FAILED_OR_AMBIGUOUS".into();
+        assert!(
+            automatic_predecessor(None, Some(&other), &next)
+                .unwrap()
+                .is_none()
+        );
+        other.state = result.state.clone();
+        other.serving_state = Some("UNVERIFIED".into());
+        assert!(
+            automatic_predecessor(None, Some(&other), &next)
+                .unwrap()
+                .is_none()
+        );
+
+        value.plan.schema_version = 2;
+        value.plan.completed_promotion = true;
+        value.evidence_sha256 = digest(&bytes(&value.plan).unwrap());
+        let parent = metadata(&root).unwrap();
+        update_journal(&parent, &value).unwrap();
+        assert!(
+            archive_locked(&parent, &mut value, |point| if point == "HANDOFF_RENAMED" {
+                Err("controlled interruption".into())
+            } else {
+                Ok(())
+            })
+            .is_err()
+        );
+        let mut pending = journal(&parent).unwrap().unwrap();
+        assert_eq!(
+            automatic_predecessor(Some(&pending), None, &next).unwrap(),
+            Some(value.plan.transaction_id.as_str())
+        );
+        assert!(automatic_predecessor(Some(&pending), None, &result.candidate_sha256).is_err());
+        archive_locked(&parent, &mut pending, |_| Ok(())).unwrap();
+        assert!(
+            automatic_predecessor(Some(&pending), None, &next)
+                .unwrap()
+                .is_none()
+        );
+        verify_archive(&parent, &pending).unwrap();
         drop(parent);
         cleanup_fixture(root);
     }
