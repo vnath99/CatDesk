@@ -10,6 +10,10 @@ use std::path::Path;
 #[derive(Debug, Eq, PartialEq)]
 enum InstallBrokerAction {
     Preflight,
+    Result {
+        generation: u64,
+        request_sha256: String,
+    },
     StartOnce,
     StartLocalOnce,
     Bootstrap {
@@ -29,6 +33,23 @@ fn parse_install_broker_action(args: &[String]) -> Result<Option<InstallBrokerAc
     }
     match args {
         [_, action] if action == "preflight" => Ok(Some(InstallBrokerAction::Preflight)),
+        [_, action, generation, hash]
+            if action == "result"
+                && generation.bytes().all(|b| b.is_ascii_digit())
+                && hash.len() == 64
+                && hash
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) =>
+        {
+            Ok(Some(InstallBrokerAction::Result {
+                generation: generation
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|n| *n > 0)
+                    .ok_or("WAKE_INSTALL_BROKER_ARGUMENTS_INVALID")?,
+                request_sha256: hash.clone(),
+            }))
+        }
         [_, action] if action == "start-once" => Ok(Some(InstallBrokerAction::StartOnce)),
         [_, action] if action == "start-local-once" => {
             Ok(Some(InstallBrokerAction::StartLocalOnce))
@@ -91,6 +112,17 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
     let Some(action) = parse_install_broker_action(args)? else {
         return Ok(None);
     };
+    if let InstallBrokerAction::Result {
+        generation,
+        request_sha256,
+    } = &action
+    {
+        return catdesk_wake::install_broker_ledger::inspect_fixed_same_state_result(
+            *generation,
+            request_sha256,
+        )
+        .map(Some);
+    }
     // First provisioning cannot require the already-installed broker. Its
     // separate native entry verifies exact frozen enrollment, elevated owner,
     // existing state identity, absent destinations and pinned parent safety.
@@ -478,6 +510,15 @@ mod install_broker_cli_tests {
             parse_install_broker_action(&args(&["install-broker", "start-local-once"])).unwrap(),
             Some(InstallBrokerAction::StartLocalOnce)
         );
+        let digest = "a".repeat(64);
+        assert_eq!(
+            parse_install_broker_action(&args(&["install-broker", "result", "3", &digest]))
+                .unwrap(),
+            Some(InstallBrokerAction::Result {
+                generation: 3,
+                request_sha256: digest.clone(),
+            })
+        );
         assert!(matches!(
             parse_install_broker_action(&args(&[
                 "install-broker",
@@ -501,6 +542,9 @@ mod install_broker_cli_tests {
         for values in [
             vec!["install-broker"],
             vec!["install-broker", "preflight", "--start"],
+            vec!["install-broker", "result", "0", &digest],
+            vec!["install-broker", "result", "3", "short"],
+            vec!["install-broker", "result", "3", &digest, "--start"],
             vec![
                 "install-broker",
                 "submit",

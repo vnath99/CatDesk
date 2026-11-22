@@ -57,6 +57,7 @@ use std::{
 
 #[path = "install_broker_ledger_same_state.rs"]
 mod same_state;
+pub use same_state::inspect_fixed_same_state_result;
 pub(crate) use same_state::{
     AdmittedSameStateLedgerLeaseV3, SameStateFailedCurrentImageV3, SameStateLedgerAdmissionV3,
     SameStateLedgerBindingV3,
@@ -1214,6 +1215,15 @@ fn open_relative(
     name: &str,
     disposition: u32,
 ) -> std::result::Result<File, u32> {
+    open_ledger_file(root, name, disposition, true)
+}
+
+fn open_ledger_file(
+    root: &OwnedHandle,
+    name: &str,
+    disposition: u32,
+    write: bool,
+) -> std::result::Result<File, u32> {
     // Callers derive names exclusively via record_name. No caller path, slash,
     // dot component, ADS, or arbitrary child can enter this NT relative open.
     if name.len() > 96
@@ -1246,7 +1256,10 @@ fn open_relative(
     let result = unsafe {
         NtCreateFile(
             &mut handle,
-            FILE_READ_DATA | FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+            FILE_READ_DATA
+                | FILE_READ_ATTRIBUTES
+                | SYNCHRONIZE
+                | if write { FILE_WRITE_DATA } else { 0 },
             &mut attributes,
             &mut status,
             ptr::null_mut(),
@@ -1255,7 +1268,7 @@ fn open_relative(
             disposition,
             FILE_NON_DIRECTORY_FILE
                 | FILE_SYNCHRONOUS_IO_NONALERT
-                | FILE_WRITE_THROUGH
+                | if write { FILE_WRITE_THROUGH } else { 0 }
                 | FILE_OPEN_REPARSE_POINT,
             ptr::null_mut(),
             0,
@@ -1281,7 +1294,7 @@ fn create_or_reopen(root: &OwnedHandle, name: &str) -> Result<(File, bool)> {
 }
 
 fn open_optional(root: &OwnedHandle, name: &str) -> Result<Option<File>> {
-    match open_relative(root, name, FILE_OPEN) {
+    match open_ledger_file(root, name, FILE_OPEN, false) {
         Ok(file) => Ok(Some(file)),
         Err(STATUS_OBJECT_NAME_NOT_FOUND) => Ok(None),
         Err(STATUS_SHARING_VIOLATION) => Err("WAKE_LEDGER_CONTENDER_BUSY".into()),

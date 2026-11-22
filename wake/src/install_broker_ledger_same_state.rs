@@ -503,6 +503,60 @@ pub(super) fn history_v3(
     ))
 }
 
+/// Read an exact V3 request from the fixed, attested namespace. This reports
+/// recorded history only, without starting or connecting to the service.
+pub fn inspect_fixed_same_state_result(
+    generation: u64,
+    request_sha256: &str,
+) -> Result<serde_json::Value> {
+    let root = crate::install_broker_preflight::acquire_fixed_protected_root_for_reader()?;
+    inspect_same_state_result(root.root(), generation, request_sha256)
+}
+
+fn inspect_same_state_result(
+    root: &OwnedHandle,
+    generation: u64,
+    request_sha256: &str,
+) -> Result<serde_json::Value> {
+    if generation == 0 || !lowercase_hex(request_sha256, 64) {
+        return Err("WAKE_SAME_STATE_RESULT_ARGUMENTS_INVALID".into());
+    }
+    let root_id = root_info(root)?;
+    // An exclusive read handle takes the existing global lock. Opening it
+    // requires no write access and cannot create a missing lock or record.
+    let lock = open_optional(root, GLOBAL_LOCK_NAME)?.ok_or("WAKE_LEDGER_LOCK_UNPROVISIONED")?;
+    file_info(&lock, Some(0))?;
+    let inventory = ledger_inventory(root)?;
+    let matching = if let Some(present) = inventory.get(&generation)
+        && is_v3_generation(root, generation)?
+    {
+        let (binding, phase, last_digest, _, _) = history_v3(root, generation, present, &root_id)?;
+        (binding.signed_envelope_sha256 == request_sha256).then_some((binding, phase, last_digest))
+    } else {
+        None
+    };
+    let mut result = serde_json::json!({
+        "action": "install_broker_result",
+        "state": "NOT_FOUND_NO_RETRY",
+        "installGeneration": generation,
+        "requestSha256": request_sha256,
+        "replayAuthorized": false,
+        "liveAcceptanceVerified": false,
+    });
+    if let Some((binding, phase, last_digest)) = matching {
+        result["state"] = if phase == InstallPhaseV1::Complete {
+            "COMPLETE"
+        } else {
+            "INCOMPLETE_NO_RETRY"
+        }
+        .into();
+        result["latestPhase"] = phase_name_v3(phase).into();
+        result["lastRecordSha256"] = last_digest.into();
+        result["plannedSelectionSha256"] = binding.planned_selection_sha256.into();
+    }
+    Ok(result)
+}
+
 /// Issued only under the existing protected global lock. It is evidence for
 /// verifying the exact envelope, not permission to alter selection.
 pub(crate) struct SameStateLedgerAdmissionV3 {
@@ -1103,7 +1157,7 @@ mod tests {
     #[test]
     fn same_state_native_post_pointer_resume_preserves_both_escrows_and_consumption() {
         let (path, root, _, _) = super::super::tests::fixture();
-        let guard = BrokerLedgerGuard::acquire(&root).unwrap();
+        let mut guard = BrokerLedgerGuard::acquire(&root).unwrap();
         let original = b"original selection\r\n";
         let envelope = b"synthetic metadata fixture, no installation authority";
         let mut b = binding(original);
@@ -1173,6 +1227,18 @@ mod tests {
                         .unwrap(),
                     "WAKE_LEDGER_PRIOR_INCOMPLETE"
                 );
+                assert_eq!(
+                    inspect_same_state_result(&root, 1, &b.signed_envelope_sha256).unwrap_err(),
+                    "WAKE_LEDGER_CONTENDER_BUSY"
+                );
+                drop(guard);
+                let result =
+                    inspect_same_state_result(&root, 1, &b.signed_envelope_sha256).unwrap();
+                assert_eq!(result["state"], "INCOMPLETE_NO_RETRY");
+                assert_eq!(result["latestPhase"], "pointer-switched");
+                assert_eq!(result["lastRecordSha256"], prior);
+                assert_eq!(result["replayAuthorized"], false);
+                guard = BrokerLedgerGuard::acquire(&root).unwrap();
             }
         }
         let inventory = ledger_inventory(&root).unwrap();
@@ -1222,6 +1288,21 @@ mod tests {
             "WAKE_LEDGER_APPROVAL_REPLAY"
         );
         drop(guard);
+        let result = inspect_same_state_result(&root, 1, &b.signed_envelope_sha256).unwrap();
+        assert_eq!(result["state"], "COMPLETE");
+        assert_eq!(result["lastRecordSha256"], prior);
+        assert_eq!(result["plannedSelectionSha256"], b.planned_selection_sha256);
+        assert_eq!(result["liveAcceptanceVerified"], false);
+        for (generation, hash) in [(1, "0".repeat(64)), (3, b.signed_envelope_sha256.clone())] {
+            let absent = inspect_same_state_result(&root, generation, &hash).unwrap();
+            assert_eq!(absent["state"], "NOT_FOUND_NO_RETRY");
+            assert_eq!(absent["replayAuthorized"], false);
+            assert!(absent.get("lastRecordSha256").is_none());
+        }
+        let mut lock = open_optional(&root, GLOBAL_LOCK_NAME).unwrap().unwrap();
+        assert!(lock.write_all(b"not writable").is_err());
+        assert_eq!(lock.metadata().unwrap().len(), 0);
+        drop(lock);
         drop(root);
         std::fs::remove_file(path.join(record_name_v3(2, InstallPhaseV1::Intent))).unwrap();
         std::fs::remove_file(path.join(record_name_v3(1, InstallPhaseV1::NewOwnerProven))).unwrap();
