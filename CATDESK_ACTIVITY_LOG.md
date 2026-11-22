@@ -966,3 +966,11 @@ Evidence: [docs/verification/WAKE_ROUTINE_PRE_INTENT_REFUSAL_2026_11_22.json](do
 Agent: CatDesk development. Source: 8c6c0fbb1188e95b0066b84e1e21cbfe0d1bd130. Outcome: partial. The backend-only supervisor now accepts a verified reviewed-recovery diagnosis and uses the existing lease-protected recovery engine. A real isolated mismatch restored the exact retained executable and fingerprint and served authenticated MCP after the monitor exited. Next: Qualify installed promotion and rollback after the frozen backend receives eligible independent review and producer evidence. Verify the existing signed Wake V3 selection and qualify protected Wake receipt publication.
 
 Evidence: [docs/verification/BACKEND_ONLY_SUPERVISOR_REVIEWED_FALLBACK_2026_11_22.json](docs/verification/BACKEND_ONLY_SUPERVISOR_REVIEWED_FALLBACK_2026_11_22.json); command: Bounded Windows isolated supervisor, disk fallback and authenticated MCP fixture; exit 0; SHA-256 51c388f23038119067d36711dd12c51857aa84a6c9095dde338ce82b1e159fbd.
+
+<!-- catdesk-activity:shared-release-startup-ownership-20261122T074646Z sha256:46f2d2f5c91c253a756a2d7fb33a8522013a3fe558c93f113ebe8cd5b5a2b059 -->
+
+## 2026-11-22T07:46:46Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: ec8b587de852ca4ea36dd1b6485ee5f91a00a740. Outcome: partial. Startup, status and diagnosis now share the release fence. Both PowerShell hosts passed. A real Windows lease deferred the isolated supervisor. After release the supervisor restored the exact verified fallback and authenticated MCP. Next: Qualify installed promotion and rollback after the frozen backend receives eligible independent review and producer evidence. Verify the existing signed Wake V3 selection and qualify protected Wake receipt publication.
+
+Evidence: [docs/verification/RELEASE_STARTUP_AND_STATUS_OWNERSHIP_2026_11_22.json](docs/verification/RELEASE_STARTUP_AND_STATUS_OWNERSHIP_2026_11_22.json); command: Bounded Windows shared lease, public status, diagnosis, supervisor and restored MCP fixture; exit 0; SHA-256 890d476c6ce32bfeb3e33600f54b45f319f6cfc8ade27b755c3b90f3b9c3e400.

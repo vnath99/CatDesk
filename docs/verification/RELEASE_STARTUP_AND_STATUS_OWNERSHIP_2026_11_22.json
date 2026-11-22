@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "scope": "SHARED_POWERSHELL_RELEASE_FENCE_AND_REAL_DISPOSABLE_WINDOWS_LEASE",
+  "sourceCommit": "ec8b587de852ca4ea36dd1b6485ee5f91a00a740",
+  "verifiedUtc": "2026-11-22T07:46:46Z",
+  "fixtureSha256": "b6f03900dd70afe17678d5a3fc00880f9fdc3fddd4852e0071c249af79842dc7",
+  "sourceBehavior": {
+    "sameStartupFenceForStatusDiagnosisRecovery": true,
+    "fixedExistingLeaseSharingViolation": "RELEASE_LIFECYCLE_BUSY",
+    "unsettledStoppedJournal": "RECOVERY_AUTHORITY_REQUIRED",
+    "statusAndDiagnosisRecheckBeforeReadiness": true,
+    "doctorPreservesSeparateBusyCode": true,
+    "supervisorDefersWithoutRecoveryCallWhileBusy": true
+  },
+  "liveFixture": {
+    "startedUtc": "2026-11-22T07:44:41.754855Z",
+    "finishedUtc": "2026-11-22T07:45:24.300599Z",
+    "existingSupervisorAgainstBusyDiagnosis": [
+      "DEGRADED",
+      "MONITORING_COMPLETE"
+    ],
+    "updatedSupervisorWhileExactWindowsLeaseHeld": [
+      "RELEASE_LIFECYCLE_BUSY",
+      "MONITORING_COMPLETE"
+    ],
+    "updatedSupervisorAfterOwnerRelease": [
+      "RECOVERED",
+      "READY",
+      "MONITORING_COMPLETE"
+    ],
+    "recoveryNeverReachedBackendStartupWhileLeaseHeld": true,
+    "originalCandidatePairUntouchedWhileHeld": "Only fixture binary had candidate bytes. The predecessor fingerprint remained intact.",
+    "restoredSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+    "exactRestoredPairAndUnchangedEscrow": true,
+    "configPreserved": true,
+    "anonymousHttpStatus": 401,
+    "authenticatedHttpStatus": 200,
+    "authenticatedHttpStatusAfterMonitorExit": 200,
+    "toolCount": 79,
+    "backendExitedAndListenerClosed": true,
+    "fixtureRemoved": true
+  },
+  "regressionTests": {
+    "preFixPublicStatusMissedExistingLease": true,
+    "legacyNoOptionalArgumentCallRemainsSupported": true,
+    "publishedDuringProbeRecordRefused": true,
+    "consumerLifecycleWindowsPowerShell51AndPowerShell7": "PASS",
+    "supervisorWindowsPowerShell51AndPowerShell7": "PASS",
+    "legacyAndStoppedReleasePairReconciliation": "PASS",
+    "canonicalStackWindowsBehavior": "PASS",
+    "doctorAssertionsPassed": 215,
+    "verificationNotes": "The consumer lifecycle suite uses a workspace-scoped Windows kernel guard. It passed in both hosts when run serially after a parallel run exposed fixture contention."
+  },
+  "limits": "Disposable reviewed escrow was fixture-scoped. Real source guarded the lock, public diagnosis and disk fallback. Existing test adapters confined process checks and actual authenticated headless service to the private loopback fixture.",
+  "productionPortUsed": false,
+  "protectedInstallationChanged": false,
+  "installedAcceptance": false
+}
