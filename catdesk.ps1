@@ -835,14 +835,23 @@ function Invoke-InstallPreparation {
     Write-LifecycleStatus 'INSTALL_READY' 'operator authentication and connector binding may still require attention'
 }
 
+function Write-LifecycleReleaseFenceStatus([string]$Gate) {
+    if ($Gate -ceq 'RELEASE_LIFECYCLE_BUSY') {
+        Write-LifecycleStatus $Gate 'gate=RELEASE_LIFECYCLE_BUSY'
+    } else {
+        Write-LifecycleStatus 'RECOVERY_AUTHORITY_REQUIRED'
+    }
+}
+
 function Get-NonMutatingStatus {
     # Preserve a fixed, non-secret stage code so a consumer can distinguish
     # which bounded status gate threw without projecting exception text,
     # configured endpoints, tunnel identity, credentials, or filesystem paths.
     $statusStage = 'RECOVERY_AUTHORITY'
     try {
-        if (-not (Test-CatDeskPromotionStartupReady -Root $Workspace)) {
-            Write-LifecycleStatus 'RECOVERY_AUTHORITY_REQUIRED'
+        $startupGate = Get-CatDeskReleaseStartupGate -Root $Workspace
+        if ($startupGate -cne 'READY') {
+            Write-LifecycleReleaseFenceStatus $startupGate
             return
         }
         $statusStage = 'CANONICAL_IDENTITY'
@@ -869,8 +878,9 @@ function Get-NonMutatingStatus {
         }
         # A promotion may acquire ownership and publish its journal while the probes run.
         $statusStage = 'RECOVERY_AUTHORITY'
-        if (-not (Test-CatDeskPromotionStartupReady -Root $Workspace)) {
-            Write-LifecycleStatus 'RECOVERY_AUTHORITY_REQUIRED'
+        $startupGate = Get-CatDeskReleaseStartupGate -Root $Workspace
+        if ($startupGate -cne 'READY') {
+            Write-LifecycleReleaseFenceStatus $startupGate
             return
         }
         if ($localReady -and $runtimeReady) {
@@ -891,6 +901,7 @@ function Get-NonMutatingStatus {
                         Write-LifecycleStatus 'RECOVERY_AVAILABLE' $detail
                         return
                     }
+                    'RELEASE_LIFECYCLE_BUSY' { Write-LifecycleReleaseFenceStatus $assessment.State; return }
                     'LKG_AUTHORITY_MISSING' { Write-LifecycleStatus 'LKG_AUTHORITY_MISSING'; return }
                     'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED' { Write-LifecycleStatus 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED'; return }
                     'RECOVERY_RELEASE_AUTHORITY_REQUIRED' { Write-LifecycleStatus 'RECOVERY_AUTHORITY_REQUIRED'; return }
@@ -910,14 +921,26 @@ function Get-NonMutatingStatus {
     }
 }
 
-function Invoke-LayeredDiagnosis {
+function Write-LifecycleReleaseFenceDiagnosis([string]$Gate) {
     $layers = [Collections.Generic.List[object]]::new()
     [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LIFECYCLE_ENGINE' -State 'READY' -Gate 'READY'))
-    if (-not (Test-CatDeskPromotionStartupReady -Root $Workspace)) {
+    if ($Gate -ceq 'RELEASE_LIFECYCLE_BUSY') {
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'DEGRADED' -Gate $Gate))
+        Write-LifecycleDiagnosis -State 'DEGRADED' -PrimaryLayer 'RECOVERY_AUTHORITY' -NextAction 'NONE' -Layers $layers
+    } else {
         [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'FAILED' -Gate 'RECOVERY_AUTHORITY_REQUIRED'))
         Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'RECOVERY_AUTHORITY' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
+    }
+}
+
+function Invoke-LayeredDiagnosis {
+    $startupGate = Get-CatDeskReleaseStartupGate -Root $Workspace
+    if ($startupGate -cne 'READY') {
+        Write-LifecycleReleaseFenceDiagnosis $startupGate
         return
     }
+    $layers = [Collections.Generic.List[object]]::new()
+    [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LIFECYCLE_ENGINE' -State 'READY' -Gate 'READY'))
 
     $canonical = $null
     try {
@@ -930,6 +953,7 @@ function Invoke-LayeredDiagnosis {
         $assessment = Get-LifecycleRecoveryAssessment
         if ($null -ne $assessment) {
             switch ($assessment.State) {
+                'RELEASE_LIFECYCLE_BUSY' { Write-LifecycleReleaseFenceDiagnosis $assessment.State; return }
                 'RECOVERY_READY' {
                     $authorityGate = if ($assessment.RecoverySource) { [string]$assessment.RecoverySource } else { 'RECOVERY_READY' }
                     [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'READY' -Gate $authorityGate))
@@ -1026,6 +1050,11 @@ function Invoke-LayeredDiagnosis {
 
     Add-LifecycleCodexCliDiagnosticLayer -Layers $layers
     $codexReady = $layers[$layers.Count - 1].state -eq 'READY'
+    $startupGate = Get-CatDeskReleaseStartupGate -Root $Workspace
+    if ($startupGate -cne 'READY') {
+        Write-LifecycleReleaseFenceDiagnosis $startupGate
+        return
+    }
 
     if (-not $localDaemonReady) {
         Write-LifecycleDiagnosis -State 'DEGRADED' -PrimaryLayer 'LOCAL_DAEMON' -NextAction 'RUN_RECOVER' -Layers $layers

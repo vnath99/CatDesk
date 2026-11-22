@@ -145,6 +145,13 @@ function Invoke-PublicLifecycle {
                 # Public diagnose is bounded and read-only. Do not restart a
                 # healthy backend for Wake or external-owner degradation.
                 if($parsed.layers -isnot [array]){return 'ACTION_REQUIRED'}
+                if ($parsed.primaryLayer -ceq 'RECOVERY_AUTHORITY') {
+                    $authority = @($parsed.layers | Where-Object layer -CEQ 'RECOVERY_AUTHORITY')
+                    if ($parsed.state -ceq 'DEGRADED' -and $parsed.nextAction -ceq 'NONE' -and
+                        $authority.Count -eq 1 -and $authority[0].state -ceq 'DEGRADED' -and
+                        $authority[0].gate -ceq 'RELEASE_LIFECYCLE_BUSY') { return 'RELEASE_LIFECYCLE_BUSY' }
+                    return 'ACTION_REQUIRED'
+                }
                 if ($parsed.state -ceq 'RECOVERY_AVAILABLE') {
                     # The facade stops diagnosis at the canonical pair when it
                     # independently verifies a reviewed recovery slot. Send
@@ -179,7 +186,7 @@ function Invoke-PublicLifecycle {
             }
             $state = $parsed.state
             if($localOnly -and $command -ceq 'recover' -and $state -ceq 'LOCAL_BACKEND_READY'){return 'CONNECTED_VERIFIED'}
-            if ($command -ceq 'recover' -and $state -ceq 'RELEASE_LIFECYCLE_BUSY') {
+            if ($state -ceq 'RELEASE_LIFECYCLE_BUSY') {
                 if ($parsed.detail -isnot [string] -or $parsed.detail -cne 'gate=RELEASE_LIFECYCLE_BUSY') { return 'ACTION_REQUIRED' }
                 return $state
             }
@@ -263,7 +270,7 @@ function Invoke-CatDeskAutostartSupervisor {
                 if ($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles) { Wait-SupervisorDelay -Seconds $HealthPollSeconds }
                 continue
             }
-            if ($BackendOnly -and $status -cnotin @('LOCAL_DAEMON_PENDING', 'LOCAL_RELEASE_RECOVERY_PENDING')) {
+            if ($BackendOnly -and $status -cnotin @('LOCAL_DAEMON_PENDING', 'LOCAL_RELEASE_RECOVERY_PENDING', 'RELEASE_LIFECYCLE_BUSY')) {
                 # A missing listener or reviewed pair recovery can use the
                 # narrow engine. Unproven release, auth and owner failures
                 # remain degraded until independent evidence changes.
@@ -275,7 +282,9 @@ function Invoke-CatDeskAutostartSupervisor {
             # The public recovery facade owns canonical release validation. This
             # supervisor never compiles, provisions, or assumes ownership of
             # an externally started runtime.
-            $recovery = Invoke-RecoveryBurst -Root $root -Attempts $MaximumAttempts -InitialBackoff $InitialBackoffSeconds -MaximumBackoff $MaximumBackoffSeconds -BackendOnly:$BackendOnly
+            $recovery = if ($status -ceq 'RELEASE_LIFECYCLE_BUSY') { $status } else {
+                Invoke-RecoveryBurst -Root $root -Attempts $MaximumAttempts -InitialBackoff $InitialBackoffSeconds -MaximumBackoff $MaximumBackoffSeconds -BackendOnly:$BackendOnly
+            }
             if ($recovery -eq 'RELEASE_LIFECYCLE_BUSY') {
                 # Yield to the owner and recheck the listener before another
                 # recovery. No recovery burst runs while the lease is held.

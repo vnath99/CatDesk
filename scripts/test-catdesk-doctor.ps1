@@ -76,6 +76,9 @@ try{
  $broken=Invoke-Doctor @{CanonicalIdentity={throw 'CATDESK_CANONICAL_HASH_MISMATCH'};DoctorAuthority={[pscustomobject]@{State='LKG_AUTHORITY_MISSING'}}}
  Require ((Layer $broken 'RELEASE_PAIR').code -ceq 'CANONICAL_HASH_MISMATCH') 'hash mismatch classification'
  Require ((Layer $broken 'RECOVERY_AUTHORITY').code -ceq 'LKG_AUTHORITY_MISSING') 'authority classification'
+ $busy=Invoke-Doctor @{DoctorAuthority={[pscustomobject]@{State='RELEASE_LIFECYCLE_BUSY'}}}
+ $busyAuthority=Layer $busy 'RECOVERY_AUTHORITY'
+ Require ($busyAuthority.code -ceq 'RELEASE_LIFECYCLE_BUSY' -and $busyAuthority.status -ceq 'UNVERIFIED') 'busy authority is a separate transient gate'
  Require ((Layer $broken 'PROJECT_REGISTRY').facts.pairedWakeTargets -eq 1 -and (Layer $broken 'CODEX_CLI').status -ceq 'UNVERIFIED') 'release failure stalled independent layers'
  $import=@{schemaVersion=1;source='RETAINED_REPORT';observedUtc='2020-01-01T00:00:00Z';observations=@(
   @{layer='CONNECTOR';code='UPSTREAM_RATE_OR_CONNECTOR_UNAVAILABLE'},@{layer='BROWSER';code='HOME_EDITOR_MISSING'},

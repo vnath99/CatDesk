@@ -1056,8 +1056,9 @@ function Save-RedactedRecoveryEvidence {
 
 function Get-CanonicalReleaseRecoveryAssessment([string]$Root, [string]$ExpectedHash) {
     # LKG assessment applies to a broken pair outside a reviewed transaction.
-    if (-not (Test-CatDeskPromotionStartupReady -Root $Root)) {
-        return [pscustomobject]@{ State = 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'; RecoverySource = '' }
+    $startupGate = Get-CatDeskReleaseStartupGate -Root $Root
+    if ($startupGate -cne 'READY') {
+        return [pscustomobject]@{ State = $startupGate; RecoverySource = '' }
     }
     try {
         $trusted = Get-CatDeskLastKnownGoodRelease -Root $Root
@@ -1228,14 +1229,11 @@ function Invoke-CanonicalStackBootstrap {
 function Invoke-CanonicalStackBootstrapCore {
     param([System.IO.FileStream]$StoppedLifecycleLease=$null)
     $root=(Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path;if($ReadyTimeoutSeconds -lt 5 -or $ReadyTimeoutSeconds -gt 180){throw "readiness timeout is invalid"}
-    if(-not(Test-CatDeskStoppedReconciliationStartupReady -Root $root -HeldLifecycleLease $StoppedLifecycleLease)){
-        Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'same-transaction stopped reconciliation recovery is required before startup'
-        return
-    }
     # The original reviewed transaction owns a split pair as well as a
-    # matching one. Do this before ordinary LKG recovery can change either leaf.
-    if (-not (Test-CatDeskPromotionStartupReady -Root $root)) {
-        Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'reviewed promotion must be reconciled before recovery or startup'
+    # matching one. Check both journals before ordinary LKG recovery.
+    $startupGate = Get-CatDeskReleaseStartupGate -Root $root -HeldLifecycleLease $StoppedLifecycleLease
+    if ($startupGate -cne 'READY') {
+        Write-RedactedStatus $startupGate 'canonical startup is waiting for release ownership or reconciliation'
         return
     }
     $releaseRestored=$false;$releaseRecoverySource=''
@@ -1259,8 +1257,9 @@ function Invoke-CanonicalStackBootstrapCore {
         }
     }
     # Detect a journal that appeared during the identity or recovery checks.
-    if (-not (Test-CatDeskPromotionStartupReady -Root $root)) {
-        Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'reviewed promotion must be reconciled before startup'
+    $startupGate = Get-CatDeskReleaseStartupGate -Root $root -HeldLifecycleLease $StoppedLifecycleLease
+    if ($startupGate -cne 'READY') {
+        Write-RedactedStatus $startupGate 'canonical startup is waiting for release ownership or reconciliation'
         return
     }
     if ($BackendOnly) { Invoke-BackendOnlyBootstrap -Root $root -Canonical $canonical; return }

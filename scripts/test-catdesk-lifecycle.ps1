@@ -158,6 +158,11 @@ try {
     try {
         $busy = Invoke-FixtureFacade -Command 'recover' -Seams $publicRecovery -FixtureWorkspace $realCanonicalRoot -FixtureConfigPath $realConfig -FixtureBackendOnly | ConvertFrom-Json
         Require ($busy.state -ceq 'RELEASE_LIFECYCLE_BUSY' -and $busy.detail -ceq 'gate=RELEASE_LIFECYCLE_BUSY') 'public backend recovery distinguishes a real Windows lease from missing authority'
+        $busyStatus = Invoke-FixtureFacade -Command 'status' -Seams $realCanonical -FixtureWorkspace $realCanonicalRoot -FixtureConfigPath $realConfig -FixtureFingerprintPath $realFingerprint | ConvertFrom-Json
+        $busyDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $realCanonical -FixtureWorkspace $realCanonicalRoot -FixtureConfigPath $realConfig -FixtureFingerprintPath $realFingerprint | ConvertFrom-Json
+        Require ($busyStatus.state -ceq 'RELEASE_LIFECYCLE_BUSY' -and $busyStatus.detail -ceq 'gate=RELEASE_LIFECYCLE_BUSY') 'read-only status identifies the exact held stopped-owner lease'
+        Require ($busyDiagnosis.state -ceq 'DEGRADED' -and $busyDiagnosis.primaryLayer -ceq 'RECOVERY_AUTHORITY' -and $busyDiagnosis.nextAction -ceq 'NONE') 'diagnosis asks neither to restore nor to start under a verified active lease'
+        Require (@($busyDiagnosis.layers | Where-Object { $_.gate -ceq 'RELEASE_LIFECYCLE_BUSY' }).Count -eq 1) 'diagnosis exposes the active lifecycle owner gate'
     } finally {
         $ownedLease.Dispose()
     }
@@ -180,6 +185,32 @@ try {
     }
     $unfenced = Invoke-FixtureFacade @statusArgs | ConvertFrom-Json
     Require ($unfenced.state -ceq 'READY') 'matching canonical pair and healthy probes are ready without a journal'
+
+    $stoppedRecord = Join-Path $controlRoot 'qualification.json'
+    $stoppedContents = '{"schemaVersion":2,"mode":"QUALIFIED_STOPPED"}'
+    [IO.File]::WriteAllText($stoppedRecord,$stoppedContents)
+    $observedPublicInputs.Clear()
+    $blockedStatus = Invoke-FixtureFacade @statusArgs | ConvertFrom-Json
+    $diagnoseArgs = $statusArgs.Clone()
+    $diagnoseArgs.Command = 'diagnose'
+    $blockedDiagnosis = Invoke-FixtureFacade @diagnoseArgs | ConvertFrom-Json
+    Require ($blockedStatus.state -ceq 'RECOVERY_AUTHORITY_REQUIRED' -and $observedPublicInputs.Count -eq 0) 'stopped reconciliation fences status before network probes'
+    Require ($blockedDiagnosis.state -ceq 'ACTION_REQUIRED' -and $blockedDiagnosis.primaryLayer -ceq 'RECOVERY_AUTHORITY' -and $blockedDiagnosis.nextAction -ceq 'OPERATOR_ATTENTION') 'stopped reconciliation fences diagnosis'
+    Require ([IO.File]::ReadAllText($stoppedRecord) -ceq $stoppedContents) 'readers preserve the original stopped record'
+    [IO.File]::Delete($stoppedRecord)
+
+    $originalProfilesProbe = $readyStatus.WakeRuntime
+    $readyStatus.WakeRuntime = {
+        [IO.File]::WriteAllText($stoppedRecord,$stoppedContents)
+        $true
+    }
+    $lateDiagnosis = Invoke-FixtureFacade @diagnoseArgs | ConvertFrom-Json
+    Require ($lateDiagnosis.state -ceq 'ACTION_REQUIRED' -and $lateDiagnosis.primaryLayer -ceq 'RECOVERY_AUTHORITY') 'a stopped record published during diagnosis invalidates readiness'
+    [IO.File]::Delete($stoppedRecord)
+    $lateStatus = Invoke-FixtureFacade @statusArgs | ConvertFrom-Json
+    Require ($lateStatus.state -ceq 'RECOVERY_AUTHORITY_REQUIRED') 'a stopped record published during status invalidates readiness'
+    [IO.File]::Delete($stoppedRecord)
+    $readyStatus.WakeRuntime = $originalProfilesProbe
     $observedPublicInputs.Clear()
     [IO.File]::WriteAllText($promotionJournal, $journalContents)
     $alreadyFenced = Invoke-FixtureFacade @statusArgs | ConvertFrom-Json

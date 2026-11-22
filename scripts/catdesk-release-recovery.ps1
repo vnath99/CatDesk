@@ -380,7 +380,8 @@ function Enter-CatDeskStoppedLifecycleLease([string]$Root) {
 }
 
 function Test-CatDeskStoppedReconciliationStartupReady {
-    param([string]$Root,[System.IO.FileStream]$HeldLifecycleLease=$null)
+    param([string]$Root,[System.IO.FileStream]$HeldLifecycleLease=$null,$LeaseBusy=$null)
+    if ($LeaseBusy -is [ref]) { $LeaseBusy.Value = $false }
     try{
         $rootPath=Resolve-CatDeskRecoveryRoot $Root
         $control=Join-Path $rootPath '.catdesk\release-pair-control'
@@ -393,8 +394,16 @@ function Test-CatDeskStoppedReconciliationStartupReady {
                 -not ([IO.Path]::GetFullPath($HeldLifecycleLease.Name)).Equals([IO.Path]::GetFullPath($lease),[StringComparison]::OrdinalIgnoreCase)){return $false}
         }elseif(Test-Path -LiteralPath $lease){
             [void](Assert-CatDeskRecoveryContainedPath $rootPath $lease 'release-pair lifecycle lease')
-            $probe=[IO.File]::Open($lease,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
-            $probe.Dispose()
+            try {
+                $probe=[IO.File]::Open($lease,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::None)
+                $probe.Dispose()
+            } catch {
+                $cause = $_.Exception.GetBaseException()
+                if ($LeaseBusy -is [ref] -and $cause -is [IO.IOException] -and $cause.HResult -eq [int]0x80070020) {
+                    $LeaseBusy.Value = $true
+                }
+                return $false
+            }
         }
         if(-not(Test-Path -LiteralPath $control)){return $true}
         [void](Assert-CatDeskRecoveryContainedPath $rootPath $control 'release-pair control')
@@ -432,6 +441,19 @@ function Test-CatDeskStoppedReconciliationStartupReady {
         [void](Get-CatDeskQualifiedStoppedAuthority $rootPath $outer.authorization.candidateSha256)
         return $true
     }catch{return $false}
+}
+
+function Get-CatDeskReleaseStartupGate {
+    param([string]$Root,[System.IO.FileStream]$HeldLifecycleLease=$null)
+    $busy = $false
+    if (-not (Test-CatDeskStoppedReconciliationStartupReady -Root $Root -HeldLifecycleLease $HeldLifecycleLease -LeaseBusy ([ref]$busy))) {
+        if ($busy) { return 'RELEASE_LIFECYCLE_BUSY' }
+        return 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'
+    }
+    if (-not (Test-CatDeskPromotionStartupReady -Root $Root)) {
+        return 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'
+    }
+    return 'READY'
 }
 
 function Get-CatDeskReviewedPromotionAuthority([string]$Root, $Canonical) {

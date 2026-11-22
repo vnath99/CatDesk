@@ -297,6 +297,13 @@ if($Action -ceq 'recover'){
  @{command='recover';state='LOCAL_BACKEND_READY'}|ConvertTo-Json -Compress;return
 }
 if($Action -cne 'diagnose' -or $BackendOnly){throw 'UNEXPECTED_FIXTURE_COMMAND'}
+if ($kind -ceq 'busy-pair') {
+    @{command='diagnose';state='DEGRADED';primaryLayer='RECOVERY_AUTHORITY';nextAction='NONE';layers=@(
+        @{layer='LIFECYCLE_ENGINE';state='READY';gate='READY'},
+        @{layer='RECOVERY_AUTHORITY';state='DEGRADED';gate='RELEASE_LIFECYCLE_BUSY'}
+    )}|ConvertTo-Json -Depth 5 -Compress
+    return
+}
 if($kind -in @('reviewed-pair','wrong-authority','duplicate-authority','conflicting-owner','unsupported-pair','wrong-next-action')){
     $layers=@(
         @{layer='CANONICAL_RELEASE';state='FAILED';gate='CANONICAL_HASH_MISMATCH'},
@@ -344,6 +351,9 @@ switch -CaseSensitive($kind){
         Require (($held -join ',') -ceq 'DEGRADED,MONITORING_COMPLETE') 'unsafe backend evidence did not hold'
         Require ([IO.File]::ReadAllText($backendLog).Trim() -ceq 'diagnose|False') 'unsafe backend evidence triggered recovery'
     }
+    [IO.File]::WriteAllText($kindPath,'busy-pair');[IO.File]::WriteAllText($backendLog,'')
+    $busyDiagnosis=States (Invoke-CatDeskAutostartSupervisor -BackendOnly -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 1)
+    Require (($busyDiagnosis -join ',') -ceq 'RELEASE_LIFECYCLE_BUSY,MONITORING_COMPLETE' -and [IO.File]::ReadAllText($backendLog).Trim() -ceq 'diagnose|False') 'verified lifecycle contention waits before invoking recovery'
     [IO.File]::WriteAllText($kindPath,'healthy');[IO.File]::WriteAllText($backendLog,'')
     $external=States (Invoke-CatDeskAutostartSupervisor -BackendOnly -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 1)
     Require (($external -join ',') -ceq 'READY,MONITORING_COMPLETE' -and [IO.File]::ReadAllText($backendLog).Trim() -ceq 'diagnose|False') 'external degradation recycled a healthy local daemon'
