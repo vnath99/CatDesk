@@ -1101,8 +1101,8 @@ fn read_local_promotion(workspace: &Path) -> Result<LocalPromotionObservation, S
     Ok(LocalPromotionObservation::Recorded(result))
 }
 
-/// Observe the active claimed promotion without creating a claim, acquiring a
-/// mutation lease, or requiring the canonical executable or daemon to be ready.
+/// Observe the active claimed promotion or the exact retained retirement
+/// without a mutation lease or a running canonical executable.
 #[cfg(windows)]
 pub(crate) fn observe_local_reviewed_promotion(
     workspace: &Path,
@@ -1126,6 +1126,16 @@ pub(crate) fn observe_local_reviewed_promotion(
             "transactionId":result.transaction_id, "recordedServingState":result.serving_state,
             "readOnly":true
         }),
+        LocalPromotionObservation::Missing
+        | LocalPromotionObservation::Claimed { .. }
+        | LocalPromotionObservation::Recorded(_) => {
+            retirement::observe_retired_promotion(workspace, &sha)?.unwrap_or_else(|| {
+                json!({
+                    "state":"PROMOTION_RESULT_NOT_LOCATED_NO_RETRY", "candidateSha256":sha,
+                    "readOnly":true
+                })
+            })
+        }
         _ => json!({
             "state":"PROMOTION_RESULT_NOT_LOCATED_NO_RETRY", "candidateSha256":sha,
             "readOnly":true

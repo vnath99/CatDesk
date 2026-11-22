@@ -271,6 +271,61 @@ fn verify_archive(parent: &Guard, value: &Journal) -> Result<(), String> {
     Ok(())
 }
 
+/// Observe only the transaction named by the existing retirement journal.
+/// This is historical readback, independent of the currently serving image.
+#[cfg(windows)]
+pub(super) fn observe_retired_promotion(
+    workspace: &Path,
+    expected_sha256: &str,
+) -> Result<Option<serde_json::Value>, String> {
+    let workspace = canonical_directory(workspace, LABEL)?;
+    let mut parent = Guard::acquire_read_only(&workspace, LABEL)?;
+    if !parent.descend_optional_existing(".catdesk", LABEL)? {
+        return Ok(None);
+    }
+    let Some(value) =
+        journal(&parent)?.filter(|value| value.plan.candidate_sha256 == expected_sha256)
+    else {
+        return Ok(None);
+    };
+    let transaction = &value.plan.transaction_id;
+    if value.phase != "COMPLETED" {
+        return Ok(Some(serde_json::json!({
+            "state":"PROMOTION_RESULT_PENDING_NO_RETRY", "candidateSha256":expected_sha256,
+            "transactionId":transaction, "retirementPhase":value.phase, "readOnly":true
+        })));
+    }
+    verify_archive(&parent, &value)?;
+    let archived = child(&parent, &archive_name(transaction)?)?;
+    let raw = read_relative_regular(&archived, "result.json", 4096, LABEL)?;
+    if value.plan.records.get("result.json") != Some(&digest(&raw)) {
+        return Err(format!("{LABEL} result bytes changed"));
+    }
+    let result: ReviewedPromotionResultV1 =
+        serde_json::from_slice(&raw).map_err(|_| format!("{LABEL} result is invalid"))?;
+    let auth: ReviewedPromotionAuthorizationV1 = read_json(&archived, "authorization.json")?;
+    validate_terminal_binding_for_kind(
+        &auth,
+        &read_json(&archived, "preflight.json")?,
+        &read_json(&archived, "claim.json")?,
+        &result,
+        &read_relative_regular(&archived, "worker-owner", 32, LABEL)?,
+        transaction,
+        value.plan.completed_promotion,
+    )?;
+    if !valid_promotion_result(&result)
+        || result.candidate_sha256 != expected_sha256
+        || auth.prior_canonical_sha256 != value.plan.prior_sha256
+    {
+        return Err(format!("{LABEL} result binding differs"));
+    }
+    Ok(Some(serde_json::json!({
+        "state":result.state, "candidateSha256":expected_sha256,
+        "authorizationGeneration":result.authorization_generation, "transactionId":transaction,
+        "recordedServingState":result.serving_state, "archived":true, "readOnly":true
+    })))
+}
+
 /// A pending retirement fences new mutation; status remains readable.
 #[cfg(windows)]
 pub(crate) fn ensure_ready(workspace: &Path) -> Result<(), String> {
@@ -1964,6 +2019,77 @@ mod tests {
         assert!(!root.join(".catdesk/promotion-control").exists());
         assert!(!root.join(".catdesk/restart-handoff/latest.json").exists());
         drop(parent);
+        cleanup_fixture(root);
+    }
+
+    #[test]
+    fn result_readback_follows_exact_retirement_without_authorizing_promotion() {
+        let (root, mut value) = fixture();
+        let (auth, preflight, claim, mut result) = terminal_fixture();
+        result.state = "PROMOTION_COMPLETED".into();
+        result.serving_state = Some("STOPPED_AFTER_BOUNDED_OWNER".into());
+        value.plan.schema_version = 2;
+        value.plan.completed_promotion = true;
+        value.plan.transaction_id = auth.transaction_id.clone();
+        value.plan.prior_sha256 = auth.prior_canonical_sha256.clone();
+        value.plan.candidate_sha256 = auth.candidate_sha256.clone();
+        let control = reviewed_promotion_control_dir(&root);
+        for (name, raw) in [
+            ("authorization.json", bytes(&auth).unwrap()),
+            ("preflight.json", bytes(&preflight).unwrap()),
+            ("claim.json", bytes(&claim).unwrap()),
+            ("result.json", bytes(&result).unwrap()),
+            ("worker-owner", auth.transaction_id.as_bytes().to_vec()),
+        ] {
+            fs::write(control.join(name), raw).unwrap();
+        }
+        let parent = metadata(&root).unwrap();
+        value.plan.records = record_hashes(&child(&parent, "promotion-control").unwrap()).unwrap();
+        value.evidence_sha256 = digest(&bytes(&value.plan).unwrap());
+        update_journal(&parent, &value).unwrap();
+        drop(parent);
+        let observe = || observe_local_reviewed_promotion(&root, &auth.candidate_sha256);
+
+        assert!(observe().unwrap().get("archived").is_none());
+        let parent = metadata(&root).unwrap();
+        assert_eq!(
+            archive_locked(&parent, &mut value, |_| Err("TEST_INTERRUPT".into())).unwrap_err(),
+            "TEST_INTERRUPT"
+        );
+        drop(parent);
+        let pending = observe().unwrap();
+        assert_eq!(pending["state"], "PROMOTION_RESULT_PENDING_NO_RETRY");
+        assert_eq!(pending["retirementPhase"], "PREPARED");
+        assert_eq!(pending["transactionId"], auth.transaction_id);
+
+        let parent = metadata(&root).unwrap();
+        archive_locked(&parent, &mut value, |_| Ok(())).unwrap();
+        drop(parent);
+        let retained = observe().unwrap();
+        assert_eq!(retained["state"], "PROMOTION_COMPLETED");
+        assert_eq!(retained["archived"], true);
+        assert_eq!(retained["readOnly"], true);
+        assert_eq!(retained["authorizationGeneration"], auth.generation);
+        assert_eq!(
+            observe_local_reviewed_promotion(&root, &"a".repeat(64)).unwrap()["state"],
+            "PROMOTION_RESULT_NOT_LOCATED_NO_RETRY"
+        );
+        assert!(
+            existing_local_promotion_receipt(&root, &auth.candidate_sha256)
+                .unwrap()
+                .is_none()
+        );
+        assert!(!root.join(".catdesk/promotion-operation.lock").exists());
+        let archived = root
+            .join(".catdesk")
+            .join(archive_name(&auth.transaction_id).unwrap());
+        assert_eq!(
+            fs::read(archived.join("result.json")).unwrap(),
+            bytes(&result).unwrap()
+        );
+        fs::write(archived.join("result.json"), b"changed receipt").unwrap();
+        assert!(observe().is_err());
+        assert!(!control.exists());
         cleanup_fixture(root);
     }
 
