@@ -830,3 +830,11 @@ Evidence: [docs/verification/ONE_HASH_STOPPED_SOURCE_PRECLAIM_2026_11_22.json](d
 Agent: Codex. Source: e1dcc3a478246c74fcdd6f308a7777b3927beee9. Outcome: partial. One-hash promotion checks the exact running canonical listener before claim and under the worker lease. The isolated Windows socket and both PowerShell editions passed. Next: Use the existing first Wake selection and independent backend review. Verify the real installed release, persistent startup, rollback and full Web cycle after approval.
 
 Evidence: [docs/verification/ONE_HASH_LIVE_SOURCE_LISTENER_2026_11_22.json](docs/verification/ONE_HASH_LIVE_SOURCE_LISTENER_2026_11_22.json); command: Windows listener ownership, daemon reload and public PowerShell lifecycle tests; exit 0; SHA-256 c820494ec124686867513ddeb548ff41d60529acea944f631807191424e13f8c.
+
+<!-- catdesk-activity:nov22-one-hash-source-pair-confirm sha256:db7f64706c59ccb067edbe6cb3ab61edc8e04e04c793b4edbb340647d22c1d89 -->
+
+## 2026-11-22T05:39:21.8082547Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: dbf4bc6e934ad21edb619f303b92471e94002536. Outcome: partial. The native one-hash confirmation pins the prior executable and fingerprint to the reviewed preflight hash through claim publication. Windows tests verified that a missing or drifted fingerprint leaves the preflight and executable intact and creates no claim. Both PowerShell editions preserved the distinct refusal. Next: Use the existing first Wake selection and independent backend review. Verify the actual installed promotion, persistent startup, rollback and full Web cycle after the release gates pass.
+
+Evidence: [docs/verification/ONE_HASH_SOURCE_PAIR_AT_CONFIRM_2026_11_22.json](docs/verification/ONE_HASH_SOURCE_PAIR_AT_CONFIRM_2026_11_22.json); command: Native Windows daemon reload tests and both public PowerShell lifecycle suites; exit 0; SHA-256 476e956910d24eb5d941219f67226076b542a5a74948bf13e1151d959503c08c.

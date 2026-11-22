@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_WINDOWS_NATIVE_CONFIRMATION_AND_PUBLIC_REFUSAL",
+  "verifiedUtc": "2026-11-22T05:39:21.8082547Z",
+  "sourceCommit": "dbf4bc6e934ad21edb619f303b92471e94002536",
+  "nativeTestExecutableSha256": "efd249bc930f00e7145de150ae79d7a3bda75b84d7f8e4e84141b6c6a3830816",
+  "fixedRefusal": "REVIEWED_PROMOTION_SOURCE_PAIR_UNPROVEN",
+  "nativeFixture": {
+    "actualConfirmationPath": true,
+    "noPromotionWorkerLaunched": true,
+    "missingFingerprintRefused": true,
+    "mismatchedFingerprintRefused": true,
+    "matchingUppercaseCrLfFingerprintAcceptedByPairCheck": true,
+    "retainedExecutableAndFingerprintBothRefusedWrites": true,
+    "matchingPairStillRequiredProducerAttestation": true,
+    "originalPreflightAndExecutablePreserved": true,
+    "authorizationClaimAndWorkerRecordsAbsent": true
+  },
+  "tests": [
+    {
+      "filter": "daemon_reload::",
+      "passed": 56,
+      "exitCode": 0
+    },
+    {
+      "command": "scripts/test-catdesk-lifecycle.ps1",
+      "powerShell7ExitCode": 0,
+      "windowsPowerShell51ExitCode": 0
+    }
+  ],
+  "productionActions": 0,
+  "installedAcceptance": false
+}

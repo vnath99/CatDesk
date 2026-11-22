@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22 — native confirmation verifies the prior release pair.** The one-hash path binds the prior executable and fingerprint to the prepared hash, then holds both files and their directory through claim publication. The Windows regression verified refusal before authorization or claim for a missing or mismatched fingerprint and confirmed that both retained files reject writes. Both PowerShell editions preserve the specific refusal. Installed promotion and rollback remain open. [Evidence](docs/verification/ONE_HASH_SOURCE_PAIR_AT_CONFIRM_2026_11_22.json).
+
 **November 22, 12:32 a.m. EST — live source ownership before promotion.** The one-hash path checks the Windows listener table and the current executable path before it can claim a live-source promotion. An unproven owner refuses before archive or claim. A real isolated socket and both PowerShell hosts passed the new regression. Installed promotion and health still need live qualification. [Evidence](docs/verification/ONE_HASH_LIVE_SOURCE_LISTENER_2026_11_22.json).
 
 **November 22, 12:29 a.m. EST — stopped predecessor checks before promotion.** The one-hash command verifies the existing stopped qualification before archiving a stopped predecessor. It checks the proof again and inspects the exact retirement history before confirming the new claim. The test preserved the canonical bytes and created no control directory when proof was absent. Both PowerShell editions preserve the fixed refusal. [Evidence](docs/verification/ONE_HASH_STOPPED_SOURCE_PRECLAIM_2026_11_22.json).
@@ -360,5 +362,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Use the existing first Wake selection and independent backend review. Verify the real installed release, persistent startup, rollback and full Web cycle after approval"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Use the existing first Wake selection and independent backend review. Verify the actual installed promotion, persistent startup, rollback and full Web cycle after the release gates pass"}
 ```

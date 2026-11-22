@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — canonical pair verification before one-hash promotion.** `REVIEWED_PROMOTION_SOURCE_PAIR_UNPROVEN` means native confirmation could not pin the prior executable and fingerprint to the hash in the reviewed preflight. Run `./catdesk.ps1 diagnose` and resolve any disagreement through the existing reviewed recovery procedure. This refusal precedes claim publication. [Verification](docs/verification/ONE_HASH_SOURCE_PAIR_AT_CONFIRM_2026_11_22.json).
+
 **November 22 — live source listener ownership.** `REVIEWED_PROMOTION_SOURCE_LISTENER_UNPROVEN` means the development one-hash command could not establish one live canonical executable on the backend port. Inspect the existing owner with the supported lifecycle. The command queries Windows directly and still verifies authenticated readiness during handoff. [Verification](docs/verification/ONE_HASH_LIVE_SOURCE_LISTENER_2026_11_22.json).
 
 **November 22 — missing stopped-source proof.** `REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED` means the stopped route could not validate the existing qualification for the current executable. Resolve that evidence through the supported lifecycle before retrying. The development facade checks this before archival and before claim. [Verification](docs/verification/ONE_HASH_STOPPED_SOURCE_PRECLAIM_2026_11_22.json).
