@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_WINDOWS_LISTENER_INVENTORY_AND_PUBLIC_REFUSAL",
+  "verifiedUtc": "2026-11-22T05:32:53.1052759Z",
+  "sourceCommit": "e1dcc3a478246c74fcdd6f308a7777b3927beee9",
+  "nativeTestExecutableSha256": "bc5968980acc57cb7d55ed46fbecddee9946ab36327a2fe82bec1776e1748794",
+  "fixedRefusal": "REVIEWED_PROMOTION_SOURCE_LISTENER_UNPROVEN",
+  "behavior": [
+    "Query the Windows listener table without connecting to the port",
+    "Require one live owner with the exact canonical executable path and recheck the listener table",
+    "Use the same inspection before the claim and within the worker lifecycle lease",
+    "Keep existing authenticated handoff, stopped-source qualification and retained-release checks"
+  ],
+  "nativeFixture": {
+    "windowsAssignedLoopbackSocket": true,
+    "matchingLiveImageAccepted": true,
+    "differentImageIdentityRefused": true,
+    "closedSocketObservedAsAbsent": true,
+    "productionPortUsed": false
+  },
+  "tests": [
+    {"filter":"daemon_reload::","passed":55,"exitCode":0},
+    {"command":"scripts/test-catdesk-lifecycle.ps1","powerShell7ExitCode":0,"windowsPowerShell51ExitCode":0}
+  ],
+  "productionActions": 0,
+  "installedAcceptance": false
+}

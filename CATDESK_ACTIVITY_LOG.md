@@ -822,3 +822,11 @@ Evidence: [docs/verification/ONE_HASH_COMPLETED_PREDECESSOR_ARCHIVE_2026_11_22.j
 Agent: Codex. Source: aaac571e61c76d5c1043ddb4cbd0f016f9c30070. Outcome: partial. The one-hash command checks existing stopped qualification before archival and rechecks the exact predecessor before claim. Windows native tests and both PowerShell lifecycles passed. Next: Use the prepared first Wake selection and genuine independent backend review. Verify protected native startup, rollback and the installed Web cycle once eligible.
 
 Evidence: [docs/verification/ONE_HASH_STOPPED_SOURCE_PRECLAIM_2026_11_22.json](docs/verification/ONE_HASH_STOPPED_SOURCE_PRECLAIM_2026_11_22.json); command: Windows daemon reload and public PowerShell lifecycle test suites; exit 0; SHA-256 72af1c2b34457e71e52a16931d1c699af8bbe2046a74b2a54f7b4bf9b18612af.
+
+<!-- catdesk-activity:nov22-one-hash-live-source-listener sha256:440d16974b346a9bfda955e1526ff55766d568e496f0fd396f31d4ba107b64e1 -->
+
+## 2026-11-22T05:32:53.1052759Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: e1dcc3a478246c74fcdd6f308a7777b3927beee9. Outcome: partial. One-hash promotion checks the exact running canonical listener before claim and under the worker lease. The isolated Windows socket and both PowerShell editions passed. Next: Use the existing first Wake selection and independent backend review. Verify the real installed release, persistent startup, rollback and full Web cycle after approval.
+
+Evidence: [docs/verification/ONE_HASH_LIVE_SOURCE_LISTENER_2026_11_22.json](docs/verification/ONE_HASH_LIVE_SOURCE_LISTENER_2026_11_22.json); command: Windows listener ownership, daemon reload and public PowerShell lifecycle tests; exit 0; SHA-256 c820494ec124686867513ddeb548ff41d60529acea944f631807191424e13f8c.
