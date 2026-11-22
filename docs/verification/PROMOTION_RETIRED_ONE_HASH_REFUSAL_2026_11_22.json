@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_WINDOWS_READ_ONLY_PROMOTION_RESOLUTION_AGAINST_INSTALLED_RETIREMENT",
+  "sourceCommit": "4ce3f14723734f54dc63115dc10e7b0dd248ac75",
+  "baselineSourceCommit": "519a7422e8af8f2b10112e0760bd3303dc62fe2a",
+  "fixtureSha256": "c056f77ed8f746155f3e8ec36ce7251dc1d73fe926fcef9edbdff454aca75cd3",
+  "readback": {
+    "startedUtc": "2026-11-22T10:00:44.5954966+00:00",
+    "finishedUtc": "2026-11-22T10:00:45.5846389+00:00",
+    "controllerSha256": "7b71a5645ec5582e658b9de76ad28db440d5dc1667da64a1c28c1cb0cecfe5a8",
+    "baselineCode": "REVIEWED_PROMOTION_ACTIVE_ARTIFACT_MISMATCH",
+    "baselineState": null,
+    "baselineExit": 2,
+    "archivedExactRefusal": "REVIEWED_PROMOTION_ALREADY_RETIRED_INSPECT_RESULT",
+    "archivedExit": 2,
+    "activeResult": "PROMOTION_COMPLETED",
+    "activeResultGenerationMatched": true,
+    "protectedPinsMatched": 12,
+    "readOnly": true,
+    "resolverProcessesExited": 3
+  },
+  "tests": {
+    "nativeReleaseRegressionsPassed": 58,
+    "fixtureRetirementInterruptionRefused": true,
+    "fixtureArchiveTamperingRefused": true,
+    "distinctArtifactMayContinueResolution": true,
+    "powerShell7Lifecycle": "PASS_SERIAL",
+    "windowsPowerShell51Lifecycle": "PASS",
+    "lockedOfflineBuild": "PASS",
+    "format": "PASS"
+  },
+  "limits": "The old resolver reached candidate lookup and refused the active artifact mismatch. The new resolver identified the exact archive before that lookup. These probes invoked only promote-resolve. No candidate launch, production promotion, live rollback or Web cycle was exercised.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}

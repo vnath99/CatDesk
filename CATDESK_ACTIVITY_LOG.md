@@ -1094,3 +1094,11 @@ Evidence: [docs/verification/SCOPED_REVIEW_PREFLIGHT_HOST_OBSERVATION_2026_11_22
 Agent: Codex. Source: 519a7422e8af8f2b10112e0760bd3303dc62fe2a. Outcome: partial. The separate development controller read the exact archived production promotion and the active successor independently. Twelve checked release and journal hashes matched before and after. Fifty-eight native release regression tests passed.. Next: Admit the original frozen backend review through an eligible independent route. Complete trusted producer and installed promotion and rollback. Confirm first signed Wake V3 selection before the installed Web cycle..
 
 Evidence: [docs/verification/PROMOTION_RETIRED_RESULT_READBACK_2026_11_22.json](docs/verification/PROMOTION_RETIRED_RESULT_READBACK_2026_11_22.json); command: Compiled Windows observer against exact installed history and active successor; exit 0; SHA-256 db39d8d25623ac98db6669e6b206d1b6a55583029112df233b5c428631024144.
+
+<!-- catdesk-activity:nov22-retired-artifact-one-hash-refusal sha256:01f360ee8e8e513e5d1caf2ec4d8890df4bd80a25a0988f6a5f47252d35656df -->
+
+## 2026-11-22T10:00:45.5846389+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 4ce3f14723734f54dc63115dc10e7b0dd248ac75. Outcome: partial. The development one-hash resolver refuses to restage the exact journaled retired artifact before candidate lookup. A read-only check against actual installed records preserved twelve release and journal hashes. The active successor still resolves. Fifty-eight native release tests and both PowerShell lifecycle suites passed. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/PROMOTION_RETIRED_ONE_HASH_REFUSAL_2026_11_22.json](docs/verification/PROMOTION_RETIRED_ONE_HASH_REFUSAL_2026_11_22.json); command: Read-only operator promote-resolve comparison against the exact archived result and active successor; exit 0; SHA-256 8e56c523a77466d2786131d72397154a587a59745176ecda79114f5cc7af7e7a.
