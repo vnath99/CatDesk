@@ -566,3 +566,11 @@ Evidence: [docs/verification/BACKEND_CHECKPOINT_ATTESTATION_RECONCILIATION_2026_
 Agent: CatDesk development. Source: 8f41eadf1d242a155f5ddbffd6c1d5f8a3c55ab2. Outcome: partial. Two isolated Windows native preflight tests used the byte-exact Wake candidate and fallback. The frozen d22 source refused both ordinary delivery and manual Wake before claim. Integrated 56aa source passed the package gate on both routes. Next: Complete attributable review and native build attestation for an exact backend source containing both scoped Git checkpoint and the existing 302fcff7 adapter pair change. Verify installed Wake V3 selection on receipt and keep the original d22 outcome UNKNOWN.
 
 Evidence: [docs/verification/BACKEND_WAKE_PAIR_COMPATIBILITY_2026_11_21.json](docs/verification/BACKEND_WAKE_PAIR_COMPATIBILITY_2026_11_21.json); command: Two offline native preflight tests against retained candidate and fallback copies; exit 0; SHA-256 2ddf4bbbaff15fc5c112216566e026aa4b55f2e7589e5467c7361ce53a80e236.
+
+<!-- catdesk-activity:compatible-backend-source-intake-nov21 sha256:67fd741dd65ede545624afa976c2aceff6292e6b8cdb321a7080efb528b523a6 -->
+
+## 2026-11-22T00:35:51Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 54487df224014ac681127cd839685ee162d9a328. Outcome: partial. Prepared a clean exact 56aa9912 checkout and verified all 2119 raw tracked files against public Git. Remeasured 217 retained attested backend inputs and indexed their exact matches, line ending differences and substantive differences for independent review. Next: Use the prepared exact checkout for an authorized independent headless backend review. Obtain the genuine native acknowledgment and attestation, then guarded promotion. Verify the separate Wake V3 selection when the operator result arrives.
+
+Evidence: [docs/verification/COMPATIBLE_BACKEND_SOURCE_INTAKE_2026_11_21.json](docs/verification/COMPATIBLE_BACKEND_SOURCE_INTAKE_2026_11_21.json); command: Exact detached checkout Git blob verification and retained native snapshot byte comparison; exit 0; SHA-256 89cdbc130a9327fa5aee04b7bec626e22e0af822e298e488e8545dbaee11fdc2.

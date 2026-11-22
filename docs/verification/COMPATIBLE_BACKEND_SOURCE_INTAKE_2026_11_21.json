@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T00:35:51.722921Z",
+  "scope": "EXACT_PUBLIC_SOURCE_CHECKOUT_AND_BASELINE_REVIEW_TRIAGE_ONLY",
+  "sourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "sourceTree": "4a83da9f2daa22e1ecabcf000beb6899fc5e60d1",
+  "checkout": {
+    "detached": true,
+    "originMatchesProject": true,
+    "cleanBeforeAndAfter": true,
+    "trackedFilesVerifiedAgainstGitBlob": 2119,
+    "trackedBytes": 54371113,
+    "longPathLeavesRecoveredWithLocalCheckoutOption": 4,
+    "sourceIndexSha256": "300b615ee1baa739a042257eb9569d0defb1410e2fbd5833101029af1f89b0d0"
+  },
+  "offlineLockedCargoMetadata": {
+    "exitCode": 0,
+    "headlessBinaryTarget": "catdesk",
+    "localWakePathDependency": true
+  },
+  "retainedBaseline": {
+    "artifactSha256": "608c2e9735bfcf8373dcc72e62dcf34336118efab4db1557560e45fd3eeac3cf",
+    "nativeManifestDigest": "c97401ef2e31187cad71b05344b10e96476b64767a5ccf5886b980011fb13711",
+    "rawManifestSha256": "380ed990da4939ff27ccc546516db12be13eda77f9ba771c3423c95a1542df71",
+    "capturedInputsRemeasured": 217,
+    "exactBytesMatch": 55,
+    "lineEndingOnlyDifference": 77,
+    "contentChanged": 85,
+    "absentInCandidate": 0,
+    "candidateSourceFilesOutsideBaseline": 41,
+    "comparisonRecordSha256": "e7c341d54cfd71438f22f17a96887d673040cff9d79b777f13fc68722d345c75"
+  },
+  "limitations": [
+    "The checkout index and byte comparison are read-only review inputs. Unchanged bytes may help a qualified reviewer reuse evidence within its original scope.",
+    "The 41 extra paths are source-directory candidates, not a measured compiler dependency count.",
+    "The existing independent Wake package review does not cover the root headless backend.",
+    "An attributable independent result from the new exact checkout is required before record acknowledgment, authoritative snapshot, native build and protected promotion."
+  ],
+  "reviewContractCreated": false,
+  "independentReviewStarted": false,
+  "reviewVerdictCreated": false,
+  "nativeSnapshotCreated": false,
+  "buildProducerInvoked": false,
+  "protectedWrites": 0,
+  "externalSubmissions": 0,
+  "installedAcceptance": false
+}
