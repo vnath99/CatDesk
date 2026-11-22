@@ -574,13 +574,14 @@ fn same_state_local_user_enrolled_select_and_rollback_preserve_state() {
 }
 
 #[test]
-fn same_state_local_user_cannot_overlap_the_excluded_current_image() {
-    for working_at_selection in [false, true] {
+fn same_state_local_user_gives_current_a_working_fallback_under_exclusive_pins() {
+    for matches_binding in [false, true] {
         let mut fixture = Fixture::qualified_selection(true, false);
         let working = fixture.payload.rollback_authority.release().clone();
         let mut original_release = working.clone();
-        if !working_at_selection {
-            original_release.working_evidence = None;
+        original_release.working_evidence = None;
+        if !matches_binding {
+            original_release.source_commit = "a".repeat(40);
         }
         let mut current = same_state_release_pointer_v3(&working).unwrap();
         current["selection"] = json!({
@@ -601,27 +602,88 @@ fn same_state_local_user_cannot_overlap_the_excluded_current_image() {
         fixture.payload.state_snapshot = pins.snapshot().clone();
         let observed = pins.observed(&fixture.policy, &fixture.payload, &preliminary);
         drop(pins);
-        if working_at_selection {
+        if matches_binding {
             fixture.payload.planned_selection_sha256 = observed.unwrap().planned_selection_sha256;
             let request = encode_local_user_selection_request_v1(&fixture.payload).unwrap();
             let admission = guard
                 .same_state_admission_v3(&digest(&request), 1000)
                 .unwrap();
-            let denied = SameStateInstallResources::acquire(fixture.grant(&admission, request));
+            let resources =
+                SameStateInstallResources::acquire(fixture.grant(&admission, request)).unwrap();
+            let previous_dir = fixture
+                .state
+                .join("versions")
+                .join(&working.manifest.package_id);
+            for image in ["CatDeskWakeHost.exe", "CatDeskBinagotchy.exe"] {
+                assert_eq!(
+                    File::open(previous_dir.join(image))
+                        .unwrap_err()
+                        .raw_os_error(),
+                    Some(32) // ERROR_SHARING_VIOLATION
+                );
+            }
+            let original = resources.grant().original_selection_bytes().unwrap();
+            let mut ledger = guard
+                .begin_same_state_v3(resources.grant(), &admission, &original)
+                .unwrap();
+            let result = resources.commit_selection(&mut ledger).unwrap();
+            assert_eq!(result["status"], "SELECTED_STOPPED");
+            let selected: Value =
+                serde_json::from_slice(&std::fs::read(&current_path).unwrap()).unwrap();
             assert_eq!(
-                denied.err().as_deref(),
-                Some("WAKE_SAME_STATE_LEGACY_PREVIOUS_IMAGE_OVERLAP")
+                selected["selection"]["previous"]["pointer"],
+                same_state_release_pointer_v3(&working).unwrap()
             );
+            assert_eq!(
+                selected["selection"]["previous"]["qualificationSha256"],
+                same_state_release_qualification_sha256(&working).unwrap()
+            );
+            assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+            drop(ledger);
+            {
+                // The next native transaction must be able to use the exact
+                // fallback this update left in the new pointer.
+                fixture.payload.operation = "ROLLBACK_SAME_STATE_RELEASE".into();
+                fixture.payload.approval_id = "rollback-adopted-working-current".into();
+                fixture.payload.candidate = working.clone();
+                let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+                let preliminary = guard
+                    .same_state_admission_v3(&"0".repeat(64), 1000)
+                    .unwrap();
+                fixture.payload.install_generation = preliminary.install_generation;
+                fixture.payload.state_snapshot = fixture.pins(&preliminary).snapshot().clone();
+                let request = fixture.local_request(&guard);
+                let admission = guard
+                    .same_state_admission_v3(&digest(&request), 1000)
+                    .unwrap();
+                let resources =
+                    SameStateInstallResources::acquire(fixture.grant(&admission, request)).unwrap();
+                let original = resources.grant().original_selection_bytes().unwrap();
+                let mut ledger = guard
+                    .begin_same_state_v3(resources.grant(), &admission, &original)
+                    .unwrap();
+                assert_eq!(
+                    resources.commit_selection(&mut ledger).unwrap()["status"],
+                    "ROLLED_BACK_STOPPED"
+                );
+                let restored: Value =
+                    serde_json::from_slice(&std::fs::read(&current_path).unwrap()).unwrap();
+                assert_eq!(
+                    restored["selection"]["current"]["pointer"],
+                    same_state_release_pointer_v3(&working).unwrap()
+                );
+                assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+            }
         } else {
             assert_eq!(
                 observed.err().as_deref(),
                 Some("HOST_INSTALL_PREVIOUS_QUALIFICATION_REQUIRED")
             );
+            assert_eq!(std::fs::read(&current_path).unwrap(), fixture.before);
+            assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), 2);
+            drop(guard);
         }
-        assert_eq!(std::fs::read(&current_path).unwrap(), fixture.before);
-        assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), 2);
         fixture.preserved();
-        drop(guard);
         drop(handle);
         fixture.cleanup();
     }

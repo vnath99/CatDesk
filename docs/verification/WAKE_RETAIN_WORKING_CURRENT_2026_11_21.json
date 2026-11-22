@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T04:03:55.5970934Z",
+  "scope": "WINDOWS_DISPOSABLE_NATIVE_UPDATE_AND_ROLLBACK_WITH_RETAINED_EXCLUSIVE_PREVIOUS_PACKAGE",
+  "parentCommit": "4b6b87b1d877db1a0de9cd27c32651fdaf6c2ee3",
+  "testedFileSha256": {
+    "install_broker_source.rs": "e46fdf5d8b20791a56336190adbacc35ae4e074cc0d787b29901868860876334",
+    "install_broker_source_runtime.rs": "31c1172d301c3ab0a21796659b1686961403927069a60be67c859647018ce0db",
+    "runtime_install_selection.rs": "e0fcba5fe9da31a0c897b81c6ba6dc45f664e0f72d0d70b1b65ff021dfc7334b",
+    "runtime_same_state_install.rs": "426a714f8a01dce15cc466eb77524c8a02e93aefb4181ecccb0f281400816c05",
+    "runtime_same_state_install_tests.rs": "2f94c4549d262f4b1376ec8d23acf4a62f4e16bff02dff01dbea29ba15a974d8"
+  },
+  "fixture": {
+    "platform": "Windows",
+    "assets": "INERT_DISPOSABLE_NATIVE_PACKAGE_FIXTURE",
+    "selectedBeforeHadPreviousEntry": false,
+    "workingEvidenceBoundAfterSelection": true,
+    "workingEvidenceWithoutMatchingOriginalBindingRefusedBeforeIntent": true,
+    "hostAndGuiForeignReadWin32Errors": [
+      32,
+      32
+    ],
+    "selectionStatus": "SELECTED_STOPPED",
+    "selectionLedgerPhase": "COMPLETE",
+    "retainedPreviousPointerAndFullQualificationMatch": true,
+    "rollbackStatus": "ROLLED_BACK_STOPPED",
+    "rollbackLedgerPhase": "COMPLETE",
+    "restoredPointerMatchesExactWorkingPackage": true,
+    "protectedStatePreserved": true,
+    "brokerServiceStarts": 0,
+    "browserStarts": 0
+  },
+  "tests": {
+    "focusedUpdateAndRollback": {
+      "passed": 1,
+      "failed": 0,
+      "exitCode": 0
+    },
+    "selectionPlanner": {
+      "passed": 10,
+      "failed": 0,
+      "exitCode": 0
+    },
+    "serialLocalUser": {
+      "passed": 11,
+      "failed": 2,
+      "exitCode": 101,
+      "reason": "WAKE_SAME_STATE_LEGACY_OWNER_UNPROVEN",
+      "observation": "SPLIT_ROOT_CANDIDATES",
+      "matchingProcesses": 1
+    },
+    "format": "PASS",
+    "clippyAllTargetsWithDeniedWarnings": "PASS"
+  },
+  "releaseLimits": {
+    "installedBrokerUpgraded": false,
+    "signedFirstSelectionChanged": false,
+    "existingFixedIntakeAndReviewRequired": true,
+    "previousPackageInIndependentIntakeRequiredForOverlapPath": true,
+    "nonAdminTrustedIntakePublicationNotDemonstrated": true,
+    "actualInstalledPromotion": false,
+    "webAcceptance": false
+  }
+}

@@ -185,6 +185,29 @@ pub fn propose_install_selection(
     legacy_current_qualification: Option<&str>,
     verify: &dyn Fn(&Value, &str, bool) -> Result<()>,
 ) -> Result<Vec<u8>> {
+    propose_install_selection_with_working_current(
+        before,
+        expected_sha256,
+        candidate,
+        candidate_qualification,
+        legacy_current_qualification,
+        None,
+        verify,
+    )
+}
+
+/// A working receipt can arrive after selection. The verifier must establish
+/// that both qualification hashes describe the same pinned release, with
+/// working evidence added to the second. Only the current entry may advance.
+pub(super) fn propose_install_selection_with_working_current(
+    before: &[u8],
+    expected_sha256: &str,
+    candidate: &Value,
+    candidate_qualification: &str,
+    legacy_current_qualification: Option<&str>,
+    working_current: Option<(&str, &str)>,
+    verify: &dyn Fn(&Value, &str, bool) -> Result<()>,
+) -> Result<Vec<u8>> {
     check_cas(before, expected_sha256)?;
     let prior = parse(before)?;
     let prior_pointer = prior.pointer();
@@ -208,8 +231,14 @@ pub fn propose_install_selection(
             // A damaged/unqualified current must not strand an intact,
             // independently qualified working predecessor. Never substitute
             // mere previous selection for the verifier's retained evidence.
-            let previous = if verify_release(&s.current, true).is_ok() {
-                s.current
+            let mut current = s.current;
+            if let Some((original, qualified)) = working_current
+                && current.qualification_sha256 == original
+            {
+                current.qualification_sha256 = qualified.into();
+            }
+            let previous = if verify_release(&current, true).is_ok() {
+                current
             } else {
                 let previous = s
                     .previous

@@ -256,6 +256,27 @@ fn open_relative_object_secured(
     descriptor: Option<&crate::install_broker_stage_writer::LocalDescriptor>,
     read_security: bool,
 ) -> Result<OwnedHandle> {
+    let access = FILE_READ_DATA
+        | FILE_READ_ATTRIBUTES
+        | SYNCHRONIZE
+        | if read_security { 0x0002_0000 } else { 0 }
+        | if create && !directory {
+            FILE_WRITE_DATA
+        } else {
+            0
+        };
+    open_relative_with_access(parent, name, directory, create, sharing, descriptor, access)
+}
+
+fn open_relative_with_access(
+    parent: &OwnedHandle,
+    name: &str,
+    directory: bool,
+    create: bool,
+    sharing: u32,
+    descriptor: Option<&crate::install_broker_stage_writer::LocalDescriptor>,
+    access: u32,
+) -> Result<OwnedHandle> {
     if !valid_component(name) {
         return Err("WAKE_BROKER_SOURCE_COMPONENT_INVALID".into());
     }
@@ -283,15 +304,7 @@ fn open_relative_object_secured(
     let result = unsafe {
         NtCreateFile(
             &mut raw,
-            FILE_READ_DATA
-                | FILE_READ_ATTRIBUTES
-                | SYNCHRONIZE
-                | if read_security { 0x0002_0000 } else { 0 }
-                | if create && !directory {
-                    FILE_WRITE_DATA
-                } else {
-                    0
-                },
+            access,
             &mut attributes,
             &mut iosb,
             ptr::null_mut(),

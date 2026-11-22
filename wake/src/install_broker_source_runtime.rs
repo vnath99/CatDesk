@@ -50,12 +50,24 @@ pub(crate) struct RuntimePackagePublicationV3 {
 }
 
 impl RuntimePackagePublicationV3 {
+    #[cfg(test)]
     pub(crate) fn prepare(
         root: &std::path::Path,
         payload: &crate::install_broker_approval::same_state::SameStateRootSelectionApprovalV3,
         envelope_sha256: &str,
         ledger: &crate::install_broker_ledger::AdmittedSameStateLedgerLeaseV3<'_, '_>,
         policy: &crate::install_broker_policy::BrokerProtectedPolicyV1,
+    ) -> Result<Self> {
+        Self::prepare_with_retained_previous(root, payload, envelope_sha256, ledger, policy, None)
+    }
+
+    pub(crate) fn prepare_with_retained_previous(
+        root: &std::path::Path,
+        payload: &crate::install_broker_approval::same_state::SameStateRootSelectionApprovalV3,
+        envelope_sha256: &str,
+        ledger: &crate::install_broker_ledger::AdmittedSameStateLedgerLeaseV3<'_, '_>,
+        policy: &crate::install_broker_policy::BrokerProtectedPolicyV1,
+        mut retained_previous: Option<&mut RuntimePackagePinsV3>,
     ) -> Result<Self> {
         use crate::install_broker_offline_pins::full_identity_of_handle;
         let security = StageSecurityMode::from_same_state_policy(policy)?;
@@ -131,6 +143,20 @@ impl RuntimePackagePublicationV3 {
             ("previous", payload.rollback_authority.release()),
             ("candidate", &payload.candidate),
         ] {
+            if role == "previous"
+                && let Some(pins) = retained_previous.take()
+            {
+                pins.revalidate()?;
+                let parent = &pins.ancestors[1];
+                if !pins.exclusive_launch_images
+                    || full_identity_of_handle(parent.as_raw_handle())? != result.versions_identity
+                    || pins.manifest() != &release.manifest
+                    || pins.runtime_manifest_sha256() != release.runtime_manifest_sha256
+                {
+                    return Err("WAKE_SAME_STATE_PUBLISHED_PACKAGE_MISMATCH".into());
+                }
+                continue;
+            }
             let names = crate::install_broker_reader::directory_inventory(&result.versions, 4096)?;
             let existing = if names.contains(&release.manifest.package_id) {
                 let pins = RuntimePackagePinsV3::open(
@@ -642,6 +668,7 @@ pub(crate) struct RuntimePackagePinsV3 {
     artifacts: [File; 4],
     artifact_info: [FileInfo; 4],
     publication: Option<PublicationDirectoryPinV3>,
+    exclusive_launch_images: bool,
 }
 
 impl RuntimePackagePinsV3 {
@@ -660,6 +687,16 @@ impl RuntimePackagePinsV3 {
             return Err("WAKE_SAME_STATE_PACKAGE_INVALID".into());
         }
         Self::open(open_path_directory(root.as_os_str())?, &["versions", id])
+    }
+    /// Used while the stopped Host and browser leases are held. The same
+    /// executable handles provide both launch exclusion and package readback.
+    pub(crate) fn installed_for_handoff(root: &std::path::Path, id: &str) -> Result<Self> {
+        Self::open_package(
+            open_path_directory(root.as_os_str())?,
+            &["versions", id],
+            None,
+            true,
+        )
     }
     #[cfg(test)]
     pub(crate) fn isolated(root: &std::path::Path, role: RuntimeSourceRoleV3) -> Result<Self> {
@@ -683,6 +720,15 @@ impl RuntimePackagePinsV3 {
         root: OwnedHandle,
         chain: &[&str],
         publication: Option<PublicationDirectoryPinV3>,
+    ) -> Result<Self> {
+        Self::open_package(root, chain, publication, false)
+    }
+
+    fn open_package(
+        root: OwnedHandle,
+        chain: &[&str],
+        publication: Option<PublicationDirectoryPinV3>,
+        exclusive_launch_images: bool,
     ) -> Result<Self> {
         let mut ancestors = vec![root];
         let mut directory_info = vec![info(ancestors[0].as_raw_handle(), true)?];
@@ -739,7 +785,11 @@ impl RuntimePackagePinsV3 {
         let mut descriptions = Vec::new();
         let mut observed = Vec::new();
         for (index, name) in ARTIFACT_NAMES.into_iter().enumerate() {
-            let mut file = File::from(open_relative(directory, name, false)?);
+            let mut file = File::from(if exclusive_launch_images && index < 2 {
+                open_relative_object(directory, name, false, false, 0)?
+            } else {
+                open_relative(directory, name, false)?
+            });
             let before = info(file.as_raw_handle(), false)?;
             let maximum = if index < 2 {
                 80 * 1024 * 1024
@@ -793,6 +843,7 @@ impl RuntimePackagePinsV3 {
                 .try_into()
                 .map_err(|_| "WAKE_SAME_STATE_PACKAGE_INVALID")?,
             publication,
+            exclusive_launch_images,
         };
         result.revalidate()?;
         Ok(result)
@@ -902,7 +953,21 @@ impl RuntimePackagePinsV3 {
                 expected.byte_length,
                 &expected.sha256,
             )?;
-            let reopened = open_relative(directory, name, false)?;
+            let reopened = if self.exclusive_launch_images && index < 2 {
+                // Attribute-only access establishes the live name without
+                // opening file data or sharing the held executable handle.
+                open_relative_with_access(
+                    directory,
+                    name,
+                    false,
+                    false,
+                    7,
+                    None,
+                    FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                )?
+            } else {
+                open_relative(directory, name, false)?
+            };
             if !stable(&observed, &self.artifact_info[index])
                 || !same_object(&observed, &info(reopened.as_raw_handle(), false)?)
             {

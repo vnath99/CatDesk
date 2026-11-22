@@ -702,3 +702,11 @@ Evidence: [docs/verification/BACKEND_PROMOTE_CANONICAL_READBACK_2026_11_21.json]
 Agent: CatDesk Codex. Source: d11b612a0f739219555d9b3a6c124acc0dbace70. Outcome: partial. Disposable Windows fixtures prove the broker refuses a late working receipt as sole predecessor and refuses a prequalified current image that overlaps its exclusive lease. Selection and rollback with a distinct verified fallback passed. The frozen first-selection packet was remeasured. Next: Use the existing signed first Wake selection after the enrolled administrator completes it and verify its distinct fallback. Continue the frozen compatible backend review and producer independently. Keep routine rollback qualification disposable until post-rollback roll-forward and trusted intake are demonstrated.
 
 Evidence: [docs/verification/WAKE_ROUTINE_FALLBACK_HANDOFF_2026_11_21.json](docs/verification/WAKE_ROUTINE_FALLBACK_HANDOFF_2026_11_21.json); command: Run exact Windows Wake refusal fixture and serial same-state local-user tests; exit 0; SHA-256 8ffec11fc1e0159a056c3e203e7b9c09df843dc76e5d69867ff529c3cbaeb1c0.
+
+<!-- catdesk-activity:nov21-wake-retain-working-current sha256:9937f2e6cf5292b986c3057c828c059156b1a85ab3d091562662513ed0f3edfa -->
+
+## 2026-11-22T04:03:55.5970934Z — WAKE-LIFECYCLE
+
+Agent: CatDesk Codex. Source: 4b6b87b1d877db1a0de9cd27c32651fdaf6c2ee3. Outcome: partial. The development broker verified a newly qualified current package through its existing exclusive executable handles and committed a routine selection and exact rollback in a disposable Windows fixture. A separate wider run preserved its legacy ownership refusal. Next: Verify protected first Wake selection after the existing signed operator step and continue the frozen compatible backend review and producer independently. Qualify reviewed broker bytes and protected intake under the enrolled account before calling routine production release autonomous.
+
+Evidence: [docs/verification/WAKE_RETAIN_WORKING_CURRENT_2026_11_21.json](docs/verification/WAKE_RETAIN_WORKING_CURRENT_2026_11_21.json); command: Run Wake native retained-current selection and rollback fixture, planner tests, serial local-user tests and strict Clippy; exit 0; SHA-256 d28c93be1df8b4b0237a6b91c896bd983b2906e8cd04c9768a3d760ab7c88d0f.
