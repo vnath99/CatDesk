@@ -26,9 +26,9 @@ class ResponsePersistenceTests(unittest.TestCase):
         self.sink = bridge.CdpSink('https://chatgpt.com/c/exact-fixture', Path(self.directory.name), 1, 1)
         self.clock = Clock()
 
-    def wait(self):
-        self.sink.wait_for_persisted_response(object(), 'exact message',
-            monotonic=self.clock.monotonic, sleeper=self.clock.sleep)
+    def wait(self, *, allow_load_error=False):
+        return self.sink.wait_for_persisted_response(object(), 'exact message',
+            allow_load_error=allow_load_error, monotonic=self.clock.monotonic, sleeper=self.clock.sleep)
 
     def test_remounted_body_or_resumed_generation_waits_for_two_complete_reads(self):
         with patch.object(self.sink, 'observe_cooperative_response', side_effect=[
@@ -65,6 +65,19 @@ class ResponsePersistenceTests(unittest.TestCase):
         with patch.object(self.sink, 'observe_cooperative_response', side_effect=KeyboardInterrupt) as read:
             with self.assertRaises(KeyboardInterrupt): self.wait()
         read.assert_called_once()
+
+    def test_repeated_exact_load_error_is_terminal_only_with_explicit_admission(self):
+        for outcome in ('RESPONSE_LOAD_ERROR', 'RESPONSE_COMPLETE'):
+            with self.subTest(outcome=outcome), patch.object(
+                self.sink, 'observe_cooperative_response',
+                side_effect=[bridge.Attention('RESPONSE_LOAD_ERROR'), 'RESPONSE_PENDING',
+                    bridge.Attention('RESPONSE_LOAD_ERROR'), bridge.Attention('RESPONSE_LOAD_ERROR')]
+                    if outcome == 'RESPONSE_LOAD_ERROR' else
+                    [bridge.Attention('RESPONSE_LOAD_ERROR'), 'RESPONSE_COMPLETE', 'RESPONSE_COMPLETE']
+            ) as read, patch.object(self.sink, 'click_response_timeout_retry') as retry:
+                self.assertEqual(self.wait(allow_load_error=True), outcome)
+                self.assertEqual(read.call_count, 4 if outcome == 'RESPONSE_LOAD_ERROR' else 3)
+                retry.assert_not_called()
 
     def test_formatted_message_uses_the_original_normalized_user_digest_domain(self):
         message = 'Original task.\n  {"field": "two  spaces"}\n'

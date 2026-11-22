@@ -156,18 +156,28 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
         raise bridge.Attention("TYPING_NOT_CONFIRMED")
     send_selector = sink.wait_for_send_control(cdp, 5)
     sink.smoke_path_submit(cdp, send_selector, sink.ui_timeout, editor_selector)
-    accepted_at = sink.wait_for_submission_accepted(cdp, prior, message_digest, message)
+    accepted_at = sink.wait_for_submission_accepted(
+        cdp, prior, message_digest, message, accept_response_load_error=True
+    )
     # Accepted submission starts the passive response timer but is not a
     # durable receipt and cannot transition delivery to SENT.
     emit({"stage": "SUBMISSION_ACCEPTED"})
     # Negotiating the cooperative protocol must not close the owned browser
     # while Stop/Pause remains active. Keep existing native submit/ACK fencing;
     # independent project/tool work does not need this shared browser lease.
-    sink.wait_for_response_completion(
-        cdp, message, observer=lambda stage: emit({"stage": stage})
-    )
+    try:
+        sink.wait_for_response_completion(
+            cdp, message, observer=lambda stage: emit({"stage": stage})
+        )
+    except bridge.PostSubmitUnknown as error:
+        if str(error) != "RESPONSE_LOAD_ERROR":
+            raise
+        # This exact response is no longer generating. The existing
+        # refresh guard still requires a clean composer and no Stop button.
     sink.durable_receipt_round_trip(cdp, completed_response=True)
-    sink.wait_for_persisted_response(cdp, message)
+    outcome = sink.wait_for_persisted_response(cdp, message, allow_load_error=True)
+    if outcome not in {"RESPONSE_COMPLETE", "RESPONSE_LOAD_ERROR"}:
+        raise bridge.PostSubmitUnknown("RESPONSE_PERSISTENCE_UNPROVEN")
     receipt = sink.confirm_exact_receipt(
         cdp,
         prior,
@@ -183,7 +193,11 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
         "evidence": "EXACT_USER_MESSAGE_APPENDED",
     }
     emit({"stage": "USER_MESSAGE_APPENDED", "receipt": receipt_payload})
-    emit({"stage": "SENT", "receipt": receipt_payload})
+    if outcome == "RESPONSE_LOAD_ERROR":
+        emit({"stage": "SENT_PENDING_RESPONSE", "receipt": receipt_payload,
+              "responseError": "RESPONSE_LOAD_ERROR"})
+    else:
+        emit({"stage": "SENT", "receipt": receipt_payload})
 
 
 def attention_frame(bridge, error, request=None):

@@ -2004,6 +2004,7 @@ class CdpSink:
         expected: str,
         message: str,
         *,
+        accept_response_load_error: bool = False,
         monotonic=time.monotonic,
         sleeper=time.sleep,
         wall_time=time.time,
@@ -2078,7 +2079,11 @@ class CdpSink:
                 timeout_count, _retry_count, assistant_after_user, _completion = (
                     self.response_snapshot(cdp, message)
                 )
-            except PostSubmitUnknown:
+            except PostSubmitUnknown as error:
+                if accept_response_load_error and str(error) == "RESPONSE_LOAD_ERROR":
+                    # The exact new USER anchor and cleared composer have
+                    # already been verified. This is still provisional.
+                    return float(wall_time())
                 sleeper(READINESS_POLL_SECONDS)
                 continue
             if timeout_count > 0 or assistant_after_user:
@@ -3433,25 +3438,38 @@ class CdpSink:
         raise PostSubmitUnknown("RESPONSE_TOTAL_TIMEOUT")
 
     def wait_for_persisted_response(self, cdp: Any, message: str, *,
-                                    monotonic=time.monotonic, sleeper=time.sleep) -> None:
+                                    allow_load_error: bool = False,
+                                    monotonic=time.monotonic, sleeper=time.sleep) -> str:
         """Read back the same completed exchange after the mandatory fresh load.
 
         No input, Retry, second refresh or replacement browser is permitted.
         A remounted/loading response remains pending within this fixed bound;
-        missing/duplicated USER, login, route drift and response errors fail closed.
+        missing/duplicated USER, login and route drift fail closed. A caller
+        may explicitly classify the exact repeated assistant load error.
         """
         deadline = monotonic() + POST_SUBMIT_RECEIPT_WINDOW_SECONDS
+        expected_digest = digest(normalize_message(message))
         stable = 0
+        last_stage = None
         while monotonic() < deadline:
             try:
-                stage = self.observe_cooperative_response(cdp, message, digest(normalize_message(message)))
+                stage = self.observe_cooperative_response(cdp, message, expected_digest)
             except Attention as error:
-                if str(error) != "RESPONSE_USER_DOCUMENT_NOT_HYDRATED":
+                if str(error) == "RESPONSE_USER_DOCUMENT_NOT_HYDRATED":
+                    stage = "RESPONSE_PENDING"
+                elif allow_load_error and str(error) == "RESPONSE_LOAD_ERROR":
+                    stage = "RESPONSE_LOAD_ERROR"
+                else:
                     raise
-                stage = "RESPONSE_PENDING"
-            stable = stable + 1 if stage == "RESPONSE_COMPLETE" else 0
+            if stage not in {"RESPONSE_COMPLETE", "RESPONSE_LOAD_ERROR"}:
+                stable = 0
+            elif stage == last_stage:
+                stable += 1
+            else:
+                stable = 1
+            last_stage = stage
             if stable >= 2:
-                return
+                return stage
             sleeper(min(RESPONSE_POLL_SECONDS, max(0, deadline - monotonic())))
         raise PostSubmitUnknown("RESPONSE_PERSISTENCE_UNPROVEN")
 

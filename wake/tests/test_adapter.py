@@ -64,7 +64,7 @@ class FakeSink:
     def smoke_path_submit(self, cdp, selector, timeout, editor_selector):
         cdp.sent = True
         cdp.timeline.append("submit")
-    def wait_for_submission_accepted(self, cdp, prior, digest, message):
+    def wait_for_submission_accepted(self, cdp, prior, digest, message, *, accept_response_load_error=False):
         cdp.timeline.append("accepted")
         return 99.0
     def durable_receipt_round_trip(self, cdp, *, completed_response=False):
@@ -79,8 +79,9 @@ class FakeSink:
         if observer is not None:
             observer("GENERATION_WAIT")
             observer("RESPONSE_COMPLETED")
-    def wait_for_persisted_response(self, cdp, message):
+    def wait_for_persisted_response(self, cdp, message, *, allow_load_error=False):
         cdp.timeline.append("persisted-response")
+        return "RESPONSE_COMPLETE"
     def reconcile_persisted_receipt(self, cdp, digest, message, record, target_sha256):
         cdp.timeline.append("reconcile")
         cdp.reconciled_message = message
@@ -856,7 +857,7 @@ class AdapterTests(unittest.TestCase):
 
     def test_post_refresh_response_failure_preserves_one_send_and_cannot_report_sent(self):
         class MissingPersistedBody(FakeSink):
-            def wait_for_persisted_response(self, cdp, message):
+            def wait_for_persisted_response(self, cdp, message, *, allow_load_error=False):
                 cdp.timeline.append("persisted-response-pending")
                 raise bridge.PostSubmitUnknown("RESPONSE_PERSISTENCE_UNPROVEN")
         for cooperative in (False, True):
@@ -868,6 +869,36 @@ class AdapterTests(unittest.TestCase):
                 self.assertEqual(error, "RESPONSE_PERSISTENCE_UNPROVEN")
                 self.assertFalse(any(frame["stage"] in {"SENT", "SENT_PENDING_RESPONSE", "USER_MESSAGE_APPENDED"}
                                      for frame in emitted))
+
+    def test_exact_persisted_load_error_proves_delivery_without_response_completion(self):
+        class LoadErrorSink(FakeSink):
+            def wait_for_submission_accepted(self, cdp, prior, digest, message, *, accept_response_load_error=False):
+                assert accept_response_load_error
+                return super().wait_for_submission_accepted(cdp, prior, digest, message)
+
+            def wait_for_response_completion(self, cdp, message, observer=None):
+                cdp.timeline.append("load-error")
+                raise bridge.PostSubmitUnknown("RESPONSE_LOAD_ERROR")
+
+            def durable_receipt_round_trip(self, cdp, *, completed_response=False):
+                assert completed_response
+                super().durable_receipt_round_trip(cdp, completed_response=completed_response)
+
+            def wait_for_persisted_response(self, cdp, message, *, allow_load_error=False):
+                assert allow_load_error
+                cdp.timeline.append("persisted-load-error")
+                return "RESPONSE_LOAD_ERROR"
+
+        cdp, emitted, error = self.run_attempt(lambda _: {"submit": True},
+            sink_type=LoadErrorSink, cooperative=True)
+        self.assertIsNone(error)
+        self.assertEqual(cdp.timeline,
+                         ["submit", "accepted", "load-error", "round-trip", "persisted-load-error", "confirm"])
+        self.assertEqual([frame["stage"] for frame in emitted[-2:]],
+                         ["USER_MESSAGE_APPENDED", "SENT_PENDING_RESPONSE"])
+        self.assertEqual(emitted[-1]["responseError"], "RESPONSE_LOAD_ERROR")
+        self.assertEqual(emitted[-1]["receipt"], emitted[-2]["receipt"])
+        self.assertNotIn("RESPONSE_COMPLETED", [frame["stage"] for frame in emitted])
 
     def test_navigation_during_authorization_wait_never_submits(self):
         def navigate(cdp): cdp.url = "https://chatgpt.com/c/wrong"; return {"submit": True}

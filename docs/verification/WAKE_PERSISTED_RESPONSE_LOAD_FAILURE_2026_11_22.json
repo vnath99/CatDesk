@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T21:06:24.3785334Z",
+  "scope": "DEVELOPMENT_ADAPTER_TO_SCOPED_RUNTIME_RESPONSE_FAILURE_QUALIFICATION",
+  "baseline": "8f96d99cf054d55e5e70fe34ac3b8684eecedc7f",
+  "behavior": {
+    "provisionalAcceptance": "Only a cleared composer and one new exact latest USER anchor can admit an already-visible assistant load error.",
+    "freshReadback": "The existing same-profile reload requires the exact target, empty ready editor and no active Stop or Pause. Two consecutive exact observations classify the result.",
+    "newUserMessagesPermittedByFailure": 0,
+    "assistantRetryOnLoadError": false,
+    "durableUserReceipt": "EXACT_USER_MESSAGE_APPENDED",
+    "failures": {
+      "adapterStage": "SENT_PENDING_RESPONSE",
+      "responseError": "RESPONSE_LOAD_ERROR",
+      "durableDeliveryPhase": "SENT",
+      "timerResponseState": "ATTENTION",
+      "completedUtcPresent": false
+    },
+    "bounds": "A renewed generation stays pending. Missing or duplicated USER, route drift and unrecognized replies remain fail-closed.",
+    "noReplay": true
+  },
+  "verification": {
+    "adapterUnitTestsPassed": 48,
+    "bridgeSuiteTestsPassed": 143,
+    "additionalFastLoadTestPassed": 1,
+    "responsePersistenceTestsPassedOnFinalSource": 8,
+    "windowsScopedRustTestsPassed": 49,
+    "strictWakeClippyPassed": true,
+    "rustfmtCheckPassed": true,
+    "reviewedArtifactSpecificTestsExplicitlyRun": 2,
+    "reviewedArtifactFixture": "Previously independently reviewed candidate package. The positive tests pin its real artifact bytes and exercise LF and CRLF.",
+    "firstWindowsRunNote": "The package tests incorrectly pointed at edited working source. The reviewed runtime correctly refused their new hashes. The fixed fixture uses the retained reviewed bytes. No trusted fingerprint was added."
+  },
+  "authority": {
+    "releaseHashAdmissionChanged": false,
+    "independentReviewRequiredForNewAdapterPair": true,
+    "productionMutations": 0,
+    "liveBrowserSends": 0,
+    "closedOriginalWakeSubmissionRepeated": false,
+    "firstInstalledWebCycleAccepted": false
+  },
+  "next": "Use the existing independent review and deployment path for new adapter bytes. The first installed Web cycle also requires the compatible installed backend and Wake releases and the disposable worktrees' original Git identities."
+}

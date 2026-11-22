@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — distinguish delivered Wake and failed response.** Supporting development code returns `responseError: RESPONSE_LOAD_ERROR` with the exact SENT receipt when safe fresh readback verifies the original USER message and the persistent assistant error. The timer remains Attention. Use the existing read-only response observer for the original event. [Verification](docs/verification/WAKE_PERSISTED_RESPONSE_LOAD_FAILURE_2026_11_22.json).
+
 **November 22 — test checkpoint drift without a browser.** With both `CATDESK_FROZEN_BACKEND_TEST_*` variables unset, the existing ignored Windows `cached_http_checkpoint_precedes_manual_wake` fixture runs the development backend on authenticated private loopback. It reaches the actual command sandbox and scoped Git checkpoint, then proves both delivery commands hold the exact queued event after a local tracked edit. [Verification](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).
 
 **November 22 — revalidate queued manual Wake.** Supporting development code for `operator web work manual-wake-deliver` and `manual-wake-deliver-next` rechecks the exact assigned checkpoint before opening the sender and at the final before-submit boundary. A refused checkpoint needs the task's existing verification and scoped checkpoint path. Retain the original event and inspect its phase before any further delivery attempt. [Verification](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).

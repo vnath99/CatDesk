@@ -693,12 +693,14 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
     if final_delivery.phase != Phase::Sent || final_delivery.receipt.is_none() {
         return Err("SCOPED_REVIEW_RECEIPT_REQUIRED".into());
     }
-    Ok(
-        json!({"action":if review {"scoped_review_run"} else if handoff {"scoped_rollover_handoff_run"} else if rollover {"scoped_rollover_continuation_run"} else if work {"scoped_work_request_run"} else if manual {"scoped_manual_end_turn_run"} else {"scoped_task_continuation_run"},"eventId":event_id,"projectId":event.project_id,
+    let mut outcome = json!({"action":if review {"scoped_review_run"} else if handoff {"scoped_rollover_handoff_run"} else if rollover {"scoped_rollover_continuation_run"} else if work {"scoped_work_request_run"} else if manual {"scoped_manual_end_turn_run"} else {"scoped_task_continuation_run"},"eventId":event_id,"projectId":event.project_id,
         "targetGeneration":final_delivery.target.generation,"targetDigest":final_delivery.target.digest,
         "phase":final_delivery.phase,"receipt":final_delivery.receipt,"maximumSeconds":maximum_seconds,
-        "hostStarted":false,"schedulerStarted":false,"desiredStateChanged":false}),
-    )
+        "hostStarted":false,"schedulerStarted":false,"desiredStateChanged":false});
+    if status.attention.as_deref() == Some("RESPONSE_LOAD_ERROR") {
+        outcome["responseError"] = json!("RESPONSE_LOAD_ERROR");
+    }
+    Ok(outcome)
 }
 
 fn local_status(delivery: &crate::store::Delivery) -> Status {
@@ -828,28 +830,16 @@ mod tests {
         directory
     }
 
-    fn current_native_entry_package(store: &Store, metadata_suffix: bool) -> PathBuf {
+    fn native_entry_fixture(store: &Store, adapter: &[u8], bridge: &[u8]) -> PathBuf {
         let directory = ordinary_package(store);
         let mut pointer: Value = read(&store.root().join("current.json")).unwrap();
         let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
         for (name, pointer_key, bytes) in [
-            (
-                "adapter.py",
-                "adapterSha256",
-                include_bytes!("../adapter.py").as_slice(),
-            ),
-            (
-                "wake_bridge.py",
-                "wakeBridgeSha256",
-                include_bytes!("../../scripts/wake_bridge.py").as_slice(),
-            ),
+            ("adapter.py", "adapterSha256", adapter),
+            ("wake_bridge.py", "wakeBridgeSha256", bridge),
         ] {
-            let mut bytes = bytes.to_vec();
-            if metadata_suffix {
-                bytes.extend_from_slice(b"\n# unrelated diagnostic metadata\n");
-            }
-            std::fs::write(directory.join(name), &bytes).unwrap();
-            let digest = format!("{:x}", Sha256::digest(&bytes));
+            std::fs::write(directory.join(name), bytes).unwrap();
+            let digest = format!("{:x}", Sha256::digest(bytes));
             pointer[pointer_key] = json!(digest);
             manifest["artifacts"][name] = json!(digest);
         }
@@ -858,11 +848,29 @@ mod tests {
         directory
     }
 
+    fn reviewed_native_entry_artifacts() -> (Vec<u8>, Vec<u8>) {
+        let directory = PathBuf::from(
+            std::env::var_os("CATDESK_TEST_REVIEWED_WAKE_PACKAGE")
+                .expect("set CATDESK_TEST_REVIEWED_WAKE_PACKAGE to a retained reviewed package"),
+        );
+        assert!(directory.is_absolute());
+        (
+            std::fs::read(directory.join("adapter.py")).unwrap(),
+            std::fs::read(directory.join("wake_bridge.py")).unwrap(),
+        )
+    }
+
     #[test]
+    #[ignore = "requires the retained reviewed package, not working source files"]
     fn scoped_native_entry_known_pair_accepts_and_unknown_installed_metadata_requires_review() {
+        let (adapter, bridge) = reviewed_native_entry_artifacts();
         for suffix in [false, true] {
             let (store, _, _) = fixture("native-entry-current");
-            let directory = current_native_entry_package(&store, suffix);
+            let mut adapter = adapter.clone();
+            if suffix {
+                adapter.extend_from_slice(b"\n# unrelated diagnostic metadata\n");
+            }
+            let directory = native_entry_fixture(&store, &adapter, &bridge);
             if suffix {
                 assert_eq!(
                     installed_scoped_work_browser_directory(&store).unwrap_err(),
@@ -878,10 +886,12 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires the retained reviewed package, not working source files"]
     fn scoped_native_entry_accepts_reviewed_lf_or_crlf_with_exact_artifact_integrity() {
+        let (adapter, bridge) = reviewed_native_entry_artifacts();
         for crlf in [false, true] {
             let (store, _, _) = fixture("native-entry-line-endings");
-            let directory = current_native_entry_package(&store, false);
+            let directory = native_entry_fixture(&store, &adapter, &bridge);
             let mut pointer: Value = read(&store.root().join("current.json")).unwrap();
             let mut manifest: Value = read(&directory.join("manifest.json")).unwrap();
             for (name, key) in [
@@ -1036,7 +1046,11 @@ mod tests {
     #[test]
     fn scoped_native_entry_refuses_changed_critical_code_even_with_consistent_manifest() {
         let (store, _, _) = fixture("native-entry-critical-change");
-        let directory = current_native_entry_package(&store, false);
+        let directory = native_entry_fixture(
+            &store,
+            include_bytes!("../adapter.py"),
+            include_bytes!("../../scripts/wake_bridge.py"),
+        );
         let path = directory.join("adapter.py");
         let source = std::fs::read_to_string(&path).unwrap();
         let changed = source.replace(
@@ -1162,6 +1176,84 @@ mod tests {
                 target,
             )
             .unwrap()
+    }
+
+    #[test]
+    fn scoped_persisted_load_error_keeps_exact_delivery_and_attention_timer() {
+        let (store, event, target) = fixture("scoped-persisted-response-error");
+        let mut fake = adapter(&event, &target);
+        let ack = fake.ack_count.clone();
+        let admitted = fake.admitted.clone();
+        let receipt = fake.receipt.clone();
+        fake.terminal_refusal = Some(json!({
+            "stage":"SENT_PENDING_RESPONSE","receipt":receipt,
+            "responseError":"RESPONSE_LOAD_ERROR",
+        }));
+        let result = run_with_adapter(
+            &store,
+            &event.event_id,
+            120,
+            &mut |_, _| {
+                admitted.set(true);
+                Ok(())
+            },
+            &|| Ok(()),
+            |_, _| Ok(fake),
+        )
+        .unwrap();
+        assert_eq!(ack.get(), 1);
+        assert_eq!(result["phase"], "SENT");
+        assert_eq!(result["responseError"], "RESPONSE_LOAD_ERROR");
+        let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(delivery.receipt, Some(receipt));
+        let timer = store.timer(&event.event_id).unwrap().unwrap();
+        assert_eq!(timer.response_state, ResponseState::Attention);
+        assert!(timer.completed_utc.is_none());
+        assert_eq!(
+            run_with_adapter::<FakeAdapter>(
+                &store,
+                &event.event_id,
+                120,
+                &mut |_, _| unreachable!(),
+                &|| Ok(()),
+                |_, _| panic!("an exact delivery cannot be replayed"),
+            )
+            .unwrap_err(),
+            "SCOPED_REVIEW_REPLAY_REFUSED"
+        );
+    }
+
+    #[test]
+    fn scoped_response_error_cannot_complete_timer_or_carry_untrusted_text() {
+        for (stage, error) in [
+            ("SENT", "RESPONSE_LOAD_ERROR"),
+            ("SENT_PENDING_RESPONSE", "untrusted assistant text"),
+        ] {
+            let (store, event, target) = fixture("scoped-invalid-response-error");
+            let mut fake = adapter(&event, &target);
+            let admitted = fake.admitted.clone();
+            fake.terminal_refusal = Some(json!({
+                "stage":stage,"receipt":fake.receipt,"responseError":error,
+            }));
+            assert_eq!(
+                run_with_adapter(
+                    &store,
+                    &event.event_id,
+                    120,
+                    &mut |_, _| {
+                        admitted.set(true);
+                        Ok(())
+                    },
+                    &|| Ok(()),
+                    |_, _| Ok(fake),
+                )
+                .unwrap_err(),
+                "BROWSER_ADAPTER_RESPONSE_INVALID"
+            );
+            let delivery = store.delivery(&event.event_id).unwrap().unwrap();
+            assert_eq!(delivery.phase, Phase::Submitting);
+            assert!(delivery.receipt.is_none());
+        }
     }
 
     #[test]

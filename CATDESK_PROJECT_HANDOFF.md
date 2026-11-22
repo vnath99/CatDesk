@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 4:06 p.m. EST.** A persistent assistant load error can now retain the exact USER receipt while leaving the turn incomplete. The source uses the existing browser owner and refresh guards. Artifact admission for changed Python bytes still requires genuine independent review. The previously reviewed pair passed its exact tests without a hash-list change. [Verification](docs/verification/WAKE_PERSISTED_RESPONSE_LOAD_FAILURE_2026_11_22.json).
+
 **November 22, 3:58 p.m. EST.** The new delayed manual-Wake guard passed the existing Windows sandbox-backed loopback cycle. Both CLI delivery selectors refuse a stale checkpoint without changing the queued event or creating delivery evidence. The fixture supplied the original source receipt. Neither the installed browser nor canonical v5 was exercised. The frozen release prerequisites and original delivery histories remain in force. [Evidence](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).
 
 **November 22, 3:48 p.m. EST — checkpoint before manual Wake delivery.** The exact queued manual Wake reuses the existing Git checkpoint guard while the scoped project lease is held. The check runs before sender launch and before durable submission. Post-fence task progress keeps its existing path. The source change leaves all frozen releases and historical Wake attempts in place. [Verification](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).

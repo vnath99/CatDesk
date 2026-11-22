@@ -8405,6 +8405,16 @@ fn attempt_inner<A: SubmissionAdapter>(
                     status.login = "READY".into();
                 }
                 Some(stage @ ("SENT" | "SENT_PENDING_RESPONSE")) => {
+                    let response_error = match value.get("responseError") {
+                        None => None,
+                        Some(serde_json::Value::String(code))
+                            if stage == "SENT_PENDING_RESPONSE"
+                                && code == "RESPONSE_LOAD_ERROR" =>
+                        {
+                            Some(code.as_str())
+                        }
+                        _ => return Err("BROWSER_ADAPTER_RESPONSE_INVALID".into()),
+                    };
                     let receipt: Receipt = serde_json::from_value(
                         value.get("receipt").ok_or("RECEIPT_MISSING")?.clone(),
                     )
@@ -8422,13 +8432,23 @@ fn attempt_inner<A: SubmissionAdapter>(
                     }
                     if stage == "SENT" {
                         store.complete_timer(&d.event.event_id)?;
+                    } else if response_error.is_some() {
+                        store.set_timer_response_state(
+                            &d.event.event_id,
+                            ResponseState::Attention,
+                        )?;
                     }
                     status.last_success_utc = Some(now());
                     status.last_receipt = Some(receipt);
-                    status.browser = "READY".into();
+                    status.browser = if response_error.is_some() {
+                        "ATTENTION"
+                    } else {
+                        "READY"
+                    }
+                    .into();
                     status.login = "READY".into();
                     status.submission = stage.into();
-                    status.attention = None;
+                    status.attention = response_error.map(str::to_owned);
                     return Ok(());
                 }
                 Some("ATTENTION") => {

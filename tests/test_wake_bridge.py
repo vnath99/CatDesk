@@ -1615,6 +1615,20 @@ class WakeBridgeTests(unittest.TestCase):
             )
         self.assertEqual(8.0, accepted)
 
+    def test_fast_load_error_is_provisional_only_for_the_exact_new_user(self):
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = types.SimpleNamespace(get_current_url=lambda: "https://chatgpt.com/c/review-one")
+        with patch.object(sink, "post_submit_composer_text", return_value=""), patch.object(
+            sink, "trusted_turn_anchor_state", return_value=(1, 0)
+        ), patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+            sink, "response_snapshot", side_effect=wake_bridge.PostSubmitUnknown("RESPONSE_LOAD_ERROR")
+        ):
+            accepted = sink.wait_for_submission_accepted(
+                cdp, 0, wake_bridge.digest("exact submitted message"), "exact submitted message",
+                accept_response_load_error=True, wall_time=lambda: 8.0,
+            )
+        self.assertEqual(accepted, 8.0)
+
     def test_submission_acceptance_refuses_same_document_append_without_server_turn_signal(self):
         class Clock:
             def __init__(self): self.now = 0.0
