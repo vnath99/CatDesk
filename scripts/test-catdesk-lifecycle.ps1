@@ -272,11 +272,28 @@ using System.IO;
 
 static class PromotionRefusal {
     static int Main(string[] args) {
+        if (args.Length == 1 && args[0] == "--fixture-hold-promotion-pipes") {
+            File.WriteAllText("pipe-owner.pid", System.Diagnostics.Process.GetCurrentProcess().Id.ToString());
+            var budget = System.Diagnostics.Stopwatch.StartNew();
+            while (budget.ElapsedMilliseconds < 12000 && !File.Exists("release-pipe-owner"))
+                System.Threading.Thread.Sleep(25);
+            return 0;
+        }
         string mode = File.ReadAllText("refusal-mode.txt");
         File.AppendAllText("refusal-invocations.txt", args[1] + "\n");
-        if ((mode == "candidate" || mode == "stopped-source" || mode == "listener-owner" || mode == "source-pair") && args[1] == "promote-resolve") {
+        if ((mode == "candidate" || mode == "stopped-source" || mode == "listener-owner" || mode == "source-pair" || mode == "pipe-held") && args[1] == "promote-resolve") {
             Console.WriteLine("{\"state\":\"PROMOTION_CANDIDATE_RESOLVED\",\"candidateSha256\":\"" + args[2] + "\",\"buildAttemptId\":\"" + new string('a', 32) + "\"}");
             return 0;
+        }
+        if (mode == "pipe-held") {
+            var childInfo = new System.Diagnostics.ProcessStartInfo(
+                System.Reflection.Assembly.GetExecutingAssembly().Location, "--fixture-hold-promotion-pipes");
+            childInfo.UseShellExecute = false;
+            childInfo.CreateNoWindow = true;
+            using (var owner = System.Diagnostics.Process.Start(childInfo)) {
+                Console.WriteLine("{\"state\":\"PROMOTION_IN_PROGRESS\",\"candidateSha256\":\"" + args[2] + "\"}");
+                return 0;
+            }
         }
         string code = mode == "candidate" ? "REVIEWED_PROMOTION_REVIEW_REQUIRED" : "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD";
         if (mode == "stopped-source") code = "REVIEWED_PROMOTION_STOPPED_SOURCE_UNQUALIFIED";
@@ -321,6 +338,26 @@ static class PromotionRefusal {
         }
         Require ($wire -cnotmatch 'FIXTURE_PRIVATE') 'refusal does not disclose child stderr or arbitrary stdout'
         Require (([IO.File]::ReadAllLines($invocations) -join ',') -ceq $case.Actions) 'refusal ends the operation without advancing or retrying'
+    }
+
+    [IO.File]::WriteAllText((Join-Path $realCanonicalRoot 'refusal-mode.txt'), 'pipe-held')
+    [IO.File]::WriteAllText($invocations, '')
+    $pipeOwnerPath = Join-Path $realCanonicalRoot 'pipe-owner.pid'
+    $releasePipeOwner = Join-Path $realCanonicalRoot 'release-pipe-owner'
+    $pipeOwner = $null
+    try {
+        $pipeResult = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $realCanonical | ConvertFrom-Json
+        Require ([IO.File]::Exists($pipeOwnerPath)) 'the real native descendant inherited the controller pipes'
+        Require ($pipeResult.state -ceq 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED' -and $pipeResult.detail -ceq 'RUN_CANDIDATE') 'a retained output pipe produces exact candidate reconciliation instead of waiting for EOF'
+        $pipeOwner = [Diagnostics.Process]::GetProcessById([int][IO.File]::ReadAllText($pipeOwnerPath))
+        Require (-not $pipeOwner.HasExited) 'the facade returns without terminating the descendant that owns the pipe'
+        Require (([IO.File]::ReadAllLines($invocations) -join ',') -ceq 'promote-resolve,promote') 'ambiguous output does not restart the controller'
+    } finally {
+        [IO.File]::WriteAllText($releasePipeOwner, '')
+        if ($null -ne $pipeOwner) {
+            try { Require ($pipeOwner.WaitForExit(5000)) 'test-owned pipe descendant exits after release' }
+            finally { $pipeOwner.Dispose() }
+        }
     }
 
     $status = Invoke-FixtureFacade -Command 'status' -Seams $base | ConvertFrom-Json

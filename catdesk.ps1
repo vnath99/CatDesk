@@ -1109,6 +1109,11 @@ function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$
                 $output = $process.StandardOutput.ReadToEndAsync()
                 $errors = $process.StandardError.ReadToEndAsync()
                 if (!$process.WaitForExit(720000)) { throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED' }
+                # A descendant can still own a pipe after the controller exits.
+                $streams = [Threading.Tasks.Task[]]@($output, $errors)
+                if (-not [Threading.Tasks.Task]::WaitAll($streams, 2000)) {
+                    throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
+                }
                 $wire = $output.GetAwaiter().GetResult()
                 if ($errors.GetAwaiter().GetResult().Length -ne 0 -or $wire.Length -gt 4096 -or $process.ExitCode -notin @(0, 2)) {
                     throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
