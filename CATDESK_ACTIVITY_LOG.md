@@ -670,3 +670,11 @@ Evidence: [docs/verification/WAKE_FIRST_SELECTION_REFRESH_2026_11_21.json](docs/
 Agent: CatDesk development. Source: 376a07a9d2c1461ad892232fab8387d10d78efee. Outcome: partial. The existing CatDesk lifecycle accepts one artifact hash in development. It validates the canonical pair, resolves the active reviewed build with the canonical process, releases that process, and then pins and invokes the exact noncanonical candidate. Both PowerShell suites and four native tests passed. This qualification used fixtures and created no installed promotion. Next: Verify the refreshed signed Wake selection after the operator completes it. The first compatible backend still uses the existing review, producer and promotion route. Qualify the one-command facade against a reviewed installed release with actual rollback and Web continuation evidence.
 
 Evidence: [docs/verification/BACKEND_PROMOTE_FACADE_2026_11_21.json](docs/verification/BACKEND_PROMOTE_FACADE_2026_11_21.json); command: cargo test --offline --locked --bin catdesk routine_promote_; exit 0; SHA-256 9ddbf3730fd17c58581094bfd2f0da7faad877a59a1f80fd4789a4af5061ab59.
+
+<!-- catdesk-activity:promotion-facade-windows-process-handoff-nov21 sha256:ad8a60a34b01978bf0b651cd3db422e6101cfeb8394438d802f56533571cffea -->
+
+## 2026-11-22T03:10:33.0009288Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: e0c286f7976c2f2be9174fde78876db5699191a0. Outcome: partial. Both PowerShell editions exercised the actual promotion facade with real disposable Windows resolver and candidate executables. Both candidates proved exclusive read access to the canonical file, confirming the resolver and its pins had exited first. Test-owned processes exited and exact fixture files were cleaned up. The native responses were simulated. Next: Independently verify the refreshed Wake selection once the enrolled administrator completes it. Continue the exact compatible backend review and producer, then demonstrate the actual installed Web work cycle and guarded rollback.
+
+Evidence: [docs/verification/BACKEND_PROMOTE_WINDOWS_PROCESS_HANDOFF_2026_11_21.json](docs/verification/BACKEND_PROMOTE_WINDOWS_PROCESS_HANDOFF_2026_11_21.json); command: catdesk.ps1 promote <fixture-artifact-sha256> in each supported PowerShell edition; exit 0; SHA-256 2b30e030de8a0f3fbace82e63b679a27066f53c7c59437db987caa986ec8fd45.

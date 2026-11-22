@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T03:10:33.0009288Z",
+  "sourceCommit": "e0c286f7976c2f2be9174fde78876db5699191a0",
+  "scope": "REAL_WINDOWS_PROCESS_FIXTURE_NO_PRODUCTION_PROMOTION",
+  "catdeskFacadeSha256": "8e5cbe9dfd1201f32c8c15d29cf2c0b1c91ac220d30a01722c719b1d6880a0f9",
+  "previousTest": "BACKEND_PROMOTE_FACADE_2026_11_21.json",
+  "runs": [
+    {
+      "edition": "pwsh.exe",
+      "facadeState": "PROMOTION_COMPLETED",
+      "servingState": "STOPPED_AFTER_BOUNDED_OWNER",
+      "realResolverAndCandidateProcesses": true,
+      "exactWorkspaceWithSpaces": true,
+      "candidateExclusiveCanonicalReadProved": true,
+      "fixtureExecutableBytesUnchanged": true,
+      "remainingOwnedProcesses": 0
+    },
+    {
+      "edition": "powershell.exe",
+      "facadeState": "PROMOTION_COMPLETED",
+      "servingState": "STOPPED_AFTER_BOUNDED_OWNER",
+      "realResolverAndCandidateProcesses": true,
+      "exactWorkspaceWithSpaces": true,
+      "candidateExclusiveCanonicalReadProved": true,
+      "fixtureExecutableBytesUnchanged": true,
+      "remainingOwnedProcesses": 0
+    }
+  ],
+  "fixture": {
+    "actualWindowsCandidateLoaderUsed": true,
+    "suppliedSimulatedNativeResult": true,
+    "sourceSha256": "62f13e8cb20805cd9d179ba20ffc252a0dfa71e4e5be756a2a99f1cb6537505a",
+    "resolverSha256": "db36281ba9e177b382d44bb9246f42f2a7654baf4ec8c7d5fdb45f6f84b6f556",
+    "candidateSha256": "700ef87feee3cfaecde104491616c1cd520a6d10760bd0a413683e72343187ec",
+    "testCompilerInvocations": 2,
+    "compilerAndFacadesUsedBoundedJob": true,
+    "preliminaryHarnessProcessStarted": false,
+    "preliminaryHarnessReason": "The host lookup returned two PowerShell application paths. The corrected run selected one exact executable for each edition and reused both compiled fixtures."
+  },
+  "cleanup": {
+    "fixtureRootAbsent": true,
+    "ownedProcessCount": 0,
+    "removedExactOwnedEntries": 38,
+    "receiptSha256": "da44f52df009e82d7f68b61b8d632515c2a924662a4e557a355688420428c8bc"
+  },
+  "proofSha256": "204683fdece3d31f0b7b6330079c218deb15f4e6ded4a8ecf8160076bc201212",
+  "limits": {
+    "productionChanges": 0,
+    "promotionOrRollbackRan": false,
+    "nativeReviewAuthorityCreated": false,
+    "installedBackendHealthChecked": false,
+    "chatgptWebInvoked": false
+  }
+}
