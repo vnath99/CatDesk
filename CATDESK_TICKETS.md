@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**November 22 WAKE-LIFECYCLE.** Restore of the exact backend review workspace passed, and its original contract stays DRAFT. The review and producer dependency applies to protected promotion. Development has a separate bounded result-readback improvement. First installed Web execution still requires a compatible installed pair and verified disposable project and linked-worktree identities. [Verification](docs/verification/WAKE_LIFECYCLE_RESUME_2026_11_22.json).
+
 **Wake lifecycle checkpoint, November 22.** The original signed V3 operation ended with `NOT_FOUND_NO_RETRY` in the protected ledger. Existing packages and project state matched, and the enrolled administrator verified all 16 retained intake files and the original ACL checks. The installed service discarded the first failing internal check. The attempt stays closed. Fresh signed pre-intent refusal reporting is source-only. Later routine upgrades retain the existing reviewed local policy and qualified predecessor. [Evidence](docs/verification/WAKE_V3_ORIGINAL_ATTEMPT_RECONCILIATION_2026_11_22.json).
 
 Current ticket index. Status is workflow state; maturity is separate. Historical mention alone is not acceptance. Unreconciled historical tickets remain OPEN / UNVERIFIED with owner UNKNOWN; this does not authorize execution or claim that old work is unfinished. Consult the linked original for retained claims. Source inventory covers every T-ID found in tracked Markdown, plus the existing C1/UI acceptance identity.

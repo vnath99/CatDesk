@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T17:23:31.2454874Z",
+  "scope": "ACTUAL_FROZEN_REVIEW_WORKSPACE_RESTORE_AND_LOCAL_PROMOTION_FACADE_QUALIFICATION",
+  "developmentBaseline": "329a7224949d5a0722f879eaf2fe92a35241914a",
+  "reviewWorkspace": {
+    "contractId": "nov21-independent-56aa-backend-review",
+    "restoredOriginalAbsoluteBinding": true,
+    "commit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "tree": "4a83da9f2daa22e1ecabcf000beb6899fc5e60d1",
+    "filesVerified": 2151,
+    "bytesVerified": 82513036,
+    "contractSha256": "9cdd8134c1e046c86f7786328931a5b90e323e0a0220bc02bcfcb320ffcb26f2",
+    "nativeState": "DRAFT",
+    "nativeContractRecreated": false,
+    "existingPathsOverwritten": 0,
+    "independentReviewerAdmitted": false,
+    "startApprovalRequired": true,
+    "originalContractClaimed": false,
+    "approvedContractHashPresent": false,
+    "providerTurnCount": 0,
+    "reviewOutputPresent": false,
+    "producerInvoked": false,
+    "nextGate": "Admit an eligible independent reviewer through an authorized unoccupied route, then use the exact contract start, independent report, ACK and reviewed producer workflow."
+  },
+  "promotionFacade": {
+    "sourceChange": "One read-only, exact-artifact canonical resolver observation after an exited candidate returns an unreadable result.",
+    "newObservationProcessWaitMilliseconds": 15000,
+    "requiresBoundTerminalResult": true,
+    "canonicalPairReadbackStillRequired": true,
+    "recoveredResultDoesNotAuthorizeStart": true,
+    "mutationRetry": false,
+    "unmatchedOrUnboundReadback": "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED at READ_ORIGINAL_RESULT",
+    "windowsPowerShell51LifecyclePassed": true,
+    "powerShell7LifecyclePassed": true,
+    "parallelFixtureInterference": "The first PowerShell 7 run overlapped the Windows PowerShell run at the shared real fixture's named autostart guard. The sequential PowerShell 7 rerun passed. No fixture worker remained.",
+    "qualifiesInstalledPromotion": false
+  },
+  "firstWebCycle": {
+    "frozenArtifactsHashVerified": 4,
+    "registeredDisposableRootPresent": false,
+    "assignedLinkedWorktreePresent": false,
+    "sharedGitStorePresent": false,
+    "publicBaseObjectAvailable": true,
+    "primaryProvider": "chatgpt-web",
+    "primaryModel": "conversation-selected",
+    "fallbackProviders": 0,
+    "grantsChanged": 0,
+    "requestsReplayed": 0,
+    "installDependencies": [
+      "Compatible reviewed backend selected and health/rollback verified",
+      "Qualified Wake release selected through the protected lifecycle"
+    ],
+    "otherDependencies": [
+      "Restore approved disposable project and linked worktree identities or complete supported relocation and revalidate frozen binding",
+      "Verify actual v5 task caller and fresh authorized grant"
+    ],
+    "acceptanceRequired": [
+      "Scoped file edit",
+      "Fixed verification",
+      "Scoped Git checkpoint",
+      "Task-journal-bound self-Wake SENT receipt",
+      "Exact next-turn continuation of the checkpoint",
+      "Zero Codex model calls"
+    ],
+    "accepted": false
+  },
+  "installedBackend": {
+    "canonicalListenerVerified": true,
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "releaseOrRollbackMutation": false
+  },
+  "wake": {
+    "originalV3AttemptRemainsClosed": true,
+    "originalV3DiagnosticReplayed": false,
+    "signaturesRequested": 0,
+    "submissionsAttempted": 0
+  }
+}

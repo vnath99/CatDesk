@@ -1153,7 +1153,7 @@ $script:PromotionNativeRefusals = @(
     'REVIEWED_PROMOTION_REVIEW_REQUIRED'
 )
 
-function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$ImageSha,[string]$Action,[string]$Digest) {
+function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$ImageSha,[string]$Action,[string]$Digest,[int]$WaitMilliseconds = 720000) {
     $path = Assert-CatDeskRecoveryContainedPath -Root $Root -Path $Image -Label 'reviewed promotion controller'
     $pins = [CatDesk.DevLocalTarget.ReadOnlyScope]::new()
     try {
@@ -1161,8 +1161,8 @@ function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$
         if ($file.Length -lt 1 -or $file.Sha256 -cne $ImageSha) {
             throw 'REVIEWED_PROMOTION_CONTROLLER_CHANGED'
         }
-        Invoke-LifecycleSeam -Name 'PromotionInvokeNative' -Arguments @($path,$Root,$Action,$Digest) -Default {
-            param($controller,$workspace,$verb,$artifact)
+        Invoke-LifecycleSeam -Name 'PromotionInvokeNative' -Arguments @($path,$Root,$Action,$Digest,$WaitMilliseconds) -Default {
+            param($controller,$workspace,$verb,$artifact,$wait)
             $info = [Diagnostics.ProcessStartInfo]::new()
             $info.FileName = $controller
             $info.WorkingDirectory = $workspace
@@ -1175,7 +1175,12 @@ function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$
             try {
                 $output = $process.StandardOutput.ReadToEndAsync()
                 $errors = $process.StandardError.ReadToEndAsync()
-                if (!$process.WaitForExit(720000)) { throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED' }
+                if (!$process.WaitForExit($wait)) {
+                    if ($verb -ceq 'promote-resolve') {
+                        try { $process.Kill(); [void]$process.WaitForExit(2000) } catch {}
+                    }
+                    throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
+                }
                 # A descendant can still own a pipe after the controller exits.
                 $streams = [Threading.Tasks.Task[]]@($output, $errors)
                 if (-not [Threading.Tasks.Task]::WaitAll($streams, 2000)) {
@@ -1188,7 +1193,11 @@ function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$
                 if ($process.ExitCode -eq 2 -and -not $wire.TrimStart().StartsWith('{', [StringComparison]::Ordinal)) {
                     throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
                 }
-                $reply = ConvertFrom-CatDeskLiteralJson $wire
+                try {
+                    $reply = ConvertFrom-CatDeskLiteralJson $wire
+                } catch {
+                    throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
+                }
                 if ($process.ExitCode -eq 0) { return $reply }
                 $fields = @($reply.PSObject.Properties.Name)
                 if ($verb -ceq 'promote-resolve' -and $reply -is [pscustomobject] -and
@@ -1320,6 +1329,14 @@ function Get-LifecyclePromotionServingReadback {
     }
 }
 
+function Test-LifecycleBoundPromotionReceipt($Receipt) {
+    return ($Receipt -is [pscustomobject] -and
+        $Receipt.state -cin @('PROMOTION_COMPLETED','PROMOTION_FAILED_OR_AMBIGUOUS') -and
+        $Receipt.existingResult -is [bool] -and $Receipt.existingResult -and
+        ($Receipt.authorizationGeneration -is [int] -or $Receipt.authorizationGeneration -is [long]) -and
+        $Receipt.authorizationGeneration -gt 0)
+}
+
 function Invoke-LifecycleReviewedPromotion {
     if ($AutostartAction -cnotmatch '^[0-9a-fA-F]{64}$' -or $WakeTerminalTaskId) {
         Write-LifecycleStatus 'REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED'
@@ -1335,9 +1352,7 @@ function Invoke-LifecycleReviewedPromotion {
         Initialize-DevLocalTargetMetadata
         $selection = Invoke-PinnedPromotionController $root $canonical.Binary $canonical.Hash 'promote-resolve' $digest
         if ($selection.state -cin @('PROMOTION_COMPLETED','PROMOTION_FAILED_OR_AMBIGUOUS')) {
-            if ($selection.existingResult -isnot [bool] -or -not $selection.existingResult -or
-                ($selection.authorizationGeneration -isnot [int] -and $selection.authorizationGeneration -isnot [long]) -or
-                $selection.authorizationGeneration -lt 1) {
+            if (!(Test-LifecycleBoundPromotionReceipt $selection)) {
                 throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
             }
             $receipt = $selection
@@ -1350,7 +1365,22 @@ function Invoke-LifecycleReviewedPromotion {
             # Keep only the exact noncanonical attested controller pinned.
             $candidate = Join-Path $root ("target\reviewed-builds\" + $selection.buildAttemptId + "\catdesk.exe")
             $phase = 'RUN_CANDIDATE'
-            $receipt = Invoke-PinnedPromotionController $root $candidate $digest 'promote' $digest
+            try {
+                $receipt = Invoke-PinnedPromotionController $root $candidate $digest 'promote' $digest
+            } catch {
+                if ($_.Exception.Message -cne 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT') { throw }
+                # The candidate exited and both streams closed. Observe the
+                # same digest through the current canonical resolver once.
+                # Never launch another candidate or adopt a fresh resolution.
+                $phase = 'READ_ORIGINAL_RESULT'
+                $receipt = try {
+                    $installed = Get-CatDeskCanonicalPairEvidence $root
+                    Invoke-PinnedPromotionController $root $installed.Binary $installed.Hash 'promote-resolve' $digest 15000
+                } catch { $null }
+                if (!(Test-LifecycleBoundPromotionReceipt $receipt) -or $receipt.candidateSha256 -cne $digest) {
+                    throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
+                }
+            }
         }
         if ($receipt.candidateSha256 -cne $digest -or $receipt.state -cnotin @(
             'PROMOTION_COMPLETED','PROMOTION_FAILED_OR_AMBIGUOUS','PROMOTION_IN_PROGRESS','PROMOTION_CLAIMED_PENDING_UNPROVEN')) {

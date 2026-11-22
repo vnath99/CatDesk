@@ -608,7 +608,20 @@ static class PromotionRefusal {
         }
         string mode = File.ReadAllText("refusal-mode.txt");
         File.AppendAllText("refusal-invocations.txt", args[1] + "\n");
-        if ((mode == "candidate" || mode == "legacy-candidate" || mode == "stopped-source" || mode == "listener-owner" || mode == "source-pair" || mode == "pipe-held") && args[1] == "promote-resolve") {
+        bool ambiguous = mode.StartsWith("ambiguous-", StringComparison.Ordinal);
+        if (ambiguous && args[1] == "promote") {
+            Console.WriteLine("{invalid");
+            return 0;
+        }
+        if (ambiguous && args[1] == "promote-resolve" && File.ReadAllLines("refusal-invocations.txt").Length == 3) {
+            var result = mode == "ambiguous-failed" ? "PROMOTION_FAILED_OR_AMBIGUOUS" : "PROMOTION_COMPLETED";
+            var sha = mode == "ambiguous-mismatch" ? new string('0', 64) : args[2];
+            var bound = mode == "ambiguous-unbound" ? "false" : "true";
+            Console.WriteLine("{\"state\":\"" + result + "\",\"candidateSha256\":\"" + sha +
+                "\",\"existingResult\":" + bound + ",\"authorizationGeneration\":7}");
+            return 0;
+        }
+        if ((ambiguous || mode == "candidate" || mode == "legacy-candidate" || mode == "stopped-source" || mode == "listener-owner" || mode == "source-pair" || mode == "pipe-held") && args[1] == "promote-resolve") {
             Console.WriteLine("{\"state\":\"PROMOTION_CANDIDATE_RESOLVED\",\"candidateSha256\":\"" + args[2] + "\",\"buildAttemptId\":\"" + new string('a', 32) + "\"}");
             return 0;
         }
@@ -648,7 +661,11 @@ static class PromotionRefusal {
     $invocations = Join-Path $realCanonicalRoot 'refusal-invocations.txt'
     $cases = @(
         @{ Mode = 'legacy-resolver'; State = 'REVIEWED_PROMOTION_RESOLVER_PROTOCOL_UNAVAILABLE'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
-        @{ Mode = 'legacy-candidate'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve,promote' }
+        @{ Mode = 'legacy-candidate'; State = 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'; Phase = 'READ_ORIGINAL_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
+        @{ Mode = 'ambiguous-complete'; State = 'PROMOTION_COMPLETED'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
+        @{ Mode = 'ambiguous-failed'; State = 'PROMOTION_FAILED_OR_AMBIGUOUS'; Phase = 'INSPECT_EXISTING_PROMOTION_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
+        @{ Mode = 'ambiguous-mismatch'; State = 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'; Phase = 'READ_ORIGINAL_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
+        @{ Mode = 'ambiguous-unbound'; State = 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'; Phase = 'READ_ORIGINAL_RESULT'; Actions = 'promote-resolve,promote,promote-resolve' }
         @{ Mode = 'legacy-malformed'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
         @{ Mode = 'resolver'; State = 'REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
         @{ Mode = 'candidate'; State = 'REVIEWED_PROMOTION_REVIEW_REQUIRED'; Phase = 'RUN_CANDIDATE'; Actions = 'promote-resolve,promote' }
