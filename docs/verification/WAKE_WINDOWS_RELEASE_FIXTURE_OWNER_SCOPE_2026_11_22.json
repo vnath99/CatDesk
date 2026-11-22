@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T10:55:59Z",
+  "scope": "DISPOSABLE_WINDOWS_WAKE_SELECTION_AND_ROLLBACK_FIXTURE_PROCESS_SCOPE",
+  "sourceCommit": "e75ab57f71515d940ab7563853ce67b9cc16dce1",
+  "previousEvidence": "docs/verification/WAKE_SIGNED_PREDECESSOR_LOCAL_ROLLBACK_2026_11_22.json",
+  "cause": "The earlier disposable tests queried the fixed installed Wake process name. A matching process and distinct known-folder roots made that census ambiguous for an unrelated fixture.",
+  "qualification": {
+    "realWindowsProcessCensusUsedInFixtures": true,
+    "inertFixturesUseSeparateProcessName": true,
+    "realMatchingProcessRefused": "WAKE_SAME_STATE_LEGACY_OWNER_UNPROVEN",
+    "refusedBeforeIntentWithOriginalSelectionPreserved": true,
+    "installedProcessAndKnownFolderChecksRetained": true
+  },
+  "tests": {
+    "sameStateInstall": {
+      "passed": 30,
+      "failed": 0,
+      "ignored": 0,
+      "elapsedSeconds": 419.54
+    },
+    "legacyOwner": {
+      "passed": 4,
+      "failed": 0
+    },
+    "previousFailuresNowPassing": [
+      "local update after completed rollback",
+      "interrupted pointer resumes only the original request",
+      "publication retains exact bytes",
+      "damaged current selects only the intact previous version"
+    ],
+    "strictClippyAllTargets": "PASS",
+    "format": "PASS",
+    "ownedTestProcessesRemaining": 0,
+    "isolatedCargoCacheRemoved": true
+  },
+  "limits": "The real Windows process census, files and leases served disposable fixtures. No protected broker, installed promotion, installed rollback or ChatGPT Web operation was exercised.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}

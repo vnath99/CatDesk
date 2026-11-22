@@ -1150,3 +1150,11 @@ Evidence: [docs/verification/WAKE_ROUTINE_UPDATE_RETAINED_COMPLETE_2026_11_22.js
 Agent: Codex. Source: 8628f0c48fed608e453612d7f6d838a52dd22c2a. Outcome: partial. The disposable Windows broker used its immediately preceding signed terminal selection to restore the exact verified fallback without staging duplicate receipts. The targeted runtime fixture and 336 broker tests passed. Fresh selection and protected production authority remain separate. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/WAKE_SIGNED_PREDECESSOR_LOCAL_ROLLBACK_2026_11_22.json](docs/verification/WAKE_SIGNED_PREDECESSOR_LOCAL_ROLLBACK_2026_11_22.json); command: Disposable native signed selection and exact enrolled Windows rollback plus broker regression suite; exit 0; SHA-256 d79856b5ecdf6b007f545d2e6395307f354e2831c9f6bb8a94f095be3565efd3.
+
+<!-- catdesk-activity:wake-windows-release-fixture-owner-scope-20261122 sha256:9266b03e29b2370b29df1a76be9d7f22dfdde923526264b550450d2335464a4e -->
+
+## 2026-11-22T10:55:59Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: e75ab57f71515d940ab7563853ce67b9cc16dce1. Outcome: partial. The disposable Windows same-state suite passed all 30 selection, interruption and rollback tests after separating fixture and installed process inventories. Four owner-classifier tests passed. A live matching process still blocked before transaction intent. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/WAKE_WINDOWS_RELEASE_FIXTURE_OWNER_SCOPE_2026_11_22.json](docs/verification/WAKE_WINDOWS_RELEASE_FIXTURE_OWNER_SCOPE_2026_11_22.json); command: cargo test --locked --offline --manifest-path wake/Cargo.toml --target-dir target/wake-fixture-owner-check --lib runtime::same_state_install -- --test-threads=1; exit 0; SHA-256 f9936905d6b048d35613be3268ce018cdb771cb8074c453123155f8f328a68c5.
