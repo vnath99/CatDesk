@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-22T05:45:05Z.** The durable promotion journal has priority over generic LKG repair for either a matching or split current pair. Public recovery inspects the journal before disk repair and still checks it before launch. The reviewed transaction retains its guarded rollback path. [Windows evidence](../verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_22.json).
+
 **Decision 2026-11-22T05:39:21Z.** The native one-hash confirmation remeasures and pins the canonical executable and its fingerprint to the preflight's prior hash. It retains both files and their directory through authorization and claim publication, then releases the pins for the existing guarded worker. The worker revalidates the release before mutation. [Windows evidence](../verification/ONE_HASH_SOURCE_PAIR_AT_CONFIRM_2026_11_22.json).
 
 **Decision 2026-11-22T05:32:53Z.** Use the existing Windows listener and exact process-image queries for live-source admission. Observe the same owner twice, confirm its executable path, and perform the check again under the worker's lifecycle lease. Authenticated handoff still owns readiness evidence. [Windows evidence](../verification/ONE_HASH_LIVE_SOURCE_LISTENER_2026_11_22.json).

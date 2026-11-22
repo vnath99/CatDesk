@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_WINDOWS_PUBLIC_RECOVERY_AND_DURABLE_DISK_FIXTURE",
+  "verifiedUtc": "2026-11-22T05:45:05.7500754Z",
+  "sourceCommit": "3909e2ec74e6e2261a50c3639a2afb2207bd8cf3",
+  "stackScriptSha256": "6116bce2514982e256443ad03156f8d6595834195b895522520421978f8a8d88",
+  "bootstrapFixtureSha256": "3d04efd51e38fe79926989f7cea82428d40c4fb500f3d6fa1e36672543297899",
+  "originalFailure": "The public command returned RECOVERY_AUTHORITY_REQUIRED after changing pinned fixture state. The journal check ran after generic LKG repair.",
+  "passedFixture": {
+    "promotionJournalPhase": "CANONICAL_MUTATION_STARTED",
+    "canonicalPairIntentionallyDivergent": true,
+    "validRetainedLkg": true,
+    "publicBackendOnlyRecover": "RECOVERY_AUTHORITY_REQUIRED",
+    "publicDefaultRecover": "RECOVERY_AUTHORITY_REQUIRED",
+    "diagnosis": {
+      "state": "ACTION_REQUIRED",
+      "primaryLayer": "RECOVERY_AUTHORITY",
+      "gate": "RECOVERY_AUTHORITY_REQUIRED",
+      "nextAction": "OPERATOR_ATTENTION"
+    },
+    "unchangedPins": 7,
+    "ordinaryLkgRepairAndIdempotenceWithoutJournalPassed": true
+  },
+  "tests": [
+    {
+      "script": "scripts/test-start-catdesk-stack.ps1",
+      "powerShell7ExitCode": 0,
+      "windowsPowerShell51ExitCode": 0
+    },
+    {
+      "script": "scripts/test-catdesk-lifecycle.ps1",
+      "powerShell7ExitCode": 0,
+      "windowsPowerShell51ExitCode": 0
+    },
+    {
+      "script": "scripts/test-catdesk-autostart-supervisor.ps1",
+      "powerShell7ExitCode": 0
+    }
+  ],
+  "testCorrection": "After removal of the obsolete unbound helper probe, the fixture now places the ordinary repair after the read-only assessment and before the idempotent repeat.",
+  "existingAuthorizedRollbackChanged": false,
+  "installedProductionActions": 0,
+  "installedAcceptance": false
+}

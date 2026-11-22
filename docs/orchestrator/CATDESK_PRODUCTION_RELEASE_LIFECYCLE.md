@@ -1291,6 +1291,12 @@ back its full remote SHA. Preserve previous immutable artifacts and Git history.
 
 ### 12. Rollback and failure recovery
 
+As of the November 22 development controller, a surviving ordinary promotion
+journal makes public `recover` refuse before it repairs either canonical
+file. Use the original reviewed transaction's guarded recovery, including
+when the executable and fingerprint disagree. `diagnose` reports the
+recovery-authority layer. [Disposable Windows qualification](../verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_22.json).
+
 For failed ordinary promotion, the existing transaction retains the exact prior
 backup and performs at most one recovery handoff; report its actual result. For
 failed pre-release reconciliation, restore the escrow only after whole-tree exit

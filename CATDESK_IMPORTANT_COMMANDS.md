@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — interrupted promotion owns the release pair.** When the existing disk journal is present, public `recover` returns `RECOVERY_AUTHORITY_REQUIRED` before restoring either canonical file from LKG. `diagnose` identifies the recovery-authority layer. Use the original reviewed transaction's guarded recovery procedure. Ordinary LKG repair applies after the journal is settled. [Evidence](docs/verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_22.json).
+
 **November 22 — canonical pair verification before one-hash promotion.** `REVIEWED_PROMOTION_SOURCE_PAIR_UNPROVEN` means native confirmation could not pin the prior executable and fingerprint to the hash in the reviewed preflight. Run `./catdesk.ps1 diagnose` and resolve any disagreement through the existing reviewed recovery procedure. This refusal precedes claim publication. [Verification](docs/verification/ONE_HASH_SOURCE_PAIR_AT_CONFIRM_2026_11_22.json).
 
 **November 22 — live source listener ownership.** `REVIEWED_PROMOTION_SOURCE_LISTENER_UNPROVEN` means the development one-hash command could not establish one live canonical executable on the backend port. Inspect the existing owner with the supported lifecycle. The command queries Windows directly and still verifies authenticated readiness during handoff. [Verification](docs/verification/ONE_HASH_LIVE_SOURCE_LISTENER_2026_11_22.json).

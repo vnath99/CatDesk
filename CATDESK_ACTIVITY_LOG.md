@@ -838,3 +838,11 @@ Evidence: [docs/verification/ONE_HASH_LIVE_SOURCE_LISTENER_2026_11_22.json](docs
 Agent: Codex. Source: dbf4bc6e934ad21edb619f303b92471e94002536. Outcome: partial. The native one-hash confirmation pins the prior executable and fingerprint to the reviewed preflight hash through claim publication. Windows tests verified that a missing or drifted fingerprint leaves the preflight and executable intact and creates no claim. Both PowerShell editions preserved the distinct refusal. Next: Use the existing first Wake selection and independent backend review. Verify the actual installed promotion, persistent startup, rollback and full Web cycle after the release gates pass.
 
 Evidence: [docs/verification/ONE_HASH_SOURCE_PAIR_AT_CONFIRM_2026_11_22.json](docs/verification/ONE_HASH_SOURCE_PAIR_AT_CONFIRM_2026_11_22.json); command: Native Windows daemon reload tests and both public PowerShell lifecycle suites; exit 0; SHA-256 476e956910d24eb5d941219f67226076b542a5a74948bf13e1151d959503c08c.
+
+<!-- catdesk-activity:nov22-interrupted-promotion-split-pair sha256:cb6e2ece14678c0f0e0ab168dada7f4254d464c573d0b174ce4e21a6a5b44449 -->
+
+## 2026-11-22T05:45:05.7500754Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 3909e2ec74e6e2261a50c3639a2afb2207bd8cf3. Outcome: partial. Public recovery now honors the original promotion journal before generic LKG repair. Both PowerShell editions reproduced the guarded path against a real split pair and preserved all seven release pins. Diagnose reports the recovery authority gate. Next: Use the existing first Wake selection and independent backend review. Verify actual installed promotion, persistent startup, rollback and the full Web cycle after the release gates pass.
+
+Evidence: [docs/verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_22.json](docs/verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_22.json); command: Public recovery split-pair regression under PowerShell 7 and Windows PowerShell 5.1; exit 0; SHA-256 8f944d7b7dda7dfe065bed4a0687b48a4d9d8af1685d81c0c3e176992460db4a.
