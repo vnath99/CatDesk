@@ -28,6 +28,7 @@ pub(crate) use delivery::retry_pre_submit_with_timeout;
 #[path = "web_work_manual_delivery.rs"]
 mod manual_delivery;
 pub(crate) use manual_delivery::deliver as deliver_manual_wake;
+pub(crate) use manual_delivery::deliver_next as deliver_next_manual_wake;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

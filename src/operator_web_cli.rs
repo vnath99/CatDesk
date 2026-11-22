@@ -163,6 +163,9 @@ pub(crate) enum WebAction {
         project_id: String,
         request_id: String,
     },
+    WorkManualWakeDeliverNext {
+        project_id: String,
+    },
     WorkManualWakeDeliver {
         project_id: String,
         request_id: String,
@@ -376,6 +379,11 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         return Err("WEB_USAGE: invalid project ID".into());
     }
     match (group, verb) {
+        ("work", "manual-wake-deliver-next") if options.is_empty() => {
+            Ok(WebAction::WorkManualWakeDeliverNext {
+                project_id: project_id.into(),
+            })
+        }
         ("work", "manual-wake-deliver") => {
             let mut id = |option| {
                 options
@@ -2142,6 +2150,9 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             request_id,
         } => crate::web_work::deliver(&workspace, &project_id, &request_id),
+        WebAction::WorkManualWakeDeliverNext { project_id } => {
+            crate::web_work::deliver_next_manual_wake(&workspace, &project_id)
+        }
         WebAction::WorkManualWakeDeliver {
             project_id,
             request_id,
@@ -3840,6 +3851,36 @@ mod tests {
         let mut bad = base.clone();
         *bad.last_mut().unwrap() = "../other".into();
         assert!(parse(&bad).is_err());
+    }
+
+    #[test]
+    fn manual_wake_deliver_next_accepts_only_the_project_selector() {
+        let base = args(&[
+            "operator",
+            "web",
+            "work",
+            "manual-wake-deliver-next",
+            "--project-id",
+            "alpha",
+        ]);
+        assert_eq!(
+            parse(&base).unwrap(),
+            WebAction::WorkManualWakeDeliverNext {
+                project_id: "alpha".into()
+            }
+        );
+        for option in [
+            "--request-id",
+            "--event-id",
+            "--call-id",
+            "--message",
+            "--workspace",
+            "--force",
+        ] {
+            let mut bad = base.clone();
+            bad.extend(args(&[option, "unexpected"]));
+            assert!(parse(&bad).is_err(), "{option}");
+        }
     }
 
     #[test]

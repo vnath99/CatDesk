@@ -6,6 +6,16 @@ use catdesk_wake::{
     store::{Store, read},
 };
 
+#[derive(Clone, Copy)]
+enum Selection<'a> {
+    Exact {
+        request_id: &'a str,
+        call_id: &'a str,
+        event_id: &'a str,
+    },
+    Next,
+}
+
 pub(crate) fn deliver(
     workspace: &Path,
     project: &str,
@@ -13,12 +23,30 @@ pub(crate) fn deliver(
     call_id: &str,
     event_id: &str,
 ) -> Result<Value, String> {
+    deliver_selected(
+        workspace,
+        project,
+        Selection::Exact {
+            request_id,
+            call_id,
+            event_id,
+        },
+    )
+}
+
+pub(crate) fn deliver_next(workspace: &Path, project: &str) -> Result<Value, String> {
+    deliver_selected(workspace, project, Selection::Next)
+}
+
+fn deliver_selected(
+    workspace: &Path,
+    project: &str,
+    selection: Selection<'_>,
+) -> Result<Value, String> {
     deliver_with_sender(
         workspace,
         project,
-        request_id,
-        call_id,
-        event_id,
+        selection,
         |store, event, target, before, keep, handoff| {
             runtime::run_scoped_manual_end_turn_handoff(
                 store, event, target, 180, before, keep, handoff,
@@ -30,9 +58,7 @@ pub(crate) fn deliver(
 fn deliver_with_sender(
     workspace: &Path,
     project: &str,
-    request_id: &str,
-    call_id: &str,
-    event_id: &str,
+    selection: Selection<'_>,
     send: impl FnOnce(
         &Store,
         &Event,
@@ -42,9 +68,9 @@ fn deliver_with_sender(
         &mut dyn FnMut(&Event, &Target) -> Result<(), String>,
     ) -> Result<Value, String>,
 ) -> Result<Value, String> {
-    if ![project, request_id, call_id, event_id]
-        .iter()
-        .all(|id| protocol::valid_id(id))
+    if !protocol::valid_id(project)
+        || matches!(selection, Selection::Exact { request_id, call_id, event_id }
+        if ![request_id, call_id, event_id].into_iter().all(protocol::valid_id))
     {
         return Err("WEB_WORK_ARGUMENTS_INVALID".into());
     }
@@ -52,10 +78,13 @@ fn deliver_with_sender(
         .map_err(|_| "WEB_WORK_PROJECT_UNAVAILABLE")?;
     let lease = crate::operator_facade::acquire_web_work_lease(workspace, project)?;
     let ledger = WorkLedger::open_read_only(workspace, project)?;
+    let record = match selection {
+        Selection::Exact { request_id, .. } => ledger.record(request_id)?,
+        Selection::Next => ledger.active_record()?,
+    }
+    .ok_or("WEB_WORK_REQUEST_MISSING")?;
+    let request_id = record.request_id.as_str();
     ledger.require_ordinary_request(request_id)?;
-    let record = ledger
-        .record(request_id)?
-        .ok_or("WEB_WORK_REQUEST_MISSING")?;
     let paired = mcp::operator_read_project_web_target(workspace, project)
         .map_err(|_| "WEB_WORK_PAIRED_TARGET_REQUIRED")?
         .ok_or("WEB_WORK_PAIRED_TARGET_REQUIRED")?;
@@ -63,13 +92,25 @@ fn deliver_with_sender(
     lease.check_source_task(&record.target, &target, &record.event_id)?;
     require_assignment_source(workspace, project, &record, record.target == target)?;
     let wake = Store::open(&wake_protocol_client::wake_root_for_workspace(workspace)?)?;
-    let event: Event = match wake.delivery(event_id)? {
-        Some(delivery) => delivery.event,
-        None => read(&wake.root().join("queue").join(format!("{event_id}.json")))?,
+    let (call_id, event) = match selection {
+        Selection::Exact {
+            call_id, event_id, ..
+        } => {
+            let event: Event = match wake.delivery(event_id)? {
+                Some(delivery) => delivery.event,
+                None => read(&wake.root().join("queue").join(format!("{event_id}.json")))?,
+            };
+            if event.event_id != event_id {
+                return Err("WEB_TASK_MANUAL_WAKE_SELECTION_CHANGED".into());
+            }
+            (call_id.to_owned(), event)
+        }
+        Selection::Next => {
+            crate::project_mcp_task::next_manual_wake(prepared.scope(), &record, &target, &wake)?
+        }
     };
-    if event.event_id != event_id {
-        return Err("WEB_TASK_MANUAL_WAKE_SELECTION_CHANGED".into());
-    }
+    let call_id = call_id.as_str();
+    let event_id = event.event_id.as_str();
     catdesk_wake::development_runtime::validate_selected_target_isolation(
         workspace,
         wake.root(),
@@ -223,46 +264,98 @@ mod tests {
             .record("request-a")
             .unwrap()
             .unwrap();
-        let request = crate::project_mcp_task::ManualWakeRequest::parse(
-            json!({"sourceTurnId":"done-turn","priority":1,"ttlSeconds":600}),
-        )
-        .unwrap();
-        let published = crate::project_mcp_task::journal_manual_wake(
-            prepared.scope(),
-            &record,
-            &key,
-            "wake-one",
-            &request,
-            &target,
-            || {
-                wake.produce_expected_wake(
-                    "alpha",
-                    &wake_protocol_client::registered_manual_wake_message(
+        let queue = |call_id, turn_id| {
+            let request = crate::project_mcp_task::ManualWakeRequest::parse(
+                json!({"sourceTurnId":turn_id,"priority":1,"ttlSeconds":600}),
+            )
+            .unwrap();
+            crate::project_mcp_task::journal_manual_wake(
+                prepared.scope(),
+                &record,
+                &key,
+                call_id,
+                &request,
+                &target,
+                || {
+                    wake.produce_expected_wake(
                         "alpha",
-                        "request-a",
-                        "task-fixture",
-                        &source.event_id,
-                        "done-turn",
-                    ),
-                    &target,
-                    WakeIntent {
-                        purpose: protocol::WakePurpose::ManualEndTurn,
-                        source_event_id: &source.event_id,
-                        source_turn_id: "done-turn",
-                        priority: 1,
-                        ttl_seconds: 600,
-                    },
-                )
-            },
-        )
-        .unwrap();
+                        &wake_protocol_client::registered_manual_wake_message(
+                            "alpha",
+                            "request-a",
+                            "task-fixture",
+                            &source.event_id,
+                            turn_id,
+                        ),
+                        &target,
+                        WakeIntent {
+                            purpose: protocol::WakePurpose::ManualEndTurn,
+                            source_event_id: &source.event_id,
+                            source_turn_id: turn_id,
+                            priority: 1,
+                            ttl_seconds: 600,
+                        },
+                    )
+                },
+            )
+            .unwrap()
+        };
+        let older = queue("wake-older", "earlier-turn");
+        let published = queue("wake-one", "done-turn");
         let event_id = published["eventId"].as_str().unwrap();
+        let older_id = older["eventId"].as_str().unwrap();
+        let older_event: Event =
+            read(&wake.root().join("queue").join(format!("{older_id}.json"))).unwrap();
+
+        let forbidden_sender = |_: &Store,
+                                _: &Event,
+                                _: &Target,
+                                _: &mut dyn FnMut(&Event, &Target) -> Result<(), String>,
+                                _: &dyn Fn() -> Result<(), String>,
+                                _: &mut dyn FnMut(&Event, &Target) -> Result<(), String>|
+         -> Result<Value, String> {
+            panic!("a held or ambiguous Wake must not start a sender")
+        };
+        assert_eq!(
+            deliver_with_sender(&control, "alpha", Selection::Next, forbidden_sender).unwrap_err(),
+            "WEB_TASK_MANUAL_WAKE_MULTIPLE_PENDING",
+        );
+        assert!(wake.delivery(event_id).unwrap().is_none());
+
+        let host = wake.host_lock().unwrap();
+        let prior = wake.claim(&older_event, &host).unwrap();
+        let prior = wake
+            .transition(older_id, &prior.owner, Phase::Submitting, None, None)
+            .unwrap();
+        drop(host);
+        assert_eq!(
+            deliver_with_sender(&control, "alpha", Selection::Next, forbidden_sender).unwrap_err(),
+            "WEB_TASK_MANUAL_WAKE_DELIVERY_HELD",
+        );
+        assert_eq!(wake.delivery(older_id).unwrap(), Some(prior.clone()));
+        assert!(wake.delivery(event_id).unwrap().is_none());
+
+        // A synthetic receipt resolves the older event so the other exact
+        // call becomes the sole candidate. No real browser is used.
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: older_id.into(),
+            target_generation: prior.target.generation,
+            target_digest: prior.target.digest.clone(),
+            message_digest: prior.message_digest.clone(),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(older_id, &receipt).unwrap();
+        wake.transition(older_id, &prior.owner, Phase::Sent, Some(receipt), None)
+            .unwrap();
+        wake.complete_timer(older_id).unwrap();
+        let unrelated = wake.root().join("queue/unrelated-fixture.json");
+        std::fs::write(&unrelated, b"unrelated corrupt queue object").unwrap();
+
         let output = deliver_with_sender(
             &control,
             "alpha",
-            "request-a",
-            "wake-one",
-            event_id,
+            Selection::Next,
             |store, event, target, before, keep, handoff| {
                 before(event, target)?;
                 assert!(crate::operator_facade::acquire_web_work_lease(&control, "alpha").is_err());
@@ -318,6 +411,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(output["taskCompletionVerified"], false);
+        assert_eq!(output["requestId"], "request-a");
+        assert_eq!(output["taskCallId"], "wake-one");
+        assert_eq!(
+            std::fs::read(unrelated).unwrap(),
+            b"unrelated corrupt queue object"
+        );
         assert_eq!(
             wake.delivery(event_id).unwrap().unwrap().phase,
             Phase::Submitting

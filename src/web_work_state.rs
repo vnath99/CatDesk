@@ -328,6 +328,14 @@ impl WorkLedger {
         Ok("OPEN_NEW".into())
     }
 
+    pub(crate) fn active_record(&self) -> Result<Option<WorkRecord>, String> {
+        Ok(self
+            .load()?
+            .records
+            .into_iter()
+            .find(|record| record.phase == "OPEN"))
+    }
+
     pub(crate) fn record(&self, request_id: &str) -> Result<Option<WorkRecord>, String> {
         if !valid_request(request_id) {
             return Err("WEB_WORK_LEDGER_ARGUMENTS_INVALID".into());

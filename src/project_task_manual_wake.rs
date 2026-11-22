@@ -2,7 +2,10 @@
 //! This never creates a grant, task call, event or replacement identity.
 use super::*;
 use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
-use catdesk_wake::protocol::{Event, Target, WakePurpose};
+use catdesk_wake::{
+    protocol::{Event, Target, WakePurpose, valid_id},
+    store::{Phase, Store, read},
+};
 
 pub(crate) fn authorize_manual_wake_delivery(
     project: &ResolvedProjectScopeV1,
@@ -12,6 +15,18 @@ pub(crate) fn authorize_manual_wake_delivery(
     call_id: &str,
     require_quiescent: bool,
 ) -> Result<(), String> {
+    let calls = manual_wake_calls(project, record, require_quiescent)?;
+    let call = calls
+        .get(call_id)
+        .ok_or("WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN")?;
+    validate_selection(project, record, target, event, call_id, call)
+}
+
+fn manual_wake_calls(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    require_quiescent: bool,
+) -> Result<std::collections::BTreeMap<String, ToolCallRecordV1>, String> {
     let link = record
         .task_assignment
         .as_ref()
@@ -70,10 +85,57 @@ pub(crate) fn authorize_manual_wake_delivery(
     {
         return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
     }
-    let call = calls
-        .get(call_id)
-        .ok_or("WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN")?;
-    validate_selection(project, record, target, event, call_id, call)
+    Ok(calls)
+}
+
+pub(crate) fn next_manual_wake(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    target: &Target,
+    wake: &Store,
+) -> Result<(String, Event), String> {
+    let mut pending = None;
+    for (call_id, call) in manual_wake_calls(project, record, true)? {
+        if call.tool_name != "wake.manual_end_turn" || call.status != ToolCallStatus::Completed {
+            continue;
+        }
+        // The retained summary is only a locator. The exact queue event and
+        // both journal hashes must agree before it can select a send.
+        let id = call
+            .outcome_summary
+            .as_deref()
+            .and_then(|summary| summary.strip_prefix("manual Wake intent "))
+            .and_then(|summary| summary.strip_suffix(" recorded; delivery unverified"))
+            .filter(|id| valid_id(id) && id.starts_with("wake-intent-"))
+            .ok_or("WEB_TASK_MANUAL_WAKE_CALL_UNPROVEN")?;
+        let delivery = wake.delivery(id)?;
+        let event: Event = match &delivery {
+            Some(saved) => saved.event.clone(),
+            None => read(&wake.root().join("queue").join(format!("{id}.json")))?,
+        };
+        if event.event_id != id {
+            return Err("WEB_TASK_MANUAL_WAKE_SELECTION_CHANGED".into());
+        }
+        validate_selection(
+            project,
+            record,
+            delivery.as_ref().map_or(target, |saved| &saved.target),
+            &event,
+            &call_id,
+            &call,
+        )?;
+        if let Some(saved) = delivery {
+            match saved.phase {
+                Phase::Sent => continue,
+                Phase::Claimed if saved.target == *target => {}
+                _ => return Err("WEB_TASK_MANUAL_WAKE_DELIVERY_HELD".into()),
+            }
+        }
+        if pending.replace((call_id, event)).is_some() {
+            return Err("WEB_TASK_MANUAL_WAKE_MULTIPLE_PENDING".into());
+        }
+    }
+    pending.ok_or_else(|| "WEB_TASK_MANUAL_WAKE_NO_PENDING_INTENT".into())
 }
 
 fn validate_selection(
