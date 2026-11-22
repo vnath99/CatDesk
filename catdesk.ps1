@@ -1049,6 +1049,17 @@ function Invoke-CatDeskOnlyStop {
     }
 }
 
+# Fixed errorCode vocabulary from operator_promote_error_code in src/main.rs.
+$script:PromotionNativeRefusals = @(
+    'REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED',
+    'REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD',
+    'REVIEWED_PROMOTION_ACTIVE_ARTIFACT_MISMATCH',
+    'REVIEWED_PROMOTION_USE_ATTESTED_CANDIDATE_CONTROLLER',
+    'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED',
+    'REVIEWED_PROMOTION_CANDIDATE_ALREADY_AT_CANONICAL_PATH',
+    'REVIEWED_PROMOTION_REVIEW_REQUIRED'
+)
+
 function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$ImageSha,[string]$Action,[string]$Digest) {
     $path = Assert-CatDeskRecoveryContainedPath -Root $Root -Path $Image -Label 'reviewed promotion controller'
     $pins = [CatDesk.DevLocalTarget.ReadOnlyScope]::new()
@@ -1073,10 +1084,22 @@ function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$
                 $errors = $process.StandardError.ReadToEndAsync()
                 if (!$process.WaitForExit(720000)) { throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED' }
                 $wire = $output.GetAwaiter().GetResult()
-                if ($errors.GetAwaiter().GetResult().Length -ne 0 -or $wire.Length -gt 4096 -or $process.ExitCode -ne 0) {
+                if ($errors.GetAwaiter().GetResult().Length -ne 0 -or $wire.Length -gt 4096 -or $process.ExitCode -notin @(0, 2)) {
                     throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
                 }
-                return ConvertFrom-CatDeskLiteralJson $wire
+                if ($process.ExitCode -eq 2 -and -not $wire.TrimStart().StartsWith('{', [StringComparison]::Ordinal)) {
+                    throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
+                }
+                $reply = ConvertFrom-CatDeskLiteralJson $wire
+                if ($process.ExitCode -eq 0) { return $reply }
+                $fields = @($reply.PSObject.Properties.Name)
+                if ($reply -is [pscustomobject] -and $fields.Count -eq 2 -and
+                    $fields -ccontains 'status' -and $fields -ccontains 'errorCode' -and
+                    $reply.status -is [string] -and $reply.status -ceq 'attention' -and
+                    $reply.errorCode -is [string] -and $reply.errorCode -cin $script:PromotionNativeRefusals) {
+                    throw [string]$reply.errorCode
+                }
+                throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
             } finally { $process.Dispose() }
         }
     } finally { $pins.Dispose() }
@@ -1088,6 +1111,7 @@ function Invoke-LifecycleReviewedPromotion {
         return
     }
     $digest = $AutostartAction.ToLowerInvariant()
+    $phase = 'RESOLVE_CANDIDATE'
     try {
         $root = (Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
         $canonical = Get-CatDeskCanonicalPairEvidence $root
@@ -1102,6 +1126,7 @@ function Invoke-LifecycleReviewedPromotion {
         # The canonical resolver has exited and its file pin was released.
         # Keep only the exact noncanonical attested controller pinned.
         $candidate = Join-Path $root ("target\reviewed-builds\" + $selection.buildAttemptId + "\catdesk.exe")
+        $phase = 'RUN_CANDIDATE'
         $receipt = Invoke-PinnedPromotionController $root $candidate $digest 'promote' $digest
         if ($receipt.candidateSha256 -cne $digest -or $receipt.state -cnotin @(
             'PROMOTION_COMPLETED','PROMOTION_FAILED_OR_AMBIGUOUS','PROMOTION_IN_PROGRESS','PROMOTION_CLAIMED_PENDING_UNPROVEN')) {
@@ -1130,7 +1155,11 @@ function Invoke-LifecycleReviewedPromotion {
         Write-LifecycleStatus $receipt.state $detail
     } catch {
         $reason = [string]$_.Exception.Message
-        if ($reason -cnotin @('REVIEWED_PROMOTION_CONTROLLER_CHANGED','REVIEWED_PROMOTION_RESOLUTION_UNPROVEN','REVIEWED_PROMOTION_RECONCILIATION_REQUIRED')) {
+        if ($reason -cin $script:PromotionNativeRefusals) {
+            Write-LifecycleStatus $reason $phase
+            return
+        }
+        if ($reason -cnotin @('REVIEWED_PROMOTION_CONTROLLER_CHANGED','REVIEWED_PROMOTION_RESOLUTION_UNPROVEN')) {
             $reason = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
         }
         Write-LifecycleStatus $reason

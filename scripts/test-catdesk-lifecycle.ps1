@@ -215,6 +215,59 @@ try {
     Require ($drifted.state -ceq 'REVIEWED_PROMOTION_CONTROLLER_CHANGED' -and ($actions -join ',') -ceq 'promote-resolve') 'changed candidate bytes never reach launch'
     $actions.Clear()
 
+    # Exercise the facade's actual process, pipe and exit-code path.
+    $fixtureSource = Join-Path $realCanonicalRoot 'promotion-refusal.cs'
+    [IO.File]::WriteAllText($fixtureSource, @'
+using System;
+using System.IO;
+
+static class PromotionRefusal {
+    static int Main(string[] args) {
+        string mode = File.ReadAllText("refusal-mode.txt");
+        File.AppendAllText("refusal-invocations.txt", args[1] + "\n");
+        if (mode == "candidate" && args[1] == "promote-resolve") {
+            Console.WriteLine("{\"state\":\"PROMOTION_CANDIDATE_RESOLVED\",\"candidateSha256\":\"" + args[2] + "\",\"buildAttemptId\":\"" + new string('a', 32) + "\"}");
+            return 0;
+        }
+        string code = mode == "candidate" ? "REVIEWED_PROMOTION_REVIEW_REQUIRED" : "REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD";
+        if (mode == "unknown") code = "FIXTURE_PRIVATE_PATH";
+        string extra = mode == "extra" ? ",\"message\":\"FIXTURE_PRIVATE_TEXT\"" : "";
+        if (mode == "stderr") Console.Error.WriteLine("FIXTURE_PRIVATE_TEXT");
+        string refusal = "{\"status\":\"attention\",\"errorCode\":\"" + code + "\"" + extra + "}";
+        Console.WriteLine(mode == "array" ? "[" + refusal + "]" : refusal);
+        return mode == "other-exit" ? 1 : 2;
+    }
+}
+'@)
+    $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+    & $compiler /nologo /target:exe "/out:$realBinary" $fixtureSource
+    Require ($LASTEXITCODE -eq 0) 'bounded refusal executable compiles'
+    [IO.File]::Copy($realBinary, $candidate, $true)
+    $digest = (Get-FileHash -LiteralPath $candidate).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText($realFingerprint, $digest)
+    $invocations = Join-Path $realCanonicalRoot 'refusal-invocations.txt'
+    $cases = @(
+        @{ Mode = 'resolver'; State = 'REVIEWED_PROMOTION_NO_ACTIVE_ATTESTED_BUILD'; Phase = 'RESOLVE_CANDIDATE'; Actions = 'promote-resolve' }
+        @{ Mode = 'candidate'; State = 'REVIEWED_PROMOTION_REVIEW_REQUIRED'; Phase = 'RUN_CANDIDATE'; Actions = 'promote-resolve,promote' }
+        @{ Mode = 'unknown'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
+        @{ Mode = 'extra'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
+        @{ Mode = 'array'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
+        @{ Mode = 'stderr'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
+        @{ Mode = 'other-exit'; State = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'; Actions = 'promote-resolve' }
+    )
+    foreach ($case in $cases) {
+        [IO.File]::WriteAllText((Join-Path $realCanonicalRoot 'refusal-mode.txt'), $case.Mode)
+        [IO.File]::WriteAllText($invocations, '')
+        $wire = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $realCanonical
+        $refusal = $wire | ConvertFrom-Json
+        Require ($refusal.state -ceq $case.State) "expected native refusal for $($case.Mode), got $($refusal.state)"
+        if ($case.ContainsKey('Phase')) {
+            Require ($refusal.detail -ceq $case.Phase) "native refusal identifies its phase for $($case.Mode)"
+        }
+        Require ($wire -cnotmatch 'FIXTURE_PRIVATE') 'refusal does not disclose child stderr or arbitrary stdout'
+        Require (([IO.File]::ReadAllLines($invocations) -join ',') -ceq $case.Actions) 'refusal ends the operation without advancing or retrying'
+    }
+
     $status = Invoke-FixtureFacade -Command 'status' -Seams $base | ConvertFrom-Json
     Require ($status.state -eq 'LOCAL_DAEMON_PENDING') 'status reports a bounded non-mutating pending state'
     Require ($actions.Count -eq 0) 'status did not invoke any lifecycle side effect'
