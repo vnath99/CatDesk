@@ -149,7 +149,7 @@ try {
   if(Test-LocalMcpReadiness -LocalMcp $local -Canonical $listenerCanonical -ExpectedDaemonProcess $expectedLaunch){throw "raced-in canonical listener was accepted as the launched daemon"}
   $script:BootstrapSeams["Listener"]={param($port,$canonical)[pscustomobject]@{Pid=7001;CreationTimeUtc=$expectedLaunchTime.ToString('o');Path=$listenerCanonical.Path;Sha256=$listenerHash;MatchesCanonical=$true}}
   if(-not(Test-LocalMcpReadiness -LocalMcp $local -Canonical $listenerCanonical -ExpectedDaemonProcess $expectedLaunch)){throw "exact launched daemon listener was rejected"}
-  $script:BootstrapSeams["Listener"]={param($port,$canonical)[pscustomobject]@{Pid=1;MatchesCanonical=$true}}
+  $script:BootstrapSeams["Listener"]={param($port,$canonical)[pscustomobject]@{Pid=1;CreationTimeUtc=$expectedLaunchTime.ToString('o');MatchesCanonical=$true}}
   if(Test-LocalMcpReadiness -LocalMcp ([pscustomobject]@{Port=$local.Port;Uri="http://127.0.0.1:$($local.Port)/"}) -Canonical ([pscustomobject]@{})){throw "root path satisfied MCP readiness"}
   $script:BootstrapSeams["LocalMcpHttp"]={param($uri,$json)if($json -match 'initialize'){[pscustomobject]@{StatusCode=200;Content='{ "result": { "serverInfo": {} } }'}}else{[pscustomobject]@{StatusCode=200;Content='{ "result": { "tools": [{"name":"catdesk_instruction"}] } }'}}}
   if(Test-LocalMcpReadiness -LocalMcp $local -Canonical ([pscustomobject]@{})){throw "missing required MCP tool accepted"}

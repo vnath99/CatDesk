@@ -960,6 +960,22 @@ function Get-LocalMcpReadiness {
                 if($names -notcontains "catdesk_instruction" -or $names -notcontains "delegated_run_list"){return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_PROTOCOL_UNREADY'}
             }
         }
+        if ($requireAuth) {
+            # Release health must describe one process instance across both
+            # anonymous rejection and the authenticated MCP exchange.
+            try {
+                $after = Get-LoopbackCatDeskListener -Port $endpoint.Port -Canonical $identity
+            } catch {
+                return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'
+            }
+            if ($null -eq $after) {
+                return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_LISTENER_MISSING'
+            }
+            if (-not $after.MatchesCanonical -or [int]$listener.Pid -lt 1 -or -not $listener.CreationTimeUtc -or
+                $after.Pid -ne $listener.Pid -or $after.CreationTimeUtc -cne $listener.CreationTimeUtc) {
+                return New-LocalMcpReadinessResult -Ready $false -Gate 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'
+            }
+        }
         return New-LocalMcpReadinessResult -Ready $true -Gate 'READY'
     }
     if($observed -is [bool]){return New-LocalMcpReadinessResult -Ready ([bool]$observed) -Gate $(if($observed){'READY'}else{'LOCAL_MCP_RESPONSE_UNAVAILABLE'})}
