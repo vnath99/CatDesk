@@ -1158,3 +1158,11 @@ Evidence: [docs/verification/WAKE_SIGNED_PREDECESSOR_LOCAL_ROLLBACK_2026_11_22.j
 Agent: Codex. Source: e75ab57f71515d940ab7563853ce67b9cc16dce1. Outcome: partial. The disposable Windows same-state suite passed all 30 selection, interruption and rollback tests after separating fixture and installed process inventories. Four owner-classifier tests passed. A live matching process still blocked before transaction intent. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/WAKE_WINDOWS_RELEASE_FIXTURE_OWNER_SCOPE_2026_11_22.json](docs/verification/WAKE_WINDOWS_RELEASE_FIXTURE_OWNER_SCOPE_2026_11_22.json); command: cargo test --locked --offline --manifest-path wake/Cargo.toml --target-dir target/wake-fixture-owner-check --lib runtime::same_state_install -- --test-threads=1; exit 0; SHA-256 f9936905d6b048d35613be3268ce018cdb771cb8074c453123155f8f328a68c5.
+
+<!-- catdesk-activity:promotion-mcp-startup-timeout-20261122 sha256:01fa60ca719777ee38ca6e001c24d9d7304b836639cab4ebad80b5a60b6de0ee -->
+
+## 2026-11-22T11:03:12Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 5f172ba911d220fa1cc952f31daa411ee7e22a62. Outcome: partial. One-hash promotion now allows a bounded follow-up health probe after a timeout from the same exact listener. A disposable frozen backend rejected anonymous MCP and served authenticated MCP after the facade exited. Both PowerShell editions passed. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/PROMOTION_MCP_STARTUP_TIMEOUT_2026_11_22.json](docs/verification/PROMOTION_MCP_STARTUP_TIMEOUT_2026_11_22.json); command: pwsh -NoProfile -File scripts/test-catdesk-lifecycle.ps1; exit 0; SHA-256 8c56cc2f72644c7c60914c9d4a1d45e7a0cdf5a025f1a140f56c70d3f20c8d70.

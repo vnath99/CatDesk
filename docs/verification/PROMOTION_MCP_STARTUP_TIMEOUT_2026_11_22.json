@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T11:03:12Z",
+  "scope": "DISPOSABLE_WINDOWS_PROMOTION_SERVING_READBACK",
+  "sourceCommit": "5f172ba911d220fa1cc952f31daa411ee7e22a62",
+  "baselineSourceCommit": "f2b049d4f48cde843e984ea240e40acc4ac21455",
+  "actualBackend": {
+    "candidateArtifactSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+    "previousArtifactSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+    "baseFixtureSha256": "ea3cdc28cf8af6119a52d136b6ff3d47157690e2737529d3f439338eee3705f0",
+    "startedUtc": "2026-11-22T11:00:56.842211Z",
+    "finishedUtc": "2026-11-22T11:01:16.367198Z",
+    "firstAnonymousTimeoutInjected": true,
+    "nextHandshakeActualLocalHttp": true,
+    "facadeState": "PROMOTION_COMPLETED",
+    "facadeDetail": "LOCAL_BACKEND_READY",
+    "anonymousStatus": 401,
+    "authenticatedStatusAfterFacadeExit": 200,
+    "backendExitedNaturally": true,
+    "listenerClosed": true,
+    "fixtureRemoved": true
+  },
+  "regressions": {
+    "baselineFailedWithBoundListenerTimeoutAndWithAnonymousTimeout": true,
+    "stableOwnerTimeoutAllowsAnotherReadOnlyProbe": true,
+    "samePidWithDifferentCreationTimeRefusesBeforeNextProbe": true,
+    "startupBudgetExpiryReturnsPendingWithoutAnotherProbe": true,
+    "explicitProtocolFailureRemainsUnverified": true,
+    "anonymousTimeoutDoesNotSendBearer": true,
+    "powershell7LifecycleAndBootstrap": "PASS",
+    "windowsPowershell51LifecycleAndBootstrap": "PASS",
+    "lifecycleFinalSuitesRanSerially": true
+  },
+  "limits": "The disposable run used a fixture promotion receipt, private loopback and one injected HTTP timeout. The subsequent MCP handshake, Windows listener, process lifetime and cleanup were measured. Installed promotion, installed rollback and the Web cycle remain open.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}
