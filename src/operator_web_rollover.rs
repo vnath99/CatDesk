@@ -4604,15 +4604,17 @@ mod tests {
         let before = fs::read(&ledger).unwrap();
         // Live publication is admitted only after the target's creation second.
         std::thread::sleep(std::time::Duration::from_millis(1100));
-        let preflight = review_action(&control, "preflight", request.clone());
-        let refused = review_action(&control, "run", request);
+        let preflight_busy = review_action(&control, "preflight", request.clone());
+        let refused = review_action(&control, "run", request.clone());
+        drop(owned);
+        let preflight_idle = review_action(&control, "preflight", request);
         let unchanged = fs::read(&ledger).unwrap() == before;
         let empty = wake.events().unwrap().is_empty()
             && wake.timers_for_project("alpha").unwrap().is_empty();
-        drop(owned);
         drop(wake);
         fs::remove_dir_all(parent).unwrap();
-        assert_eq!(preflight.unwrap()["status"], "ELIGIBLE");
+        assert_eq!(preflight_busy.unwrap_err(), "HOST_ALREADY_RUNNING");
+        assert_eq!(preflight_idle.unwrap()["status"], "ELIGIBLE");
         assert_eq!(refused.unwrap_err(), "HOST_ALREADY_RUNNING");
         assert!(unchanged, "host contention consumed the review grant");
         assert!(empty, "host contention published an event or a timer");

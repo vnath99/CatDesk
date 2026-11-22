@@ -2803,6 +2803,30 @@ impl Store {
         atomic(&self.archive_path(id), &event)?;
         fs::remove_file(self.event_path(id)).map_err(|_| "QUEUE_ARCHIVE_FAILED".into())
     }
+    /// Advisory snapshot only. An existing owner excludes this shared read,
+    /// but an idle observation never reserves the host for a later operation.
+    pub fn observe_host_idle(&self) -> Result<()> {
+        let path = self.root.join("host.lock");
+        reject_link(&path)?;
+        let file = match File::open(path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(_) => return Err("HOST_LOCK_UNAVAILABLE".into()),
+        };
+        if !file
+            .metadata()
+            .map_err(|_| "HOST_LOCK_UNAVAILABLE")?
+            .is_file()
+        {
+            return Err("HOST_LOCK_UNAVAILABLE".into());
+        }
+        match file.try_lock_shared() {
+            Ok(()) => Ok(()),
+            Err(std::fs::TryLockError::WouldBlock) => Err("HOST_ALREADY_RUNNING".into()),
+            Err(_) => Err("HOST_LOCK_UNAVAILABLE".into()),
+        }
+    }
+
     pub fn host_lock(&self) -> Result<HostLease> {
         if self.read_only {
             return Err("STATE_READ_ONLY".into());
@@ -4115,6 +4139,39 @@ mod read_only_store_tests {
         assert!(reader.host_lock().is_err());
         assert!(!root.join("host.lock").exists());
         assert_eq!(fs::read(root.join("config.json")).unwrap(), before);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn host_idle_observation_does_not_create_lock_and_respects_live_owner() {
+        let root = root();
+        let writer = Store::open(&root).unwrap();
+        let reader = Store::open_read_only(&root).unwrap();
+        let lock = root.join("host.lock");
+        reader.observe_host_idle().unwrap();
+        assert!(!lock.exists());
+
+        let owner = writer.host_lock().unwrap();
+        let before = fs::metadata(&lock).unwrap();
+        assert_eq!(
+            reader.observe_host_idle().unwrap_err(),
+            "HOST_ALREADY_RUNNING"
+        );
+        assert_eq!(
+            reader.observe_host_idle().unwrap_err(),
+            "HOST_ALREADY_RUNNING"
+        );
+        drop(owner);
+        reader.observe_host_idle().unwrap();
+        assert_eq!(fs::metadata(&lock).unwrap().len(), before.len());
+        assert!(writer.host_lock().is_ok());
+
+        fs::remove_file(&lock).unwrap();
+        fs::create_dir(&lock).unwrap();
+        assert_eq!(
+            reader.observe_host_idle().unwrap_err(),
+            "HOST_LOCK_UNAVAILABLE"
+        );
         fs::remove_dir_all(&root).unwrap();
     }
 

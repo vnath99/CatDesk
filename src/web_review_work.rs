@@ -279,6 +279,9 @@ pub(crate) fn action(workspace: &Path, operation: &str, args: Value) -> Result<V
             return Err("WEB_REVIEW_REQUEST_ALREADY_PUBLISHED".into());
         }
     }
+    if operation == "preflight" {
+        store.observe_host_idle()?;
+    }
     let permit: ReviewDispatchPermit =
         with_project(&workspace, &input.project_id, &expected, |ledger| {
             let permit = if resume {
