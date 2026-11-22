@@ -566,6 +566,7 @@ pub(crate) struct SameStateLedgerAdmissionV3 {
     pub(crate) original_selection: Option<Vec<u8>>,
     pub(crate) original_envelope: Option<Vec<u8>>,
     pub(crate) selection_attempt_present: bool,
+    pub(crate) previous_completed_signed_select: Option<(SameStateLedgerBindingV3, Vec<u8>)>,
     envelope_sha256: String,
 }
 
@@ -607,6 +608,7 @@ fn observe_same_state_admission(
     let inventory = ledger_inventory(root)?;
     let mut next = 1;
     let mut last_time = 0;
+    let mut previous_completed_signed_select = None;
     for (&generation, present) in &inventory {
         if generation != next {
             return Err("WAKE_LEDGER_STALE_GENERATION".into());
@@ -625,6 +627,7 @@ fn observe_same_state_admission(
                     original_selection: Some(original),
                     original_envelope: Some(envelope),
                     selection_attempt_present: present[POINTER_ATTEMPT_SLOT],
+                    previous_completed_signed_select,
                     envelope_sha256: envelope_sha256.into(),
                 });
             }
@@ -632,6 +635,9 @@ fn observe_same_state_admission(
                 return Err("WAKE_LEDGER_PRIOR_INCOMPLETE".into());
             }
             last_time = binding.accepted_at_utc_seconds;
+            previous_completed_signed_select = (!binding.local_user_authorized()
+                && !binding.is_rollback())
+            .then_some((binding, envelope));
         } else {
             let (intent, phase, _, _) = historical_intent(root, generation, present, &root_id)?;
             if phase != InstallPhaseV1::Complete {
@@ -641,6 +647,7 @@ fn observe_same_state_admission(
                 return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
             }
             last_time = intent.accepted_at_utc_seconds;
+            previous_completed_signed_select = None;
         }
         next = generation
             .checked_add(1)
@@ -656,6 +663,7 @@ fn observe_same_state_admission(
         original_selection: None,
         original_envelope: None,
         selection_attempt_present: false,
+        previous_completed_signed_select,
         envelope_sha256: envelope_sha256.into(),
     })
 }

@@ -775,6 +775,147 @@ fn same_state_local_user_gives_current_a_working_fallback_under_exclusive_pins()
 }
 
 #[test]
+fn earlier_signed_selection_supplies_its_exact_manual_rollback_qualification() {
+    let mut fixture = Fixture::with_local_updates(true);
+    let working = fixture.payload.rollback_authority.release().clone();
+    let handle = fixture.handle.try_clone().unwrap();
+    let current_path = fixture.state.join("current.json");
+    {
+        let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+        let envelope = fixture.signed(&guard);
+        let admission = guard
+            .same_state_admission_v3(&digest(&envelope), 1000)
+            .unwrap();
+        let resources =
+            SameStateInstallResources::acquire(fixture.grant(&admission, envelope)).unwrap();
+        let original = resources.grant().original_selection_bytes().unwrap();
+        let mut ledger = guard
+            .begin_same_state_v3(resources.grant(), &admission, &original)
+            .unwrap();
+        assert_eq!(
+            resources.commit_selection(&mut ledger).unwrap()["status"],
+            "SELECTED_STOPPED"
+        );
+        assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+    }
+    fixture.payload.operation = "ROLLBACK_SAME_STATE_RELEASE".into();
+    fixture.payload.approval_id = "rollback-signed-retained-working".into();
+    fixture.payload.candidate = working.clone();
+    fixture.payload.rollback_authority = SameStateRollbackAuthorityV3::VerifiedWorkingPrevious {
+        release: working.clone(),
+    };
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let preliminary = guard
+        .same_state_admission_v3(&"0".repeat(64), 1000)
+        .unwrap();
+    fixture.payload.install_generation = preliminary.install_generation;
+    fixture.payload.state_snapshot = fixture.pins(&preliminary).snapshot().clone();
+    let request = fixture.local_request(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&request), 1000)
+        .unwrap();
+    let approval_key_sha256 = fixture
+        .policy
+        .readback()
+        .unwrap()
+        .approval_public_key_sha256;
+    let expected = rollback_authority_sha256(&fixture.payload).unwrap();
+    let selected_bytes = std::fs::read(&current_path).unwrap();
+    assert_eq!(
+        retained_local_rollback_review_sha256(
+            &admission,
+            &selected_bytes,
+            &fixture.payload,
+            &approval_key_sha256
+        )
+        .unwrap()
+        .as_deref(),
+        Some(expected.as_str())
+    );
+    for drift in [
+        "policy",
+        "root",
+        "generation",
+        "working evidence",
+        "pointer",
+    ] {
+        let mut changed = fixture.payload.clone();
+        match drift {
+            "policy" => changed.policy_sha256 = "a".repeat(64),
+            "root" => changed.state_snapshot.root.volume_serial += 1,
+            "generation" => changed.install_generation += 1,
+            "working evidence" => {
+                let mut previous = working.clone();
+                previous.working_evidence.as_mut().unwrap().receipt_sha256 = "b".repeat(64);
+                changed.candidate = previous.clone();
+                changed.rollback_authority =
+                    SameStateRollbackAuthorityV3::VerifiedWorkingPrevious { release: previous };
+            }
+            _ => changed.state_snapshot.current.sha256 = "d".repeat(64),
+        }
+        assert!(
+            retained_local_rollback_review_sha256(
+                &admission,
+                &selected_bytes,
+                &changed,
+                &approval_key_sha256,
+            )
+            .unwrap()
+            .is_none(),
+            "{drift}"
+        );
+    }
+    assert!(
+        retained_local_rollback_review_sha256(
+            &admission,
+            &selected_bytes,
+            &fixture.payload,
+            &"f".repeat(64),
+        )
+        .unwrap()
+        .is_none()
+    );
+    let receipts = fixture.intake.join("receipts");
+    let retained = fixture.path.join("retained-receipts");
+    std::fs::rename(&receipts, &retained).unwrap();
+    let mut pins = fixture.pins(&admission);
+    assert_eq!(
+        pins.observed(&fixture.policy, &fixture.payload, &admission)
+            .unwrap_err(),
+        "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE"
+    );
+    pins.local_rollback = true;
+    pins.observed(&fixture.policy, &fixture.payload, &admission)
+        .unwrap();
+    pins.require_protected_review_intake().unwrap();
+    let resources =
+        SameStateInstallResources::acquire(fixture.grant_with_pins(&admission, request, pins))
+            .unwrap();
+    let original = resources.grant().original_selection_bytes().unwrap();
+    let mut ledger = guard
+        .begin_same_state_v3(resources.grant(), &admission, &original)
+        .unwrap();
+    assert_eq!(
+        resources.commit_selection(&mut ledger).unwrap()["status"],
+        "ROLLED_BACK_STOPPED"
+    );
+    assert_eq!(ledger.phase(), InstallPhaseV1::Complete);
+    let selected =
+        install_selection::inspect_install_selection(&std::fs::read(&current_path).unwrap())
+            .unwrap();
+    assert_eq!(
+        selected["current"],
+        same_state_release_pointer_v3(&working).unwrap()
+    );
+    assert!(!receipts.exists());
+    assert!(retained.join("previous-review.json").is_file());
+    fixture.preserved();
+    drop(ledger);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
 fn same_state_local_user_can_update_after_completed_rollback() {
     let mut fixture = Fixture::qualified_selection(true, true);
     let handle = fixture.handle.try_clone().unwrap();
