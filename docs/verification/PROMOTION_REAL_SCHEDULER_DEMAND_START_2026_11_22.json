@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_WINDOWS_TASK_SCHEDULER_DEMAND_START_OF_DISPOSABLE_PROMOTION_FIXTURE",
+  "sourceCommit": "9c1a8d97b5079cd2201e4948bef022386ffa750b",
+  "baselineSourceCommit": "6c941a629b080e7f7e86a5dff629cdce2b2ddf92",
+  "fixtures": {
+    "orchestratorSha256": "88dd1c8c8f7f7ad3a19767f1163ae52c9feaa090e85dd70a4c4a34e4f6927187",
+    "taskBodySha256": "106230e1f610c12983f658770067a08f6cd02e674a653ec1ba1c84c3a35ecca3"
+  },
+  "candidateSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+  "baseline": {
+    "firstFixtureFailure": "The test seam used a variable shadowed by the facade scope. The first test registration and workspace were removed.",
+    "actualTaskRefusalState": "PROMOTION_COMPLETED",
+    "actualTaskRefusalDetail": "STOPPED_AFTER_BOUNDED_OWNER",
+    "nativeRegistrationShape": {
+      "scope": "DISPOSABLE_EXACT_TASK_REGISTRATION_SHAPE",
+      "taskNameMatches": true,
+      "taskPathMatches": true,
+      "actionHostMatches": true,
+      "actionArgumentsMatch": true,
+      "principalNameLiteralMatches": false,
+      "principalIsSid": false,
+      "logonType": "Interactive",
+      "runLevel": "Limited",
+      "triggerClass": "MSFT_TaskLogonTrigger",
+      "startWhenAvailable": true,
+      "allowOnBattery": null,
+      "keepOnBattery": null,
+      "instances": "IgnoreNew",
+      "executionTimeLimit": "PT0S",
+      "demandStartAllowed": true,
+      "state": "Ready"
+    },
+    "nativeBatteryPolicyPropertyNames": [
+      "DisallowStartIfOnBatteries",
+      "StopIfGoingOnBatteries"
+    ]
+  },
+  "tests": {
+    "lifecyclePowerShell7": "PASS",
+    "lifecycleWindowsPowerShell51": "PASS",
+    "windowsSidEquivalenceChecked": true,
+    "finiteDurationMissingBatteryFlagsOtherSidAndAlternateLogonRefused": true
+  },
+  "actualScheduler": {
+    "startedUtc": "2026-11-22T10:28:05.1984804+00:00",
+    "state": "PROMOTION_COMPLETED",
+    "detail": "LOCAL_BACKEND_READY",
+    "registeredTaskDemandOnly": true,
+    "actualSchedulerStart": true,
+    "selectedExactBackend": true,
+    "realTaskReturnCode": 0,
+    "anonymousHttp": 401,
+    "authorizedHttpAfterFacadeExit": 200,
+    "monitorAndBackendExitedNaturally": true,
+    "registeredDefinitionUnchanged": true,
+    "listenerClosed": true,
+    "productionTouched": false,
+    "taskRemoved": true,
+    "fixtureRemoved": true,
+    "finishedUtc": "2026-11-22T10:28:39.2666034+00:00"
+  },
+  "limits": "The facade used the real Windows Scheduler registration and unmocked Start-ScheduledTask path. A disposable demand-only task ran with a limited interactive principal and a disabled logon trigger. Its bounded test action launched actual candidate bytes directly on private loopback. Promotion authority and the candidate swap were fixture inputs. Installed promotion, production startup, protected rollback and live Web continuation were outside this test.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}

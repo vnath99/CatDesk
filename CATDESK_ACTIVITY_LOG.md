@@ -1126,3 +1126,11 @@ Evidence: [docs/verification/BACKEND_INTERRUPTED_ROLLBACK_SELECTION_2026_11_22.j
 Agent: Codex. Source: c45a18e091549231733c3b9d6ec4e079bac85423. Outcome: partial. Fresh promotion can request one start of an exact existing backend-only scheduled task. It can observe the listener of the already-running full-stack owner which the installed read-only registration check found. Two disposable Windows fixtures verified authenticated MCP after facade exit. Scheduler dispatch was modeled. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/PROMOTION_REGISTERED_BACKEND_OWNER_2026_11_22.json](docs/verification/PROMOTION_REGISTERED_BACKEND_OWNER_2026_11_22.json); command: Windows one-hash owner fixtures and read-only installed registration inspection; exit 0; SHA-256 a60bc098b6a4f59b882f65799044482717f444a116df0c5d5bef273d6c685bbb.
+
+<!-- catdesk-activity:nov22-promotion-real-scheduler-demand-start sha256:2bfe9139cedfa83297eb4acd2570da54f5c4fee012f9bbede7feae57f56dfe0c -->
+
+## 2026-11-22T10:28:39.2666034+00:00 — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 9c1a8d97b5079cd2201e4948bef022386ffa750b. Outcome: partial. Fixed recognition of native Windows Task Scheduler principal and settings fields. The one-hash facade demand-started a real disposable task and verified the exact backend on authenticated private loopback after return. The bounded task and backend exited, and the test registration was removed. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/PROMOTION_REAL_SCHEDULER_DEMAND_START_2026_11_22.json](docs/verification/PROMOTION_REAL_SCHEDULER_DEMAND_START_2026_11_22.json); command: Actual limited Windows Task Scheduler demand start with a disposable workspace and real private MCP; exit 0; SHA-256 8365d8182f068d579fb7f4bacef03ee80a2c5573529de50ce8c21c8281a60218.
