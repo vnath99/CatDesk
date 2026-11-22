@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake')]
+    [ValidateSet('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake', 'promote')]
     [string]$Command,
     [Parameter(Position = 1)]
     [string]$AutostartAction = '',
@@ -1049,6 +1049,78 @@ function Invoke-CatDeskOnlyStop {
     }
 }
 
+function Invoke-PinnedPromotionController([string]$Root,[string]$Image,[string]$ImageSha,[string]$Action,[string]$Digest) {
+    $path = Assert-CatDeskRecoveryContainedPath -Root $Root -Path $Image -Label 'reviewed promotion controller'
+    $pins = [CatDesk.DevLocalTarget.ReadOnlyScope]::new()
+    try {
+        $file = $pins.File($path,128MB,$false)
+        if ($file.Length -lt 1 -or $file.Sha256 -cne $ImageSha) {
+            throw 'REVIEWED_PROMOTION_CONTROLLER_CHANGED'
+        }
+        Invoke-LifecycleSeam -Name 'PromotionInvokeNative' -Arguments @($path,$Root,$Action,$Digest) -Default {
+            param($controller,$workspace,$verb,$artifact)
+            $info = [Diagnostics.ProcessStartInfo]::new()
+            $info.FileName = $controller
+            $info.WorkingDirectory = $workspace
+            $info.Arguments = "operator $verb $artifact"
+            $info.UseShellExecute = $false
+            $info.CreateNoWindow = $true
+            $info.RedirectStandardOutput = $true
+            $info.RedirectStandardError = $true
+            $process = [Diagnostics.Process]::Start($info)
+            try {
+                $output = $process.StandardOutput.ReadToEndAsync()
+                $errors = $process.StandardError.ReadToEndAsync()
+                if (!$process.WaitForExit(720000)) { throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED' }
+                $wire = $output.GetAwaiter().GetResult()
+                if ($errors.GetAwaiter().GetResult().Length -ne 0 -or $wire.Length -gt 4096 -or $process.ExitCode -ne 0) {
+                    throw 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
+                }
+                return ConvertFrom-CatDeskLiteralJson $wire
+            } finally { $process.Dispose() }
+        }
+    } finally { $pins.Dispose() }
+}
+
+function Invoke-LifecycleReviewedPromotion {
+    if ($AutostartAction -cnotmatch '^[0-9a-fA-F]{64}$' -or $WakeTerminalTaskId) {
+        Write-LifecycleStatus 'REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED'
+        return
+    }
+    $digest = $AutostartAction.ToLowerInvariant()
+    try {
+        $root = (Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
+        $canonical = Get-CatDeskCanonicalPairEvidence $root
+        $metadata = Resolve-TrustedBootstrapHelperPath -Path (Join-Path $PSScriptRoot 'scripts/catdesk-dev-local-target-native.ps1') -FailureMessage 'promotion file pin helper unavailable'
+        . $metadata
+        Initialize-DevLocalTargetMetadata
+        $selection = Invoke-PinnedPromotionController $root $canonical.Binary $canonical.Hash 'promote-resolve' $digest
+        if ($selection.state -cne 'PROMOTION_CANDIDATE_RESOLVED' -or $selection.candidateSha256 -cne $digest -or
+            $selection.buildAttemptId -cnotmatch '^[0-9a-f]{32}$') {
+            throw 'REVIEWED_PROMOTION_RESOLUTION_UNPROVEN'
+        }
+        # The canonical resolver has exited and its file pin was released.
+        # Keep only the exact noncanonical attested controller pinned.
+        $candidate = Join-Path $root ("target\reviewed-builds\" + $selection.buildAttemptId + "\catdesk.exe")
+        $receipt = Invoke-PinnedPromotionController $root $candidate $digest 'promote' $digest
+        if ($receipt.candidateSha256 -cne $digest -or $receipt.state -cnotin @(
+            'PROMOTION_COMPLETED','PROMOTION_FAILED_OR_AMBIGUOUS','PROMOTION_IN_PROGRESS','PROMOTION_CLAIMED_PENDING_UNPROVEN')) {
+            throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
+        }
+        if ($null -ne $receipt.servingState -and $receipt.servingState -cnotin @('STOPPED_AFTER_BOUNDED_OWNER','UNVERIFIED')) {
+            throw 'REVIEWED_PROMOTION_RECONCILIATION_REQUIRED'
+        }
+        $detail = if ($receipt.servingState) { $receipt.servingState } else { 'INSPECT_EXISTING_PROMOTION_RESULT' }
+        Write-LifecycleStatus $receipt.state $detail
+    } catch {
+        $reason = [string]$_.Exception.Message
+        if ($reason -cnotin @('REVIEWED_PROMOTION_CONTROLLER_CHANGED','REVIEWED_PROMOTION_RESOLUTION_UNPROVEN','REVIEWED_PROMOTION_RECONCILIATION_REQUIRED')) {
+            $reason = 'REVIEWED_PROMOTION_REFUSED_INSPECT_RESULT'
+        }
+        Write-LifecycleStatus $reason
+    }
+}
+
 try {
     if ($BackendOnly -and $Command -notin @('start', 'recover', 'autostart')) { throw 'BackendOnly is limited to start, recover and autostart' }
     if ($Command -ne 'doctor' -and ($ObservationFile -or $ProjectWorkspace -or $WakeRoot -or $Human)) { throw 'doctor options require doctor' }
@@ -1066,6 +1138,7 @@ try {
         'stop' { Invoke-CatDeskOnlyStop }
         'autostart' { Invoke-AutostartLifecycle }
         'wake' { Invoke-WakePolicyLifecycle }
+        'promote' { Invoke-LifecycleReviewedPromotion }
     }
 } catch {
     Write-LifecycleStatus 'ACTION_REQUIRED'

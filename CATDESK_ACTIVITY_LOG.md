@@ -662,3 +662,11 @@ Evidence: [docs/verification/ROUTINE_PROMOTION_AND_V3_OWNER_RECONCILIATION_2026_
 Agent: CatDesk development. Source: 0990d6c6ce5a70da1724e89654d8b361e770d715. Outcome: partial. The supported Stop ended the exact installed WakeHost naturally and preserved 894 recorded state pins and the serving owners. The first-selection packet now binds the fresh stopped control identity. Native preview and the existing checked wrapper accepted it. The same candidate, fallback and review evidence were retained. Next: The enrolled administrator can now perform the single signed legacy selection through the refreshed wrapper. Verify the protected result independently, then continue the compatible backend review, producer and installed v5 work cycle.
 
 Evidence: [docs/verification/WAKE_FIRST_SELECTION_REFRESH_2026_11_21.json](docs/verification/WAKE_FIRST_SELECTION_REFRESH_2026_11_21.json); command: Authorized local Wake Stop and checked V3 wrapper -VerifyInputsOnly; exit 0; SHA-256 09886e0eb3e1fdd6a869db5ea385cd6387048451a3de14ddad54ec7657760578.
+
+<!-- catdesk-activity:public-one-hash-promotion-facade-nov21 sha256:871dec39738bee04d8d990487eeff4f0c77528271f6cb45b8eca375ff344c169 -->
+
+## 2026-11-22T03:05:40.9562586Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 376a07a9d2c1461ad892232fab8387d10d78efee. Outcome: partial. The existing CatDesk lifecycle accepts one artifact hash in development. It validates the canonical pair, resolves the active reviewed build with the canonical process, releases that process, and then pins and invokes the exact noncanonical candidate. Both PowerShell suites and four native tests passed. This qualification used fixtures and created no installed promotion. Next: Verify the refreshed signed Wake selection after the operator completes it. The first compatible backend still uses the existing review, producer and promotion route. Qualify the one-command facade against a reviewed installed release with actual rollback and Web continuation evidence.
+
+Evidence: [docs/verification/BACKEND_PROMOTE_FACADE_2026_11_21.json](docs/verification/BACKEND_PROMOTE_FACADE_2026_11_21.json); command: cargo test --offline --locked --bin catdesk routine_promote_; exit 0; SHA-256 9ddbf3730fd17c58581094bfd2f0da7faad877a59a1f80fd4789a4af5061ab59.

@@ -3001,7 +3001,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let operator_release_pair = args.first().is_some_and(|arg| arg == "operator")
         && args.get(1).is_some_and(|arg| arg == "release-pair");
     let operator_promote = args.first().is_some_and(|arg| arg == "operator")
-        && args.get(1).is_some_and(|arg| arg == "promote");
+        && args.get(1).is_some_and(|arg| matches!(arg.as_str(), "promote" | "promote-resolve"));
     match operator_facade::parse_operator_action(args.clone()) {
         Ok(Some(action)) => {
             let workspace = std::env::current_dir()?;

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T03:05:40.9562586Z",
+  "scope": "SOURCE_QUALIFICATION_OF_EXISTING_WINDOWS_LIFECYCLE_PROMOTION_FACADE",
+  "baselineCommit": "376a07a9d2c1461ad892232fab8387d10d78efee",
+  "command": "catdesk.ps1 promote <artifact-sha256>",
+  "controller": {
+    "canonicalPairRemeasured": true,
+    "canonicalResolverReadOnly": true,
+    "canonicalProcessAndPinsReleasedBeforeCandidateStart": true,
+    "candidatePathDerivedFromBoundedAttestedAttemptId": true,
+    "resolvedCandidateDigestRemeasuredHoldingWindowsFileAndAncestorPins": true,
+    "workingDirectoryExplicitInProcessStartInfo": true,
+    "existingPromotionInterpreterAndTransactionRetained": true,
+    "processBoundaryPartlySimulatedByFixture": true
+  },
+  "tests": {
+    "powershell7LifecycleFixture": "PASS",
+    "windowsPowershell51LifecycleFixture": "PASS",
+    "rustCommand": "cargo test --offline --locked --bin catdesk routine_promote_",
+    "rustTestsPassed": 4,
+    "gitCommitHashRefusedBeforeResolver": true,
+    "unsafeAttemptPathRefusedBeforeCandidateLaunch": true,
+    "contentDriftRefusedBeforeCandidateLaunch": true,
+    "backendStoppedReceiptDoesNotImplyPersistentReadiness": true
+  },
+  "acceptance": {
+    "productionContainsResolver": false,
+    "firstFrozenBackendReviewUsesExistingProcedure": true,
+    "protectedPromotionAttempted": false,
+    "installedStartupOrRollbackQualified": false,
+    "v5WebCycleComplete": false
+  }
+}

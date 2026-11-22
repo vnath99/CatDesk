@@ -111,7 +111,7 @@ $realCanonicalRoot = $null
 
 try {
     Require ($source -match [regex]::Escape('$PSScriptRoot')) 'facade resolves all internal paths from its own root'
-    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake'\)") 'exact public command vocabulary is present'
+    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake', 'promote'\)") 'exact public command vocabulary is present'
     Require ($source -notmatch '(?i)provision-catdesk-release|cargo\s+(build|run|test)|tunnel-client.*(stop|remove)|runtimes\s+(stop|rm)') 'facade contains no compile/provision or tunnel stop/remove route'
     Require ($source -notmatch 'Stop-Process\s+-Id\s+\$processId') 'public stop never reacquires destructive authority by PID alone'
     Require ($source -match 'Stop-CatDeskListenerProcessForRecovery\s+-LocalMcp\s+\$endpoint\s+-Canonical\s+\$identity\s+-Candidate\s+\$candidate') 'public stop reuses the exact pinned listener process-instance mutation boundary'
@@ -147,6 +147,45 @@ try {
     Require ($realStart.state -eq 'CONNECTED_VERIFIED') 'real canonical start preserves the facade workspace and fingerprint across engine dot-source'
     Require (([string]::Join(',', $actions)) -eq 'recover:start') 'real canonical start reaches only the bounded recovery seam after identity validation'
     Require ($observedPublicInputs -contains "recovery:$realCanonicalRoot|$realConfig|$realHash|$realFingerprint|$realTimeout|start") 'start preserves every public lifecycle identity and timeout after helper loading'
+    $actions.Clear()
+
+    # Use real file identity and hashing, with only the native child seam
+    # simulated. This never launches a release controller or a backend.
+    $attemptId = 'a' * 32
+    $candidate = Join-Path $realCanonicalRoot "target\reviewed-builds\$attemptId\catdesk.exe"
+    [void][IO.Directory]::CreateDirectory((Split-Path -Parent $candidate))
+    [IO.File]::WriteAllText($candidate,'fixture-attested-controller')
+    $digest = (Get-FileHash -LiteralPath $candidate).Hash.ToLowerInvariant()
+    $resolver = $realCanonical.Clone()
+    $resolver.PromotionInvokeNative = {
+        param($image,$root,$verb,$hash)
+        Require ($root -ceq $realCanonicalRoot -and $hash -ceq $digest) 'promotion stays within the same workspace and artifact'
+        [void]$actions.Add($verb)
+        if ($verb -ceq 'promote-resolve') {
+            Require ($image -ceq $realBinary) 'only the canonical image resolves the attested release'
+            return [pscustomobject]@{state='PROMOTION_CANDIDATE_RESOLVED';candidateSha256=$hash;buildAttemptId=$attemptId}
+        }
+        Require ($verb -ceq 'promote' -and $image -ceq $candidate) 'only the exact resolved controller starts promotion'
+        [pscustomobject]@{state='PROMOTION_COMPLETED';candidateSha256=$hash;servingState='STOPPED_AFTER_BOUNDED_OWNER'}
+    }
+    $invalid = & $facade promote '56aa9912' -Workspace $realCanonicalRoot -TestSeams $resolver | ConvertFrom-Json
+    Require ($invalid.state -ceq 'REVIEWED_PROMOTION_ARTIFACT_SHA256_REQUIRED' -and $actions.Count -eq 0) 'promotion rejects short and Git source hashes before resolving'
+    $promoted = & $facade promote $digest.ToUpperInvariant() -Workspace $realCanonicalRoot -TestSeams $resolver | ConvertFrom-Json
+    Require ($promoted.state -ceq 'PROMOTION_COMPLETED' -and $promoted.detail -ceq 'STOPPED_AFTER_BOUNDED_OWNER') 'promotion preserves the observed terminal result without claiming running health'
+    Require (($actions -join ',') -ceq 'promote-resolve,promote') 'the one-argument facade invokes each native phase once'
+    $actions.Clear()
+    $invalidResolver = $resolver.Clone()
+    $invalidResolver.PromotionInvokeNative = {
+        param($image,$root,$verb,$hash)
+        [void]$actions.Add($verb)
+        [pscustomobject]@{state='PROMOTION_CANDIDATE_RESOLVED';candidateSha256=$hash;buildAttemptId='..\escape'}
+    }
+    $unsafe = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $invalidResolver | ConvertFrom-Json
+    Require ($unsafe.state -ceq 'REVIEWED_PROMOTION_RESOLUTION_UNPROVEN' -and ($actions -join ',') -ceq 'promote-resolve') 'untrusted candidate path never reaches launch'
+    $actions.Clear()
+    [IO.File]::WriteAllText($candidate,'drifted-fixture-controller')
+    $drifted = & $facade promote $digest -Workspace $realCanonicalRoot -TestSeams $resolver | ConvertFrom-Json
+    Require ($drifted.state -ceq 'REVIEWED_PROMOTION_CONTROLLER_CHANGED' -and ($actions -join ',') -ceq 'promote-resolve') 'changed candidate bytes never reach launch'
     $actions.Clear()
 
     $status = Invoke-FixtureFacade -Command 'status' -Seams $base | ConvertFrom-Json
