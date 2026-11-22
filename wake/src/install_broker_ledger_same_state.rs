@@ -1364,6 +1364,21 @@ mod tests {
         assert_eq!(result["lastRecordSha256"], prior);
         assert_eq!(result["plannedSelectionSha256"], b.planned_selection_sha256);
         assert_eq!(result["liveAcceptanceVerified"], false);
+        let request = serde_json::json!({
+            "installGeneration": b.install_generation,
+            "plannedSelectionSha256": b.planned_selection_sha256
+        });
+        let recovered = crate::install_broker_client::recover_local_result_for_fixture(
+            result,
+            &request,
+            &b.signed_envelope_sha256,
+        )
+        .expect("client accepts the exact terminal projection emitted by the native reader");
+        assert_eq!(
+            recovered["state"],
+            "WAKE_LOCAL_UPDATE_COMPLETE_RECOVERED_FROM_LEDGER"
+        );
+        assert_eq!(recovered["recordedResult"]["lastRecordSha256"], prior);
         for (generation, hash) in [(1, "0".repeat(64)), (3, b.signed_envelope_sha256.clone())] {
             let absent = inspect_same_state_result(&root, generation, &hash).unwrap();
             assert_eq!(absent["state"], "NOT_FOUND_NO_RETRY");

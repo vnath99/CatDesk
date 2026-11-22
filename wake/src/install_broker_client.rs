@@ -50,6 +50,8 @@ const SECURITY_SQOS_PRESENT: u32 = 0x0010_0000;
 const SECURITY_IMPERSONATION: u32 = 0x0002_0000;
 const SC_MANAGER_CONNECT: u32 = 1;
 const SERVICE_QUERY_STATUS: u32 = 4;
+const SERVICE_STOPPED: u32 = 1;
+const SERVICE_STOP_PENDING: u32 = 3;
 const SERVICE_RUNNING: u32 = 4;
 const SERVICE_WIN32_OWN_PROCESS: u32 = 0x10;
 const SC_STATUS_PROCESS_INFO: u32 = 0;
@@ -85,6 +87,7 @@ const WRITE_TIMEOUT_MS: u32 = 5000;
 const ERROR_IO_PENDING: u32 = 997;
 const LOCAL_PIPE_START_WAIT: Duration = Duration::from_secs(2);
 const LOCAL_PIPE_POLL_INTERVAL: Duration = Duration::from_millis(50);
+const LOCAL_BROKER_EXIT_WAIT: Duration = Duration::from_secs(15);
 const ERROR_FILE_NOT_FOUND: i32 = 2;
 const WAIT_OBJECT_0: u32 = 0;
 const WAIT_TIMEOUT: u32 = 258;
@@ -491,6 +494,51 @@ fn service_matches(status: &ServiceStatusProcess, server_pid: u32) -> bool {
         && status.service_type == SERVICE_WIN32_OWN_PROCESS
         && status.process_id == server_pid
         && status.service_flags == 0
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct LocalBrokerExit {
+    process_exited: bool,
+    service_stopped: bool,
+}
+
+fn observe_local_broker_exit(
+    process: &impl AsRawHandle,
+    pid: u32,
+    budget: Duration,
+    mut read_status: impl FnMut() -> Result<ServiceStatusProcess>,
+) -> LocalBrokerExit {
+    let deadline = Instant::now() + budget;
+    let wait_ms = budget.as_millis().min(u128::from(u32::MAX - 1)) as u32;
+    if unsafe { WaitForSingleObject(process.as_raw_handle(), wait_ms) } != WAIT_OBJECT_0 {
+        return LocalBrokerExit::default();
+    }
+    let mut exit = LocalBrokerExit {
+        process_exited: true,
+        service_stopped: false,
+    };
+    loop {
+        let Ok(status) = read_status() else {
+            return exit;
+        };
+        if status.service_type != SERVICE_WIN32_OWN_PROCESS || status.service_flags != 0 {
+            return exit;
+        }
+        if status.current_state == SERVICE_STOPPED {
+            exit.service_stopped = status.process_id == 0;
+            return exit;
+        }
+        if status.process_id != pid
+            || !matches!(status.current_state, SERVICE_RUNNING | SERVICE_STOP_PENDING)
+        {
+            return exit;
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return exit;
+        }
+        std::thread::sleep(remaining.min(LOCAL_PIPE_POLL_INTERVAL));
+    }
 }
 
 fn connected_server(pipe: &OwnedHandle) -> Result<u32> {
@@ -958,21 +1006,101 @@ impl FixedBrokerApprovalClient<'_> {
         let raw = crate::install_broker_pipe_io::read_once(
             self.pipe.as_handle(),
             8192,
-            std::time::Duration::from_secs(180),
+            Duration::from_secs(180),
             &std::sync::atomic::AtomicBool::new(false),
-        )
-        .map_err(|_| "WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY")?;
+        );
         let request_sha256 = format!("{:x}", Sha256::digest(request));
-        if let Some(code) = local_intake_refusal_code(&raw, &request_sha256) {
+        if let Ok(bytes) = &raw
+            && let Some(code) = local_intake_refusal_code(bytes, &request_sha256)
+        {
             return Err(code.into());
         }
-        let result: serde_json::Value =
-            serde_json::from_slice(&raw).map_err(|_| "WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY")?;
-        if !local_user_complete_reply_matches(&result, &payload, &request_sha256) {
-            return Err("WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY".into());
+        let reply = raw
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .filter(|reply| local_user_complete_reply_matches(reply, &payload, &request_sha256));
+        // Keep the exact connected process handle through cleanup. Release the
+        // request pipe so an exiting service can observe client closure.
+        drop(self.pipe);
+        let owner_exit = observe_local_broker_exit(
+            &self.process,
+            self.server_pid,
+            LOCAL_BROKER_EXIT_WAIT,
+            || service_status(&self.service),
+        );
+        if let Some(mut reply) = reply {
+            reply["clientObservedBrokerExit"] = owner_exit.process_exited.into();
+            reply["clientObservedBrokerStopped"] = owner_exit.service_stopped.into();
+            return Ok(reply);
         }
-        Ok(result)
+        if owner_exit.service_stopped
+            && self.policy.revalidate().is_ok()
+            && let Some(generation) = payload["installGeneration"].as_u64()
+            && let Ok(recorded) = crate::install_broker_ledger::inspect_fixed_same_state_result(
+                generation,
+                &request_sha256,
+            )
+            && let Some(recovered) =
+                recovered_local_update_result(recorded, &payload, &request_sha256, owner_exit)
+        {
+            return Ok(recovered);
+        }
+        Err("WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY".into())
     }
+}
+
+fn recovered_local_update_result(
+    record: serde_json::Value,
+    payload: &serde_json::Value,
+    request_sha256: &str,
+    owner_exit: LocalBrokerExit,
+) -> Option<serde_json::Value> {
+    let planned_selection = payload["plannedSelectionSha256"].as_str()?;
+    if !owner_exit.process_exited
+        || !owner_exit.service_stopped
+        || record["action"] != "install_broker_result"
+        || record["state"] != "COMPLETE"
+        || record["latestPhase"] != crate::install_broker_ledger::InstallPhaseV1::Complete.name()
+        || payload["installGeneration"]
+            .as_u64()
+            .is_none_or(|generation| generation == 0)
+        || record["installGeneration"] != payload["installGeneration"]
+        || record["requestSha256"] != request_sha256
+        || record["plannedSelectionSha256"] != planned_selection
+        || !record["lastRecordSha256"].as_str().is_some_and(|hash| {
+            hash.len() == 64
+                && hash
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+    {
+        return None;
+    }
+    Some(serde_json::json!({
+        "state":"WAKE_LOCAL_UPDATE_COMPLETE_RECOVERED_FROM_LEDGER",
+        "recordedResult":record,
+        "clientObservedBrokerExit":true,
+        "clientObservedBrokerStopped":true,
+        "replayAuthorized":false,
+        "liveAcceptanceVerified":false
+    }))
+}
+
+#[cfg(test)]
+pub(crate) fn recover_local_result_for_fixture(
+    record: serde_json::Value,
+    payload: &serde_json::Value,
+    request_sha256: &str,
+) -> Option<serde_json::Value> {
+    recovered_local_update_result(
+        record,
+        payload,
+        request_sha256,
+        LocalBrokerExit {
+            process_exited: true,
+            service_stopped: true,
+        },
+    )
 }
 
 fn allowed_local_intake_refusal(code: &str) -> Option<&'static str> {
@@ -1895,6 +2023,105 @@ mod tests {
             expired,
             "WAKE_BROKER_CLIENT_LOCAL_PIPE_NOT_READY_NO_REQUEST"
         );
+    }
+
+    #[test]
+    fn local_update_cleanup_requires_exact_process_exit_and_stopped_service() {
+        use std::process::{Command, Stdio};
+        let (current, _) = pinned_process(std::process::id()).unwrap();
+        assert_eq!(
+            observe_local_broker_exit(&current, std::process::id(), Duration::ZERO, || {
+                panic!("SCM must not be consulted while the original process is still alive")
+            }),
+            LocalBrokerExit::default()
+        );
+
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .arg("--list")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let good = ServiceStatusProcess {
+            service_type: SERVICE_WIN32_OWN_PROCESS,
+            current_state: SERVICE_STOPPED,
+            process_id: 0,
+            ..ServiceStatusProcess::default()
+        };
+        let clean = observe_local_broker_exit(&child, pid, Duration::from_secs(5), || Ok(good));
+        assert!(child.wait().unwrap().success());
+        assert_eq!(
+            clean,
+            LocalBrokerExit {
+                process_exited: true,
+                service_stopped: true
+            }
+        );
+        let new_owner = ServiceStatusProcess {
+            current_state: SERVICE_RUNNING,
+            process_id: pid + 1,
+            ..good
+        };
+        assert_eq!(
+            observe_local_broker_exit(&child, pid, Duration::ZERO, || Ok(new_owner)),
+            LocalBrokerExit {
+                process_exited: true,
+                service_stopped: false
+            }
+        );
+    }
+
+    #[test]
+    fn local_update_lost_reply_requires_exact_terminal_ledger_and_owner_cleanup() {
+        let request = "a".repeat(64);
+        let pointer = "b".repeat(64);
+        let payload =
+            serde_json::json!({"installGeneration": 9, "plannedSelectionSha256": pointer});
+        let record = serde_json::json!({
+            "action":"install_broker_result","state":"COMPLETE","latestPhase":"complete",
+            "installGeneration":9,"requestSha256":request,"plannedSelectionSha256":pointer,
+            "lastRecordSha256":"c".repeat(64),"replayAuthorized":false,"liveAcceptanceVerified":false
+        });
+        let cleanup = LocalBrokerExit {
+            process_exited: true,
+            service_stopped: true,
+        };
+        let recovered =
+            recovered_local_update_result(record.clone(), &payload, &request, cleanup).unwrap();
+        assert_eq!(
+            recovered["state"],
+            "WAKE_LOCAL_UPDATE_COMPLETE_RECOVERED_FROM_LEDGER"
+        );
+        assert_eq!(recovered["recordedResult"], record);
+        assert_eq!(recovered["replayAuthorized"], false);
+        assert_eq!(recovered["liveAcceptanceVerified"], false);
+        assert!(
+            recovered_local_update_result(
+                record.clone(),
+                &payload,
+                &request,
+                LocalBrokerExit {
+                    process_exited: true,
+                    service_stopped: false,
+                }
+            )
+            .is_none()
+        );
+        for (field, value) in [
+            ("state", serde_json::json!("INCOMPLETE_NO_RETRY")),
+            ("latestPhase", serde_json::json!("pointer-switched")),
+            ("latestPhase", serde_json::json!("COMPLETE")),
+            ("installGeneration", serde_json::json!(8)),
+            ("requestSha256", serde_json::json!("d".repeat(64))),
+            ("plannedSelectionSha256", serde_json::json!("e".repeat(64))),
+            ("lastRecordSha256", serde_json::json!("unverified")),
+        ] {
+            let mut changed = record.clone();
+            changed[field] = value;
+            assert!(recovered_local_update_result(changed, &payload, &request, cleanup).is_none());
+        }
     }
 
     #[test]

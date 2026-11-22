@@ -223,7 +223,7 @@ impl InstallPhaseV1 {
             .expect("all enum variants appear in ORDER")
     }
 
-    fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Intent => "intent",
             Self::StageStarted => "stage-started",
