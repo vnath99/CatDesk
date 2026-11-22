@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Verification 2026-11-22T05:50:21Z.** The existing routine broker can select a different qualified package after a completed rollback clears the previous entry. It verifies the restored current as working, records it as the new fallback, and preserves the complete prior ledger. This was exercised with native Windows file operations and isolated policy fixtures. Trusted intake publication and installed routine promotion remain open. [Evidence](../verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.json).
+
 **Decision 2026-11-22T05:45:05Z.** The durable promotion journal has priority over generic LKG repair for either a matching or split current pair. Public recovery inspects the journal before disk repair and still checks it before launch. The reviewed transaction retains its guarded rollback path. [Windows evidence](../verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_22.json).
 
 **Decision 2026-11-22T05:39:21Z.** The native one-hash confirmation remeasures and pins the canonical executable and its fingerprint to the preflight's prior hash. It retains both files and their directory through authorization and claim publication, then releases the pins for the existing guarded worker. The worker revalidates the release before mutation. [Windows evidence](../verification/ONE_HASH_SOURCE_PAIR_AT_CONFIRM_2026_11_22.json).

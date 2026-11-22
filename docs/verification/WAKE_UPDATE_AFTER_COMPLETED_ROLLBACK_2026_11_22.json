@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T05:50:21.5957166Z",
+  "sourceCommit": "275e9276a4813849ccbc2bb5b2247350da14216c",
+  "fixtureSha256": "fbfa5a54c96184072375acfbb4637aacc83fd71393d8d21d8de6806781da097f",
+  "nativeTestExecutableSha256": "32e406c98d822b243129e3c9598d7f6d34102700784c9819603f39dae84bc8a7",
+  "scope": "WINDOWS_NATIVE_DISPOSABLE_WAKE_ROLLBACK_AND_SUCCESSOR_SELECTION",
+  "testedAuthority": "Existing local-user policy with an isolated operator identity and fixture review receipts.",
+  "passed": {
+    "rollback": "ROLLED_BACK_STOPPED",
+    "rollbackLedger": "COMPLETE",
+    "rollbackClearedPreviousEntry": true,
+    "successorIsDistinctPackage": true,
+    "successor": "SELECTED_STOPPED",
+    "successorLedger": "COMPLETE",
+    "successorAdmissionWasFreshAndNextGeneration": true,
+    "selectionGenerationAfterSuccessor": 9,
+    "duplicatePreviousIntakePresent": false,
+    "restoredWorkingPackageRetainedAsFallback": true,
+    "originalRequestAndLedgerFilesUnchanged": true,
+    "configControlProfileAndUnresolvedJournalUnchanged": true
+  },
+  "attempts": [
+    {
+      "result": "ZERO_TESTS_SELECTED",
+      "reason": "The initial exact Cargo filter omitted the module path."
+    },
+    {
+      "result": "HARNESS_READ_SHARING_VIOLATION",
+      "reason": "The post-commit assertion tried to read the ledger lock while holding it. No product source changed. Read-only inspection confirmed the expected selected fixture generation and the original test owner exited. The command runner denied recursive fixture deletion, so that inactive fixture was retained."
+    },
+    {
+      "result": "PASS",
+      "testsPassed": 1,
+      "exitCode": 0,
+      "fixtureRemovedByTest": true
+    }
+  ],
+  "productionActions": 0,
+  "installedBrokerActions": 0,
+  "browserStarts": 0,
+  "limits": "Physical files and the native ledger were exercised with inert executable bytes. Trusted publication of genuine review receipts, an installed routine broker release and the first installed Web cycle remain separate."
+}

@@ -846,3 +846,11 @@ Evidence: [docs/verification/ONE_HASH_SOURCE_PAIR_AT_CONFIRM_2026_11_22.json](do
 Agent: Codex. Source: 3909e2ec74e6e2261a50c3639a2afb2207bd8cf3. Outcome: partial. Public recovery now honors the original promotion journal before generic LKG repair. Both PowerShell editions reproduced the guarded path against a real split pair and preserved all seven release pins. Diagnose reports the recovery authority gate. Next: Use the existing first Wake selection and independent backend review. Verify actual installed promotion, persistent startup, rollback and the full Web cycle after the release gates pass.
 
 Evidence: [docs/verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_22.json](docs/verification/INTERRUPTED_PROMOTION_SPLIT_PAIR_RECOVERY_2026_11_22.json); command: Public recovery split-pair regression under PowerShell 7 and Windows PowerShell 5.1; exit 0; SHA-256 8f944d7b7dda7dfe065bed4a0687b48a4d9d8af1685d81c0c3e176992460db4a.
+
+<!-- catdesk-activity:nov22-wake-update-after-completed-rollback sha256:80b07738d161335680b784ddb7fc6125779de9c16c1052520ac384edf36a0110 -->
+
+## 2026-11-22T05:50:21.5957166Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 275e9276a4813849ccbc2bb5b2247350da14216c. Outcome: partial. The Windows broker fixture completed rollback and selected a different qualified package under the existing local-user policy. The restored package became the retained fallback and all prior ledger bytes matched. Next: Use the existing signed first Wake selection and admit an eligible independent reviewer for the frozen backend. Trusted routine receipt publication and installed promotion, rollback and Web acceptance still require proof.
+
+Evidence: [docs/verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.json](docs/verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.json); command: Exact native Windows rollback and successor selection regression; exit 0; SHA-256 5cd6222b40b861e66ab495aa811064c2e94c6fe5c635194bbf57643ab6e2dfbd.
