@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T03:53:53.0806008Z",
+  "scope": "WINDOWS_DISPOSABLE_NATIVE_V3_ADMISSION_FIXTURE_AND_FROZEN_FIRST_SELECTION_READBACK",
+  "sourceParent": "d11b612a0f739219555d9b3a6c124acc0dbace70",
+  "fixtureSha256": "9f14470c95668e71add91ec443f74ecf210c3fa2a66819593e014b1dde0e819a",
+  "firstSelection": {
+    "operatorWrapperSha256": "4a19bb36f0e0eb34c6a1cb718d6a2c6f2bb7429d4c930f740f71cf988d2ec142",
+    "candidateHasWorkingEvidence": false,
+    "fallbackHasWorkingEvidence": true,
+    "wrapperModified": false,
+    "packetExecuted": false
+  },
+  "findings": {
+    "lateWorkingEvidenceAlone": "HOST_INSTALL_PREVIOUS_QUALIFICATION_REQUIRED_WHEN_NO_DISTINCT_RETAINED_ENTRY_EXISTS",
+    "alreadyBoundWorkingCurrent": "WAKE_SAME_STATE_LEGACY_PREVIOUS_IMAGE_OVERLAP",
+    "legacyExecutionExclusionRequired": true,
+    "bothRefusalsBeforeIntent": true,
+    "fixturePointerAndProtectedFilesUnchanged": true,
+    "existingDistinctWorkingFallbackSelectionAndRollback": "PASS",
+    "rollbackClearsPreviousEntry": true,
+    "routinePostRollbackRollForwardWithNoDistinctPrevious": "NOT_QUALIFIED",
+    "routineTrustedIntakePublicationWithoutAdmin": "NOT_DEMONSTRATED"
+  },
+  "prototype": {
+    "plannedAttachmentOfWorkingEvidencePassedPlanning": true,
+    "failedAtExistingExclusiveImageGuard": true,
+    "productionChangesReverted": true
+  },
+  "tests": {
+    "fullPrototypeRun": {
+      "passed": 54,
+      "failed": 4,
+      "failures": {
+        "workingCurrentOverlap": 1,
+        "legacyOwnerUnproven": 3
+      }
+    },
+    "finalScopedSerialRun": {
+      "passed": 12,
+      "failed": 1,
+      "remainingRefusal": "WAKE_SAME_STATE_LEGACY_OWNER_UNPROVEN"
+    },
+    "finalExactRepro": {
+      "passed": 1,
+      "failed": 0,
+      "exitCode": 0
+    },
+    "formatCheck": "PASS"
+  },
+  "limits": {
+    "installedBrokerChange": false,
+    "serviceStarts": 0,
+    "productionPromotion": false,
+    "installedRollback": false,
+    "newSignatureOrPacket": false,
+    "webAcceptance": false
+  }
+}

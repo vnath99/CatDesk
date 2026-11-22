@@ -574,6 +574,60 @@ fn same_state_local_user_enrolled_select_and_rollback_preserve_state() {
 }
 
 #[test]
+fn same_state_local_user_cannot_overlap_the_excluded_current_image() {
+    for working_at_selection in [false, true] {
+        let mut fixture = Fixture::qualified_selection(true, false);
+        let working = fixture.payload.rollback_authority.release().clone();
+        let mut original_release = working.clone();
+        if !working_at_selection {
+            original_release.working_evidence = None;
+        }
+        let mut current = same_state_release_pointer_v3(&working).unwrap();
+        current["selection"] = json!({
+            "schemaVersion":2,"generation":7,
+            "current":{"pointer":current.clone(),
+                "qualificationSha256":same_state_release_qualification_sha256(&original_release).unwrap()},
+            "previous":null
+        });
+        fixture.before = serde_json::to_vec(&current).unwrap();
+        let current_path = fixture.state.join("current.json");
+        std::fs::write(&current_path, &fixture.before).unwrap();
+        let handle = fixture.handle.try_clone().unwrap();
+        let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+        let preliminary = guard
+            .same_state_admission_v3(&"0".repeat(64), 1000)
+            .unwrap();
+        let mut pins = fixture.pins(&preliminary);
+        fixture.payload.state_snapshot = pins.snapshot().clone();
+        let observed = pins.observed(&fixture.policy, &fixture.payload, &preliminary);
+        drop(pins);
+        if working_at_selection {
+            fixture.payload.planned_selection_sha256 = observed.unwrap().planned_selection_sha256;
+            let request = encode_local_user_selection_request_v1(&fixture.payload).unwrap();
+            let admission = guard
+                .same_state_admission_v3(&digest(&request), 1000)
+                .unwrap();
+            let denied = SameStateInstallResources::acquire(fixture.grant(&admission, request));
+            assert_eq!(
+                denied.err().as_deref(),
+                Some("WAKE_SAME_STATE_LEGACY_PREVIOUS_IMAGE_OVERLAP")
+            );
+        } else {
+            assert_eq!(
+                observed.err().as_deref(),
+                Some("HOST_INSTALL_PREVIOUS_QUALIFICATION_REQUIRED")
+            );
+        }
+        assert_eq!(std::fs::read(&current_path).unwrap(), fixture.before);
+        assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), 2);
+        fixture.preserved();
+        drop(guard);
+        drop(handle);
+        fixture.cleanup();
+    }
+}
+
+#[test]
 fn same_state_local_user_pointer_interruptions_resume_only_the_original_request() {
     for rollback in [false, true] {
         for stop in [

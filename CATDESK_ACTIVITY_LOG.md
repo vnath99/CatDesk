@@ -694,3 +694,11 @@ Evidence: [docs/verification/DEVELOPMENT_SELECTION_AND_REAL_ROLLBACK_2026_11_21.
 Agent: CatDesk Codex. Source: caf1562a7e3ea8b0ebddffa54d960dd179d94d6e. Outcome: partial. The one-hash facade now pins and remeasures the installed executable and fingerprint before presenting completion. Both PowerShell editions pass the stale receipt and split pair regressions. Exact source confirms the installed image and 56aa candidate both need the existing reviewed promotion route. Next: Verify the signed first Wake selection after the enrolled administrator completes it. Assign the exact 56aa backend contract to an eligible independent reviewer, then produce the attestation and use the existing reviewed promotion route before installed startup, rollback and Web work qualification.
 
 Evidence: [docs/verification/BACKEND_PROMOTE_CANONICAL_READBACK_2026_11_21.json](docs/verification/BACKEND_PROMOTE_CANONICAL_READBACK_2026_11_21.json); command: Run scripts/test-catdesk-lifecycle.ps1 separately on PowerShell 7 and Windows PowerShell 5.1; exit 0; SHA-256 bc133bbe5a1139a0fdeccbfe17e1364698c5c338b0b63b378e1665bcc9134dfc.
+
+<!-- catdesk-activity:nov21-wake-routine-fallback-handoff sha256:8be893fe37132c5a7e164297fca9b01be8ca6326e48cbc4fdd254ecb735267f8 -->
+
+## 2026-11-22T03:53:53.0806008Z — WAKE-LIFECYCLE
+
+Agent: CatDesk Codex. Source: d11b612a0f739219555d9b3a6c124acc0dbace70. Outcome: partial. Disposable Windows fixtures prove the broker refuses a late working receipt as sole predecessor and refuses a prequalified current image that overlaps its exclusive lease. Selection and rollback with a distinct verified fallback passed. The frozen first-selection packet was remeasured. Next: Use the existing signed first Wake selection after the enrolled administrator completes it and verify its distinct fallback. Continue the frozen compatible backend review and producer independently. Keep routine rollback qualification disposable until post-rollback roll-forward and trusted intake are demonstrated.
+
+Evidence: [docs/verification/WAKE_ROUTINE_FALLBACK_HANDOFF_2026_11_21.json](docs/verification/WAKE_ROUTINE_FALLBACK_HANDOFF_2026_11_21.json); command: Run exact Windows Wake refusal fixture and serial same-state local-user tests; exit 0; SHA-256 8ffec11fc1e0159a056c3e203e7b9c09df843dc76e5d69867ff529c3cbaeb1c0.
