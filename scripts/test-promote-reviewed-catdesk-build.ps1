@@ -46,6 +46,29 @@ function Write-InterruptedTransaction($Fixture, [string]$PriorHash, [string]$Can
     @{ schemaVersion = 2; transactionId = '11111111111111111111111111111111'; authorizationId = '0123456789abcdef0123456789abcdef'; phase = 'CANONICAL_MUTATION_STARTED'; priorHash = $PriorHash; candidateHash = $CandidateHash; candidateRelativePath = 'reviewed\catdesk-reviewed.exe' } | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $directory 'promotion-transaction.json') -Encoding utf8
 }
 function TransactionPath([string]$Root) { Join-Path $Root '.catdesk\promotion-recovery\promotion-transaction.json' }
+function New-InterruptedAfterSelectionFixture([string]$Root, [switch]$WithoutPriorSlot) {
+    $fixture = Reset-Fixture $Root
+    $priorHash = Hash $fixture.Canonical
+    $candidateHash = Hash $fixture.Candidate
+    if (-not $WithoutPriorSlot) {
+        [void](Save-CatDeskLastKnownGoodRelease -Root $Root -Canonical (Get-CatDeskCanonicalPairEvidence $Root))
+    }
+    Write-InterruptedTransaction $fixture $priorHash $candidateHash
+    Copy-Item -LiteralPath $fixture.Candidate -Destination $fixture.Canonical -Force
+    [IO.File]::WriteAllText("$($fixture.Canonical).sha256", $candidateHash)
+    $receipt = Join-Path (Split-Path -Parent (TransactionPath $Root)) 'reviewed-promotion.json'
+    [ordered]@{
+        schemaVersion = 1
+        transactionId = '11111111111111111111111111111111'
+        authorizationId = '0123456789abcdef0123456789abcdef'
+        stage = 'CANONICAL_HANDOFF_PROVEN'
+        candidateHash = $candidateHash
+        canonicalRelativePath = 'target\release\catdesk.exe'
+        canonicalSha256 = $candidateHash
+    } | ConvertTo-Json -Compress | Set-Content -LiteralPath $receipt -Encoding utf8
+    $selected = Save-CatDeskLastKnownGoodRelease -Root $Root -Canonical (Get-CatDeskCanonicalPairEvidence $Root)
+    [pscustomobject]@{ Fixture = $fixture; Prior = $priorHash; Candidate = $candidateHash; Selected = $selected; Receipt = $receipt }
+}
 function New-Seams([Collections.Generic.List[string]]$Calls, [bool[]]$Results = @($true, $true)) {
     $handoffState = [pscustomobject]@{ Index = 0; Results = @($Results) }
     $restart = {
@@ -578,6 +601,52 @@ try {
 
     $idempotentPlan = & $promoter -BuildPath $fixture.Candidate -Workspace $workspace | ConvertFrom-Json
     Require ($idempotentPlan.state -eq 'PLAN_READY') 'second invocation after proven recovery is ordinary and idempotent'
+
+    $published = New-InterruptedAfterSelectionFixture $workspace
+    $calls = [Collections.Generic.List[string]]::new()
+    $pins = @(Get-ChildItem -LiteralPath (Get-CatDeskReleaseRecoveryDirectory $workspace) -Directory |
+        Get-ChildItem -File | ForEach-Object FullName) + @($published.Receipt)
+    $beforeRollback = @($pins | ForEach-Object { Hash $_ })
+    $rolledBack = & $promoter -BuildPath $published.Fixture.Candidate -Workspace $workspace -Execute -RecoveryRollbackOnly -TestSeams (New-Seams $calls) | ConvertFrom-Json
+    Require ($rolledBack.state -ceq 'RECOVERED_PRIOR_CANONICAL' -and (Hash $published.Fixture.Canonical) -ceq $published.Prior) 'interrupted promotion restores the exact prior pair'
+    Require ((Read-CatDeskLkgPointer $workspace).Hash -ceq $published.Prior) 'interrupted rollback also restores the prior escrow selection'
+    Require ((Get-CatDeskLastKnownGoodRelease $workspace).Hash -ceq $published.Prior) 'later unpinned recovery will select the rolled back release'
+    $afterRollback = @($pins | ForEach-Object { Hash $_ })
+    Require (($afterRollback -join ',') -ceq ($beforeRollback -join ',') -and $calls.Count -eq 0 -and
+        -not (Test-Path -LiteralPath (TransactionPath $workspace))) 'rollback preserves both immutable slots and the exact candidate receipt'
+
+    foreach ($checkpoint in @('AFTER_ROLLBACK_MANIFEST_REPLACEMENT', 'AFTER_ROLLBACK_ESCROW_SELECTION')) {
+        $published = New-InterruptedAfterSelectionFixture $workspace
+        $calls = [Collections.Generic.List[string]]::new()
+        $interrupt = New-Seams $calls
+        $interrupt.Checkpoint = { param($name) if ($name -ceq $checkpoint) { throw 'fixture interrupted rollback' } }.GetNewClosure()
+        $result = & $promoter -BuildPath $published.Fixture.Candidate -Workspace $workspace -Execute -RecoveryRollbackOnly -TestSeams $interrupt | ConvertFrom-Json
+        Require ($result.state -ceq 'ROLLBACK_UNPROVEN_OPERATOR_ATTENTION' -and (Test-Path -LiteralPath (TransactionPath $workspace))) 'rollback interruption retains the original journal'
+        $expectedSelection = if ($checkpoint -ceq 'AFTER_ROLLBACK_ESCROW_SELECTION') { $published.Prior } else { $published.Candidate }
+        Require ((Hash $published.Fixture.Canonical) -ceq $published.Prior -and (Read-CatDeskLkgPointer $workspace).Hash -ceq $expectedSelection) 'rollback interrupted at the expected durable boundary'
+        $result = & $promoter -BuildPath $published.Fixture.Candidate -Workspace $workspace -Execute -RecoveryRollbackOnly -TestSeams (New-Seams $calls) | ConvertFrom-Json
+        Require ($result.state -ceq 'RECOVERED_PRIOR_CANONICAL' -and (Read-CatDeskLkgPointer $workspace).Hash -ceq $published.Prior -and
+            $calls.Count -eq 0 -and -not (Test-Path -LiteralPath (TransactionPath $workspace))) 'the same authorized recovery resumes without starting a handoff'
+    }
+
+    foreach ($fixtureFault in @('missing prior slot', 'wrong receipt', 'wrong journal candidate')) {
+        $published = New-InterruptedAfterSelectionFixture $workspace -WithoutPriorSlot:($fixtureFault -ceq 'missing prior slot')
+        $journal = TransactionPath $workspace
+        if ($fixtureFault -ceq 'wrong receipt') {
+            $receipt = [IO.File]::ReadAllText($published.Receipt).Replace(('1' * 32), ('2' * 32))
+            [IO.File]::WriteAllText($published.Receipt, $receipt)
+        } elseif ($fixtureFault -ceq 'wrong journal candidate') {
+            [IO.File]::WriteAllText($journal, ([IO.File]::ReadAllText($journal).Replace($published.Candidate, ('f' * 64))))
+        }
+        $pins = @($published.Fixture.Canonical, "$($published.Fixture.Canonical).sha256", $published.Receipt, $journal, (Read-CatDeskLkgPointer $workspace).Path)
+        $beforeRefusal = @($pins | ForEach-Object { Hash $_ })
+        $calls = [Collections.Generic.List[string]]::new()
+        $result = & $promoter -BuildPath $published.Fixture.Candidate -Workspace $workspace -Execute -RecoveryRollbackOnly -TestSeams (New-Seams $calls) | ConvertFrom-Json
+        $expectedRefusal = if ($fixtureFault -ceq 'wrong journal candidate') { 'REVIEWED_PROMOTION_AUTHORIZATION_REQUIRED' } else { 'ROLLBACK_UNPROVEN_OPERATOR_ATTENTION' }
+        Require ($result.state -ceq $expectedRefusal -and $calls.Count -eq 0) "rollback refuses $fixtureFault before mutation"
+        $afterRefusal = @($pins | ForEach-Object { Hash $_ })
+        Require (($afterRefusal -join ',') -ceq ($beforeRefusal -join ',')) "rollback preserves original bytes with $fixtureFault"
+    }
 
     $fixture = Reset-Fixture $workspace
     $priorHash = Hash $fixture.Canonical; $candidateHash = Hash $fixture.Candidate

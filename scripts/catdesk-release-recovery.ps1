@@ -645,6 +645,17 @@ function Get-CatDeskRetainedReleasePredecessor([string]$Root, [string]$ExpectedH
     return [pscustomobject]@{ Current = $pointer; Previous = $previous }
 }
 
+function Set-CatDeskLkgPointer([string]$Root, $Release) {
+    $path = Join-Path (Get-CatDeskReleaseRecoveryDirectory $Root) 'current.json'
+    $pointer = [ordered]@{ schemaVersion = $script:CatDeskReleaseRecoverySchemaVersion; slot = $Release.Slot; generation = $Release.Generation; sha256 = $Release.Hash }
+    Write-CatDeskAtomicUtf8 -Path $path -Text ($pointer | ConvertTo-Json -Compress)
+    $confirmed = Read-CatDeskLkgPointer $Root
+    if ($null -eq $confirmed -or $confirmed.Slot -cne $Release.Slot -or
+        $confirmed.Generation -ne $Release.Generation -or $confirmed.Hash -cne $Release.Hash) {
+        throw 'retained release selection confirmation did not persist'
+    }
+}
+
 function Confirm-CatDeskRecoveredPredecessor {
     param([string]$Root, $Selection, [System.IO.FileStream]$HeldLifecycleLease)
     if ($null -eq $HeldLifecycleLease -or (Get-CatDeskReleaseStartupGate -Root $Root -HeldLifecycleLease $HeldLifecycleLease) -cne 'READY') {
@@ -658,13 +669,7 @@ function Confirm-CatDeskRecoveredPredecessor {
         (Get-CatDeskCanonicalPairEvidence $Root).Hash -cne $previous.Hash) {
         throw 'retained release selection changed before confirmation'
     }
-    $pointer = [ordered]@{ schemaVersion = $script:CatDeskReleaseRecoverySchemaVersion; slot = $previous.Slot; generation = $previous.Generation; sha256 = $previous.Hash }
-    Write-CatDeskAtomicUtf8 -Path $observed.Current.Path -Text ($pointer | ConvertTo-Json -Compress)
-    $confirmed = Read-CatDeskLkgPointer $Root
-    if ($null -eq $confirmed -or $confirmed.Slot -cne $previous.Slot -or
-        $confirmed.Generation -ne $previous.Generation -or $confirmed.Hash -cne $previous.Hash) {
-        throw 'retained release selection confirmation did not persist'
-    }
+    Set-CatDeskLkgPointer -Root $Root -Release $observed.Previous
 }
 
 function Select-CatDeskRecoveryRelease {

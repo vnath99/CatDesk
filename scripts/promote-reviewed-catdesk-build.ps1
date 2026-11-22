@@ -567,9 +567,27 @@ function Restore-PriorCanonical([string]$Root, $Backup, $Canonical) {
     }
 }
 
+function Get-InterruptedPromotionEscrowSelection([string]$Root, $Transaction) {
+    $selected = Get-CatDeskLastKnownGoodRelease -Root $Root -AllowMissing
+    if ($null -eq $selected -or $selected.Hash -cne $Transaction.CandidateHash) { return $null }
+    # The existing protected authorization binds the exact interrupted
+    # transaction. The retained receipt must bind this candidate selection.
+    $receipt = Get-CatDeskReviewedPromotionAuthority -Root $Root -Canonical $selected
+    if ($receipt.transactionId -cne $Transaction.TransactionId -or $receipt.authorizationId -cne $Transaction.AuthorizationId) {
+        throw 'interrupted promotion escrow receipt does not match its transaction'
+    }
+    $selection = Get-CatDeskRetainedReleasePredecessor -Root $Root -ExpectedHash $Transaction.PriorHash
+    if ($null -eq $selection -or $selection.Current.Hash -cne $selected.Hash -or
+        $selection.Current.Slot -cne $selected.Slot -or $selection.Current.Generation -ne $selected.Generation) {
+        throw 'interrupted promotion escrow predecessor is unproven'
+    }
+    return $selection
+}
+
 function Invoke-InterruptedPromotionRecovery([string]$Root, $Transaction, [switch]$RecoveryRollbackOnly) {
     $backup = Get-PromotionBackupEvidence $Root
     if ($null -eq $backup -or $backup.Hash -ne $Transaction.PriorHash) { throw 'promotion recovery backup is invalid' }
+    $selection = Get-InterruptedPromotionEscrowSelection -Root $Root -Transaction $Transaction
     $release = [pscustomobject]@{
         Binary = Get-ContainedRegularFile -Root $Root -Path (Join-Path $Root 'target\release\catdesk.exe') -Label 'canonical release binary'
         Manifest = Get-ContainedRegularFile -Root $Root -Path (Join-Path $Root 'target\release\catdesk.exe.sha256') -Label 'canonical release manifest'
@@ -578,18 +596,29 @@ function Invoke-InterruptedPromotionRecovery([string]$Root, $Transaction, [switc
     $disposition = Get-CanonicalPairDisposition -Root $Root -CandidateHash $Transaction.CandidateHash -PriorHash $Transaction.PriorHash
     if ($disposition.State -ne 'PRIOR') { $restored = Restore-PriorCanonical -Root $Root -Backup $backup -Canonical $release } else { $restored = $disposition.Evidence }
     if ($restored.Hash -ne $Transaction.PriorHash) { throw 'promotion recovery pair validation failed' }
-    if ($RecoveryRollbackOnly) {
-        Clear-PromotionTransaction $Root
-        return $restored
+    if (-not $RecoveryRollbackOnly) {
+        $candidatePath = Join-Path $Root $Transaction.CandidateRelativePath
+        $candidateListener = $null
+        if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
+            try { $candidateListener = Get-PromotionListener -BuildPath (Get-ContainedRegularFile -Root $Root -Path $candidatePath -Label 'transaction candidate') -ExpectedHash $Transaction.CandidateHash } catch { throw 'promotion transaction candidate is invalid' }
+        }
+        if ($null -ne $candidateListener) {
+            if (-not (Invoke-PromotionHandoff -Root $Root -From $candidateListener -TargetPath $restored.Binary -TargetHash $restored.Hash)) { throw 'promotion recovery canonical handoff was not proven' }
+            if ($null -eq (Get-PromotionListener -BuildPath $restored.Binary -ExpectedHash $restored.Hash)) { throw 'promotion recovery canonical listener was not proven' }
+        }
     }
-    $candidatePath = Join-Path $Root $Transaction.CandidateRelativePath
-    $candidateListener = $null
-    if (Test-Path -LiteralPath $candidatePath -PathType Leaf) {
-        try { $candidateListener = Get-PromotionListener -BuildPath (Get-ContainedRegularFile -Root $Root -Path $candidatePath -Label 'transaction candidate') -ExpectedHash $Transaction.CandidateHash } catch { throw 'promotion transaction candidate is invalid' }
+    $observed = Get-InterruptedPromotionEscrowSelection -Root $Root -Transaction $Transaction
+    if (($null -eq $selection) -ne ($null -eq $observed)) {
+        throw 'interrupted promotion escrow changed before rollback confirmation'
     }
-    if ($null -ne $candidateListener -and -not $RecoveryRollbackOnly) {
-        if (-not (Invoke-PromotionHandoff -Root $Root -From $candidateListener -TargetPath $restored.Binary -TargetHash $restored.Hash)) { throw 'promotion recovery canonical handoff was not proven' }
-        if ($null -eq (Get-PromotionListener -BuildPath $restored.Binary -ExpectedHash $restored.Hash)) { throw 'promotion recovery canonical listener was not proven' }
+    if ($null -ne $observed) {
+        if ($observed.Current.Slot -cne $selection.Current.Slot -or $observed.Current.Generation -ne $selection.Current.Generation -or
+            $observed.Previous.Slot -cne $selection.Previous.Slot -or $observed.Previous.Generation -ne $selection.Previous.Generation -or
+            (Get-CatDeskCanonicalPairEvidence $Root).Hash -cne $observed.Previous.Hash) {
+            throw 'interrupted promotion escrow changed before rollback confirmation'
+        }
+        Set-CatDeskLkgPointer -Root $Root -Release $observed.Previous
+        Invoke-PromotionCheckpoint 'AFTER_ROLLBACK_ESCROW_SELECTION'
     }
     Clear-PromotionTransaction $Root
     return $restored
@@ -610,8 +639,13 @@ try {
         }
         try {
             $transactionCandidate = Get-ContainedRegularFile -Root $root -Path $BuildPath -Label 'transaction candidate'
-            $script:PromotionAuthorization = Get-ProtectedPromotionAuthorization -Root $root -Token $AuthorizationToken -TransactionId $TransactionId -Candidate $transactionCandidate -CandidateHash (Get-PromotionHash $transactionCandidate) -PriorHash $interrupted.PriorHash
-            if ($interrupted.SchemaVersion -ne 2 -or [string]$interrupted.AuthorizationId -ne [string]$script:PromotionAuthorization.authorizationId) { throw 'REVIEWED_PROMOTION_AUTHORIZATION_REQUIRED' }
+            $transactionCandidateHash = Get-PromotionHash $transactionCandidate
+            $script:PromotionAuthorization = Get-ProtectedPromotionAuthorization -Root $root -Token $AuthorizationToken -TransactionId $TransactionId -Candidate $transactionCandidate -CandidateHash $transactionCandidateHash -PriorHash $interrupted.PriorHash
+            if ($interrupted.SchemaVersion -ne 2 -or $interrupted.AuthorizationId -cne $script:PromotionAuthorization.authorizationId -or
+                $interrupted.TransactionId -cne $script:PromotionAuthorization.transactionId -or $interrupted.CandidateHash -cne $transactionCandidateHash -or
+                $interrupted.CandidateRelativePath.Replace('\', '/') -ine (Get-WorkspaceRelativePath -Root $root -Path $transactionCandidate -Label 'transaction candidate')) {
+                throw 'REVIEWED_PROMOTION_AUTHORIZATION_REQUIRED'
+            }
         } catch {
             Write-PromotionResult -State 'REVIEWED_PROMOTION_AUTHORIZATION_REQUIRED' -CandidateValidated $false -CanonicalReleaseValidated $false -PromotionRequired $false
             return
