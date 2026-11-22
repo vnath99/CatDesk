@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 21:11 UTC — retain Wake response failures for read-only status.** The confirmed USER receipt and fixed assistant load error now commit in the same delivery record. The existing timer STATUS can report that observation after the sender exits. [Evidence](docs/verification/WAKE_DELIVERY_ERROR_READBACK_2026_11_22.json).
+
 **2026-11-22 21:06 UTC — keep a durable Wake receipt when the assistant response fails to load.** The ordinary adapter now distinguishes a persisted exact USER message from an unusable assistant turn. Two matching fresh-document load-error observations can preserve SENT delivery with an Attention timer. Tests covered exactly one submission, no re-send, and unchanged reviewed artifact admission. [Evidence](docs/verification/WAKE_PERSISTED_RESPONSE_LOAD_FAILURE_2026_11_22.json).
 
 **2026-11-22 20:58 UTC — exercise the queued checkpoint guard through authenticated Windows MCP.** The disposable fixture recorded a real edit, fixed sandbox verification with zero model calls, a local Git checkpoint and one queued manual Wake. After a tracked-file change, exact and next-event delivery both refused before the sender. The queue bytes matched and no delivery, timer or submission witness for the new event appeared. The owned test listener and successful fixture were removed. [Evidence](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).

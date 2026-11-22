@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** The development timer STATUS can recover a previously observed load failure from the original exact delivery. The sender can exit before readback, and STATUS requires neither browser access nor another send. Installed Web acceptance remains open. [Verification](docs/verification/WAKE_DELIVERY_ERROR_READBACK_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** Ordinary scoped Wake now preserves delivery across a confirmed assistant load error with a fixed diagnostic and Attention timer. Source and durable state-machine tests passed. The installed path still needs qualified releases and real continuation evidence. [Verification](docs/verification/WAKE_PERSISTED_RESPONSE_LOAD_FAILURE_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** The Windows sandbox-backed loopback fixture now covers checkpoint drift between queuing and delivery. The exact and next-event entry points both held the same event before browser ownership. Full installed Web acceptance remains open. [Verification](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).

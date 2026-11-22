@@ -697,8 +697,8 @@ fn run_selected_with_adapter<A: SubmissionAdapter>(
         "targetGeneration":final_delivery.target.generation,"targetDigest":final_delivery.target.digest,
         "phase":final_delivery.phase,"receipt":final_delivery.receipt,"maximumSeconds":maximum_seconds,
         "hostStarted":false,"schedulerStarted":false,"desiredStateChanged":false});
-    if status.attention.as_deref() == Some("RESPONSE_LOAD_ERROR") {
-        outcome["responseError"] = json!("RESPONSE_LOAD_ERROR");
+    if let Some(error) = final_delivery.persisted_response_error() {
+        outcome["responseError"] = json!(error);
     }
     Ok(outcome)
 }
@@ -1206,6 +1206,10 @@ mod tests {
         assert_eq!(result["responseError"], "RESPONSE_LOAD_ERROR");
         let delivery = store.delivery(&event.event_id).unwrap().unwrap();
         assert_eq!(delivery.receipt, Some(receipt));
+        assert_eq!(
+            delivery.persisted_response_error(),
+            Some("RESPONSE_LOAD_ERROR")
+        );
         let timer = store.timer(&event.event_id).unwrap().unwrap();
         assert_eq!(timer.response_state, ResponseState::Attention);
         assert!(timer.completed_utc.is_none());

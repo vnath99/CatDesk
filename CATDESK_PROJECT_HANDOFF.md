@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 4:11 p.m. EST.** Development persists the fixed assistant load error beside the exact sent Wake receipt. Read the existing timer STATUS using the original event ID for an attributable error and current timer state. The first installed continuation still depends on the frozen review, original Git worktree metadata and qualified release transitions. [Evidence](docs/verification/WAKE_DELIVERY_ERROR_READBACK_2026_11_22.json).
+
 **November 22, 4:06 p.m. EST.** A persistent assistant load error can now retain the exact USER receipt while leaving the turn incomplete. The source uses the existing browser owner and refresh guards. Artifact admission for changed Python bytes still requires genuine independent review. The previously reviewed pair passed its exact tests without a hash-list change. [Verification](docs/verification/WAKE_PERSISTED_RESPONSE_LOAD_FAILURE_2026_11_22.json).
 
 **November 22, 3:58 p.m. EST.** The new delayed manual-Wake guard passed the existing Windows sandbox-backed loopback cycle. Both CLI delivery selectors refuse a stale checkpoint without changing the queued event or creating delivery evidence. The fixture supplied the original source receipt. Neither the installed browser nor canonical v5 was exercised. The frozen release prerequisites and original delivery histories remain in force. [Evidence](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).

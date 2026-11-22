@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — autonomous response diagnosis.** Development status now retrieves the bounded error from the original Wake receipt after the sender exits. It withholds the receipt and error if the timer and delivery identities disagree. This readback still needs installed qualification. [Evidence](docs/verification/WAKE_DELIVERY_ERROR_READBACK_2026_11_22.json).
+
 **November 22 — Wake response recovery.** Development now preserves an attributable delivery receipt when the initial assistant response cannot load and the same error persists after safe refresh. The live first-cycle proof still requires an attributed next-turn continuation through the installed runtime. [Evidence](docs/verification/WAKE_PERSISTED_RESPONSE_LOAD_FAILURE_2026_11_22.json).
 
 **November 22 — direct-Web path qualification.** Authenticated local MCP and the Windows sandbox verified the development checkpoint gate through real edit, check, checkpoint and queued-Wake refusal after drift. Installed v5 delivery and exact next-turn continuation remain open. [Evidence](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).

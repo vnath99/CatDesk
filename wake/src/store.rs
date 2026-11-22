@@ -259,6 +259,17 @@ impl TurnTimer {
 }
 
 impl Delivery {
+    /// Reports a previously observed failure only for an exact committed USER receipt.
+    pub fn persisted_response_error(&self) -> Option<&'static str> {
+        (self.phase == Phase::Sent
+            && self
+                .receipt
+                .as_ref()
+                .is_some_and(|receipt| receipt.evidence == "EXACT_USER_MESSAGE_APPENDED")
+            && self.reason.as_deref() == Some("RESPONSE_LOAD_ERROR"))
+        .then_some("RESPONSE_LOAD_ERROR")
+    }
+
     fn validate(&self) -> Result<()> {
         self.event.validate()?;
         self.target.validate()?;

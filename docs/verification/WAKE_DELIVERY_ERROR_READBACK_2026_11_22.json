@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T21:11:42.9272156Z",
+  "scope": "DEVELOPMENT_WAKE_RECEIPT_AND_MCP_TIMER_READBACK",
+  "baseline": "ea27bf5005ac43932aba9b3cbbb4a57e53ffaae7",
+  "diagnosis": "A fixed assistant load error was returned by the scoped sender and its timer entered Attention. The exact error was absent from the delivery record used by later read-only status.",
+  "implementation": {
+    "storedWithReceipt": "RESPONSE_LOAD_ERROR",
+    "receiptRequired": "EXACT_USER_MESSAGE_APPENDED",
+    "deliveryPhase": "SENT",
+    "timerAtCommit": "ATTENTION",
+    "timerCompletionRecordedAtCommit": false,
+    "existingReadback": "catdesk_turn_timer STATUS",
+    "responseField": "lastObservedResponseError",
+    "binding": ["event ID", "project ID", "target generation", "target digest", "receipt message digest"],
+    "identityConflict": "IDENTITY_CONFLICT",
+    "historicalFieldRetainedUponCompletion": true,
+    "recordSchemaChanged": false
+  },
+  "verification": {
+    "windowsMcpTimerTestsPassed": 5,
+    "windowsScopedWakeTestsPassed": 2,
+    "strictWakeClippyPassed": true,
+    "rustfmtCheckPassed": true,
+    "exercised": [
+      "Existing scoped sender commits and rereads the attributable error from disposable state",
+      "Existing replay guard refuses an already sent event",
+      "Untrusted or completion-frame diagnostics are refused",
+      "Read-only status reopens the exact stored timer and receipt and leaves their bytes intact",
+      "Conflicting timer generation withholds receipt and error",
+      "A completed timer retains the older failure alongside its current state"
+    ]
+  },
+  "authority": {
+    "browserStarts": 0,
+    "externalMessagesSent": 0,
+    "productionMutations": 0,
+    "originalWakeV3Repeated": false,
+    "firstInstalledWebCycleAccepted": false
+  }
+}

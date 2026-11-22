@@ -8420,23 +8420,24 @@ fn attempt_inner<A: SubmissionAdapter>(
                     )
                     .map_err(|_| "RECEIPT_MALFORMED")?;
                     store.record_exact_receipt_timer(&d.event.event_id, &receipt)?;
+                    if response_error.is_some() {
+                        store.set_timer_response_state(
+                            &d.event.event_id,
+                            ResponseState::Attention,
+                        )?;
+                    }
                     let delivery = store.transition(
                         &d.event.event_id,
                         lease.owner(),
                         Phase::Sent,
                         Some(receipt.clone()),
-                        None,
+                        response_error.map(str::to_owned),
                     )?;
                     if delivery.phase != Phase::Sent {
                         return Err("SUBMISSION_TRANSITION_INVALID".into());
                     }
                     if stage == "SENT" {
                         store.complete_timer(&d.event.event_id)?;
-                    } else if response_error.is_some() {
-                        store.set_timer_response_state(
-                            &d.event.event_id,
-                            ResponseState::Attention,
-                        )?;
                     }
                     status.last_success_utc = Some(now());
                     status.last_receipt = Some(receipt);

@@ -4905,7 +4905,14 @@ fn handle_turn_timer(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcRespo
                 .and_then(|root| catdesk_wake::store::Store::open_read_only(&root))
                 .and_then(|store| store.delivery(&status.event_id))
                 {
-                    Ok(Some(delivery)) => ("PRESENT", Some(delivery)),
+                    Ok(Some(delivery))
+                        if delivery.event.project_id == project_id
+                            && delivery.target.generation == target_generation
+                            && delivery.target.digest == target_digest =>
+                    {
+                        ("PRESENT", Some(delivery))
+                    }
+                    Ok(Some(_)) => ("IDENTITY_CONFLICT", None),
                     Ok(None) => ("MISSING", None),
                     Err(_) => ("READ_FAILED", None),
                 }
@@ -4938,6 +4945,7 @@ fn handle_turn_timer(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcRespo
                     "deliveryPhase": delivery.as_ref().map(|value| format!("{:?}", value.phase).to_uppercase()),
                     "deliveryUpdatedUtc": delivery.as_ref().map(|value| value.updated_utc),
                     "deliveryHasReceipt": receipt.is_some(),
+                    "lastObservedResponseError": delivery.as_ref().and_then(|value| value.persisted_response_error()),
                     "receiptEvidence": receipt.map(|value| value.evidence.clone()),
                     "receiptTargetGeneration": receipt.map(|value| value.target_generation),
                     "receiptTargetDigest": receipt.map(|value| value.target_digest.clone()),
@@ -12406,7 +12414,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn shared_turn_timer_status_is_independent_of_central_target_and_preserves_mutation_scope() {
-        use catdesk_wake::store::{MANUAL_TURN_PREFIX, Phase};
+        use catdesk_wake::store::{MANUAL_TURN_PREFIX, Phase, Receipt, ResponseState, TurnTimer};
         let (control, _, wake, _, event) = crate::web_work::tests::assignment_fixture_for("alpha");
         assert!(!wake.config().unwrap().targets.contains_key("catdesk"));
         // This models Wake's existing project-specific submission timer. It is
@@ -12479,6 +12487,7 @@ mod tests {
             assert_eq!(value["bindingEvidence"], "STORED_TIMER_METADATA");
             assert_eq!(value["timerAloneProvesDelivery"], false);
             assert_eq!(value["timerAloneGrantsExecution"], false);
+            assert!(value["lastObservedResponseError"].is_null());
             if project == "alpha" {
                 assert_eq!(value["deliveryPhase"], "SUBMITTING");
                 assert_eq!(value["deliveryHasReceipt"], false);
@@ -12528,6 +12537,68 @@ mod tests {
         for (path, bytes) in paths.iter().zip(before).skip(1) {
             assert_eq!(std::fs::read(path).unwrap(), bytes);
         }
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: delivery.target.generation,
+            target_digest: delivery.target.digest.clone(),
+            message_digest: delivery.message_digest.clone(),
+            sent_utc: catdesk_wake::store::now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        wake.set_timer_response_state(&event.event_id, ResponseState::Attention)
+            .unwrap();
+        wake.transition(
+            &event.event_id,
+            &delivery.owner,
+            Phase::Sent,
+            Some(receipt.clone()),
+            Some("RESPONSE_LOAD_ERROR".into()),
+        )
+        .unwrap();
+        let status_request = tool_call_request(
+            "catdesk_turn_timer",
+            json!({"action":"STATUS","timerId":event.event_id}),
+        );
+        let readback = || {
+            handle_turn_timer(&status_request, control.to_str().unwrap())
+                .result
+                .unwrap()["structuredContent"]
+                .clone()
+        };
+        let error_record = std::fs::read(&paths[1]).unwrap();
+        let attention_timer = std::fs::read(&paths[2]).unwrap();
+        let failed = readback();
+        assert_eq!(failed["projectId"], "alpha");
+        assert_eq!(failed["deliveryReadState"], "PRESENT");
+        assert_eq!(failed["deliveryPhase"], "SENT");
+        assert_eq!(failed["receiptMessageDigest"], receipt.message_digest);
+        assert_eq!(failed["state"], "ATTENTION");
+        assert_eq!(failed["lastObservedResponseError"], "RESPONSE_LOAD_ERROR");
+        assert_eq!(std::fs::read(&paths[1]).unwrap(), error_record);
+        assert_eq!(std::fs::read(&paths[2]).unwrap(), attention_timer);
+
+        // A valid timer file for a different target must never inherit the receipt.
+        let mut wrong_target: TurnTimer = serde_json::from_slice(&attention_timer).unwrap();
+        wrong_target.target_generation += 1;
+        std::fs::write(&paths[2], serde_json::to_vec(&wrong_target).unwrap()).unwrap();
+        let conflict = readback();
+        assert_eq!(conflict["deliveryReadState"], "IDENTITY_CONFLICT");
+        assert_eq!(conflict["deliveryHasReceipt"], false);
+        assert!(conflict["lastObservedResponseError"].is_null());
+        std::fs::write(&paths[2], attention_timer).unwrap();
+
+        // A subsequently recovered response completes the timer while retaining history.
+        wake.complete_timer(&event.event_id).unwrap();
+        let recovered = readback();
+        assert_eq!(recovered["state"], "COMPLETE");
+        assert_eq!(
+            recovered["lastObservedResponseError"],
+            "RESPONSE_LOAD_ERROR"
+        );
+        assert_eq!(std::fs::read(&paths[1]).unwrap(), error_record);
         let start = tool_call_request("catdesk_turn_timer", json!({"action":"START"}));
         let started = handle_turn_timer(&start, control.to_str().unwrap())
             .result
