@@ -83,6 +83,31 @@ function Get-CatDeskReleaseRecoveryDirectory([string]$Root) {
     return Join-Path $control 'release-recovery'
 }
 
+function Test-CatDeskPromotionStartupReady([string]$Root) {
+    try {
+        $path = Resolve-CatDeskRecoveryRoot $Root
+    } catch {
+        return $false
+    }
+    try {
+        foreach ($directory in @('.catdesk', 'promotion-recovery')) {
+            $path = Join-Path $path $directory
+            $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+            if ($item -isnot [IO.DirectoryInfo] -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                return $false
+            }
+        }
+        # The watched name is published before the canonical pair is changed
+        # and removed only after completion or explicit recovery.
+        [void](Get-Item -LiteralPath (Join-Path $path 'promotion-transaction.json') -Force -ErrorAction Stop)
+        return $false
+    } catch [Management.Automation.ItemNotFoundException] {
+        return $true
+    } catch {
+        return $false
+    }
+}
+
 function Write-CatDeskDurableBytes([string]$Path, [byte[]]$Bytes) {
     $parent = Split-Path -Parent $Path
     if (-not (Test-Path -LiteralPath $parent -PathType Container)) {

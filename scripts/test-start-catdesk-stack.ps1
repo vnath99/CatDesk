@@ -350,6 +350,25 @@ try {
   $invalidLease=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
   if($invalidLease.State -cne 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' -or $script:actions.Count){throw 'invalid lease namespace was treated as transient contention'}
   $Workspace=$root
+  $pendingPromotionRoot=Join-Path $root 'pending-reviewed-promotion'
+  $pendingPromotionDirectory=Join-Path $pendingPromotionRoot '.catdesk\promotion-recovery'
+  [void][IO.Directory]::CreateDirectory($pendingPromotionDirectory)
+  $pendingJournal=Join-Path $pendingPromotionDirectory 'promotion-transaction.json'
+  $pendingContents=[ordered]@{
+    schemaVersion=2;transactionId=('a'*32);authorizationId=('b'*32)
+    phase='CANONICAL_MUTATION_STARTED';priorHash=('c'*64);candidateHash=$hash2
+    candidateRelativePath='target/reviewed-builds/fixture/catdesk.exe'
+  }|ConvertTo-Json -Compress
+  [IO.File]::WriteAllText($pendingJournal,$pendingContents)
+  $Workspace=$pendingPromotionRoot
+  foreach($scope in @($false,$true)){
+    $BackendOnly=$scope
+    $interruptedStartup=Invoke-CanonicalStackBootstrap|ConvertFrom-Json
+    if($interruptedStartup.State -cne 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' -or $script:actions.Count){throw 'matching canonical pair bypassed the interrupted promotion journal'}
+    if([IO.File]::ReadAllText($pendingJournal) -cne $pendingContents){throw 'startup changed the interrupted promotion journal'}
+  }
+  $BackendOnly=$false
+  $Workspace=$root
   function Get-ConfiguredLocalMcp {param($Path)Assert-FixtureLifecycleLeaseHeld $Workspace 'config';throw 'fixture bootstrap core failure'}
   try{Invoke-CanonicalStackBootstrap|Out-Null;throw 'fixture bootstrap failure was swallowed'}catch{if($_.Exception.Message -cne 'fixture bootstrap core failure'){throw}}
   Assert-FixtureLifecycleLeaseReleased $root

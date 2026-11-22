@@ -1291,6 +1291,12 @@ function Invoke-CanonicalStackBootstrapCore {
             return
         }
     }
+    # Matching executable and fingerprint bytes alone cannot settle an
+    # interrupted handoff. Even trusted disk repair can leave it unresolved.
+    if (-not (Test-CatDeskPromotionStartupReady -Root $root)) {
+        Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'reviewed promotion must be reconciled before startup'
+        return
+    }
     if ($BackendOnly) { Invoke-BackendOnlyBootstrap -Root $root -Canonical $canonical; return }
     $localMcp=Get-ConfiguredLocalMcp -Path $ConfigPath;$runtimeAlias=Get-ConfiguredRuntimeAlias -Path $ConfigPath;$client=Find-TunnelClient -ExplicitPath $TunnelClientPath;if(-not $client){throw "official runtime client unavailable"};$setup=Join-Path $root "scripts\setup-secure-mcp.ps1";$diskMode=Read-OfficialRuntimeProcessMode -Path $ConfigPath;$existing=Get-LoopbackCatDeskListener -Port $localMcp.Port -Canonical $canonical;$launched=$false
     [void](Get-LocalMcpProbeHeaders -LocalMcp $localMcp)
