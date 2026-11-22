@@ -625,6 +625,43 @@ function Replace-CatDeskRecoveryFile([string]$Source, [string]$Destination, [str
     }
 }
 
+function Get-CatDeskRetainedReleasePredecessor([string]$Root, [string]$ExpectedHash) {
+    $pointer = Read-CatDeskLkgPointer $Root
+    if ($null -eq $pointer -or $pointer.Hash -ceq $ExpectedHash) { return $null }
+    $current = Read-CatDeskLkgSlot -Root $Root -Slot $pointer.Slot
+    if ($null -eq $current -or $pointer.Generation -ne $current.Generation -or $pointer.Hash -cne $current.Hash) {
+        return $null
+    }
+    $other = if ($current.Slot -ceq 'slot-a') { 'slot-b' } else { 'slot-a' }
+    $previous = Read-CatDeskLkgSlot -Root $Root -Slot $other
+    if ($null -eq $previous -or $previous.Generation -ge $current.Generation -or $previous.Hash -cne $ExpectedHash) {
+        return $null
+    }
+    return [pscustomobject]@{ Current = $pointer; Previous = $previous }
+}
+
+function Confirm-CatDeskRecoveredPredecessor {
+    param([string]$Root, $Selection, [System.IO.FileStream]$HeldLifecycleLease)
+    if ($null -eq $HeldLifecycleLease -or (Get-CatDeskReleaseStartupGate -Root $Root -HeldLifecycleLease $HeldLifecycleLease) -cne 'READY') {
+        throw 'retained release confirmation requires the active lifecycle lease'
+    }
+    $previous = $Selection.Previous
+    $observed = Get-CatDeskRetainedReleasePredecessor -Root $Root -ExpectedHash $previous.Hash
+    if ($null -eq $observed -or $observed.Current.Slot -cne $Selection.Current.Slot -or
+        $observed.Current.Generation -ne $Selection.Current.Generation -or $observed.Current.Hash -cne $Selection.Current.Hash -or
+        $observed.Previous.Slot -cne $previous.Slot -or $observed.Previous.Generation -ne $previous.Generation -or
+        (Get-CatDeskCanonicalPairEvidence $Root).Hash -cne $previous.Hash) {
+        throw 'retained release selection changed before confirmation'
+    }
+    $pointer = [ordered]@{ schemaVersion = $script:CatDeskReleaseRecoverySchemaVersion; slot = $previous.Slot; generation = $previous.Generation; sha256 = $previous.Hash }
+    Write-CatDeskAtomicUtf8 -Path $observed.Current.Path -Text ($pointer | ConvertTo-Json -Compress)
+    $confirmed = Read-CatDeskLkgPointer $Root
+    if ($null -eq $confirmed -or $confirmed.Slot -cne $previous.Slot -or
+        $confirmed.Generation -ne $previous.Generation -or $confirmed.Hash -cne $previous.Hash) {
+        throw 'retained release selection confirmation did not persist'
+    }
+}
+
 function Select-CatDeskRecoveryRelease {
     param([string]$Root, [string]$ExpectedHash = '', [switch]$AllowRetainedPredecessor)
     try { $current = Get-CatDeskLastKnownGoodRelease $Root } catch { throw (Get-CatDeskLkgAuthorityFailure $Root) }
@@ -640,18 +677,12 @@ function Select-CatDeskRecoveryRelease {
     catch { $split = $_.Exception.Message -ceq 'canonical release pair does not match' }
     if (!$split) { throw 'canonical split pair is unproven for predecessor recovery' }
 
-    $pointer = Read-CatDeskLkgPointer $Root
-    if ($null -eq $pointer -or $pointer.Slot -cne $current.Slot -or
-        $pointer.Generation -ne $current.Generation -or $pointer.Hash -cne $current.Hash) {
-        throw 'selected release recovery slot is unproven for predecessor recovery'
-    }
-    $other = if ($current.Slot -ceq 'slot-a') { 'slot-b' } else { 'slot-a' }
-    $previous = Read-CatDeskLkgSlot -Root $Root -Slot $other
-    if ($null -eq $previous -or $previous.Generation -ge $current.Generation -or
-        $previous.Hash -cne $ExpectedHash.ToLowerInvariant()) {
+    $selection = Get-CatDeskRetainedReleasePredecessor -Root $Root -ExpectedHash $ExpectedHash.ToLowerInvariant()
+    if ($null -eq $selection -or $selection.Current.Slot -cne $current.Slot -or
+        $selection.Current.Generation -ne $current.Generation -or $selection.Current.Hash -cne $current.Hash) {
         throw 'retained release predecessor does not match requested hash'
     }
-    return $previous
+    return $selection.Previous
 }
 
 function Restore-CatDeskCanonicalFromLastKnownGood {

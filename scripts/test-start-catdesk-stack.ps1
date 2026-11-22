@@ -341,6 +341,25 @@ try {
       (Get-CatDeskCanonicalPairEvidence $root).Hash -cne $olderPin) { throw 'the exact retained predecessor pair was not restored' }
   $afterSlots = @($beforeSlotPaths | ForEach-Object { (Get-FixtureHash -LiteralPath $_ -Algorithm SHA256).Hash })
   if (($beforeSlots -join ',') -cne ($afterSlots -join ',')) { throw 'explicit predecessor recovery changed retained release evidence' }
+  $selectionToConfirm = Get-CatDeskRetainedReleasePredecessor -Root $root -ExpectedHash $olderPin
+  if ($null -eq $selectionToConfirm) { throw 'the restored predecessor was not eligible for confirmation' }
+  $refusal = try { Confirm-CatDeskRecoveredPredecessor -Root $root -Selection $selectionToConfirm } catch { $_.Exception.Message }
+  if ($refusal -cne 'retained release confirmation requires the active lifecycle lease') { throw 'confirmation ran outside the lifecycle lease' }
+  $heldSelectionLease = Enter-CatDeskStoppedLifecycleLease -Root $root
+  try {
+    [IO.File]::WriteAllText($pointer,'different-pointer')
+    $driftAccepted = try { Confirm-CatDeskRecoveredPredecessor -Root $root -Selection $selectionToConfirm -HeldLifecycleLease $heldSelectionLease; $true } catch { $false }
+    if ($driftAccepted -or [IO.File]::ReadAllText($pointer) -cne 'different-pointer') { throw 'confirmation overwrote changed pointer evidence' }
+    [IO.File]::WriteAllBytes($pointer,$pointerBefore)
+    Confirm-CatDeskRecoveredPredecessor -Root $root -Selection $selectionToConfirm -HeldLifecycleLease $heldSelectionLease
+    $confirmedPredecessor = Get-CatDeskLastKnownGoodRelease $root
+    if ($confirmedPredecessor.Slot -cne $lkg1.Slot -or $confirmedPredecessor.Hash -cne $olderPin) { throw 'confirmed rollback did not change default recovery selection' }
+    $contentPins = @($beforeSlotPaths | Select-Object -First 6 | ForEach-Object { (Get-FixtureHash -LiteralPath $_ -Algorithm SHA256).Hash })
+    if (($contentPins -join ',') -cne (($beforeSlots | Select-Object -First 6) -join ',')) { throw 'confirmation rewrote retained release artifacts' }
+  } finally {
+    [IO.File]::WriteAllBytes($pointer,$pointerBefore)
+    $heldSelectionLease.Dispose()
+  }
   $restoredCurrent = Restore-CatDeskCanonicalFromLastKnownGood $root
   if ($restoredCurrent.Hash -cne $hash2) { throw 'the ordinary recovery selection moved after explicit predecessor recovery' }
 

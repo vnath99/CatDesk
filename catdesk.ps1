@@ -709,7 +709,8 @@ function Invoke-CanonicalRecovery {
     $raw = @(Invoke-LifecycleSeam -Name 'Recovery' -Arguments @($enginePath, $Workspace, $ConfigPath, $ExpectedBuildSha256, $BuildFingerprintPath, $ReadyTimeoutSeconds, $RequestedCommand, [bool]$BackendOnly) -Default {
         param($engine, $root, $config, $expected, $manifest, $timeout, $requested, $backend)
         # Both public start and recover use the same proven, release-only engine.
-        & $engine -Mode recover -Workspace $root -ConfigPath $config -ExpectedBuildSha256 $expected -BuildFingerprintPath $manifest -ReadyTimeoutSeconds $timeout -BackendOnly:$backend -Execute
+        $confirmRetainedSelection = $requested -ceq 'recover' -and $backend -and $expected
+        & $engine -Mode recover -Workspace $root -ConfigPath $config -ExpectedBuildSha256 $expected -BuildFingerprintPath $manifest -ReadyTimeoutSeconds $timeout -BackendOnly:$backend -ConfirmRetainedSelection:$confirmRetainedSelection -Execute
     })
     $result = Get-LifecycleRecoveryResult -Raw $raw
     if ($BackendOnly -and $null -ne $result -and $result.State -eq 'LOCAL_BACKEND_READY') {

@@ -8,6 +8,7 @@ param(
     [string]$BuildFingerprintPath = "",
     [string]$TunnelClientPath = "",
     [switch]$BackendOnly,
+    [switch]$ConfirmRetainedSelection,
     [switch]$Execute
 )
 
@@ -1203,13 +1204,16 @@ function Get-BackendOnlyUtcNow {
 }
 
 function Invoke-BackendOnlyBootstrap {
-    param([string]$Root, $Canonical)
+    param([string]$Root, $Canonical, $RetainedSelection, [System.IO.FileStream]$StoppedLifecycleLease)
     # Release repair before this function retains its existing integrity/owner
     # gates and helper timeouts. Only local convergence is capped here; a probe
     # already in flight retains its existing finite per-call timeout.
     $deadline = (Get-BackendOnlyUtcNow).AddSeconds([Math]::Min(60, $ReadyTimeoutSeconds))
     $local = Get-ConfiguredLocalMcp -Path $ConfigPath
-    try { [void](Get-LocalMcpProbeHeaders -LocalMcp $local) } catch {
+    try {
+        $headers = Get-LocalMcpProbeHeaders -LocalMcp $local
+        if ($null -ne $RetainedSelection -and !$headers.ContainsKey('Authorization')) { throw 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
+    } catch {
         $gate = if ($_.Exception.Message -eq 'LOCAL_MCP_AUTH_SCOPE_INVALID') { 'LOCAL_MCP_AUTH_SCOPE_INVALID' } else { 'LOCAL_MCP_AUTH_TOKEN_INVALID' }
         Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'local MCP authentication scope refused' '' $gate; return
     }
@@ -1238,8 +1242,19 @@ function Invoke-BackendOnlyBootstrap {
     }
     $lastGate = 'LOCAL_MCP_RESPONSE_UNAVAILABLE'
     while ((Get-BackendOnlyUtcNow) -lt $deadline) {
-        $ready = Get-LocalMcpReadiness -LocalMcp $local -Canonical $Canonical -ExpectedDaemonProcess $started
-        if ($ready.Ready) { Write-RedactedStatus 'LOCAL_BACKEND_READY' 'local backend only; Wake, GUI and official runtime not examined or started'; return }
+        $ready = Get-LocalMcpReadiness -LocalMcp $local -Canonical $Canonical -ExpectedDaemonProcess $started -RequireBearer:($null -ne $RetainedSelection)
+        if ($ready.Ready) {
+            if ($null -ne $RetainedSelection) {
+                try {
+                    Confirm-CatDeskRecoveredPredecessor -Root $Root -Selection $RetainedSelection -HeldLifecycleLease $StoppedLifecycleLease
+                } catch {
+                    Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'authenticated backend is ready but retained selection could not be confirmed'
+                    return
+                }
+            }
+            Write-RedactedStatus 'LOCAL_BACKEND_READY' 'local backend only; Wake, GUI and official runtime not examined or started'
+            return
+        }
         $lastGate = [string]$ready.Gate
         # Existing canonical listeners are not recycled on a timeout: the full
         # path's external-readiness proof is deliberately not weakened here.
@@ -1310,7 +1325,21 @@ function Invoke-CanonicalStackBootstrapCore {
         Write-RedactedStatus $startupGate 'canonical startup is waiting for release ownership or reconciliation'
         return
     }
-    if ($BackendOnly) { Invoke-BackendOnlyBootstrap -Root $root -Canonical $canonical; return }
+    if ($BackendOnly) {
+        $retainedSelection = $null
+        if ($ConfirmRetainedSelection -and $Mode -ceq 'recover' -and $Execute -and $ExpectedBuildSha256) {
+            try {
+                # A valid, exact predecessor already on disk also permits readback
+                # after a prior command stopped between repair and confirmation.
+                $retainedSelection = Get-CatDeskRetainedReleasePredecessor -Root $root -ExpectedHash $canonical.Sha256
+            } catch {
+                Write-RedactedStatus 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' 'retained selection evidence could not be verified'
+                return
+            }
+        }
+        Invoke-BackendOnlyBootstrap -Root $root -Canonical $canonical -RetainedSelection $retainedSelection -StoppedLifecycleLease $StoppedLifecycleLease
+        return
+    }
     $localMcp=Get-ConfiguredLocalMcp -Path $ConfigPath;$runtimeAlias=Get-ConfiguredRuntimeAlias -Path $ConfigPath;$client=Find-TunnelClient -ExplicitPath $TunnelClientPath;if(-not $client){throw "official runtime client unavailable"};$setup=Join-Path $root "scripts\setup-secure-mcp.ps1";$diskMode=Read-OfficialRuntimeProcessMode -Path $ConfigPath;$existing=Get-LoopbackCatDeskListener -Port $localMcp.Port -Canonical $canonical;$launched=$false
     [void](Get-LocalMcpProbeHeaders -LocalMcp $localMcp)
     Test-CodexOnDemandPrerequisites
