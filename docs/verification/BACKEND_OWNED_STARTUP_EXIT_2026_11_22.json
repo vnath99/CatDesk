@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_FROZEN_WINDOWS_BACKEND_EXIT_OBSERVED_BY_DISPOSABLE_LOCAL_RECOVERY",
+  "sourceCommit": "489f675149b29cb79fd648f61715fa813eb92576",
+  "baselineCommit": "fa216bd9f0761836996961c7db9c5552ff29e3c1",
+  "baseline": "The new exact-child regression failed on the prior source because the recovery readback returned the missing-listener gate at its deadline instead of recognizing the observed child exit.",
+  "privateFixtureSha256": "205662330d6e63b880e6d10710883ae19444894dc4ac2d1669f0e7e615a4278a",
+  "startedUtc": "2026-11-22T09:20:03.9924965+00:00",
+  "finishedUtc": "2026-11-22T09:20:07.6346206+00:00",
+  "result": {
+    "candidateSha256": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+    "fault": "INVALID_PRIVATE_CONFIG",
+    "childExitCode": 1,
+    "state": "TRANSPORT_VERIFICATION_FAILED",
+    "gate": "LOCAL_MCP_LAUNCHED_PROCESS_EXITED",
+    "elapsedMilliseconds": 3107,
+    "configuredTimeoutSeconds": 25,
+    "childStarts": 1,
+    "ownedExitObserved": true,
+    "canonicalPairAndConfigUnchanged": true,
+    "listenerAbsent": true,
+    "fixtureRemoved": true
+  },
+  "tests": {
+    "bootstrapPowerShell51": "PASS",
+    "bootstrapPowerShell7": "PASS",
+    "publicLifecyclePowerShell7": "PASS",
+    "autostartSupervisorPowerShell7": "PASS"
+  },
+  "noProductionPort": true,
+  "productionActions": 0,
+  "installedAcceptance": false,
+  "limits": "The real frozen binary passed the backend-only support query. The recovery fixture launched the private headless mode with malformed disposable TOML and observed the exact handle exit. This establishes quicker terminal failure reporting. It supplies no authority to select a fallback from an intact pair or to run installed promotion."
+}

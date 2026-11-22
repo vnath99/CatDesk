@@ -1054,3 +1054,11 @@ Evidence: [docs/verification/BACKEND_PINNED_PREDECESSOR_RECOVERY_2026_11_22.json
 Agent: Codex. Source: f623ac2eb01ceb6537e9127943f05ab99dfe1e6e. Outcome: partial. An explicit rollback now records the verified predecessor as selected only after authenticated MCP proves it is serving. The actual Windows private backend kept both escrow artifacts and later unpinned recovery selected the predecessor.. Next: Obtain genuine independent review and trusted build evidence for the frozen backend. Qualify the installed promotion and rollback. Verify the first signed Wake V3 selection, then run the installed Web edit and self-Wake cycle..
 
 Evidence: [docs/verification/BACKEND_CONFIRMED_ROLLBACK_SELECTION_2026_11_22.json](docs/verification/BACKEND_CONFIRMED_ROLLBACK_SELECTION_2026_11_22.json); command: Bounded Windows recovery selection and authenticated MCP fixture; exit 0; SHA-256 6521929d7ed5931bb57a4d2e8828b547bd3d06e5219b88af7f3079288b21120f.
+
+<!-- catdesk-activity:owned-backend-startup-exit-2026-11-22 sha256:10cddecdb759bb78549780a518f4f4360c38d8adc0df0cd14657d0a9f58df191 -->
+
+## 2026-11-22T09:20:08Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 489f675149b29cb79fd648f61715fa813eb92576. Outcome: partial. Backend-only recovery now stops waiting once its exact newly launched child has exited. The frozen backend failed on an invalid disposable config and returned the new gate in 3.1 seconds. The pair stayed intact and the private owner exited.. Next: Verify an eligible independent ChatGPT Web review-only route for the original frozen draft. Its exact start approval, genuine report, acknowledgment and source snapshot remain mandatory. Qualify installed promotion and rollback and confirm the first signed Wake V3 selection before the installed Web cycle..
+
+Evidence: [docs/verification/BACKEND_OWNED_STARTUP_EXIT_2026_11_22.json](docs/verification/BACKEND_OWNED_STARTUP_EXIT_2026_11_22.json); command: Bounded frozen Windows backend with a malformed disposable config; exit 0; SHA-256 1fe0e313fd142ed80a00046ad0b1e349876c31d0384ba0400da10ff9abe3f128.
