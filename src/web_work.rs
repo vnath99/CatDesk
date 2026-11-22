@@ -926,13 +926,13 @@ fn assigned_action(
     )
 }
 
-/// Local operator only. Select one existing assignment or explicitly yield
-/// it at a quiescent boundary. No task, browser, grant or worker is started.
+/// Local operator only. Manage one existing assignment and prove quiescence
+/// before it can release ownership. No task, browser, grant or worker starts.
 pub(crate) fn transition_execution_lane(
     workspace: &Path,
     project: &str,
     request_id: &str,
-    select: bool,
+    action: execution_lane::Transition,
 ) -> Result<Value, String> {
     let workspace = workspace
         .canonicalize()
@@ -951,11 +951,15 @@ pub(crate) fn transition_execution_lane(
     let paired = mcp::operator_read_project_web_target(&workspace, project)
         .map_err(|_| "WEB_WORK_PAIRED_TARGET_REQUIRED")?
         .ok_or("WEB_WORK_PAIRED_TARGET_REQUIRED")?;
-    let wake = catdesk_wake::store::Store::open_read_only(
-        &wake_protocol_client::wake_root_for_workspace(&workspace)?,
-    )?;
-    if !select {
-        execution_lane::require_owner(&workspace, project, &record)?;
+    use execution_lane::Transition;
+    let active = execution_lane::owns_active_lane(&workspace, project, &record)?;
+    if action == Transition::Yield && !active {
+        return Err("WEB_WORK_LANE_OWNER_CHANGED".into());
+    }
+    if active && matches!(action, Transition::Yield | Transition::Pause) {
+        let wake = catdesk_wake::store::Store::open_read_only(
+            &wake_protocol_client::wake_root_for_workspace(&workspace)?,
+        )?;
         crate::project_mcp_task::require_completed_task_continuations(
             prepared.scope(),
             &record,
@@ -976,7 +980,7 @@ pub(crate) fn transition_execution_lane(
             }
             let current = protocol::Target::new(paired.generation, paired.url.clone())?;
             lease.check_source_task(&record.target, &current, &record.event_id)?;
-            if select && !execution_lane::is_enabled(workspace)? {
+            if action == Transition::Select && !execution_lane::is_enabled(workspace)? {
                 let registry = AutonomousProjectRegistryStoreV1::open_read_only(
                     workspace.join(".catdesk/projects"),
                 )
@@ -998,7 +1002,7 @@ pub(crate) fn transition_execution_lane(
                     }
                 }
             }
-            execution_lane::transition(workspace, project, &record, select)
+            execution_lane::transition(workspace, project, &record, action)
         },
     )
 }

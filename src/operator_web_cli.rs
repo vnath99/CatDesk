@@ -197,7 +197,7 @@ pub(crate) enum WebAction {
     WorkLane {
         project_id: String,
         request_id: String,
-        select: bool,
+        action: crate::web_work_state::execution_lane::Transition,
     },
     WorkAssociate {
         project_id: String,
@@ -384,7 +384,14 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         return Err("WEB_USAGE: invalid project ID".into());
     }
     match (group, verb) {
-        ("work", "lane-select" | "lane-yield") => {
+        ("work", "lane-select" | "lane-yield" | "lane-pause" | "lane-resume") => {
+            use crate::web_work_state::execution_lane::Transition;
+            let action = match verb {
+                "lane-select" => Transition::Select,
+                "lane-yield" => Transition::Yield,
+                "lane-pause" => Transition::Pause,
+                _ => Transition::Resume,
+            };
             let request_id = options
                 .remove("--request-id")
                 .filter(|id| id.len() <= 128 && catdesk_wake::protocol::valid_id(id))
@@ -395,7 +402,7 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
             Ok(WebAction::WorkLane {
                 project_id: project_id.into(),
                 request_id: request_id.into(),
-                select: verb == "lane-select",
+                action,
             })
         }
         ("work", "manual-wake-deliver-next") if options.is_empty() => {
@@ -2244,9 +2251,9 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
         WebAction::WorkLane {
             project_id,
             request_id,
-            select,
+            action,
         } => {
-            crate::web_work::transition_execution_lane(&workspace, &project_id, &request_id, select)
+            crate::web_work::transition_execution_lane(&workspace, &project_id, &request_id, action)
         }
         WebAction::WorkManualWakeDeliverNext { project_id } => {
             crate::web_work::deliver_next_manual_wake(&workspace, &project_id)

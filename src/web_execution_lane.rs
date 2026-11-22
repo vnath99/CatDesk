@@ -44,6 +44,18 @@ impl Owner {
             && sha256(&self.assignment.assignment_sha256)
             && sha256(&self.assignment.scope_sha256)
     }
+
+    fn eligible_to_wait(&self, workspace: &Path) -> Result<bool, String> {
+        Ok(self.open(workspace)? && !self.revoked(workspace)?)
+    }
+
+    fn revoked(&self, workspace: &Path) -> Result<bool, String> {
+        crate::project_mcp_task::web_task_lane_revoked(
+            workspace,
+            &self.project_id,
+            &self.assignment.task_id,
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +65,8 @@ struct Lane {
     owner: Option<Owner>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     waiting: Vec<Owner>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    paused: Vec<Owner>,
 }
 
 fn path(workspace: &Path) -> PathBuf {
@@ -85,10 +99,12 @@ fn load(workspace: &Path) -> Result<Option<Lane>, String> {
     let mut events = std::collections::BTreeSet::new();
     if lane.schema_version != 1
         || lane.waiting.len() > MAX_WAITING
+        || lane.paused.len() > MAX_WAITING
         || lane
             .owner
             .iter()
             .chain(&lane.waiting)
+            .chain(&lane.paused)
             .any(|owner| !owner.valid() || !events.insert(&owner.event_id))
     {
         return Err("WEB_WORK_LANE_INVALID".into());
@@ -107,7 +123,7 @@ fn save(workspace: &Path, lane: &Lane) -> Result<(), String> {
 
 fn next_waiting<'a>(workspace: &Path, waiting: &'a [Owner]) -> Result<Option<&'a Owner>, String> {
     for candidate in waiting {
-        if candidate.open(workspace)? {
+        if candidate.eligible_to_wait(workspace)? {
             return Ok(Some(candidate));
         }
     }
@@ -119,6 +135,19 @@ pub(crate) fn status(workspace: &Path, project: &str) -> Value {
         let Some(lane) = load(workspace)? else {
             return Ok::<_, String>(json!({"status":"NOT_ENABLED"}));
         };
+        for paused in &lane.paused {
+            if paused.project_id == project && paused.open(workspace)? {
+                return Ok(json!({"status":"PAUSED","requestId":paused.request_id}));
+            }
+        }
+        for waiter in &lane.waiting {
+            if waiter.project_id == project
+                && waiter.open(workspace)?
+                && waiter.revoked(workspace)?
+            {
+                return Ok(json!({"status":"EXECUTION_REVOKED","requestId":waiter.request_id}));
+            }
+        }
         if let Some(owner) = lane.owner
             && owner.open(workspace)?
         {
@@ -160,6 +189,9 @@ pub(crate) fn admit_owner(
         return Err("WEB_WORK_REQUEST_CLOSED".into());
     }
     let requested = Owner::new(project, record)?;
+    if lane.paused.contains(&requested) {
+        return Err("WEB_WORK_LANE_PAUSED".into());
+    }
     if lane.owner.as_ref() == Some(&requested) {
         return Ok(());
     }
@@ -168,11 +200,11 @@ pub(crate) fn admit_owner(
         Some(owner) => owner.open(workspace)?,
         None => false,
     };
-    // A closed waiter is already settled by normal terminal resolution. An
-    // absent or conflicting record fails closed instead of dropping its slot.
+    // Closed and explicitly revoked waiters cannot execute. An absent or
+    // conflicting record fails closed instead of dropping its slot.
     let mut waiting = Vec::with_capacity(lane.waiting.len());
     for candidate in &lane.waiting {
-        if candidate.open(workspace)? {
+        if candidate.eligible_to_wait(workspace)? {
             waiting.push(candidate.clone());
         }
     }
@@ -212,52 +244,114 @@ pub(crate) fn require_owner(
         return Ok(());
     };
     let requested = Owner::new(project, record)?;
+    if lane.paused.contains(&requested) {
+        return Err("WEB_WORK_LANE_PAUSED".into());
+    }
     if record.phase == "OPEN" && lane.owner.as_ref() == Some(&requested) {
         return Ok(());
     }
     Err("WEB_WORK_EXECUTION_QUEUED".into())
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Transition {
+    Select,
+    Yield,
+    Pause,
+    Resume,
+}
+
+pub(crate) fn owns_active_lane(
+    workspace: &Path,
+    project: &str,
+    record: &WorkRecord,
+) -> Result<bool, String> {
+    let owner = load(workspace)?.and_then(|lane| lane.owner);
+    Ok(owner.as_ref() == Some(&Owner::new(project, record)?))
+}
+
 /// The caller retains the project lease and registration lock, and has checked
-/// the exact requested record and the absence of unresolved work when yielding.
+/// the exact record and the absence of unresolved effects when relinquishing it.
 pub(crate) fn transition(
     workspace: &Path,
     project: &str,
     record: &WorkRecord,
-    select: bool,
+    action: Transition,
 ) -> Result<Value, String> {
     if record.phase != "OPEN" {
         return Err("WEB_WORK_REQUEST_CLOSED".into());
     }
     let requested = Owner::new(project, record)?;
     let lane = load(workspace)?;
-    let current = lane.as_ref().and_then(|state| state.owner.as_ref());
-    if select {
-        if current == Some(&requested) {
-            return Ok(
-                json!({"status":"ACTIVE","projectId":project,"requestId":record.request_id}),
-            );
-        }
-        if let Some(current) = current
-            && current.open(workspace)?
-        {
-            return Err("WEB_WORK_LANE_ALREADY_OWNED".into());
-        }
-    } else if current != Some(&requested) {
-        return Err("WEB_WORK_LANE_OWNER_CHANGED".into());
+    if lane.is_none() && action != Transition::Select {
+        return Err("WEB_WORK_LANE_NOT_ENABLED".into());
     }
     let mut next = lane.unwrap_or(Lane {
         schema_version: 1,
         owner: None,
         waiting: vec![],
+        paused: vec![],
     });
-    if select {
-        next.waiting.retain(|candidate| candidate != &requested);
+    let before = next.clone();
+    let is_owner = next.owner.as_ref() == Some(&requested);
+    let status = match action {
+        Transition::Select => {
+            if !is_owner {
+                if let Some(current) = &next.owner
+                    && current.open(workspace)?
+                {
+                    return Err("WEB_WORK_LANE_ALREADY_OWNED".into());
+                }
+                if next.paused.contains(&requested) {
+                    return Err("WEB_WORK_LANE_PAUSED".into());
+                }
+                if requested.revoked(workspace)? {
+                    return Err("WEB_TASK_GRANT_REVOKED".into());
+                }
+                next.waiting.retain(|candidate| candidate != &requested);
+                next.owner = Some(requested);
+            }
+            "ACTIVE"
+        }
+        Transition::Yield => {
+            if !is_owner {
+                return Err("WEB_WORK_LANE_OWNER_CHANGED".into());
+            }
+            next.owner = None;
+            "YIELDED"
+        }
+        Transition::Pause => {
+            if !next.paused.contains(&requested) {
+                let mut paused = Vec::with_capacity(next.paused.len());
+                for candidate in &next.paused {
+                    if candidate.open(workspace)? {
+                        paused.push(candidate.clone());
+                    }
+                }
+                if paused.len() == MAX_WAITING {
+                    return Err("WEB_WORK_LANE_PAUSED_CAPACITY".into());
+                }
+                paused.push(requested.clone());
+                next.paused = paused;
+                next.waiting.retain(|candidate| candidate != &requested);
+                if is_owner {
+                    next.owner = None;
+                }
+            }
+            "PAUSED"
+        }
+        Transition::Resume => {
+            if requested.revoked(workspace)? {
+                return Err("WEB_TASK_GRANT_REVOKED".into());
+            }
+            next.paused.retain(|candidate| candidate != &requested);
+            "RESUMED"
+        }
+    };
+    if before != next {
+        save(workspace, &next)?;
     }
-    next.owner = select.then_some(requested);
-    save(workspace, &next)?;
     Ok(
-        json!({"status":if select {"ACTIVE"} else {"YIELDED"}, "projectId":project,
-        "requestId":record.request_id,"taskRemainsOpen":true}),
+        json!({"status":status,"projectId":project,"requestId":record.request_id,"taskRemainsOpen":true}),
     )
 }

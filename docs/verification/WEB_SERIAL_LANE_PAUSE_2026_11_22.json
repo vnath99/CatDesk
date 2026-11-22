@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T22:29:00Z",
+  "scope": "WINDOWS_DEVELOPMENT_WEB_LANE_PAUSE_RESUME_AND_REVOKED_WAITERS",
+  "baseline": "73cfb5de9a0f576fc739a225531c026fe63edcfb",
+  "operatorControls": "The existing operator CLI can pause one exact open assignment and later remove that pause. Active ownership releases only after the existing task-journal and exact Wake-response checks. The original assignment stays open.",
+  "revocation": "The waiting order skips a closed task or an exact execution-revoked marker. A missing or conflicting identity stops advancement. A revoked grant never releases an active owner by itself.",
+  "effects": "A paused task retains read access through its existing authority. A resumed task reenters on its next authorized effect request. No project file or browser input is produced by the pause or resume operation.",
+  "observations": {
+    "pauseRefusedDuringPendingWake": true,
+    "pauseAfterExactResponseReleasedOriginalOwner": true,
+    "pausedReadAllowedAndPatchRefused": true,
+    "waitingPeerAdvancedAndEditedOnlyItsWorktree": true,
+    "resumedTaskReenteredThroughExistingGrant": true,
+    "existingRevocationNoLongerBlockedAnEligiblePeer": true,
+    "originalRequestGrantAndWakeReceiptPreserved": true,
+    "browserReceiptSimulated": true
+  },
+  "serialWindowsTests": {
+    "command": "cargo test --offline --locked --bin catdesk serial_web_lane -- --test-threads=1",
+    "passed": 2,
+    "failed": 0,
+    "testSeconds": 68.08
+  },
+  "existingManualWakeGrantRevocationRegression": "PASS",
+  "liveChatGptWebAcceptance": false,
+  "productionChanges": false
+}

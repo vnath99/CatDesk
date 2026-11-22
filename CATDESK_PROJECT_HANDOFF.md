@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 5:27 p.m. EST.** The opt-in lane has local pause and resume commands. Scope follows the original request and task. A live or unresolved owner requires proof before release. An exact revoked waiter is skipped while its work record and journal remain available for recovery. [Evidence](docs/verification/WEB_SERIAL_LANE_PAUSE_2026_11_22.json).
+
 **November 22, 5:21 p.m. EST.** The opt-in lane now keeps a durable waiting order and advances on the next authorized tool call after a safe release. Selection and unknown-outcome recovery still share the existing project and registration leases. Installed acceptance still uses the original disposable workspace and frozen backend approval chain. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_FIFO_2026_11_22.json).
 
 **November 22, 5:13 p.m. EST.** Serial development now supports local selection, queued project status, and exact safe yield through the existing work registry. It is inactive until first selection. Native Codex and read-only observations are outside the direct-Web effects gate. The frozen backend review, original Git backing and reviewed installed release still gate the first Web cycle. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_LANE_2026_11_22.json).

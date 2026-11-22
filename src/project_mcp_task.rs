@@ -364,12 +364,26 @@ fn task_directory(
     task_id: &str,
     create: bool,
 ) -> Result<PathBuf, String> {
+    task_directory_for(
+        &project.control_workspace,
+        &project.project.project_id,
+        task_id,
+        create,
+    )
+}
+
+fn task_directory_for(
+    workspace: &Path,
+    project_id: &str,
+    task_id: &str,
+    create: bool,
+) -> Result<PathBuf, String> {
     if task_id.len() > 128 || !catdesk_wake::protocol::valid_id(task_id) {
         return Err("PROJECT_TASK_ASSIGNMENT_INVALID".into());
     }
-    let mut path = project.control_workspace.join(".catdesk");
+    let mut path = workspace.join(".catdesk");
     plain_directory(&path)?;
-    for component in ["project-mcp-tasks", &project.project.project_id, task_id] {
+    for component in ["project-mcp-tasks", project_id, task_id] {
         path.push(component);
         if create
             && !path
@@ -381,6 +395,26 @@ fn task_directory(
         plain_directory(&path)?;
     }
     Ok(path)
+}
+
+/// Check the existing immutable revocation without opening the queued
+/// project's workspace, its credential file, or a task writer.
+pub(crate) fn web_task_lane_revoked(
+    workspace: &Path,
+    project_id: &str,
+    task_id: &str,
+) -> Result<bool, String> {
+    if project_id.len() > 128 || !catdesk_wake::protocol::valid_id(project_id) {
+        return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
+    }
+    let marker =
+        task_directory_for(workspace, project_id, task_id, false)?.join("execution-revoked.json");
+    match fs::symlink_metadata(&marker) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(_) => Err("WEB_TASK_GRANT_UNAVAILABLE".into()),
+        Ok(_) if read_assignment_bytes(&marker)? == b"{\"revoked\":true}" => Ok(true),
+        Ok(_) => Err("WEB_TASK_GRANT_INVALID".into()),
+    }
 }
 
 pub(crate) fn read_assignment_bytes(path: &Path) -> Result<Vec<u8>, String> {

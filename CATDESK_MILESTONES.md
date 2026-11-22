@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — operator pause and resume in the serial Web lane.** Paused work keeps its original assignment and releases the lane only at a safe boundary. The queue skips revoked waiters. Installed Web and live multi-project qualification remain open. [Evidence](docs/verification/WEB_SERIAL_LANE_PAUSE_2026_11_22.json).
+
 **November 22 — ordered Web-lane handoff in development.** Waiting assignments advance in admission order after yield or verified closure, using the next authorized request. The installed Web coding and multi-project browser tests remain open. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_FIFO_2026_11_22.json).
 
 **November 22 — serial Web execution in development.** One persistent operator-selected assignment owns scoped edits, verification, Git actions and self-Wake. Queue order is operator-selected. The first installed Web cycle and multi-project browser acceptance remain open. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_LANE_2026_11_22.json).

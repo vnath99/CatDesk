@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** A paused request cannot claim the lane on a later effect call, and revocation no longer leaves a queued task at the head. The active-owner recovery guard still applies. [Evidence](docs/verification/WEB_SERIAL_LANE_PAUSE_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** The serial lane persists deduplicated waiters. A late attempt stays behind the existing queue, and a previously recorded call cannot reenter the lane. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_FIFO_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** Opt-in operator serial admission now binds the active project, request, source event and archived assignment. A self-Wake retains the owner across the response timer, and pending effects refuse a yield. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_LANE_2026_11_22.json).

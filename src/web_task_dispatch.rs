@@ -3218,7 +3218,17 @@ pub(crate) mod tests {
             "NOT_ENABLED"
         );
         let transition = |project: &str, select| {
-            crate::web_work::transition_execution_lane(root, project, "request-a", select)
+            use execution_lane::Transition;
+            crate::web_work::transition_execution_lane(
+                root,
+                project,
+                "request-a",
+                if select {
+                    Transition::Select
+                } else {
+                    Transition::Yield
+                },
+            )
         };
         let select_alpha = [
             "operator",
@@ -3408,6 +3418,145 @@ pub(crate) mod tests {
             "{alpha_after_close}"
         );
         assert_eq!(execution_lane::status(root, "alpha")["status"], "ACTIVE");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn serial_web_lane_pause_and_revoked_waiters_preserve_original_tasks() {
+        use crate::web_work_state::{WorkLedger, execution_lane};
+        let (alpha, beta) = paired_fixtures(false);
+        let wake = ready_manual_wake(&alpha);
+        let root = &alpha.control;
+        let change = |project: &'static str, verb: &'static str| async move {
+            let args = [
+                "operator",
+                "web",
+                "work",
+                verb,
+                "--project-id",
+                project,
+                "--request-id",
+                "request-a",
+            ]
+            .map(str::to_string);
+            let action = crate::operator_facade::parse_operator_action(args)
+                .unwrap()
+                .unwrap();
+            crate::operator_facade::execute_operator_action(action, root).await
+        };
+        let preview = |f: &Fixture, id| {
+            request(
+                f,
+                id,
+                "patch.preview",
+                json!({"patchId":id,"operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 53 }"}]}),
+            )
+        };
+        assert_eq!(
+            change("alpha", "lane-select").await.unwrap()["status"],
+            "ACTIVE"
+        );
+        assert_eq!(
+            call(&beta, preview(&beta, "beta-waiting")).await["error"]["message"],
+            "WEB_WORK_EXECUTION_QUEUED"
+        );
+        let wake_queued = call(
+            &alpha,
+            manual_request(&alpha, "alpha-pause-wake", "alpha-turn"),
+        )
+        .await;
+        assert!(wake_queued.get("error").is_none(), "{wake_queued}");
+        assert_eq!(
+            change("alpha", "lane-pause").await.unwrap_err(),
+            "WEB_WORK_CONTINUATION_PENDING"
+        );
+        assert_eq!(execution_lane::status(root, "alpha")["status"], "ACTIVE");
+        let event_id = wake_queued["result"]["structuredContent"]["eventId"]
+            .as_str()
+            .unwrap();
+        let event = wake
+            .events()
+            .unwrap()
+            .into_iter()
+            .find(|event| event.event_id == event_id)
+            .unwrap();
+        // Only fixture receipt/response data. Production and the browser are outside the test.
+        sent(&wake, &event);
+        wake.complete_timer(event_id).unwrap();
+        assert_eq!(
+            change("alpha", "lane-pause").await.unwrap()["status"],
+            "PAUSED"
+        );
+        assert_eq!(execution_lane::status(root, "alpha")["status"], "PAUSED");
+        assert_eq!(
+            call(&alpha, preview(&alpha, "alpha-next")).await["error"]["message"],
+            "WEB_WORK_LANE_PAUSED"
+        );
+        let read = call(
+            &alpha,
+            request(&alpha, "paused-read", "read", json!({"path":"src/lib.rs"})),
+        )
+        .await;
+        assert!(read.get("error").is_none(), "{read}");
+        let selected_beta = call(&beta, preview(&beta, "beta-waiting")).await;
+        assert!(selected_beta.get("error").is_none(), "{selected_beta}");
+        assert_eq!(execution_lane::status(root, "beta")["status"], "ACTIVE");
+        assert_eq!(
+            change("alpha", "lane-resume").await.unwrap()["status"],
+            "RESUMED"
+        );
+        assert_eq!(
+            call(&alpha, preview(&alpha, "alpha-next")).await["error"]["message"],
+            "WEB_WORK_EXECUTION_QUEUED"
+        );
+        let ledger = WorkLedger::open_read_only(root, "alpha").unwrap();
+        let before = ledger.record("request-a").unwrap().unwrap();
+        let grant_path =
+            root.join(".catdesk/project-mcp-tasks/alpha/task-fixture/execution-grant.json");
+        let grant = fs::read(&grant_path).unwrap();
+        let revocation =
+            crate::web_work::execution_permission(root, alpha.pins.clone(), true).unwrap();
+        assert_eq!(revocation["status"], "EXECUTION_REVOKED");
+        assert_eq!(
+            execution_lane::status(root, "alpha")["status"],
+            "EXECUTION_REVOKED"
+        );
+        assert_eq!(execution_lane::status(root, "beta")["status"], "ACTIVE");
+        assert_eq!(
+            change("beta", "lane-yield").await.unwrap()["status"],
+            "YIELDED"
+        );
+        assert_eq!(
+            execution_lane::status(root, "beta")["status"],
+            "AVAILABLE_FOR_SELECTION"
+        );
+        let continued_beta = call(
+            &beta,
+            request(
+                &beta,
+                "beta-apply",
+                "patch.apply",
+                json!({"patchId":"beta-waiting"}),
+            ),
+        )
+        .await;
+        assert!(continued_beta.get("error").is_none(), "{continued_beta}");
+        assert_eq!(
+            call(&alpha, preview(&alpha, "alpha-next")).await["error"]["message"],
+            "WEB_TASK_GRANT_REVOKED"
+        );
+        assert_eq!(ledger.record("request-a").unwrap(), Some(before));
+        assert_eq!(fs::read(grant_path).unwrap(), grant);
+        assert_eq!(wake.delivery(event_id).unwrap().unwrap().phase, Phase::Sent);
+        assert!(
+            fs::read_to_string(beta.task.join("src/lib.rs"))
+                .unwrap()
+                .contains("{ 53 }")
+        );
+        assert!(
+            fs::read_to_string(alpha.task.join("src/lib.rs"))
+                .unwrap()
+                .contains("{ 1 }")
+        );
     }
 
     async fn central_http_route_fixture(cached: bool) {
