@@ -511,6 +511,42 @@ impl Fixture {
 }
 
 #[test]
+fn missing_review_receipt_refuses_a_fresh_request_before_intent() {
+    let mut fixture = Fixture::qualified_selection(true, false);
+    let handle = fixture.handle.try_clone().unwrap();
+    let guard = BrokerLedgerGuard::acquire(&handle).unwrap();
+    let request = fixture.local_request(&guard);
+    let admission = guard
+        .same_state_admission_v3(&digest(&request), 1000)
+        .unwrap();
+    assert!(admission.resume_binding.is_none());
+    std::fs::rename(
+        fixture.intake.join("receipts/candidate-review.json"),
+        fixture.path.join("retained-candidate-review.json"),
+    )
+    .unwrap();
+    let operator = crate::install_broker_operator::isolated_same_state_operator_fixture(
+        &fixture.policy.readback().unwrap().operator_sid_sha256,
+    );
+    let frame = crate::install_broker_request::isolated_same_state_frame_fixture(request, operator);
+    let error = fixture
+        .policy
+        .verify_same_state_selection_v3(&frame, fixture.pins(&admission), &admission)
+        .err()
+        .unwrap();
+    assert_eq!(error, "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE");
+    assert_eq!(std::fs::read_dir(&fixture.broker).unwrap().count(), 2);
+    assert_eq!(
+        std::fs::read(fixture.state.join("current.json")).unwrap(),
+        fixture.before
+    );
+    fixture.preserved();
+    drop(guard);
+    drop(handle);
+    fixture.cleanup();
+}
+
+#[test]
 fn same_state_local_user_unenrolled_policy_refuses_before_intent() {
     let mut fixture = Fixture::qualified_selection(false, false);
     let handle = fixture.handle.try_clone().unwrap();

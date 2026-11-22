@@ -389,7 +389,8 @@ impl SameStateReadPinsV3 {
         } else {
             match &intake {
                 SameStateIntakeV3::Fixed => {
-                    RuntimePackagePinsV3::fixed(RuntimeSourceRoleV3::Candidate)?
+                    RuntimePackagePinsV3::fixed(RuntimeSourceRoleV3::Candidate)
+                        .map_err(|_| "WAKE_SAME_STATE_CANDIDATE_INTAKE_UNAVAILABLE")?
                 }
                 #[cfg(test)]
                 SameStateIntakeV3::Isolated(path) => {
@@ -659,13 +660,17 @@ impl SameStateReadPinsV3 {
             roles.push(("reconstruction.json",reconstruction_receipt_sha256));
         }
         if self.receipts.is_empty() {
-            self._receipt_directory = Some(OfflineObjectPinV2::same_state_directory(
-                &self.receipt_root,
-            )?);
+            self._receipt_directory = Some(
+                OfflineObjectPinV2::same_state_directory(&self.receipt_root)
+                    .map_err(|_| "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE")?,
+            );
             for (name, expected) in &roles {
                 let path = self.receipt_root.join(name);
-                let mut pin = OfflineObjectPinV2::open(&path, false)?;
-                let raw = pin.read_bounded(1024 * 1024)?;
+                let mut pin = OfflineObjectPinV2::open(&path, false)
+                    .map_err(|_| "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE")?;
+                let raw = pin
+                    .read_bounded(1024 * 1024)
+                    .map_err(|_| "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE")?;
                 if digest(&raw) != *expected {
                     return Err("WAKE_SAME_STATE_RECEIPT_MISMATCH".into());
                 }

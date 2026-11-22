@@ -203,10 +203,37 @@ fn run_one_service_submission() -> Result<()> {
         let operation = purpose["payload"]["operation"]
             .as_str()
             .ok_or("WAKE_BROKER_REQUEST_OPERATION_UNSUPPORTED")?;
-        let pins = crate::runtime::SameStateReadPinsV3::observe_for_operation(
+        let grant = crate::runtime::SameStateReadPinsV3::observe_for_operation(
             &policy, &admission, operation, &purpose,
-        )?;
-        let grant = policy.verify_same_state_selection_v3(&frame, pins, &admission)?;
+        )
+        .and_then(|pins| policy.verify_same_state_selection_v3(&frame, pins, &admission));
+        let grant = match grant {
+            Ok(grant) => grant,
+            Err(error) => {
+                // The global ledger lock is still held, and this fresh request
+                // never reached INTENT. Do not describe a resumed or later
+                // failure as a refused first attempt.
+                let fresh_local_request = admission.resume_binding.is_none()
+                    && purpose["authorization"] == "LOCAL_USER_POLICY"
+                    && policy.local_user_updates_enabled().unwrap_or(false);
+                if let Some(reply) = crate::install_broker_client::local_intake_refusal_reply(
+                    fresh_local_request,
+                    &envelope_sha256,
+                    &error,
+                ) {
+                    let raw = serde_json::to_vec(&reply)
+                        .map_err(|_| "WAKE_SAME_STATE_RESULT_ENCODING_INVALID")?;
+                    write_once(
+                        endpoint.as_handle(),
+                        &raw,
+                        8192,
+                        REPLY_DEADLINE,
+                        &STOP_REQUESTED,
+                    )?;
+                }
+                return Err(error);
+            }
+        };
         let resources = crate::runtime::SameStateInstallResources::acquire(grant)?;
         // acceptedUTC is the protected signature-verification sample, as in
         // V1. A separate final sample must still be in the fresh approval's

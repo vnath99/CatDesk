@@ -958,17 +958,67 @@ impl FixedBrokerApprovalClient<'_> {
             &std::sync::atomic::AtomicBool::new(false),
         )
         .map_err(|_| "WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY")?;
+        let request_sha256 = format!("{:x}", Sha256::digest(request));
+        if let Some(code) = local_intake_refusal_code(&raw, &request_sha256) {
+            return Err(code.into());
+        }
         let result: serde_json::Value =
             serde_json::from_slice(&raw).map_err(|_| "WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY")?;
-        if !local_user_complete_reply_matches(
-            &result,
-            &payload,
-            &format!("{:x}", Sha256::digest(request)),
-        ) {
+        if !local_user_complete_reply_matches(&result, &payload, &request_sha256) {
             return Err("WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY".into());
         }
         Ok(result)
     }
+}
+
+fn allowed_local_intake_refusal(code: &str) -> Option<&'static str> {
+    const CODES: &[&str] = &[
+        "WAKE_SAME_STATE_CANDIDATE_INTAKE_UNAVAILABLE",
+        "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE",
+        "WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED",
+        "WAKE_SAME_STATE_RECEIPT_MISMATCH",
+        "WAKE_SAME_STATE_RECEIPT_SEMANTICS_INVALID",
+    ];
+    CODES.iter().copied().find(|&candidate| candidate == code)
+}
+
+pub(crate) fn local_intake_refusal_reply(
+    fresh_local_request: bool,
+    request_sha256: &str,
+    error: &str,
+) -> Option<serde_json::Value> {
+    if !fresh_local_request {
+        return None;
+    }
+    let code = allowed_local_intake_refusal(error)?;
+    Some(serde_json::json!({
+        "schemaVersion": 3,
+        "authorization": "LOCAL_USER_POLICY",
+        "phase": "REFUSED_BEFORE_INTENT",
+        "requestSha256": request_sha256,
+        "errorCode": code,
+    }))
+}
+
+fn local_intake_refusal_code(raw: &[u8], request_sha256: &str) -> Option<&'static str> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields, rename_all = "camelCase")]
+    struct Reply {
+        schema_version: u64,
+        authorization: String,
+        phase: String,
+        request_sha256: String,
+        error_code: String,
+    }
+    let reply: Reply = serde_json::from_slice(raw).ok()?;
+    if reply.schema_version != 3
+        || reply.authorization != "LOCAL_USER_POLICY"
+        || reply.phase != "REFUSED_BEFORE_INTENT"
+        || reply.request_sha256 != request_sha256
+    {
+        return None;
+    }
+    allowed_local_intake_refusal(&reply.error_code)
 }
 
 fn local_user_request_payload(request: &[u8]) -> Result<serde_json::Value> {
@@ -1354,6 +1404,42 @@ mod tests {
             &payload,
             &"b".repeat(64)
         ));
+    }
+
+    #[test]
+    fn local_intake_refusal_requires_fresh_request_and_exact_closed_reply() {
+        let hash = "a".repeat(64);
+        let code = "WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED";
+        assert!(local_intake_refusal_reply(false, &hash, code).is_none());
+        assert!(local_intake_refusal_reply(true, &hash, "private fixture data").is_none());
+        let reply = local_intake_refusal_reply(true, &hash, code).unwrap();
+        let wire = serde_json::to_string(&reply).unwrap();
+        assert_eq!(
+            local_intake_refusal_code(wire.as_bytes(), &hash),
+            Some(code)
+        );
+        assert_eq!(
+            local_intake_refusal_code(wire.as_bytes(), &"b".repeat(64)),
+            None
+        );
+        let duplicate = wire.replacen(
+            r#""schemaVersion":3"#,
+            r#""schemaVersion":3,"schemaVersion":3"#,
+            1,
+        );
+        assert_ne!(duplicate, wire);
+        assert_eq!(local_intake_refusal_code(duplicate.as_bytes(), &hash), None);
+        for (field, value) in [
+            ("extra", serde_json::json!(true)),
+            ("phase", serde_json::json!("COMPLETE")),
+            ("authorization", serde_json::json!("SIGNED")),
+            ("errorCode", serde_json::json!("private fixture data")),
+        ] {
+            let mut changed = reply.clone();
+            changed[field] = value;
+            let bytes = serde_json::to_vec(&changed).unwrap();
+            assert_eq!(local_intake_refusal_code(&bytes, &hash), None, "{field}");
+        }
     }
 
     #[test]
