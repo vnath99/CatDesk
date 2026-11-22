@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 
 const LABEL: &str = "stopped promotion retirement";
 const JOURNAL: &str = "promotion-retirement.json";
+const RECEIPT_PREFIX: &str = "promotion-retirement-receipt-";
+const MAX_HISTORY_DIRECTORY_ENTRIES: usize = 2048;
 const RECORDS: [&str; 6] = [
     "authorization.json",
     "claim.json",
@@ -238,11 +240,17 @@ fn journal(parent: &Guard) -> Result<Option<Journal>, String> {
     let Some(raw) = read_optional_relative_regular(parent, JOURNAL, 65536, LABEL)? else {
         return Ok(None);
     };
+    decode_journal(&raw).map(Some)
+}
+
+fn decode_journal(raw: &[u8]) -> Result<Journal, String> {
     let value: Journal =
-        serde_json::from_slice(&raw).map_err(|_| format!("{LABEL} journal invalid"))?;
+        serde_json::from_slice(raw).map_err(|_| format!("{LABEL} journal invalid"))?;
     if value.schema_version != 1
         || !value.plan.valid_mode()
         || !valid_id(&value.plan.transaction_id)
+        || !valid_digest(&value.plan.prior_sha256)
+        || !valid_digest(&value.plan.candidate_sha256)
         || !valid_digest(&value.evidence_sha256)
         || digest(&bytes(&value.plan)?) != value.evidence_sha256
         || !matches!(
@@ -252,7 +260,7 @@ fn journal(parent: &Guard) -> Result<Option<Journal>, String> {
     {
         return Err(format!("{LABEL} journal differs"));
     }
-    Ok(Some(value))
+    Ok(value)
 }
 
 #[cfg(windows)]
@@ -316,8 +324,8 @@ fn verify_archive(parent: &Guard, value: &Journal) -> Result<(), String> {
     Ok(())
 }
 
-/// Observe only the transaction named by the existing retirement journal.
-/// This is historical readback, independent of the currently serving image.
+/// Observe the exact artifact in the current journal or retained completion
+/// receipts. Historical readback does not attest the currently serving image.
 #[cfg(windows)]
 pub(super) fn observe_retired_promotion(
     workspace: &Path,
@@ -328,20 +336,72 @@ pub(super) fn observe_retired_promotion(
     if !parent.descend_optional_existing(".catdesk", LABEL)? {
         return Ok(None);
     }
-    let Some(value) =
+    if let Some(value) =
         journal(&parent)?.filter(|value| value.plan.candidate_sha256 == expected_sha256)
-    else {
-        return Ok(None);
-    };
-    let transaction = &value.plan.transaction_id;
-    if value.phase != "COMPLETED" {
-        return Ok(Some(serde_json::json!({
-            "state":"PROMOTION_RESULT_PENDING_NO_RETRY", "candidateSha256":expected_sha256,
-            "transactionId":transaction, "retirementPhase":value.phase, "readOnly":true
-        })));
+    {
+        if value.phase != "COMPLETED" {
+            return Ok(Some(serde_json::json!({
+                "state":"PROMOTION_RESULT_PENDING_NO_RETRY", "candidateSha256":expected_sha256,
+                "transactionId":value.plan.transaction_id, "retirementPhase":value.phase, "readOnly":true
+            })));
+        }
+        return read_retired_result(&parent, &value, expected_sha256).map(Some);
     }
-    verify_archive(&parent, &value)?;
-    let archived = child(&parent, &archive_name(transaction)?)?;
+    read_retained_completions(&parent, expected_sha256)
+}
+
+#[cfg(windows)]
+fn read_retained_completions(
+    parent: &Guard,
+    expected_sha256: &str,
+) -> Result<Option<serde_json::Value>, String> {
+    let entries = fs::read_dir(parent.path())
+        .map_err(|_| format!("{LABEL} history inventory unavailable"))?;
+    let mut matching = BTreeMap::new();
+    for (index, entry) in entries.enumerate() {
+        if index >= MAX_HISTORY_DIRECTORY_ENTRIES {
+            return Err(format!("{LABEL} history inventory exceeds its bound"));
+        }
+        let name = entry
+            .map_err(|_| format!("{LABEL} history inventory unavailable"))?
+            .file_name();
+        let Some(transaction) = name
+            .to_str()
+            .and_then(|name| name.strip_prefix(RECEIPT_PREFIX))
+            .and_then(|name| name.strip_suffix(".json"))
+        else {
+            continue;
+        };
+        if !valid_id(transaction) {
+            return Err(format!("{LABEL} completion receipt name invalid"));
+        }
+        let name = format!("{RECEIPT_PREFIX}{transaction}.json");
+        let value = decode_journal(&read_relative_regular(parent, &name, 65536, LABEL)?)?;
+        if value.plan.transaction_id != transaction || value.phase != "COMPLETED" {
+            return Err(format!("{LABEL} completion receipt binding differs"));
+        }
+        if value.plan.candidate_sha256 == expected_sha256 {
+            let result = read_retired_result(parent, &value, expected_sha256)?;
+            let generation = result["authorizationGeneration"]
+                .as_u64()
+                .ok_or_else(|| format!("{LABEL} completion generation missing"))?;
+            if matching.insert(generation, result).is_some() {
+                return Err(format!("{LABEL} completion generation ambiguous"));
+            }
+        }
+    }
+    Ok(matching.pop_last().map(|(_, value)| value))
+}
+
+#[cfg(windows)]
+fn read_retired_result(
+    parent: &Guard,
+    value: &Journal,
+    expected_sha256: &str,
+) -> Result<serde_json::Value, String> {
+    let transaction = &value.plan.transaction_id;
+    verify_archive(parent, value)?;
+    let archived = child(parent, &archive_name(transaction)?)?;
     let raw = read_relative_regular(&archived, "result.json", 4096, LABEL)?;
     if value.plan.records.get("result.json") != Some(&digest(&raw)) {
         return Err(format!("{LABEL} result bytes changed"));
@@ -364,11 +424,11 @@ pub(super) fn observe_retired_promotion(
     {
         return Err(format!("{LABEL} result binding differs"));
     }
-    Ok(Some(serde_json::json!({
+    Ok(serde_json::json!({
         "state":result.state, "candidateSha256":expected_sha256,
         "authorizationGeneration":result.authorization_generation, "transactionId":transaction,
         "recordedServingState":result.serving_state, "archived":true, "readOnly":true
-    })))
+    }))
 }
 
 /// A pending retirement fences new mutation; status remains readable.
@@ -1448,10 +1508,7 @@ fn publish_retirement(
         if old.phase == "COMPLETED" {
             verify_archive(parent, old)?;
             // Previous completion remains durable before replacing the current journal.
-            let name = format!(
-                "promotion-retirement-receipt-{}.json",
-                old.plan.transaction_id
-            );
+            let name = format!("{RECEIPT_PREFIX}{}.json", old.plan.transaction_id);
             let encoded = bytes(old)?;
             match read_optional_relative_regular(parent, &name, 65536, LABEL)? {
                 Some(saved) if saved == encoded => {}
@@ -2234,6 +2291,34 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+        let parent = metadata(&root).unwrap();
+        let name = format!("{RECEIPT_PREFIX}{}.json", value.plan.transaction_id);
+        let historical = bytes(&value).unwrap();
+        write_new_regular_in(&parent, &name, &historical, LABEL).unwrap();
+        let mut successor = value.clone();
+        successor.phase = "PREPARED".into();
+        successor.plan.transaction_id = "d".repeat(32);
+        successor.plan.candidate_sha256 = "e".repeat(64);
+        successor.evidence_sha256 = digest(&bytes(&successor.plan).unwrap());
+        update_journal(&parent, &successor).unwrap();
+        drop(parent);
+        assert_eq!(observe().unwrap(), retained);
+        assert_eq!(
+            existing_local_promotion_receipt(&root, &auth.candidate_sha256).unwrap_err(),
+            "REVIEWED_PROMOTION_ALREADY_RETIRED_INSPECT_RESULT"
+        );
+        assert_eq!(
+            observe_local_reviewed_promotion(&root, &successor.plan.candidate_sha256).unwrap()["state"],
+            "PROMOTION_RESULT_PENDING_NO_RETRY"
+        );
+        let history_path = root.join(".catdesk").join(name);
+        let different_name = root
+            .join(".catdesk")
+            .join(format!("{RECEIPT_PREFIX}{}.json", "f".repeat(32)));
+        fs::write(&different_name, &historical).unwrap();
+        assert!(observe().is_err());
+        fs::remove_file(different_name).unwrap();
+        assert_eq!(fs::read(&history_path).unwrap(), historical);
         assert!(!root.join(".catdesk/promotion-operation.lock").exists());
         let archived = root
             .join(".catdesk")
