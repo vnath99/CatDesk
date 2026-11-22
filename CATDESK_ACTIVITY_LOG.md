@@ -750,3 +750,11 @@ Evidence: [docs/verification/WAKE_BROKER_IMAGE_REPLACEMENT_HANDLE_PROOF_2026_11_
 Agent: Codex. Source: 3aaf313cd12d7a1203f10cf78d0cc05b6e16b4e7. Outcome: partial. One-hash promotion now preserves the native refusal and phase. Both Windows PowerShell editions passed with disposable child processes. Next: Use the existing signed first Wake selection and independent backend review paths. Qualify a durable startup block and interrupted recovery before replacing the installed broker.
 
 Evidence: [docs/verification/BACKEND_PROMOTE_NATIVE_REFUSALS_2026_11_21.json](docs/verification/BACKEND_PROMOTE_NATIVE_REFUSALS_2026_11_21.json); command: scripts/test-catdesk-lifecycle.ps1 in PowerShell 7 and Windows PowerShell 5.1; exit 0; SHA-256 249b6179707d1baa1b5e9c697c5419265863c7d0764d80f0a015b3a0572fdcc0.
+
+<!-- catdesk-activity:nov21-local-promotion-startup-lease sha256:4bc68b35a84763ebe04d074837c4c85bb2b4574d61f788c68b79bc5f66dd4fdc -->
+
+## 2026-11-22T04:49:40.9560882Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: cde55f2d3f2f7365c29709f35f1eed8df73ebe93. Outcome: partial. Local promotion now holds the existing startup lease through the receipt on both listener branches. Windows native and supervisor regressions passed. Next: Use the prepared first Wake selection and the existing independent backend review. Qualify persistent supervisor recovery and exact rollback after a protected candidate promotion.
+
+Evidence: [docs/verification/BACKEND_PROMOTION_STARTUP_LEASE_2026_11_21.json](docs/verification/BACKEND_PROMOTION_STARTUP_LEASE_2026_11_21.json); command: Windows daemon_reload native suite and existing PowerShell autostart suite; exit 0; SHA-256 110bd63b0bc3d024ea6523217b6563932df0945013a6032572de98adada5e213.

@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 21, 11:47 p.m. EST — startup and local promotion coordination.** The development worker takes the existing startup lease before checking for a live listener. It holds that lease through handoff and the terminal promotion receipt, including when it uses an existing listener. Normal startup can resume after the lease is released. Verify persistent serving separately after installed promotion. [Evidence](docs/verification/BACKEND_PROMOTION_STARTUP_LEASE_2026_11_21.json).
+
 **November 21, 11:42 p.m. EST — one-hash promotion diagnostics.** The PowerShell facade now preserves fixed refusal codes from the pinned native controller. Real disposable Windows executables exercised resolver and candidate refusals in PowerShell 7 and Windows PowerShell 5.1. Each refusal stopped at its original phase. The frozen compatible backend still uses the existing reviewed promotion route. [Evidence](docs/verification/BACKEND_PROMOTE_NATIVE_REFUSALS_2026_11_21.json).
 
 **November 21, 11:36 p.m. EST — Windows broker replacement fixture.** Two harmless images exercised exclusive file ownership, replacement and exact rollback on NTFS. Windows refused launch while each selected image was held. After release each executable returned its expected result. Production deployment still requires reviewed broker replacement and a startup block that survives interruption. The reviewed installed broker hash matched on readback. [Evidence](docs/verification/WAKE_BROKER_IMAGE_REPLACEMENT_HANDLE_PROOF_2026_11_21.json).
@@ -340,5 +342,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Use the existing signed first Wake selection and independent backend review paths. Qualify a durable startup block and interrupted recovery before replacing the installed broker"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Use the prepared first Wake selection and the existing independent backend review. Qualify persistent supervisor recovery and exact rollback after a protected candidate promotion"}
 ```

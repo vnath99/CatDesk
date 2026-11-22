@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T04:49:40.9560882Z",
+  "scope": "WINDOWS_DEVELOPMENT_STARTUP_LEASE_AND_RELEASE_REGRESSION",
+  "sourceCommit": "cde55f2d3f2f7365c29709f35f1eed8df73ebe93",
+  "testExecutableSha256": "300759f312de51a64f860b1782ff95994d8aa95f403baa7e70f699a37aa617c9",
+  "originalSource": {
+    "stoppedSourceRetainedStartupLease": true,
+    "liveListenerPathRetainedStartupLease": false
+  },
+  "regression": {
+    "existingWindowsFileLeaseUsed": true,
+    "kernelShareModeEnforced": true,
+    "existingStartupOwnerPreventedListenerObservation": true,
+    "liveListenerBranchHeldLeaseDuringObservation": true,
+    "liveListenerBranchLaunchedBridge": false,
+    "liveListenerBranchReturnedLeaseToPromotionWorker": true,
+    "newStartupLeaseAvailableAfterRelease": true,
+    "lockBytesPreserved": true
+  },
+  "tests": [
+    {
+      "command": "cargo test --locked --offline --bin catdesk daemon_reload:: -- --test-threads=1",
+      "passed": 51,
+      "failed": 0,
+      "exitCode": 0
+    },
+    {
+      "command": "pwsh.exe -NoProfile -File scripts/test-catdesk-autostart-supervisor.ps1",
+      "exitCode": 0
+    },
+    {
+      "command": "rustfmt --edition 2024 --check --config skip_children=true src/daemon_reload.rs src/promotion_source_bridge.rs",
+      "exitCode": 0
+    }
+  ],
+  "formatScope": "The changed Rust files passed. Whole-tree cargo fmt reported pre-existing differences in three unchanged Rust files.",
+  "limitations": [
+    "The test supplies a live-listener observation to exercise the native lease. It opens no production listener.",
+    "The worker retains the lease through terminal receipt publication by source control flow. Installed promotion, registered supervisor recovery, and persistent MCP serving require live qualification."
+  ],
+  "protectedPromotionInvoked": false,
+  "productionLifecycleActions": 0,
+  "installedAcceptance": false
+}
