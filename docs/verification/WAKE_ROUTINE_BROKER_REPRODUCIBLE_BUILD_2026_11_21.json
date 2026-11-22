@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T04:28:49.4786336Z",
+  "scope": "EXACT_SOURCE_WINDOWS_RELEASE_BUILD_AND_DETERMINISTIC_LINK_VERIFICATION",
+  "sourceCommit": "bc995a36325a7e82ea6ac27dfbc8755f7369f9d2",
+  "wakeTree": "ba3e3c13b9c148d5a385c9c000dc576890bb9077",
+  "verifiedWakeBlobCount": 177,
+  "archiveSha256": "b0e30e20e1acca88b44be1e377887492c7eccf2216023c2ef16c698637c037ed",
+  "cargoManifestSha256": "e6b8c2f59218cebd3b2b2596d320598f7b72846bc8f73a92c2b36315c299b51a",
+  "cargoLockSha256": "b5111ee182d8233b2d026ad51c7e0232ef669784dcd634234785ee54c191034b",
+  "embeddedScriptSha256": {
+    "scripts/wake_bridge.py": "eea29aff3cb6518a2c03e97bbb361d3e52357b5e47a81ca63fdaaa69da890f5d",
+    "scripts/wake_profile_quiescence.py": "ffdb2b4b7bfd56af3c04f329fee761f601f65c9758f43576258c016d3151c2ef",
+    "scripts/wake_readiness_visual_probe.py": "e1018dd7023c67c1e76fb4eff4a3f8c99ab5ad2ba8dafadb27b63194904bed2a",
+    "scripts/wake_development_login.py": "479c6751f811f80f95e04359b12bc738271e2d932eae1d643a9322c6b1c8b18f"
+  },
+  "toolchain": {
+    "cargo": "1.97.0 (c980f4866 2026-06-30)",
+    "rustc": "1.97.0 (2d8144b78 2026-07-07)",
+    "projection": "WINDOWS_WORKTREE_CRLF_BYTES_VERIFIED_AGAINST_GIT_BLOBS"
+  },
+  "earlyAttempts": [
+    {
+      "result": "ARCHIVE_MISSING_TRACKED_EMBEDDED_SCRIPT_INPUTS",
+      "exitCode": 101,
+      "binaryProduced": false
+    },
+    {
+      "result": "RAW_ARCHIVE_BYTES_DIFFER_FROM_LINE_ENDING_NORMALIZED_GIT_BLOBS",
+      "compilerInvoked": false,
+      "resolution": "VERIFY_GIT_FILTERED_EQUIVALENCE_AND_MEASURE_RAW_ARCHIVE_BYTES"
+    }
+  ],
+  "ordinaryBuilds": {
+    "releaseBuildsCompleted": 2,
+    "independentSourceAndTargetRoots": true,
+    "firstSha256": "251d73280fda06c3706f9e77f7078e8c333e314373fe948991d574eb9656a3e4",
+    "secondSha256": "97d55bb78e0e8ff7b14020c9ec30dae5744c12a1f41459eff153bfa0fcd38711",
+    "firstBuildReceiptSha256": "5963fa6919637e4f4c49c6bb6131b2f043910354dde5806c09a7758ee09d8b44",
+    "rebuildReceiptSha256": "62b7f42c54788e7146f3a12c83416ad16b989e8077ab3aa357724806c4ce23a2",
+    "differentByteCount": 23,
+    "identicalTextSection": true,
+    "changedRegions": [
+      "COFF_TIMESTAMP",
+      "PE_DEBUG_TIMESTAMPS_AND_CODEVIEW"
+    ],
+    "inputsAndAssetsPreserved": true
+  },
+  "deterministic": {
+    "sourceAndDependencyBuildsIndependent": true,
+    "relinkedExistingIndependentBuilds": true,
+    "hostScope": "THIS_WINDOWS_TOOLCHAIN_AND_BUILD_PROJECTION",
+    "linkerArgs": [
+      "/Brepro",
+      "/PDBALTPATH:CatDeskWakeInstallBroker.pdb"
+    ],
+    "identicalAcrossRoots": true,
+    "artifactSha256": "0a47919235e217614b5b2fa07ffaafd6d815059467196be147d5ea83a7ec26d3",
+    "artifactLength": 2238976,
+    "peReproducibleMarkerPresent": true,
+    "receiptSha256": "2954c086e9ed852619bda21d4cb77f09559509f96a5963832750dd64a7d54997"
+  },
+  "production": {
+    "installedBrokerHashBeforeAfter": "9535a7185341b8683a01a4920eb5c3823f10c9bbcdaaf715e28554692bc46d3c",
+    "dedicatedProducerScmServicePresent": false,
+    "dedicatedProducerNamespacePresent": false,
+    "githubCiWitnessAcceptsReviewReceipts": false,
+    "bootstrapRejectsExistingBrokerService": "WAKE_BOOTSTRAP_SERVICE_ALREADY_EXISTS",
+    "protectedWrites": 0,
+    "installOrCandidateRun": false,
+    "signedFirstSelectionRepacked": false,
+    "releaseAuthorityCreated": false
+  }
+}

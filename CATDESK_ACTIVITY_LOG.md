@@ -726,3 +726,11 @@ Evidence: [docs/verification/WAKE_ROUTINE_INSTALLED_FALLBACK_REUSE_2026_11_21.js
 Agent: CatDesk Codex. Source: c5a6118b4fed36d429b138d4ab6aafa71c349ccd. Outcome: partial. The development Wake broker now requires independently protected review intake for unsigned routine requests. Native ACL cases and signed reconstruction passed. The local rollback fixture stopped at the existing legacy owner guard and the read-only installed observation found no published intake. Next: Verify first signed Wake selection after the existing operator procedure and continue the exact compatible backend review and producer independently. Qualify the trusted publisher and reviewed broker under the enrolled account before installed routine updates.
 
 Evidence: [docs/verification/WAKE_ROUTINE_REVIEW_INTAKE_AUTHORITY_2026_11_21.json](docs/verification/WAKE_ROUTINE_REVIEW_INTAKE_AUTHORITY_2026_11_21.json); command: Run native intake ACL cases, signed reconstruction and local fallback fixture plus read-only installed ACL classification; exit 101; SHA-256 ff1d1789120d0ee8327cf38096a5c1729aff25405fd9c8800fe2327f1eb5713f.
+
+<!-- catdesk-activity:nov21-wake-routine-broker-repro-build sha256:18b817fe7e8604bc0a3fdf55e9d5b8354994d9e8e6e6196a2bcfc98a6b6d22e8 -->
+
+## 2026-11-22T04:28:49.4786336Z — WAKE-LIFECYCLE
+
+Agent: CatDesk Codex. Source: bc995a36325a7e82ea6ac27dfbc8755f7369f9d2. Outcome: partial. Built the exact routine Wake broker source twice from separate Windows roots and reproduced the executable byte for byte with deterministic linker options. Verified the installed image stayed unchanged. The dedicated reviewed producer is absent and the current broker bootstrap only creates a new installation. Next: Use the existing first signed selection and complete the frozen compatible backend review independently. Preserve the reproduced development artifact for exact review, then qualify a supported fixed broker replacement and trusted intake publication before installed routine adoption.
+
+Evidence: [docs/verification/WAKE_ROUTINE_BROKER_REPRODUCIBLE_BUILD_2026_11_21.json](docs/verification/WAKE_ROUTINE_BROKER_REPRODUCIBLE_BUILD_2026_11_21.json); command: Build the broker from exact archived source in two separate roots and verify the deterministic relink hashes; exit 0; SHA-256 55b936da1413880e3e18ebb2281d170eafd1a5a0fa56acf35ab3ce03c2297c6c.
