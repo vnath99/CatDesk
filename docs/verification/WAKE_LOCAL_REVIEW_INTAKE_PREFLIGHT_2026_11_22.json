@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "scope": "WINDOWS_DEVELOPMENT_WAKE_REVIEW_INTAKE_PREFLIGHT",
+  "verifiedUtc": "2026-11-22T06:52:24Z",
+  "sourceCommit": "5670e669558fff7647411a9714b5e48e71087ed9",
+  "developmentWakeHostSha256": "5eed85efcd1ef3579a491be800d6f7aa06d00a27b4d1aa018cfdc7315c0cfafc",
+  "targetedTests": {
+    "passed": 3,
+    "exitCode": 0
+  },
+  "compiledWindowsCommand": {
+    "missingRequest": "WAKE_INSTALL_APPROVAL_UNAVAILABLE",
+    "malformedRequest": "WAKE_SAME_STATE_REQUEST_INVALID",
+    "serviceStartOverride": "WAKE_INSTALL_BROKER_ARGUMENTS_INVALID",
+    "oversizedRequest": "WAKE_INSTALL_APPROVAL_INVALID"
+  },
+  "receiptFixture": {
+    "existingReceiptHashesAndSemanticsPassed": true,
+    "userWritableIntakeAclRefused": true,
+    "missingCandidateReviewReported": "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE",
+    "originalSelectionAndLedgerPreserved": true
+  },
+  "broaderWakeSuite": {
+    "passed": 23,
+    "failed": 5,
+    "exitCode": 101,
+    "commonRefusal": "WAKE_SAME_STATE_LEGACY_OWNER_UNPROVEN",
+    "nativeReason": "SPLIT_ROOT_CANDIDATES",
+    "baselineCommit": "06844bf6ad0a2316ec9b43231e20d126ff67c38e",
+    "fiveFailingCasesAgainstBaseline": {
+      "passed": 4,
+      "sameRefusal": 1,
+      "exitCode": 101
+    },
+    "fourRemainingCasesAgainstChangedSource": {
+      "passedOnFollowup": 4,
+      "initialFocusedPass": 3,
+      "instrumentedFinalPass": 1
+    },
+    "installResourceAndOwnerSequenceUnchanged": true,
+    "legacyOwnerImplementationUnchanged": true,
+    "finalNamedWakeOrHarnessProcesses": 0
+  },
+  "installedProductionActions": 0,
+  "trustedInstalledIntakePass": false,
+  "installedAcceptance": false,
+  "remainingGate": "Protected publication of genuine receipt bytes remains required. The preflight does not admit a ledger transaction or start the broker."
+}

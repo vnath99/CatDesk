@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22 — routine Wake receipt preflight.** The development WakeHost shares the broker receipt verifier and can check the exact protected intake without opening the service or ledger. Focused Windows tests and the compiled refusal checks passed. The wider suite passed 23 of 28 and five cases refused at the legacy split-root owner check. The same refusal reproduced on unchanged source in one case, and the other four passed on focused reruns of the changed source. Genuine protected publication and installed qualification remain open. [Evidence](docs/verification/WAKE_LOCAL_REVIEW_INTAKE_PREFLIGHT_2026_11_22.json).
+
 **November 22 — promotion reuse matches the active transaction.** The one-hash entry and offline reader share the same claim, authorization, and result checks. An unbound receipt or unfinished claim stops the promotion before preflight. The verified predecessor path remains available for a different candidate. Five promotion and 24 retirement Windows tests passed. [Evidence](docs/verification/ONE_HASH_BOUND_EXISTING_RESULT_2026_11_22.json).
 
 **November 22 — offline promotion result.** A verified development controller can read the exact active promotion by original artifact SHA-256 without the daemon or a usable canonical pair. The compiled Windows command distinguished missing, pending, matching, ambiguous, and stale results with redacted output and preserved records. The installed binary has not been upgraded with this command. [Evidence](docs/verification/PROMOTION_OFFLINE_RESULT_READBACK_2026_11_22.json).

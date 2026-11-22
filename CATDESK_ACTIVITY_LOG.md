@@ -910,3 +910,11 @@ Evidence: [docs/verification/PROMOTION_OFFLINE_RESULT_READBACK_2026_11_22.json](
 Agent: CatDesk development. Source: 89b33a81ebc339fdeb3fa9285af021fd49144c8e. Outcome: partial. One-hash promotion now requires the active claim, candidate hash, transaction and generation before reusing a receipt. Five promotion and 24 retirement tests passed on Windows. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
 
 Evidence: [docs/verification/ONE_HASH_BOUND_EXISTING_RESULT_2026_11_22.json](docs/verification/ONE_HASH_BOUND_EXISTING_RESULT_2026_11_22.json); command: Windows native routine promotion and promotion retirement regressions; exit 0; SHA-256 2017611a7f86fb94b647d7b542d5209d5fec5b600d671e242b4431a4425a7020.
+
+<!-- catdesk-activity:nov22-wake-local-review-intake-preflight sha256:2fd8222b110673467922ee7dc91b92986e8042bf8efe9fcd4a765dad5870f97b -->
+
+## 2026-11-22T06:52:24Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 5670e669558fff7647411a9714b5e48e71087ed9. Outcome: partial. The development WakeHost now verifies exact routine review intake before a broker start. Focused Windows checks passed. The broader suite and baseline comparison preserve the legacy split-root owner refusal. Next: Verify the first Wake V3 selection when its operator result arrives. Admit a qualified independent reviewer for the frozen backend before its exact draft start decision.
+
+Evidence: [docs/verification/WAKE_LOCAL_REVIEW_INTAKE_PREFLIGHT_2026_11_22.json](docs/verification/WAKE_LOCAL_REVIEW_INTAKE_PREFLIGHT_2026_11_22.json); command: Focused Wake native tests, compiled preflight refusals, and baseline comparison; exit 0; SHA-256 9a15d8d6faec76f303dc9b3979a2fabc9019844464760b55405ab5d3aed69c46.
