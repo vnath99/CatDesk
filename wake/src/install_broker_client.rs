@@ -1087,30 +1087,42 @@ impl FixedBrokerApprovalClient<'_> {
     }
 }
 
+fn local_update_completion_matches(
+    record: &serde_json::Value,
+    payload: &serde_json::Value,
+    request_sha256: &str,
+) -> bool {
+    let Some(planned_selection) = payload["plannedSelectionSha256"].as_str() else {
+        return false;
+    };
+    record["action"] == "install_broker_result"
+        && record["state"] == "COMPLETE"
+        && record["latestPhase"] == crate::install_broker_ledger::InstallPhaseV1::Complete.name()
+        && payload["installGeneration"]
+            .as_u64()
+            .is_some_and(|generation| generation != 0)
+        && record["installGeneration"] == payload["installGeneration"]
+        && record["requestSha256"] == request_sha256
+        && record["plannedSelectionSha256"] == planned_selection
+        && record["replayAuthorized"] == false
+        && record["liveAcceptanceVerified"] == false
+        && record["lastRecordSha256"].as_str().is_some_and(|hash| {
+            hash.len() == 64
+                && hash
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        })
+}
+
 fn recovered_local_update_result(
     record: serde_json::Value,
     payload: &serde_json::Value,
     request_sha256: &str,
     owner_exit: LocalBrokerExit,
 ) -> Option<serde_json::Value> {
-    let planned_selection = payload["plannedSelectionSha256"].as_str()?;
     if !owner_exit.process_exited
         || !owner_exit.service_stopped
-        || record["action"] != "install_broker_result"
-        || record["state"] != "COMPLETE"
-        || record["latestPhase"] != crate::install_broker_ledger::InstallPhaseV1::Complete.name()
-        || payload["installGeneration"]
-            .as_u64()
-            .is_none_or(|generation| generation == 0)
-        || record["installGeneration"] != payload["installGeneration"]
-        || record["requestSha256"] != request_sha256
-        || record["plannedSelectionSha256"] != planned_selection
-        || !record["lastRecordSha256"].as_str().is_some_and(|hash| {
-            hash.len() == 64
-                && hash
-                    .bytes()
-                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-        })
+        || !local_update_completion_matches(&record, payload, request_sha256)
     {
         return None;
     }
@@ -1122,6 +1134,26 @@ fn recovered_local_update_result(
         "replayAuthorized":false,
         "liveAcceptanceVerified":false
     }))
+}
+
+pub(crate) fn retained_local_update_result(
+    record: serde_json::Value,
+    payload: &serde_json::Value,
+    request_sha256: &str,
+) -> Option<serde_json::Value> {
+    local_update_completion_matches(&record, payload, request_sha256).then(|| {
+        serde_json::json!({
+            "state":"WAKE_LOCAL_UPDATE_COMPLETE_RECORDED_ONLY",
+            "recordedResult":record,
+            "clientObservedBrokerExit":false,
+            "clientObservedBrokerStopped":false,
+            "currentSelectionVerified":false,
+            "readOnly":true,
+            "serviceStarted":false,
+            "replayAuthorized":false,
+            "liveAcceptanceVerified":false
+        })
+    })
 }
 
 #[cfg(test)]
@@ -1589,8 +1621,37 @@ pub fn update_fixed_broker_local_once(request: &[u8]) -> Result<serde_json::Valu
     let policy = load_fixed_broker_policy_read_only()?;
     policy.current_process_local_updater()?;
     let request_sha256 = format!("{:x}", Sha256::digest(request));
-    let attempt =
-        LocalUpdateAttempt::for_policy(&policy, payload.install_generation, &request_sha256)?;
+    let attempt = match LocalUpdateAttempt::for_policy(
+        &policy,
+        payload.install_generation,
+        &request_sha256,
+    ) {
+        Ok(attempt) => attempt,
+        Err(error) if error == LOCAL_ATTEMPT_FENCED => {
+            // A later invocation has no original process handle. Only the
+            // protected terminal transaction may be reported, never its exit
+            // or the present runtime selection. All other fences stay sticky.
+            let observe = || -> Result<_> {
+                let before = policy.readback()?;
+                if before.policy_sha256 != payload.policy_sha256 {
+                    return Err(LOCAL_ATTEMPT_FENCED.into());
+                }
+                let recorded = crate::install_broker_ledger::inspect_fixed_same_state_result(
+                    payload.install_generation,
+                    &request_sha256,
+                )?;
+                if policy.readback()? != before {
+                    return Err(LOCAL_ATTEMPT_FENCED.into());
+                }
+                let payload = serde_json::to_value(&payload)
+                    .map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID")?;
+                retained_local_update_result(recorded, &payload, &request_sha256)
+                    .ok_or_else(|| LOCAL_ATTEMPT_FENCED.into())
+            };
+            return observe().map_err(|_| error);
+        }
+        Err(error) => return Err(error),
+    };
     inspect_local_update_request(request, &payload, &policy, true)?;
     let earliest = current_filetime();
     let started = crate::install_broker_lifecycle::start_fixed_broker_for_local_update()?;
@@ -2682,6 +2743,23 @@ mod tests {
         assert_eq!(recovered["recordedResult"], record);
         assert_eq!(recovered["replayAuthorized"], false);
         assert_eq!(recovered["liveAcceptanceVerified"], false);
+        let retained = retained_local_update_result(record.clone(), &payload, &request).unwrap();
+        assert_eq!(
+            retained["state"],
+            "WAKE_LOCAL_UPDATE_COMPLETE_RECORDED_ONLY"
+        );
+        assert_eq!(retained["recordedResult"], record);
+        assert_eq!(retained["readOnly"], true);
+        for field in [
+            "clientObservedBrokerExit",
+            "clientObservedBrokerStopped",
+            "currentSelectionVerified",
+            "serviceStarted",
+            "replayAuthorized",
+            "liveAcceptanceVerified",
+        ] {
+            assert_eq!(retained[field], false, "{field}");
+        }
         assert!(
             recovered_local_update_result(
                 record.clone(),
@@ -2702,10 +2780,16 @@ mod tests {
             ("requestSha256", serde_json::json!("d".repeat(64))),
             ("plannedSelectionSha256", serde_json::json!("e".repeat(64))),
             ("lastRecordSha256", serde_json::json!("unverified")),
+            ("replayAuthorized", serde_json::json!(true)),
+            ("liveAcceptanceVerified", serde_json::json!(true)),
         ] {
             let mut changed = record.clone();
             changed[field] = value;
-            assert!(recovered_local_update_result(changed, &payload, &request, cleanup).is_none());
+            assert!(
+                recovered_local_update_result(changed.clone(), &payload, &request, cleanup)
+                    .is_none()
+            );
+            assert!(retained_local_update_result(changed, &payload, &request).is_none());
         }
     }
 

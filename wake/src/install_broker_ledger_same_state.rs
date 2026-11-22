@@ -1368,6 +1368,21 @@ mod tests {
             "installGeneration": b.install_generation,
             "plannedSelectionSha256": b.planned_selection_sha256
         });
+        let historical = crate::install_broker_client::retained_local_update_result(
+            result.clone(),
+            &request,
+            &b.signed_envelope_sha256,
+        )
+        .expect("later reader projects only exact protected terminal history");
+        assert_eq!(
+            historical["state"],
+            "WAKE_LOCAL_UPDATE_COMPLETE_RECORDED_ONLY"
+        );
+        assert_eq!(historical["recordedResult"]["lastRecordSha256"], prior);
+        assert_eq!(historical["clientObservedBrokerExit"], false);
+        assert_eq!(historical["currentSelectionVerified"], false);
+        assert_eq!(historical["serviceStarted"], false);
+        assert_eq!(historical["replayAuthorized"], false);
         let recovered = crate::install_broker_client::recover_local_result_for_fixture(
             result,
             &request,
@@ -1384,6 +1399,10 @@ mod tests {
             assert_eq!(absent["state"], "NOT_FOUND_NO_RETRY");
             assert_eq!(absent["replayAuthorized"], false);
             assert!(absent.get("lastRecordSha256").is_none());
+            assert!(
+                crate::install_broker_client::retained_local_update_result(absent, &request, &hash)
+                    .is_none()
+            );
         }
         let mut lock = open_optional(&root, GLOBAL_LOCK_NAME).unwrap().unwrap();
         assert!(lock.write_all(b"not writable").is_err());
