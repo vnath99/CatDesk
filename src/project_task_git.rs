@@ -1826,6 +1826,29 @@ pub(super) mod tests {
     }
 
     #[tokio::test]
+    async fn end_turn_checkpoint_recheck_refuses_post_checkpoint_edit() {
+        let fixture = Fixture::new();
+        let path = fixture.root.join("src/lib.rs");
+        fs::write(&path, b"VERIFIED_FIXTURE\n").unwrap();
+        let task = fixture.task();
+        verified(&task, "wake-check", true);
+        task.execute(call(
+            "wake-save",
+            "git.checkpoint",
+            json!({"verificationCallIds":["wake-check"]}),
+        ))
+        .await
+        .unwrap();
+        task.close().await.unwrap();
+        let inspected = inspect_assignment(&fixture.scope, &fixture.assignment, 180).unwrap();
+        require_end_turn_checkpoint(&fixture.scope, &inspected).unwrap();
+        fs::write(&path, b"UNVERIFIED_EDIT_AFTER_QUEUE\n").unwrap();
+        let refused = require_end_turn_checkpoint(&fixture.scope, &inspected).unwrap_err();
+        assert_eq!(refused, "PROJECT_TASK_END_TURN_CHECKPOINT_REQUIRED");
+        assert_eq!(crate::operator_web_error_code(&refused), refused);
+    }
+
+    #[tokio::test]
     async fn task_git_checkpoint_precommit_interruption_proves_not_applied_without_replay() {
         let fixture = Fixture::new();
         fs::write(fixture.root.join("src/lib.rs"), "OWNED_PENDING_CHANGE\n").unwrap();

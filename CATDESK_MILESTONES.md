@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — manual continuation proof.** Development now refuses a queued checkpoint-bound manual Wake when the task worktree has changed since its verified checkpoint. The first installed v5 edit, verification, scoped Git checkpoint, self-Wake and verified next-turn continuation remain open. [Evidence](docs/verification/MANUAL_WAKE_PRE_SUBMIT_CHECKPOINT_2026_11_22.json).
+
 **November 22 first installed Web milestone.** The exact review workspace is restored and the original DRAFT remains eligible for an authorized idle reviewer once one is available. The original disposable checkout pair still needs its missing shared Git metadata. After those prerequisites and the compatible installed backend/Wake transitions, qualify one actual v5 edit, verification, Git checkpoint, task-issued self-Wake delivery and same-task next-turn continuation with zero Codex model calls. [Evidence](docs/verification/FIRST_WEB_RELEASE_PREREQUISITES_2026_11_22.json).
 
 **November 22 lifecycle and Web acceptance.** The frozen backend review workspace is restored. Qualified reviewer admission, exact start authority and the reviewed producer still gate backend promotion. Wake release selection remains separately protected. Verify the disposable project and linked checkout before first-cycle admission. The next milestone is one installed v5 edit, fixed verification, scoped Git checkpoint, delivered self-Wake and exact next-turn continuation with zero Codex model calls. [Verification](docs/verification/WAKE_LIFECYCLE_RESUME_2026_11_22.json).

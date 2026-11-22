@@ -26,7 +26,9 @@ use std::{
 mod context_delivery;
 #[path = "project_task_manual_wake.rs"]
 mod manual_delivery;
-pub(crate) use manual_delivery::{authorize_manual_wake_delivery, next_manual_wake};
+pub(crate) use manual_delivery::{
+    authorize_manual_wake_delivery, next_manual_wake, require_manual_wake_checkpoint,
+};
 #[cfg(windows)]
 #[path = "project_task_recovery.rs"]
 mod recovery;

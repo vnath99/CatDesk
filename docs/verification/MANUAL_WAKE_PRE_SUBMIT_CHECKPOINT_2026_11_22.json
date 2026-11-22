@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-11-22T20:48:36.6311415Z",
+  "scope": "DEVELOPMENT_MANUAL_WAKE_CHECKPOINT_REVALIDATION",
+  "sourceBaseline": "bc026fc6213350d568c330b2ad83774424a2ea90",
+  "defect": "The checkpoint was checked at manual intent creation but the delayed sender only checked the queue event, assignment and call hashes before effect.",
+  "behavior": {
+    "when": "Existing explicit scoped Git checkpoint grant",
+    "boundInputs": "Original project, request, source event, assignment and current verified scoped Git checkpoint",
+    "beforeSenderStarts": true,
+    "finalBeforeSubmit": true,
+    "bothChecksUnderExistingProjectLease": true,
+    "validationReused": "Existing assignment and end-turn checkpoint validation",
+    "followUpWithoutCheckpointGrantRemainsEligible": true,
+    "postFenceTaskProgressUnchanged": true,
+    "newJournalOrPayloadFormat": false,
+    "uncertainDeliveryReplay": false
+  },
+  "diagnostic": "PROJECT_TASK_END_TURN_CHECKPOINT_REQUIRED is exposed as a fixed CLI error without arbitrary content.",
+  "verification": {
+    "command": "cargo test --offline --locked --bin catdesk -- manual_wake end_turn_checkpoint --test-threads=1",
+    "passed": 14,
+    "failed": 0,
+    "ignored": 1,
+    "ignoredTestScope": "Explicit installed-sandbox qualification",
+    "formatAndDocumentationChecksPassed": true
+  },
+  "testScope": "The existing linked manual delivery suite checks the event, sender and lease boundary. The Windows Git regression creates a real fixture checkpoint, verifies it, edits the tracked file and verifies the exact refusal on readback. The verification result supplied to the Git fixture is synthetic. The first draft of the regression used a linked contract without a selected test runtime and refused at admission; the final regression exercises the shared checkpoint gate without that invalid setup.",
+  "authority": {
+    "protectedReleaseChanges": 0,
+    "signaturesRequested": 0,
+    "installedAcceptance": false,
+    "originalV3SubmissionRetried": false
+  },
+  "remaining": "Complete independent backend review and producer, authorized compatible backend and Wake selection, and restore the disposable worktree Git identity before the first real Web continuation."
+}

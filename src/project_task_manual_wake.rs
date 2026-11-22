@@ -22,6 +22,25 @@ pub(crate) fn authorize_manual_wake_delivery(
     validate_selection(project, record, target, event, call_id, call)
 }
 
+/// Recheck the checkpoint from the original assignment just before a send.
+/// The project lease still excludes a concurrent scoped tool call here.
+pub(crate) fn require_manual_wake_checkpoint(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+) -> Result<(), String> {
+    let link = record
+        .task_assignment
+        .as_ref()
+        .ok_or("WEB_TASK_GRANT_REQUIRED")?;
+    let directory = task_directory(project, &link.task_id, false)?;
+    if !git_checkpoint::load_policy(&directory, &link.assignment_sha256)?.checkpoint {
+        return Ok(());
+    }
+    let inspected = inspect_assignment(project, &directory.join("assignment.json"), 180)?;
+    check_record_assignment(project, &inspected, record)?;
+    git_checkpoint::require_end_turn_checkpoint(project, &inspected)
+}
+
 fn manual_wake_calls(
     project: &ResolvedProjectScopeV1,
     record: &crate::web_work_state::WorkRecord,

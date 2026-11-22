@@ -147,12 +147,13 @@ fn deliver_with_sender(
         )
     };
     guard()?;
+    crate::project_mcp_task::require_manual_wake_checkpoint(prepared.scope(), &record)?;
     let mut before = |actual: &Event, actual_target: &Target| {
         guard()?;
         if actual != &event || actual_target != &target {
             return Err("WEB_TASK_MANUAL_WAKE_SELECTION_CHANGED".into());
         }
-        Ok(())
+        crate::project_mcp_task::require_manual_wake_checkpoint(prepared.scope(), &record)
     };
     let mut handoff = |actual: &Event, actual_target: &Target| {
         if actual != &event || actual_target != &target {
