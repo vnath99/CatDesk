@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 21, 7:12 p.m. EST, reviewed V3 operator handoff.** The exact one-time wrapper is pinned at SHA-256 `e3b05e38abdbfebd452886592466143ce3773e590a148f19a5aa1087db8102a0` and supplied locally to the enrolled operator. Its read-only mode verifies the frozen input and stopped state. Execution needs Administrator PowerShell 7, explicit local V3 purpose confirmation, and the existing offline key. It verifies the detached signature, stages the fixed intake without replacement, starts the existing broker once, and submits one signed selection. Expected wrapper result is `V3_WAKE_SELECTION_COMPLETE_STOPPED` with service PID zero. A failure or timeout needs read-only reconciliation of the preserved attempt. The temporary handoff expires November 22 at 7:03:34 p.m. EST. [Exact evidence and limits](docs/verification/WAKE_V3_OPERATOR_HANDOFF_2026_11_21.json).
+
 **November 21, 6:37 p.m. EST, installed Wake broker verified.** First-broker provisioning completed once. All previously supplied bootstrap scripts, signing inputs, and service-removal confirmations are historical evidence. The successful envelope is consumed. For the installed service, use the exact reviewed Host and run the read-only broker preflight.
 
 ```powershell

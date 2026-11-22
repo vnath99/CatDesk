@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T00:12:10.776816Z",
+  "observedLocal": "2026-11-21T19:12:10.776816-05:00",
+  "scope": "REVIEWED_AND_READ_ONLY_QUALIFIED_V3_OPERATOR_HANDOFF_BEFORE_SIGNATURE_OR_PROTECTED_STAGING",
+  "identities": {
+    "installedBrokerImageSha256": "9535a7185341b8683a01a4920eb5c3823f10c9bbcdaaf715e28554692bc46d3c",
+    "installedPolicySha256": "6508ffc30ade16dddf0de652d56c9fbb6d9ff3d3cbef492c8caa733560517dc9",
+    "qualifiedWakeHostSha256": "95c312ce9432afafae7bcda138e4282be7cf1ed63c1af5b555156318bdedb830",
+    "preparedOperatorWrapperSha256": "e3b05e38abdbfebd452886592466143ce3773e590a148f19a5aa1087db8102a0",
+    "operatorOnlySignerSha256": "d73a95f7ba1a7b99e278dcae0ae37ab04f7532a1631fbf6785bb9ab824838311",
+    "frozenSigningPreimageSha256": "0e1ec9c30b38e77abc13f10057730da2868d728edbf6384cec7d8c2cd38ecf36",
+    "plannedSelectionSha256": "7364bc02c335c53aa972f405706e9eb1fc3de5aafb0c22f782b906f725b3540f",
+    "approvalExpiresUtc": "2026-11-23T00:03:34Z",
+    "requiresRemainingValiditySeconds": 300
+  },
+  "qualification": {
+    "independentReviewer": "wake_bootstrap_reviewer",
+    "exactWrapperAndSignerReview": "PASS_SOURCE_ONLY",
+    "explicitTrueModesRequired": true,
+    "retainedNoRedirectStagingDirectoryChecks": true,
+    "fixedIntakeAbsent": true,
+    "allSixReviewAndQualificationReceiptsMatch": true,
+    "installedBrokerStopped": true,
+    "enrolledOperatorIdentityMatches": true,
+    "codexProcessElevated": false,
+    "readOnlyWrapperPreflightPassed": true,
+    "nativeReadOnlyPreflightPassed": true,
+    "inertCasesPassed": 11,
+    "inertTestSha256": "07373596ef6d3ac66181bfeae297aa41c29269529cb6b3ef326d62266d2512e8",
+    "operatorSignatureCreated": false,
+    "protectedIntakeWritten": false,
+    "brokerStarted": false,
+    "candidateInstalled": false
+  },
+  "onceAuthorized": [
+    "Enrolled administrator confirms the separate V3 purpose and supplies the original key file locally",
+    "Existing signer verifies the detached signature and exact envelope",
+    "Create the fixed intake once after a protected scratch stage passes byte, physical identity and ACL checks",
+    "Start the existing broker once and observe pipe availability without opening a connection",
+    "Submit one signed request through the same native attestor and verify bound COMPLETE STOPPED and natural SCM exit"
+  ],
+  "failureHandling": "Keep the durable attempt and stage. No rerun, force-stop, replacement, or replay. Reconcile exact native evidence and SCM/ledger/selection state read-only.",
+  "remaining": "Operator execution and independent installed Wake readback, separate backend producer authority and promotion, and the first actual installed Web edit verification Git checkpoint self-Wake continuation."
+}

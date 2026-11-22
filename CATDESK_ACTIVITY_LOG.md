@@ -534,3 +534,11 @@ Evidence: [docs/verification/WAKE_SELECTION_FALLBACK_QUALIFICATION_2026_11_21.js
 Agent: CatDesk development. Source: 6ecd13ba07d72ab7a5b29a3af9736194cd23fe0b. Outcome: partial. Independent review passed both exact Wake packages and their legacy reconstruction. Six local V3 receipts and a native-checked unsigned generation-one draft are prepared. Next: Qualify the exact operator staging and purpose-signing handoff before starting the existing one-request broker. Continue the separate backend reviewed-build authority and installed Web test.
 
 Evidence: [docs/verification/WAKE_V3_REVIEWED_SELECTION_INTAKE_2026_11_21.json](docs/verification/WAKE_V3_REVIEWED_SELECTION_INTAKE_2026_11_21.json); command: Attributable review, exact receipt readback and offline native V3 plan and encoding verification; exit 0; SHA-256 636634e1462c4db35f3eedcbd022a4f13cc799d71bb522de05e22bb1537fc475.
+
+<!-- catdesk-activity:wake-v3-operator-ready-nov21 sha256:cb77afe725e64cb7c6cb019f2677edaeca297f9629247795dc48839069125499 -->
+
+## 2026-11-22T00:12:10Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: 84c9f4040bdae2a87cbc44d3896e4ed2702a0352. Outcome: partial. Exact V3 operator wrapper and signer passed independent source review, eleven inert cases and read-only installed broker preflight. Next: Enrolled administrator signs and submits the one exact V3 selection through the reviewed local wrapper. Independently verify stopped selection and preserve the separate backend promotion gate.
+
+Evidence: [docs/verification/WAKE_V3_OPERATOR_HANDOFF_2026_11_21.json](docs/verification/WAKE_V3_OPERATOR_HANDOFF_2026_11_21.json); command: Exact pin review, eleven inert cases and native read-only preflight; exit 0; SHA-256 0ea427e3091d7ad0d7a6673b892f4456cd2e8b5bd963ef6f84a3f42794335bbf.
