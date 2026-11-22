@@ -3506,6 +3506,23 @@ pub fn atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
 }
 
 pub(crate) fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
+    atomic_bytes_with_publish(path, bytes, replace)
+}
+
+// Publish and flush a new Windows state record without replacing an earlier
+// attempt. The filesystem, rather than a check before rename, picks the winner.
+#[cfg(windows)]
+pub(crate) fn atomic_create_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
+    atomic_bytes_with_publish(path, bytes, |from, to| {
+        move_with_write_through(from, to, false)
+    })
+}
+
+fn atomic_bytes_with_publish(
+    path: &Path,
+    bytes: &[u8],
+    publish: impl FnOnce(&Path, &Path) -> Result<()>,
+) -> Result<()> {
     reject_link(path)?;
     if bytes.len() as u64 > MAX_FILE {
         return Err("STATE_TOO_LARGE".into());
@@ -3525,7 +3542,7 @@ pub(crate) fn atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
             .and_then(|_| file.sync_all())
             .map_err(|_| "STATE_WRITE_FAILED")?;
         drop(file);
-        replace(&tmp, path)
+        publish(&tmp, path)
     })();
     if result.is_err() {
         let _ = fs::remove_file(&tmp);
@@ -3540,6 +3557,11 @@ fn transient_replace_error(code: u32) -> bool {
 
 #[cfg(windows)]
 fn replace(from: &Path, to: &Path) -> Result<()> {
+    move_with_write_through(from, to, true)
+}
+
+#[cfg(windows)]
+fn move_with_write_through(from: &Path, to: &Path, replace_existing: bool) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -3548,15 +3570,22 @@ fn replace(from: &Path, to: &Path) -> Result<()> {
     }
     let from: Vec<u16> = from.as_os_str().encode_wide().chain(Some(0)).collect();
     let to: Vec<u16> = to.as_os_str().encode_wide().chain(Some(0)).collect();
-    // Same-directory replacement, with write-through before acknowledging commit.
-    // Windows readers/AV can briefly hold the destination without FILE_SHARE_DELETE.
-    // Retry only known transient sharing/access errors and remain fail-closed otherwise.
+    const MOVEFILE_REPLACE_EXISTING: u32 = 1;
+    const MOVEFILE_WRITE_THROUGH: u32 = 8;
+    let flags = MOVEFILE_WRITE_THROUGH
+        | if replace_existing {
+            MOVEFILE_REPLACE_EXISTING
+        } else {
+            0
+        };
+    // Preserve the bounded sharing-error handling for replacement. Creating
+    // an attempt fence gets one publication attempt and never replaces a leaf.
     for attempt in 0..20 {
-        if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 1 | 8) } != 0 {
+        if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), flags) } != 0 {
             return Ok(());
         }
         let code = unsafe { GetLastError() };
-        if !transient_replace_error(code) || attempt == 19 {
+        if !replace_existing || !transient_replace_error(code) || attempt == 19 {
             return Err("STATE_REPLACE_FAILED".into());
         }
         std::thread::sleep(std::time::Duration::from_millis(10));

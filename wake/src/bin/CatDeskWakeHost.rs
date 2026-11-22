@@ -26,6 +26,7 @@ enum InstallBrokerAction {
     SubmitLocal(std::path::PathBuf),
     PreflightLocalIntake(std::path::PathBuf),
     PreflightLocalUpdate(std::path::PathBuf),
+    UpdateLocalOnce(std::path::PathBuf),
 }
 
 #[cfg(windows)]
@@ -90,7 +91,10 @@ fn parse_install_broker_action(args: &[String]) -> Result<Option<InstallBrokerAc
             if ((action == "submit" && flag == "--approval-file")
                 || (matches!(
                     action.as_str(),
-                    "submit-local" | "preflight-local-intake" | "preflight-local-update"
+                    "submit-local"
+                        | "preflight-local-intake"
+                        | "preflight-local-update"
+                        | "update-local-once"
                 ) && flag == "--request-file"))
                 && !path.is_empty()
                 && !path.chars().any(char::is_control)
@@ -100,6 +104,7 @@ fn parse_install_broker_action(args: &[String]) -> Result<Option<InstallBrokerAc
                 "submit-local" => InstallBrokerAction::SubmitLocal(path.into()),
                 "preflight-local-intake" => InstallBrokerAction::PreflightLocalIntake(path.into()),
                 "preflight-local-update" => InstallBrokerAction::PreflightLocalUpdate(path.into()),
+                "update-local-once" => InstallBrokerAction::UpdateLocalOnce(path.into()),
                 _ => InstallBrokerAction::Submit(path.into()),
             }))
         }
@@ -143,7 +148,7 @@ fn read_frozen_broker_request(path: &Path) -> Result<Vec<u8>> {
 fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
     use catdesk_wake::{
         install_broker_client::{
-            connect_fixed_broker_for_approval, connect_fixed_broker_for_local_update,
+            connect_fixed_broker_for_approval, submit_fixed_local_update_on_running_broker,
         },
         install_broker_policy::load_fixed_broker_policy_read_only,
         install_broker_preflight::inspect_fixed_broker_read_only,
@@ -199,6 +204,11 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
         return catdesk_wake::install_broker_client::inspect_fresh_local_user_update(&request)
             .map(Some);
     }
+    if let InstallBrokerAction::UpdateLocalOnce(path) = &action {
+        let request = read_frozen_broker_request(path)?;
+        return catdesk_wake::install_broker_client::update_fixed_broker_local_once(&request)
+            .map(Some);
+    }
     let preflight = inspect_fixed_broker_read_only()?;
     let policy = load_fixed_broker_policy_read_only()?;
     let local_update = matches!(action, InstallBrokerAction::SubmitLocal(_));
@@ -213,9 +223,7 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
             // Fixed policy/service/pipe attestation precedes the one write.
             // No state-root, service-start, signing or settings argument exists.
             if local_update {
-                connect_fixed_broker_for_local_update(&policy)?
-                    .submit_local_user_selection_v1(&bytes)
-                    .map(Some)
+                submit_fixed_local_update_on_running_broker(&policy, &bytes).map(Some)
             } else {
                 connect_fixed_broker_for_approval(&policy)?
                     .submit_same_state_approval_v3(&bytes)
@@ -595,6 +603,29 @@ mod install_broker_cli_tests {
             ]))
             .is_err()
         );
+        assert_eq!(
+            parse_install_broker_action(&args(&[
+                "install-broker",
+                "update-local-once",
+                "--request-file",
+                r"C:\frozen.json"
+            ]))
+            .unwrap(),
+            Some(InstallBrokerAction::UpdateLocalOnce(
+                r"C:\frozen.json".into()
+            ))
+        );
+        for (flag, path) in [("--root", r"C:\state"), ("--request-file", "relative.json")] {
+            assert!(
+                parse_install_broker_action(&args(&[
+                    "install-broker",
+                    "update-local-once",
+                    flag,
+                    path
+                ]))
+                .is_err()
+            );
+        }
         let digest = "a".repeat(64);
         assert_eq!(
             parse_install_broker_action(&args(&["install-broker", "result", "3", &digest]))

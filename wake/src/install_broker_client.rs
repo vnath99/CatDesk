@@ -16,7 +16,9 @@ use crate::{
     Result,
     install_broker_approval::ObjectIdentityV1,
     install_broker_endpoint::FIXED_BROKER_PIPE_NAME,
-    install_broker_policy::BrokerProtectedPolicyV1,
+    install_broker_offline_pins::OfflineObjectPinV2,
+    install_broker_offline_v2::FullFileIdentityV2,
+    install_broker_policy::{BrokerProtectedPolicyV1, load_fixed_broker_policy_read_only},
     install_broker_preflight::{SERVICE_IMAGE, SERVICE_NAME, inspect_fixed_broker_read_only},
 };
 use sha2::{Digest, Sha256};
@@ -29,6 +31,7 @@ use std::{
         ffi::OsStrExt,
         io::{AsRawHandle, FromRawHandle, OwnedHandle},
     },
+    path::{Path, PathBuf},
     ptr,
     time::{Duration, Instant},
 };
@@ -202,6 +205,7 @@ unsafe extern "system" {
     ) -> *mut c_void;
     fn OpenProcess(access: u32, inherit: i32, process_id: u32) -> *mut c_void;
     fn GetProcessId(process: *mut c_void) -> u32;
+    fn GetSystemTimeAsFileTime(time: *mut FileTime);
     fn GetProcessTimes(
         process: *mut c_void,
         creation: *mut FileTime,
@@ -570,7 +574,7 @@ fn connected_server(pipe: &OwnedHandle) -> Result<u32> {
     Ok(pid)
 }
 
-fn process_creation(process: &OwnedHandle) -> Result<u64> {
+fn process_creation(process: &impl AsRawHandle) -> Result<u64> {
     let mut creation = FileTime::default();
     let mut exit = FileTime::default();
     let mut kernel = FileTime::default();
@@ -994,27 +998,52 @@ impl FixedBrokerApprovalClient<'_> {
     /// One enrolled local-user request on the same attested fixed instance.
     /// Client encoding checks supply no transaction authority; the broker must
     /// independently derive state, caller and protected-policy admission.
-    pub fn submit_local_user_selection_v1(mut self, request: &[u8]) -> Result<serde_json::Value> {
+    pub fn submit_local_user_selection_v1(self, request: &[u8]) -> Result<serde_json::Value> {
+        self.submit_local_user_selection(request, None)
+    }
+
+    fn submit_local_user_selection(
+        mut self,
+        request: &[u8],
+        attempt: Option<LocalUpdateAttempt>,
+    ) -> Result<serde_json::Value> {
         use std::os::windows::io::AsHandle;
         let payload = local_user_request_payload(request)?;
-        self.policy.current_process_local_updater()?;
-        self.revalidate()?;
-        // Recheck the enrolled policy and exact interactive user immediately
-        // before the only write; a timeout never grants replay authority.
-        self.policy.current_process_local_updater()?;
-        write_one_message(&self.pipe, request)?;
-        let raw = crate::install_broker_pipe_io::read_once(
-            self.pipe.as_handle(),
-            8192,
-            Duration::from_secs(180),
-            &std::sync::atomic::AtomicBool::new(false),
-        );
+        let generation = payload["installGeneration"]
+            .as_u64()
+            .ok_or("WAKE_SAME_STATE_REQUEST_INVALID")?;
         let request_sha256 = format!("{:x}", Sha256::digest(request));
-        if let Ok(bytes) = &raw
-            && let Some(code) = local_intake_refusal_code(bytes, &request_sha256)
+        self.policy.current_process_local_updater()?;
+        let attempt = match attempt {
+            Some(attempt) => attempt,
+            None => LocalUpdateAttempt::for_policy(self.policy, generation, &request_sha256)?,
+        };
+        self.revalidate()?;
+        let marker = attempt.record()?;
+        // Recheck the enrolled caller and retained pipe peer immediately before
+        // sending. Preserve the marker if this check or the response fails.
+        self.policy.current_process_local_updater()?;
+        require_live_process(&self.process, self.server_pid, self.process_creation)?;
+        if connected_server(&self.pipe)? != self.server_pid
+            || !service_matches(&service_status(&self.service)?, self.server_pid)
         {
-            return Err(code.into());
+            return Err("WAKE_BROKER_CLIENT_IDENTITY_CHANGED".into());
         }
+        let write = write_one_message(&self.pipe, request);
+        drop(marker);
+        drop(attempt);
+        let raw = write.and_then(|()| {
+            crate::install_broker_pipe_io::read_once(
+                self.pipe.as_handle(),
+                8192,
+                Duration::from_secs(180),
+                &std::sync::atomic::AtomicBool::new(false),
+            )
+        });
+        let refusal = raw
+            .as_ref()
+            .ok()
+            .and_then(|bytes| local_intake_refusal_code(bytes, &request_sha256));
         let reply = raw
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
@@ -1028,6 +1057,9 @@ impl FixedBrokerApprovalClient<'_> {
             LOCAL_BROKER_EXIT_WAIT,
             || service_status(&self.service),
         );
+        if let Some(code) = refusal {
+            return Err(code.into());
+        }
         if let Some(mut reply) = reply {
             reply["clientObservedBrokerExit"] = owner_exit.process_exited.into();
             reply["clientObservedBrokerStopped"] = owner_exit.service_stopped.into();
@@ -1035,7 +1067,6 @@ impl FixedBrokerApprovalClient<'_> {
         }
         if owner_exit.service_stopped
             && self.policy.revalidate().is_ok()
-            && let Some(generation) = payload["installGeneration"].as_u64()
             && let Ok(recorded) = crate::install_broker_ledger::inspect_fixed_same_state_result(
                 generation,
                 &request_sha256,
@@ -1193,21 +1224,25 @@ fn local_user_request_payload(request: &[u8]) -> Result<serde_json::Value> {
 /// Verify only the fixed receipt bundle with the same rules used by the broker.
 /// This opens no endpoint and neither grants nor claims a request.
 pub fn inspect_local_user_review_intake(request: &[u8]) -> Result<serde_json::Value> {
-    inspect_local_update_request(request, false)
+    let payload = decode_local_user_request(request)?;
+    let policy = load_fixed_broker_policy_read_only()?;
+    inspect_local_update_request(request, &payload, &policy, false)
 }
 
 /// Check a proposed fresh local update against actual pinned state before
 /// starting the broker. A passing readback never classifies transport history.
 pub fn inspect_fresh_local_user_update(request: &[u8]) -> Result<serde_json::Value> {
-    inspect_local_update_request(request, true)
+    let payload = decode_local_user_request(request)?;
+    let policy = load_fixed_broker_policy_read_only()?;
+    inspect_local_update_request(request, &payload, &policy, true)
 }
 
 fn inspect_local_update_request(
     request: &[u8],
+    payload: &crate::install_broker_approval::same_state::SameStateRootSelectionApprovalV3,
+    policy: &BrokerProtectedPolicyV1,
     inspect_fresh_state: bool,
 ) -> Result<serde_json::Value> {
-    let payload = decode_local_user_request(request)?;
-    let policy = crate::install_broker_policy::load_fixed_broker_policy_read_only()?;
     policy.current_process_local_updater()?;
     policy.same_state_resource_v2()?;
     let before = policy.readback()?;
@@ -1232,23 +1267,23 @@ fn inspect_local_update_request(
                 let outer = serde_json::from_slice(request)
                     .map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID")?;
                 let mut pins = crate::runtime::SameStateReadPinsV3::observe_for_operation(
-                    &policy,
+                    policy,
                     admission,
                     &payload.operation,
                     &outer,
                 )?;
-                let observed = pins.observed(&policy, &payload, admission)?;
+                let observed = pins.observed(policy, payload, admission)?;
                 let verified =
                     crate::install_broker_approval::same_state::verify_local_user_selection_request_v1(
                         request, &observed,
                     )?;
-                pins.revalidate_for_payload(&payload)?;
+                pins.revalidate_for_payload(payload)?;
                 pins.require_protected_review_intake()?;
                 Ok(verified)
             },
         )?;
     } else {
-        crate::runtime::inspect_fixed_local_review_intake(&payload)?;
+        crate::runtime::inspect_fixed_local_review_intake(payload)?;
     }
     if policy.readback()? != before {
         return Err("WAKE_SAME_STATE_PROTECTED_POLICY_CHANGED".into());
@@ -1269,6 +1304,164 @@ fn inspect_local_update_request(
         result["replayAuthorized"] = false.into();
     }
     Ok(result)
+}
+
+/// A client-side no-replay fence. The protected broker ledger remains the
+/// authority on whether the request was accepted and what it changed.
+struct LocalUpdateAttempt {
+    root_pins: Vec<OfflineObjectPinV2>,
+    path: PathBuf,
+    record_bytes: Vec<u8>,
+}
+
+impl LocalUpdateAttempt {
+    fn for_policy(
+        policy: &BrokerProtectedPolicyV1,
+        generation: u64,
+        request_sha256: &str,
+    ) -> Result<Self> {
+        let root = policy.same_state_resource_v2()?;
+        Self::prepare(
+            Path::new(&root.path),
+            &root.identity,
+            generation,
+            request_sha256,
+        )
+    }
+
+    fn prepare(
+        root: &Path,
+        expected_identity: &FullFileIdentityV2,
+        generation: u64,
+        request_sha256: &str,
+    ) -> Result<Self> {
+        let root_pins = root
+            .ancestors()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .map(OfflineObjectPinV2::same_state_directory)
+            .collect::<Result<Vec<_>>>()?;
+        if root_pins.last().map(|pin| &pin.identity().full) != Some(expected_identity) {
+            return Err("WAKE_SAME_STATE_ROOT_MISMATCH".into());
+        }
+        let attempt = Self {
+            root_pins,
+            path: root.join(format!(
+                "broker-local-update-attempt-v1-{generation:020}.json"
+            )),
+            record_bytes: serde_json::to_vec(&serde_json::json!({
+                "schemaVersion":1,
+                "state":"SUBMISSION_MAY_HAVE_STARTED",
+                "installGeneration":generation,
+                "requestSha256":request_sha256
+            }))
+            .map_err(|_| "WAKE_LOCAL_UPDATE_ATTEMPT_RECORD_FAILED_NO_SEND")?,
+        };
+        attempt.require_absent()?;
+        Ok(attempt)
+    }
+
+    fn require_absent(&self) -> Result<()> {
+        match std::fs::symlink_metadata(&self.path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Ok(_) => Err("WAKE_LOCAL_UPDATE_ATTEMPT_EXISTS_NO_RETRY".into()),
+            Err(_) => Err("WAKE_LOCAL_UPDATE_ATTEMPT_UNREADABLE_NO_SEND".into()),
+        }
+    }
+
+    fn record(&self) -> Result<OfflineObjectPinV2> {
+        let parent = self.path.parent().ok_or("WAKE_SAME_STATE_ROOT_INVALID")?;
+        for (pin, ancestor) in self.root_pins.iter().rev().zip(parent.ancestors()) {
+            pin.revalidate_path(ancestor)?;
+        }
+        self.require_absent()?;
+        if crate::store::atomic_create_bytes(&self.path, &self.record_bytes).is_err() {
+            self.require_absent()?;
+            return Err("WAKE_LOCAL_UPDATE_ATTEMPT_RECORD_FAILED_NO_SEND".into());
+        }
+        let mut marker = OfflineObjectPinV2::open(&self.path, false)
+            .map_err(|_| "WAKE_LOCAL_UPDATE_ATTEMPT_READBACK_FAILED_NO_SEND")?;
+        if !matches!(
+            marker.read_bounded(self.record_bytes.len()),
+            Ok(bytes) if bytes == self.record_bytes
+        ) {
+            return Err("WAKE_LOCAL_UPDATE_ATTEMPT_READBACK_FAILED_NO_SEND".into());
+        }
+        Ok(marker)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FreshLocalBroker {
+    pid: u32,
+    earliest_creation: u64,
+    latest_creation: u64,
+}
+
+impl FreshLocalBroker {
+    fn from_start(receipt: &serde_json::Value, earliest: u64, latest: u64) -> Result<Self> {
+        let pid = receipt["processId"]
+            .as_u64()
+            .and_then(|value| u32::try_from(value).ok())
+            .filter(|pid| *pid > 0);
+        if receipt["status"] != "SCM_RUNNING_ONLY"
+            || receipt["authorization"] != "LOCAL_USER_POLICY"
+            || receipt["serviceStarted"] != true
+            || earliest == 0
+            || latest < earliest
+        {
+            return Err("WAKE_LOCAL_UPDATE_FRESH_BROKER_UNPROVEN_NO_SEND".into());
+        }
+        Ok(Self {
+            pid: pid.ok_or("WAKE_LOCAL_UPDATE_FRESH_BROKER_UNPROVEN_NO_SEND")?,
+            earliest_creation: earliest,
+            latest_creation: latest,
+        })
+    }
+
+    fn matches(self, pid: u32, creation: u64) -> bool {
+        pid == self.pid && (self.earliest_creation..=self.latest_creation).contains(&creation)
+    }
+}
+
+fn current_filetime() -> u64 {
+    let mut time = FileTime::default();
+    unsafe { GetSystemTimeAsFileTime(&mut time) };
+    time.as_u64()
+}
+
+/// Starting the fixed broker does not grant install authority. Require both
+/// prospective proof and a fresh SCM owner before recording the only attempt.
+pub fn update_fixed_broker_local_once(request: &[u8]) -> Result<serde_json::Value> {
+    let payload = decode_local_user_request(request)?;
+    let policy = load_fixed_broker_policy_read_only()?;
+    policy.current_process_local_updater()?;
+    let request_sha256 = format!("{:x}", Sha256::digest(request));
+    let attempt =
+        LocalUpdateAttempt::for_policy(&policy, payload.install_generation, &request_sha256)?;
+    inspect_local_update_request(request, &payload, &policy, true)?;
+    let earliest = current_filetime();
+    let started = crate::install_broker_lifecycle::start_fixed_broker_for_local_update()?;
+    let fresh = FreshLocalBroker::from_start(&started, earliest, current_filetime())?;
+    connect_at(&policy, FIXED_BROKER_PIPE_NAME, true, Some(fresh))?
+        .submit_local_user_selection(request, Some(attempt))
+}
+
+/// Attach only after checking that the local request's generation has no
+/// prior attempt. A refused submission must not consume a running broker's
+/// single request connection merely to discover its local fence.
+pub fn submit_fixed_local_update_on_running_broker(
+    policy: &BrokerProtectedPolicyV1,
+    request: &[u8],
+) -> Result<serde_json::Value> {
+    let payload = decode_local_user_request(request)?;
+    policy.current_process_local_updater()?;
+    let request_sha256 = format!("{:x}", Sha256::digest(request));
+    let attempt =
+        LocalUpdateAttempt::for_policy(policy, payload.install_generation, &request_sha256)?;
+    connect_fixed_broker_for_local_update(policy)?
+        .submit_local_user_selection(request, Some(attempt))
 }
 
 pub(crate) fn same_state_complete_reply_matches(
@@ -1390,7 +1583,7 @@ pub(crate) fn local_user_complete_reply_matches(
 pub fn connect_fixed_broker_for_approval(
     policy: &BrokerProtectedPolicyV1,
 ) -> Result<FixedBrokerApprovalClient<'_>> {
-    connect_at(policy, FIXED_BROKER_PIPE_NAME, false)
+    connect_at(policy, FIXED_BROKER_PIPE_NAME, false, None)
 }
 
 /// An enrolled local update may arrive before a just-started service has
@@ -1399,7 +1592,7 @@ pub fn connect_fixed_broker_for_local_update(
     policy: &BrokerProtectedPolicyV1,
 ) -> Result<FixedBrokerApprovalClient<'_>> {
     policy.current_process_local_updater()?;
-    connect_at(policy, FIXED_BROKER_PIPE_NAME, true)
+    connect_at(policy, FIXED_BROKER_PIPE_NAME, true, None)
 }
 
 fn try_open_client_pipe(pipe_name: &str) -> std::io::Result<OwnedHandle> {
@@ -1456,6 +1649,7 @@ fn connect_at<'a>(
     policy: &'a BrokerProtectedPolicyV1,
     pipe_name: &str,
     wait_for_local_pipe: bool,
+    fresh: Option<FreshLocalBroker>,
 ) -> Result<FixedBrokerApprovalClient<'a>> {
     let (service_sid, operator_sid) = policy.checked_endpoint_sids()?;
     let expected_pipe = expected_pipe_sddl(service_sid, operator_sid)?;
@@ -1463,7 +1657,10 @@ fn connect_at<'a>(
     let snapshot = inspect_fixed_broker_read_only()?;
     let service = fixed_service()?;
     let (pipe, expected_local_pid) = if wait_for_local_pipe {
-        let expected_pid = service_status(&service)?.process_id;
+        let expected_pid = match fresh {
+            Some(owner) => owner.pid,
+            None => service_status(&service)?.process_id,
+        };
         let pipe = wait_for_local_update_pipe(pipe_name, LOCAL_PIPE_START_WAIT, || {
             // Readiness only. The live process and pipe are still attested
             // below before this connection can become a submission client.
@@ -1486,6 +1683,9 @@ fn connect_at<'a>(
         return Err("WAKE_BROKER_CLIENT_SERVICE_MISMATCH".into());
     }
     let (process, process_creation) = pinned_process(server_pid)?;
+    if fresh.is_some_and(|owner| !owner.matches(server_pid, process_creation)) {
+        return Err("WAKE_LOCAL_UPDATE_FRESH_BROKER_UNPROVEN_NO_SEND".into());
+    }
     exact_process_image_path(&process)?;
     exact_process_token(&process, &service_sid_bytes)?;
     let mut image = open_fixed_image()?;
@@ -1576,6 +1776,101 @@ fn write_one_message(pipe: &OwnedHandle, approval: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn local_update_fixture_root(label: &str) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-wake-{label}-{}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn local_update_attempt_survives_closed_handles_and_fences_the_generation() {
+        let root = local_update_fixture_root("attempt-fence");
+        let root_pin = OfflineObjectPinV2::same_state_directory(&root).unwrap();
+        let identity = &root_pin.identity().full;
+        let request = "a".repeat(64);
+        let attempt = LocalUpdateAttempt::prepare(&root, identity, 3, &request).unwrap();
+        assert!(!attempt.path.exists());
+        let marker = attempt.record().unwrap();
+        assert!(std::fs::remove_file(&attempt.path).is_err());
+        drop(marker);
+        let raw = std::fs::read(&attempt.path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(parsed["requestSha256"], request);
+        assert_eq!(parsed["installGeneration"], 3);
+        assert_eq!(parsed["state"], "SUBMISSION_MAY_HAVE_STARTED");
+        assert!(matches!(
+            LocalUpdateAttempt::prepare(&root, identity, 3, &"b".repeat(64)),
+            Err(code) if code == "WAKE_LOCAL_UPDATE_ATTEMPT_EXISTS_NO_RETRY"
+        ));
+        let another = LocalUpdateAttempt::prepare(&root, identity, 4, &request).unwrap();
+        std::fs::write(&another.path, b"{").unwrap();
+        assert!(matches!(
+            another.record(),
+            Err(code) if code == "WAKE_LOCAL_UPDATE_ATTEMPT_EXISTS_NO_RETRY"
+        ));
+        assert_eq!(std::fs::read(&attempt.path).unwrap(), raw);
+        assert_eq!(std::fs::read(&another.path).unwrap(), b"{");
+        let paths = [attempt.path.clone(), another.path.clone()];
+        drop((attempt, another, root_pin));
+        for path in paths {
+            std::fs::remove_file(path).unwrap();
+        }
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn local_update_attempt_checks_root_and_publishes_at_most_once() {
+        let root = local_update_fixture_root("attempt-race");
+        let root_pin = OfflineObjectPinV2::same_state_directory(&root).unwrap();
+        let identity = &root_pin.identity().full;
+        let mut foreign = identity.clone();
+        foreign.volume_serial ^= 1;
+        assert!(matches!(
+            LocalUpdateAttempt::prepare(&root, &foreign, 7, &"a".repeat(64)),
+            Err(code) if code == "WAKE_SAME_STATE_ROOT_MISMATCH"
+        ));
+        let first = LocalUpdateAttempt::prepare(&root, identity, 7, &"a".repeat(64)).unwrap();
+        let second = LocalUpdateAttempt::prepare(&root, identity, 7, &"b".repeat(64)).unwrap();
+        let path = first.path.clone();
+        let race = std::sync::Barrier::new(2);
+        let successes = std::thread::scope(|scope| {
+            let workers = [&first, &second].map(|attempt| {
+                let race = &race;
+                scope.spawn(move || {
+                    race.wait();
+                    attempt.record().is_ok()
+                })
+            });
+            workers.map(|worker| worker.join().unwrap())
+        });
+        assert_eq!(successes.into_iter().filter(|success| *success).count(), 1);
+        let expected = if successes[0] { &first } else { &second };
+        assert_eq!(std::fs::read(&path).unwrap(), expected.record_bytes);
+        assert!(crate::store::atomic_create_bytes(&path, b"other").is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), expected.record_bytes);
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+        drop((first, second, root_pin));
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn fresh_local_broker_does_not_adopt_existing_or_reused_pid() {
+        let mut receipt = serde_json::json!({
+            "status":"SCM_RUNNING_ONLY","authorization":"LOCAL_USER_POLICY",
+            "serviceStarted":true,"processId":8
+        });
+        let owner = FreshLocalBroker::from_start(&receipt, 15, 20).unwrap();
+        assert!(owner.matches(8, 17));
+        assert!(!owner.matches(8, 14));
+        assert!(!owner.matches(8, 21));
+        assert!(!owner.matches(9, 17));
+        assert!(FreshLocalBroker::from_start(&receipt, 20, 15).is_err());
+        receipt["serviceStarted"] = false.into();
+        assert!(FreshLocalBroker::from_start(&receipt, 15, 20).is_err());
+    }
 
     #[test]
     fn same_state_reply_requires_exact_request_and_complete_stopped_readback() {
@@ -2036,6 +2331,7 @@ mod tests {
             LocalBrokerExit::default()
         );
 
+        let lower_bound = current_filetime();
         let mut child = Command::new(std::env::current_exe().unwrap())
             .arg("--list")
             .stdin(Stdio::null())
@@ -2043,7 +2339,18 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
+        let upper_bound = current_filetime();
         let pid = child.id();
+        let child_broker = FreshLocalBroker::from_start(
+            &serde_json::json!({
+                "status":"SCM_RUNNING_ONLY","authorization":"LOCAL_USER_POLICY",
+                "serviceStarted":true,"processId":pid
+            }),
+            lower_bound,
+            upper_bound,
+        )
+        .unwrap();
+        let actual_creation = process_creation(&child).unwrap();
         let good = ServiceStatusProcess {
             service_type: SERVICE_WIN32_OWN_PROCESS,
             current_state: SERVICE_STOPPED,
@@ -2052,6 +2359,7 @@ mod tests {
         };
         let clean = observe_local_broker_exit(&child, pid, Duration::from_secs(5), || Ok(good));
         assert!(child.wait().unwrap().success());
+        assert!(child_broker.matches(pid, actual_creation));
         assert_eq!(
             clean,
             LocalBrokerExit {
