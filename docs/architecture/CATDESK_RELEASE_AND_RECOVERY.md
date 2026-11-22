@@ -1,5 +1,7 @@
 # CatDesk — Release, Diagnostics and Recovery
 
+**Decision 2026-11-22T06:01:10Z.** Use the existing protected V3 history and global Windows lock for exact readback after a lost broker reply. Open existing ledger files with read access. Match the original generation and digest before projecting its recorded phase. The observation carries no replay authority. Non-elevated access to the installed namespace passed. [Evidence](../verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json).
+
 **Decision 2026-11-22T05:55:35Z.** Reuse the attested broker connection to return a fixed intake refusal for a fresh local request before the ledger intent. Bind the response to the exact request digest and retain unknown-outcome handling when the reply or submission phase cannot be proven. A protected publisher for genuine evidence and installed broker qualification remain required. [Windows evidence](../verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json).
 
 **Verification 2026-11-22T05:50:21Z.** The existing routine broker can select a different qualified package after a completed rollback clears the previous entry. It verifies the restored current as working, records it as the new fallback, and preserves the complete prior ledger. This was exercised with native Windows file operations and isolated policy fixtures. Trusted intake publication and installed routine promotion remain open. [Evidence](../verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.json).

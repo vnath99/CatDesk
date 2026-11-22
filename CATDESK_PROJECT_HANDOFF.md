@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22 — read a lost Wake broker response without resending.** The development controller reads the original V3 generation and exact request digest under the existing Windows ledger lock. The installed protected namespace returned `NOT_FOUND_NO_RETRY` for a deliberate sentinel lookup from a non-elevated account. The broker remained stopped. Tests exercised busy, incomplete, and complete records. [Evidence](docs/verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json).
+
 **November 22 — distinguish rejected Wake intake from an ambiguous submission.** The development broker can return a fixed, request-bound result for a fresh intake refusal before a ledger intent. Windows tests preserved the pointer and existing broker records when the exact review receipt was absent. Unknown and resumed submissions retain the existing ledger-based disposition. Trusted publication remains gated. The existing dedicated producer IPC is unavailable. [Evidence](docs/verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json).
 
 **November 22 — new Wake selection after completed rollback.** A disposable Windows regression recorded native rollback and a fresh unsigned local-user selection in consecutive ledger generations. The successor reused the restored working package, preserved the earlier ledger bytes, and required no duplicate previous intake. The first signed selection and protected publication of genuine review evidence remain separate. [Evidence](docs/verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.json).
@@ -368,5 +370,5 @@ Without a connector: clone GitHub, check out the canonical development branch, i
 The machine `source_sha` identifies the qualified integration checkpoint, not the self-referential publication SHA of this document. Read actual checkout HEAD and remote refs before work.
 
 ```json
-{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Use existing signed first Wake selection and independent backend review. Qualify trusted routine receipt publication and installed broker promotion and rollback before the Web cycle"}
+{"schemaVersion":1,"milestone":"M-WEB","ticket":"WAKE-LIFECYCLE","source_sha":"5c8ba55bcf08ee0b489a999652c91f8e35eb7a28","branch":"codex/installed-web-cycle-nov21","status":"IN_PROGRESS","runtime_status":"VERIFIED_AT_RECORDED_TIME","blocker":"COMPATIBLE_BACKEND_REVIEW_AND_ATTESTATION_REQUIRED_AND_WAKE_V3_SELECTION_PENDING","next_action":"Use the signed first Wake selection and genuine independent backend review. Perform installed promotion, rollback and the Web cycle after authority is established"}
 ```

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T06:01:10.1887968Z",
+  "sourceCommit": "486f50623a4e5552d6a37887773ed087e7360736",
+  "scope": "ACTUAL_NON_ELEVATED_INSTALLED_LEDGER_READ_WITH_DEVELOPMENT_CONTROLLER",
+  "command": "CatDeskWakeHost.exe install-broker result <generation> <request-sha256>",
+  "actual": {
+    "developmentControllerSha256": "4e22e987d28fa7b520c7e27cbeef065b80e3409b1539ecced1b6f3ac3e247ea5",
+    "elevated": false,
+    "exitCode": 0,
+    "readerExited": true,
+    "brokerBefore": "Stopped",
+    "brokerAfter": "Stopped",
+    "brokerOwnerUnchanged": true,
+    "probeIdentity": "Deliberately absent sentinel generation and digest",
+    "state": "NOT_FOUND_NO_RETRY",
+    "replayAuthorized": false,
+    "liveAcceptanceVerified": false
+  },
+  "nativeFixture": {
+    "busyWriterRefused": true,
+    "readLockRejectsWrites": true,
+    "pointerSwitchedWithoutCompletion": "INCOMPLETE_NO_RETRY",
+    "exactComplete": "COMPLETE",
+    "wrongDigestOrMissingGeneration": "NOT_FOUND_NO_RETRY",
+    "readbackContainsNoEscrowBytes": true
+  },
+  "tests": {
+    "windowsLedgerPassed": 77,
+    "windowsCliPassed": 2
+  },
+  "publicationRecovery": "The original linked Git metadata became unavailable after testing. Three source files and the probe result were hash-checkpointed and the source was published from an isolated clone of the previously verified remote SHA.",
+  "installedWrites": 0,
+  "brokerStarts": 0,
+  "installedPromotionVerified": false
+}

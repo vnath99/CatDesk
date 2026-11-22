@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — read an exact Wake broker result.** The development controller supports `CatDeskWakeHost.exe install-broker result <generation> <request-sha256>`. Use the generation and SHA-256 of the exact original request bytes from the retained submission. `COMPLETE` reports recorded completion. `INCOMPLETE_NO_RETRY`, `NOT_FOUND_NO_RETRY`, and read failures require preservation of the original request. This command reads the fixed protected journal and starts no service. [Evidence](docs/verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json).
+
 **November 22 — routine Wake intake refusals.** Development `install-broker submit-local --request-file <absolute-path>` can surface a fixed candidate or review intake error when the attested service proves the fresh request stopped before intent. Use the existing ledger to reconcile `WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY`. The dedicated producer's IPC still refuses and does not publish Wake receipts. [Evidence](docs/verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json).
 
 **November 22 — routine Wake release after rollback.** The disposable Windows test confirms that a fresh qualified request can retain the restored working package as fallback even when rollback cleared the previous entry. It uses the existing local-user policy and genuine releases still require trusted review intake and an eligible installed broker. [Evidence](docs/verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.json).

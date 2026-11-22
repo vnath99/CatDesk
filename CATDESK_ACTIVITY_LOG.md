@@ -862,3 +862,11 @@ Evidence: [docs/verification/WAKE_UPDATE_AFTER_COMPLETED_ROLLBACK_2026_11_22.jso
 Agent: Codex. Source: ab20a02760bb82c4e1f056357b7919960006820e. Outcome: partial. The development Wake broker distinguishes fixed intake refusal before a fresh ledger intent from an ambiguous submission. Fifteen Windows tests passed including a missing physical review receipt with unchanged selection and no new ledger record. Next: Use existing signed first Wake selection and independent backend review. Qualify trusted routine receipt publication and installed broker promotion and rollback before the Web cycle.
 
 Evidence: [docs/verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json](docs/verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json); command: Windows Wake broker client and service tests plus the missing receipt regression; exit 0; SHA-256 44237b6487206dc6f8c03c0e9b4ca26f38b678d1cec8c04774c98cbdcd8916ac.
+
+<!-- catdesk-activity:nov22-wake-broker-exact-result-readback sha256:1a2dbdbafdc85a071d4d79231ffa9b4b4949701cc5dd45de8bce28e9ac54dd81 -->
+
+## 2026-11-22T06:01:10.1887968Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 486f50623a4e5552d6a37887773ed087e7360736. Outcome: partial. The exact Wake request readback reuses the protected Windows ledger without starting the broker. Non-elevated installed ledger access returned NOT_FOUND_NO_RETRY for a deliberate sentinel. Seventy-seven ledger tests and two CLI tests passed. Next: Use the signed first Wake selection and genuine independent backend review. Perform installed promotion, rollback and the Web cycle after authority is established.
+
+Evidence: [docs/verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json](docs/verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json); command: Windows exact ledger and CLI tests plus one non-elevated installed sentinel lookup; exit 0; SHA-256 cfe57249e1974623de14a241ba6f627a6505409bc786ff1453a550b7ab0d8fd9.
