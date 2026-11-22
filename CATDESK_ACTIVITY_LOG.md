@@ -1014,3 +1014,11 @@ Evidence: [docs/verification/FROZEN_BACKEND_MANUAL_WAKE_ADMISSION_2026_11_22.jso
 Agent: Codex. Source: 11b1d63c5603a370c91e62c49b15f1f2f6b4908b. Outcome: partial. Development source now reserves task-owned self-Wake submission for the existing scoped sender and retains read-only receipt and response observation. All 51 targeted Windows tests passed. Next: Qualify the existing scoped sender under the installed release and verify the exact delivery and next response. The frozen backend still requires independent review and producer evidence, and the first Wake V3 selection remains separately signed.
 
 Evidence: [docs/verification/TASK_OWNED_MANUAL_WAKE_SCHEDULER_2026_11_22.json](docs/verification/TASK_OWNED_MANUAL_WAKE_SCHEDULER_2026_11_22.json); command: cargo test --locked --offline --target-dir target -p catdesk-wake --lib runtime::scheduler::tests -- --test-threads=1 --quiet; exit 0; SHA-256 6709e77f0a89e1c5104f822246e38db428233d1bca8c5c5374112f34b422dc2b.
+
+<!-- catdesk-activity:nov22-one-shot-project-manual-wake-selection sha256:9d0fbd30afad182e3e1679d0cf0e69842e9b5d4a1538635b9b8ba6c2d5981b8f -->
+
+## 2026-11-22T08:42:37Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 0dbc306e0a2157381d915a88d7b23978e3ccceae. Outcome: partial. Development can select one journal-bound self-Wake with the project ID alone. The bounded one-shot preserves the stopped scoped sender gate and refuses ambiguous or unresolved deliveries. Thirteen Windows source tests passed. Next: Verify signed Wake V3 selection and complete genuine independent review and producer evidence. Qualify installed promotion and rollback, then exercise one actual v5 edit, verification, checkpoint and scoped self-Wake response.
+
+Evidence: [docs/verification/ONE_SHOT_PROJECT_MANUAL_WAKE_SELECTION_2026_11_22.json](docs/verification/ONE_SHOT_PROJECT_MANUAL_WAKE_SELECTION_2026_11_22.json); command: cargo test --locked --offline --target-dir target --bin catdesk manual_wake -- --test-threads=1 --quiet; exit 0; SHA-256 7e662bb11d606fa19343d93865c48dc756af3bc47f695be22a2479ada480def4.

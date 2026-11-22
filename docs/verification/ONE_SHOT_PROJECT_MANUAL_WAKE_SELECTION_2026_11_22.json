@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T08:42:37Z",
+  "scope": "WINDOWS_DEVELOPMENT_TASK_JOURNAL_AND_INERT_SENDER",
+  "sourceCommit": "0dbc306e0a2157381d915a88d7b23978e3ccceae",
+  "operatorCommand": "operator web work manual-wake-deliver-next --project-id <registered-project>",
+  "selector": {
+    "singleOpenWorkRecordReadUnderExistingProjectLease": true,
+    "exactEventAndImmutableCallHashesRequired": true,
+    "alreadySentIntentWasSkipped": true,
+    "multiplePendingIntentsBlockedBeforeSender": true,
+    "submittingUnknownPreservedBeforeSender": true,
+    "wrongOrManualIdentityOverridesRefusedByParser": true,
+    "unrelatedQueueObjectPreserved": true,
+    "handoffAfterDurableSubmissionBoundary": true
+  },
+  "currentOwnerRequirements": {
+    "existingScopedSenderRequiresStoppedWakeHost": true,
+    "existingBackgroundCoordinatorRequiresRunningWakeHost": true,
+    "oneShotOperatorCommand": true,
+    "newRecurringOwnerCreated": false
+  },
+  "test": {
+    "command": "cargo test --locked --offline --target-dir target --bin catdesk manual_wake -- --test-threads=1 --quiet",
+    "passed": 13,
+    "failed": 0,
+    "ignored": 1,
+    "elapsedSeconds": 66.64,
+    "exitCode": 0
+  },
+  "fixtureProcessesRemaining": 0,
+  "browserLaunched": false,
+  "externalMessagesSent": 0,
+  "protectedReleaseChanged": false,
+  "installedAcceptance": false
+}
