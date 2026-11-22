@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "scope": "PUBLIC_CANONICAL_FINGERPRINT_AND_REVIEWED_ESCROW_RECOVERY_IN_DISPOSABLE_WINDOWS_WORKSPACE",
+  "sourceCommit": "d2423b0f4548d2bd1dfde3711a934121e948e5e6",
+  "baselineCommit": "53bc6005064b4c50ca004bc4f750d44582703b44",
+  "fixtureSha256": "e0ae188e8dc0f101928d14adb697547fdf0f7ddf9be50fdb53446d7d609dd876",
+  "verifiedUtc": "2026-11-22T08:02:07Z",
+  "behavior": {
+    "baselineExpectedHashCouldConcealSplitPair": true,
+    "canonicalSidecarRequiredEvenWithExplicitHashOrReference": true,
+    "defaultSidecarFollowsSelectedWorkspace": true,
+    "recoveryRequiresTrustedFallbackToMatchSupplementalExpectation": true,
+    "matchingSupplementalReferenceRemainsSupported": true
+  },
+  "liveFixture": {
+    "startedUtc": "2026-11-22T08:00:57.513318Z",
+    "finishedUtc": "2026-11-22T08:01:37.955886Z",
+    "fault": "Exact fallback executable with a different release fingerprint",
+    "wrongFingerprintValue": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+    "executableAndRestoredPairSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+    "statusWithMatchingExecutableExpectation": "RECOVERY_AVAILABLE",
+    "wrongExpectedHashRecover": "RECOVERY_AUTHORITY_REQUIRED",
+    "wrongSupplementalFingerprintRecover": "RECOVERY_AUTHORITY_REQUIRED",
+    "failedRecoveriesPreservedOriginalPairAndEscrow": true,
+    "sidecarRestoredFromExistingReviewedEscrow": true,
+    "supervisorStates": [
+      "RECOVERED",
+      "READY",
+      "MONITORING_COMPLETE"
+    ],
+    "anonymousHttpStatus": 401,
+    "authenticatedHttpStatus": 200,
+    "authenticatedHttpStatusAfterMonitorExit": 200,
+    "toolCount": 79,
+    "naturalBackendExitListenerClosedAndFixtureRemoved": true
+  },
+  "regressionTests": {
+    "canonicalStackAndPublicLifecycleBothPowerShellEditions": "PASS",
+    "doctorAssertionsPassed": 215
+  },
+  "limits": "The real public diagnostics and canonical recovery used disposable fixture escrow. A private-port adapter scoped Windows process inspection and launched the exact headless image. Production release authority, owner configuration, and installed promotion were outside the fixture.",
+  "productionPortUsed": false,
+  "protectedInstallationChanged": false,
+  "installedAcceptance": false
+}

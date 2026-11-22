@@ -982,3 +982,11 @@ Evidence: [docs/verification/RELEASE_STARTUP_AND_STATUS_OWNERSHIP_2026_11_22.jso
 Agent: CatDesk development. Source: dc3aa483f378265dee2ed4f6b37ad65e6e6b30e6. Outcome: partial. The one-hash facade can wait for an existing backend-only monitor then verify the exact selected daemon and authenticated MCP. A real isolated backend rejected anonymous access and answered after the facade exited. Protected promotion and monitor registration used fixture authority. Next: Qualify installed promotion and rollback after the frozen backend receives eligible independent review and producer evidence. Verify the existing signed Wake V3 selection and qualify protected Wake receipt publication.
 
 Evidence: [docs/verification/ONE_HASH_PROMOTION_SERVING_READBACK_2026_11_22.json](docs/verification/ONE_HASH_PROMOTION_SERVING_READBACK_2026_11_22.json); command: Bounded Windows one-hash facade and actual private-port authenticated MCP fixture; exit 0; SHA-256 13991ba17b787018623916fdb2326c24de3a48d46fc21ed767dd2f7cc8fc801a.
+
+<!-- catdesk-activity:canonical-fingerprint-expectation-20261122T080207Z sha256:c43d9a52b7898b9fb31d3cfdbe161235dc055a9c97399509064f3fc5186c7a7c -->
+
+## 2026-11-22T08:02:07Z — WAKE-LIFECYCLE
+
+Agent: CatDesk development. Source: d2423b0f4548d2bd1dfde3711a934121e948e5e6. Outcome: partial. Startup now validates the recorded canonical fingerprint alongside explicit release expectations. The isolated Windows test detected a real split pair, refused two incompatible recovery requests, and restored the exact reviewed fingerprint before authenticated serving. Next: Qualify installed promotion and rollback after the frozen backend receives eligible independent review and producer evidence. Verify the existing signed Wake V3 selection and qualify protected Wake receipt publication.
+
+Evidence: [docs/verification/CANONICAL_FINGERPRINT_EXPECTATION_RECOVERY_2026_11_22.json](docs/verification/CANONICAL_FINGERPRINT_EXPECTATION_RECOVERY_2026_11_22.json); command: Bounded Windows public expectation, reviewed fallback fingerprint and authenticated MCP fixture; exit 0; SHA-256 f3df2192a09dc918180756395d8b4b6783f7026eefb2d6457590985d2f28cbfb.

@@ -1226,6 +1226,8 @@ do not discard it or blindly confirm again.
 
 ### 8. Verify installed executable and recorded fingerprint
 
+The selected workspace supplies the canonical fingerprint. An explicit `-ExpectedBuildSha256` or a supplemental `-BuildFingerprintPath` must agree with that pair. Recovery checks the same expectation against independently verified escrow before it changes either release file. [Windows qualification](../verification/CANONICAL_FINGERPRINT_EXPECTATION_RECOVERY_2026_11_22.json).
+
 Measure the actual canonical path and sidecar independently. Require both values
 to equal the admitted candidate's full SHA-256. Validate the resulting LKG through
 `Get-CatDeskLastKnownGoodRelease` as used by the public lifecycle. Reconciliation
