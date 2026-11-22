@@ -1112,7 +1112,7 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
             .map_err(|_| "WEB_WORK_REGISTRY_UNAVAILABLE")?;
     // This reads assignment journals under the project lease only. Take the
     // shared registry lock later for the exact scope and ledger comparison.
-    let completion = if resolution.outcome == "completed" {
+    let checked_assignment = if !report {
         let ledger = WorkLedger::open_read_only(&workspace, &validated.project_id)?;
         let record = ledger
             .record(&validated.request_id)?
@@ -1189,6 +1189,16 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
                 &validated.task_text,
             );
         }
+        if record.task_assignment.is_some()
+            && checked_assignment
+                .as_ref()
+                .is_none_or(|(checked, scope_digest)| {
+                    checked != &record
+                        || *scope_digest != crate::project_mcp_task::assignment_scope_sha256(&scope)
+                })
+        {
+            return Err("WEB_WORK_ASSIGNMENT_SOURCE_CHANGED".into());
+        }
         let delivery = wake.delivery(&record.event_id)?;
         if resolution.outcome == "retired"
             && delivery
@@ -1235,15 +1245,6 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
             {
                 return Err("WEB_WORK_COMPLETED_RESPONSE_REQUIRED".into());
             }
-        }
-        if resolution.outcome == "completed"
-            && record.task_assignment.is_some()
-            && completion.as_ref().is_none_or(|(checked, scope_digest)| {
-                checked != &record
-                    || *scope_digest != crate::project_mcp_task::assignment_scope_sha256(&scope)
-            })
-        {
-            return Err("WEB_WORK_ASSIGNMENT_SOURCE_CHANGED".into());
         }
         // Exact browser progress is a prerequisite. The outcome and summary
         // remain an explicit coordinator report, not verified artifacts.
@@ -1544,6 +1545,42 @@ pub(crate) mod tests {
         assert!(wake.retry_pre_submit(&event.event_id).is_err());
         assert!(ledger.require_ordinary_request("request-a").is_err());
         assert!(!control.join(".catdesk/project-mcp-tasks").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn operator_can_retire_an_associated_unstarted_request() {
+        use catdesk_wake::store::Phase;
+        let (control, assignment, wake, pins, event) = assignment_fixture();
+        wake.publish(&event).unwrap();
+        associate(&control, pins, &assignment).unwrap();
+        let ledger = WorkLedger::open_read_only(&control, "alpha").unwrap();
+        let before = ledger.record("request-a").unwrap().unwrap();
+        let task = control.join(".catdesk/project-mcp-tasks/alpha/task-fixture");
+        let original_assignment = std::fs::read(task.join("assignment.json")).unwrap();
+        assert!(!task.join("journal").exists());
+        assert!(!task.join("execution-grant.json").exists());
+        let resolution = json!({"projectId":"alpha","requestId":"request-a",
+            "expectedTargetGeneration":before.target.generation,
+            "expectedTargetSha256":before.target.digest,
+            "outcome":"retired","summary":"Withdraw the unused assignment"});
+        let closed = resolve(&control, resolution.clone()).unwrap();
+        assert_eq!(closed["phase"], "CLOSED");
+        assert_eq!(closed["outcome"], "retired");
+        assert_eq!(resolve(&control, resolution).unwrap(), closed);
+        let after = ledger.record("request-a").unwrap().unwrap();
+        assert_eq!(after.task_assignment, before.task_assignment);
+        assert_eq!(after.event_id, before.event_id);
+        assert_eq!(
+            std::fs::read(task.join("assignment.json")).unwrap(),
+            original_assignment
+        );
+        assert!(!task.join("journal").exists());
+        let delivery = wake.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(delivery.phase, Phase::Stale);
+        assert_eq!(delivery.event, event);
+        assert!(delivery.receipt.is_none());
+        assert!(wake.timer(&event.event_id).unwrap().is_none());
     }
 
     #[cfg(windows)]

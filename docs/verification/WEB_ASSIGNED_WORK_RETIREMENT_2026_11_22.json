@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T22:05:00Z",
+  "scope": "WINDOWS_DEVELOPMENT_SAFE_WEB_WORK_RETIREMENT",
+  "baseline": "1554be7cfb4135c8b897e785932f1f01a4772c60",
+  "finding": "An assigned request with a finished source invitation could formerly close as retired while its own task call or manual Wake was unresolved.",
+  "correction": "Under the existing project lease, both terminal outcomes validate task activity. The existing registration lock rechecks the exact record and assignment scope before a terminal action can change a delivery or ledger.",
+  "cases": [
+    "Queued and ambiguously submitted manual Wake preserve OPEN and the original assignment on both terminal outcomes.",
+    "An active task call prevents both completion and retirement.",
+    "An exact SENT receipt without a complete response timer still prevents release.",
+    "After the exact response timer completes, retirement closes the original request and a repeat reads back the same closure.",
+    "An associated invitation with no execution grant or journal can still retire with an exact receipt-free STALE record and preserved assignment."
+  ],
+  "tests": {
+    "command": "cargo test --offline --locked --bin catdesk -- web_work:: --test-threads=1",
+    "passed": 19,
+    "failed": 0,
+    "testSeconds": 41.86,
+    "reviewPreEditRetirementPreserved": true
+  },
+  "installedAcceptance": false,
+  "productionChanges": false,
+  "browserActions": 0,
+  "priorSubmissionsReplayed": 0,
+  "remaining": "First qualify the installed v5 edit, verification, Git checkpoint and same-task self-Wake. Then verify serial ownership and safe yielding with two registered projects."
+}

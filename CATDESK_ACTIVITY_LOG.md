@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 22:05 UTC — preserve assigned work through retirement.** Terminal work resolution now checks the same task journal and exact self-Wake evidence for both completion and retirement before changing the source delivery or ledger. [Evidence](docs/verification/WEB_ASSIGNED_WORK_RETIREMENT_2026_11_22.json).
+
 **2026-11-22 21:58 UTC — recognize repeated calls for the same manual Wake.** One-shot selection and proof-only recovery now validate every recorded call against the immutable event. Two matching journal records count as one delivery; an actual conflict still stops admission. [Evidence](docs/verification/MANUAL_WAKE_REPEATED_CALL_RECOVERY_2026_11_22.json).
 
 **2026-11-22 21:54 UTC — fence interrupted scoped Wake submissions before opening the browser.** Review admission and scoped claims now check the original delivery journal even when the interruption happened before the response timer. A sibling project can still use the shared browser owner. [Evidence](docs/verification/SCOPED_WAKE_SUBMISSION_FENCE_2026_11_22.json).

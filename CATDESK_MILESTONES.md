@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — safe release of exact Web work ownership.** Development checks pending effects and response evidence on both terminal outcomes. Terminal ownership safety is one prerequisite for yielding a shared lane. Installed Web continuation and serial lane acceptance remain open. [Evidence](docs/verification/WEB_ASSIGNED_WORK_RETIREMENT_2026_11_22.json).
+
 **November 22 — recover a manual Wake with repeated MCP call IDs.** Development can select an original task-issued Wake whose identical intent was recorded under more than one call ID. Installed Web delivery and same-task continuation remain open. [Evidence](docs/verification/MANUAL_WAKE_REPEATED_CALL_RECOVERY_2026_11_22.json).
 
 **November 22 — scoped browser isolation before the response timer.** Development fixtures prove a same-project follow-up is stopped at the original submission fence and a sibling completes its own bounded send. The durable serial coding lane across turns and installed browser acceptance remain open. [Evidence](docs/verification/SCOPED_WAKE_SUBMISSION_FENCE_2026_11_22.json).

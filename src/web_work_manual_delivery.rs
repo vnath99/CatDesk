@@ -336,11 +336,15 @@ mod tests {
         let resolution = json!({"projectId":"alpha","requestId":"request-a",
             "expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,
             "outcome":"completed","summary":"Verified task fixture"});
+        let mut retirement = resolution.clone();
+        retirement["outcome"] = json!("retired");
         let assert_pending = || {
-            assert_eq!(
-                crate::web_work::resolve(&control, resolution.clone()).unwrap_err(),
-                "WEB_WORK_CONTINUATION_PENDING"
-            );
+            for terminal in [&resolution, &retirement] {
+                assert_eq!(
+                    crate::web_work::resolve(&control, terminal.clone()).unwrap_err(),
+                    "WEB_WORK_CONTINUATION_PENDING"
+                );
+            }
             assert_eq!(
                 WorkLedger::open_read_only(&control, "alpha")
                     .unwrap()
@@ -495,6 +499,10 @@ mod tests {
             crate::web_work::resolve(&control, resolution.clone()).unwrap_err(),
             "PROJECT_TASK_RECOVERY_REQUIRED"
         );
+        assert_eq!(
+            crate::web_work::resolve(&control, retirement.clone()).unwrap_err(),
+            "PROJECT_TASK_RECOVERY_REQUIRED"
+        );
         use crate::delegated::{
             contracts::{RunId, ToolCallId},
             journal::{DelegatedJournal, ToolCallStatus},
@@ -560,11 +568,12 @@ mod tests {
             .unwrap();
         assert_pending();
         wake.complete_timer(event_id).unwrap();
-        let closed = crate::web_work::resolve(&control, resolution.clone()).unwrap();
+        let closed = crate::web_work::resolve(&control, retirement.clone()).unwrap();
         assert_eq!(closed["phase"], "CLOSED");
+        assert_eq!(closed["outcome"], "retired");
         assert_eq!(closed["taskCompletionVerified"], false);
         assert_eq!(
-            crate::web_work::resolve(&control, resolution).unwrap(),
+            crate::web_work::resolve(&control, retirement).unwrap(),
             closed
         );
     }

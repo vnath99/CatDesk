@@ -128,8 +128,8 @@ fn read_task_calls(
     Ok(calls)
 }
 
-/// A coordinator's terminal report cannot discard a live or uncertain task call
-/// or replace the exact response evidence for a self-Wake the task requested.
+/// Closing or retiring assigned work cannot abandon a live or uncertain task
+/// call or replace the exact response evidence for a requested self-Wake.
 pub(crate) fn require_completed_task_continuations(
     project: &ResolvedProjectScopeV1,
     record: &crate::web_work_state::WorkRecord,
