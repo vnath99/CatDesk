@@ -128,6 +128,31 @@ fn read_task_calls(
     Ok(calls)
 }
 
+/// Admission may queue or claim a released lane. An already journaled tool
+/// call must never do either, even though it can still be observed elsewhere.
+pub(crate) fn require_fresh_lane_call(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    call_id: &str,
+) -> Result<(), String> {
+    ToolCallId::new(call_id).map_err(|_| "PROJECT_TASK_CALL_INVALID")?;
+    let link = record
+        .task_assignment
+        .as_ref()
+        .ok_or("WEB_WORK_ASSIGNMENT_REQUIRED")?;
+    let directory = task_directory(project, &link.task_id, false)?;
+    match fs::symlink_metadata(directory.join("journal")) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err("PROJECT_TASK_RECOVERY_REQUIRED".into()),
+        Ok(_) => {}
+    }
+    let calls = read_task_calls(project, record, &directory.join("assignment.json"), true)?;
+    if calls.contains_key(call_id) {
+        return Err("PROJECT_TASK_CALL_RECORDED_NO_REPLAY".into());
+    }
+    Ok(())
+}
+
 /// Closing or retiring assigned work cannot abandon a live or uncertain task
 /// call or replace the exact response evidence for a requested self-Wake.
 pub(crate) fn require_completed_task_continuations(

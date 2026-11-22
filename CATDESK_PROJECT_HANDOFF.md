@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 5:21 p.m. EST.** The opt-in lane now keeps a durable waiting order and advances on the next authorized tool call after a safe release. Selection and unknown-outcome recovery still share the existing project and registration leases. Installed acceptance still uses the original disposable workspace and frozen backend approval chain. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_FIFO_2026_11_22.json).
+
 **November 22, 5:13 p.m. EST.** Serial development now supports local selection, queued project status, and exact safe yield through the existing work registry. It is inactive until first selection. Native Codex and read-only observations are outside the direct-Web effects gate. The frozen backend review, original Git backing and reviewed installed release still gate the first Web cycle. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_LANE_2026_11_22.json).
 
 **November 22, 5:05 p.m. EST.** Assigned requests cannot release their original task through retirement while a call or self-Wake is unresolved. The existing never-started withdrawal and exact review pre-edit retirement are separate supported cases. The first installed cycle still needs the original backing worktree and the frozen backend review and promotion. [Evidence](docs/verification/WEB_ASSIGNED_WORK_RETIREMENT_2026_11_22.json).

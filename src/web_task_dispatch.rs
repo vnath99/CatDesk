@@ -214,12 +214,13 @@ impl Call {
 }
 
 fn authorize(control: &Path, call: &Call) -> Result<PathBuf, String> {
-    let requires_lane = crate::project_mcp_task::tool_enters_web_execution_lane(&call.tool);
+    let lane_call = crate::project_mcp_task::tool_enters_web_execution_lane(&call.tool)
+        .then_some((call.task_id.as_str(), call.call_id.as_str()));
     let admission = crate::web_work::authorized_assignment_for_tool(
         control,
         call.pins(),
         &call.execution_key,
-        requires_lane,
+        lane_call,
     )?;
     if admission["taskId"].as_str() != Some(&call.task_id) {
         return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
@@ -3262,10 +3263,26 @@ pub(crate) mod tests {
                 json!({"patchId":"serial-patch","operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 52 }"}]}),
             )
         };
+        let lane_file = root.join(".catdesk/web-work/.execution-lane.json");
+        let before_wait = fs::read(&lane_file).unwrap();
+        let mut wrong_task = preview(&beta);
+        wrong_task["params"]["arguments"]["taskId"] = json!("another-task");
+        assert_eq!(
+            call(&beta, wrong_task).await["error"]["message"],
+            "WEB_TASK_GRANT_SCOPE_MISMATCH"
+        );
+        assert_eq!(fs::read(&lane_file).unwrap(), before_wait);
         assert_eq!(
             call(&beta, preview(&beta)).await["error"]["message"],
             "WEB_WORK_EXECUTION_QUEUED"
         );
+        let waiting = fs::read(&lane_file).unwrap();
+        assert_ne!(waiting, before_wait);
+        assert_eq!(
+            call(&beta, preview(&beta)).await["error"]["message"],
+            "WEB_WORK_EXECUTION_QUEUED"
+        );
+        assert_eq!(fs::read(&lane_file).unwrap(), waiting);
         assert!(
             !root
                 .join(".catdesk/project-mcp-tasks/beta/task-fixture/journal")
@@ -3315,12 +3332,28 @@ pub(crate) mod tests {
         wake.complete_timer(event_id).unwrap();
         assert_eq!(transition("alpha", false).unwrap()["status"], "YIELDED");
         assert_eq!(
-            execution_lane::status(root, "alpha")["status"],
-            "AVAILABLE_FOR_SELECTION"
+            execution_lane::status(root, "beta")["status"],
+            "NEXT_IN_QUEUE"
         );
-        assert_eq!(transition("beta", true).unwrap()["status"], "ACTIVE");
+        let after_yield = fs::read(&lane_file).unwrap();
+        assert_eq!(
+            call(&alpha, preview(&alpha)).await["error"]["message"],
+            "PROJECT_TASK_CALL_RECORDED_NO_REPLAY"
+        );
+        assert_eq!(fs::read(&lane_file).unwrap(), after_yield);
+        let alpha_apply = request(
+            &alpha,
+            "released-owner-next",
+            "patch.apply",
+            json!({"patchId":"serial-patch"}),
+        );
+        assert_eq!(
+            call(&alpha, alpha_apply.clone()).await["error"]["message"],
+            "WEB_WORK_EXECUTION_QUEUED"
+        );
         let beta_preview = call(&beta, preview(&beta)).await;
         assert!(beta_preview.get("error").is_none(), "{beta_preview}");
+        assert_eq!(execution_lane::status(root, "beta")["status"], "ACTIVE");
         let beta_apply = call(
             &beta,
             request(
@@ -3333,16 +3366,7 @@ pub(crate) mod tests {
         .await;
         assert!(beta_apply.get("error").is_none(), "{beta_apply}");
         assert_eq!(
-            call(
-                &alpha,
-                request(
-                    &alpha,
-                    "previous-owner",
-                    "patch.apply",
-                    json!({"patchId":"serial-patch"})
-                )
-            )
-            .await["error"]["message"],
+            call(&alpha, alpha_apply.clone()).await["error"]["message"],
             "WEB_WORK_EXECUTION_QUEUED"
         );
         assert!(
@@ -3362,6 +3386,28 @@ pub(crate) mod tests {
             .unwrap();
         assert_eq!(reopened, queued);
         assert_eq!(wake.delivery(event_id).unwrap().unwrap().phase, Phase::Sent);
+        wake.complete_timer(&queued.event_id).unwrap();
+        let resolved = crate::web_work::resolve(
+            root,
+            json!({
+                "projectId":"beta","requestId":queued.request_id,
+                "expectedTargetGeneration":queued.target.generation,
+                "expectedTargetSha256":queued.target.digest,
+                "outcome":"completed","summary":"Fixture Web work settled",
+            }),
+        )
+        .unwrap();
+        assert_eq!(resolved["phase"], "CLOSED");
+        assert_eq!(
+            execution_lane::status(root, "alpha")["status"],
+            "NEXT_IN_QUEUE"
+        );
+        let alpha_after_close = call(&alpha, alpha_apply).await;
+        assert!(
+            alpha_after_close.get("error").is_none(),
+            "{alpha_after_close}"
+        );
+        assert_eq!(execution_lane::status(root, "alpha")["status"], "ACTIVE");
     }
 
     async fn central_http_route_fixture(cached: bool) {

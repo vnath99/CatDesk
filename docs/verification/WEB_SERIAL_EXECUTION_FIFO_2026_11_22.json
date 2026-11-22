@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T22:22:00Z",
+  "scope": "WINDOWS_DEVELOPMENT_DIRECT_WEB_FIFO",
+  "baseline": "1be9a36ca7223424bf8c65d1f945d36ab001717d",
+  "behavior": "After the existing initial operator selection, authorized effect admission records each waiting assignment once, in arrival order. On release, the first still-open waiter can acquire the lane on its next authorized call. The existing operator may select a different exact assignment when idle.",
+  "boundary": "An unresolved owner still prevents release, and an absent or conflicting waiter record fails closed. Queuing does not create a tool journal row or execute the call. The exact task and previously journaled call checks precede queue changes.",
+  "twoProjectFixture": {
+    "passed": 1,
+    "testSeconds": 39.48,
+    "wrongTaskLeftLaneBytesUnchanged": true,
+    "repeatedWaiterLeftLaneBytesUnchanged": true,
+    "oldRecordedCallCouldNotReclaimLane": true,
+    "olderWaiterAdvancedBeforeLateFormerOwner": true,
+    "samePreviouslyQueuedCallIdSucceededAfterRelease": true,
+    "settledClosureReleasedNextQueuedAssignment": true,
+    "editsUsedOriginalAssignedWorktrees": true,
+    "browserReceiptSimulated": true
+  },
+  "additionalWindowsRegressions": {
+    "cachedSchemaDispatcherAndNoReplayJournal": "PASS",
+    "manualWakeRestartDeduplicationAndUnknownDelivery": "PASS"
+  },
+  "scopeLimit": "Advancement is driven by authorized requests. It does not start a browser, worker or recurring automation. The installed ChatGPT Web workflow still requires release and live qualification."
+}

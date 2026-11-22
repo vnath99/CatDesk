@@ -1,6 +1,8 @@
-//! Explicit serial admission for linked Web tasks, stored beside their work
+//! Serial admission for linked Web tasks, stored beside their work
 //! ledgers. Mutations share the existing registration lock with work closure.
 use super::*;
+
+const MAX_WAITING: usize = 128;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -33,6 +35,15 @@ impl Owner {
         }
         Ok(record.phase == "OPEN")
     }
+
+    fn valid(&self) -> bool {
+        valid_request(&self.project_id)
+            && valid_request(&self.request_id)
+            && self.event_id == expected_event(&self.project_id, &self.request_id)
+            && valid_request(&self.assignment.task_id)
+            && sha256(&self.assignment.assignment_sha256)
+            && sha256(&self.assignment.scope_sha256)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -40,6 +51,8 @@ impl Owner {
 struct Lane {
     schema_version: u32,
     owner: Option<Owner>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    waiting: Vec<Owner>,
 }
 
 fn path(workspace: &Path) -> PathBuf {
@@ -62,26 +75,43 @@ fn load(workspace: &Path) -> Result<Option<Lane>, String> {
     let mut bytes = Vec::new();
     File::open(path)
         .map_err(|_| "WEB_WORK_LANE_UNAVAILABLE")?
-        .take(8193)
+        .take(MAX_BYTES as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "WEB_WORK_LANE_UNAVAILABLE")?;
-    if bytes.len() > 8192 {
+    if bytes.len() > MAX_BYTES {
         return Err("WEB_WORK_LANE_INVALID".into());
     }
     let lane: Lane = serde_json::from_slice(&bytes).map_err(|_| "WEB_WORK_LANE_INVALID")?;
+    let mut events = std::collections::BTreeSet::new();
     if lane.schema_version != 1
-        || lane.owner.as_ref().is_some_and(|owner| {
-            !valid_request(&owner.project_id)
-                || !valid_request(&owner.request_id)
-                || owner.event_id != expected_event(&owner.project_id, &owner.request_id)
-                || !valid_request(&owner.assignment.task_id)
-                || !sha256(&owner.assignment.assignment_sha256)
-                || !sha256(&owner.assignment.scope_sha256)
-        })
+        || lane.waiting.len() > MAX_WAITING
+        || lane
+            .owner
+            .iter()
+            .chain(&lane.waiting)
+            .any(|owner| !owner.valid() || !events.insert(&owner.event_id))
     {
         return Err("WEB_WORK_LANE_INVALID".into());
     }
     Ok(Some(lane))
+}
+
+fn save(workspace: &Path, lane: &Lane) -> Result<(), String> {
+    let bytes = serde_json::to_vec(lane).map_err(|_| "WEB_WORK_LANE_INVALID")?;
+    write_work_state(&path(workspace), &bytes)?;
+    if load(workspace)?.as_ref() != Some(lane) {
+        return Err("WEB_WORK_LANE_READBACK_CHANGED".into());
+    }
+    Ok(())
+}
+
+fn next_waiting<'a>(workspace: &Path, waiting: &'a [Owner]) -> Result<Option<&'a Owner>, String> {
+    for candidate in waiting {
+        if candidate.open(workspace)? {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
 }
 
 pub(crate) fn status(workspace: &Path, project: &str) -> Value {
@@ -103,9 +133,68 @@ pub(crate) fn status(workspace: &Path, project: &str) -> Value {
                 json!({"status":"HELD_BY_OTHER_PROJECT"})
             });
         }
-        Ok(json!({"status":"AVAILABLE_FOR_SELECTION"}))
+        match next_waiting(workspace, &lane.waiting)? {
+            Some(next) if next.project_id == project => {
+                Ok(json!({"status":"NEXT_IN_QUEUE","requestId":next.request_id}))
+            }
+            Some(_) => Ok(json!({"status":"QUEUED_BEHIND_OTHER_PROJECT"})),
+            None => Ok(json!({"status":"AVAILABLE_FOR_SELECTION"})),
+        }
     })();
     observed.unwrap_or_else(|reason| json!({"status":"ATTENTION","reason":reason}))
+}
+
+/// Called only after exact effect authorization, under the existing project
+/// lease and registration lock. Record contention without journaling a tool
+/// call; the same call ID may be used after selection.
+pub(crate) fn admit_owner(
+    workspace: &Path,
+    project: &str,
+    record: &WorkRecord,
+    check_fresh_call: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let Some(mut lane) = load(workspace)? else {
+        return Ok(());
+    };
+    if record.phase != "OPEN" {
+        return Err("WEB_WORK_REQUEST_CLOSED".into());
+    }
+    let requested = Owner::new(project, record)?;
+    if lane.owner.as_ref() == Some(&requested) {
+        return Ok(());
+    }
+    check_fresh_call()?;
+    let occupied = match &lane.owner {
+        Some(owner) => owner.open(workspace)?,
+        None => false,
+    };
+    // A closed waiter is already settled by normal terminal resolution. An
+    // absent or conflicting record fails closed instead of dropping its slot.
+    let mut waiting = Vec::with_capacity(lane.waiting.len());
+    for candidate in &lane.waiting {
+        if candidate.open(workspace)? {
+            waiting.push(candidate.clone());
+        }
+    }
+    let can_enter = !occupied && waiting.first().is_none_or(|next| next == &requested);
+    if can_enter {
+        waiting.retain(|candidate| candidate != &requested);
+        lane.owner = Some(requested);
+    } else if !waiting.contains(&requested) {
+        if waiting.len() == MAX_WAITING {
+            return Err("WEB_WORK_LANE_QUEUE_FULL".into());
+        }
+        waiting.push(requested);
+    } else if waiting == lane.waiting {
+        return Err("WEB_WORK_EXECUTION_QUEUED".into());
+    }
+    lane.waiting = waiting;
+    save(workspace, &lane)?;
+    if can_enter {
+        Ok(())
+    } else {
+        Err("WEB_WORK_EXECUTION_QUEUED".into())
+    }
 }
 
 pub(crate) fn is_enabled(workspace: &Path) -> Result<bool, String> {
@@ -157,15 +246,16 @@ pub(crate) fn transition(
     } else if current != Some(&requested) {
         return Err("WEB_WORK_LANE_OWNER_CHANGED".into());
     }
-    let next = Lane {
+    let mut next = lane.unwrap_or(Lane {
         schema_version: 1,
-        owner: select.then_some(requested),
-    };
-    let bytes = serde_json::to_vec(&next).map_err(|_| "WEB_WORK_LANE_INVALID")?;
-    write_work_state(&path(workspace), &bytes)?;
-    if load(workspace)?.as_ref() != Some(&next) {
-        return Err("WEB_WORK_LANE_READBACK_CHANGED".into());
+        owner: None,
+        waiting: vec![],
+    });
+    if select {
+        next.waiting.retain(|candidate| candidate != &requested);
     }
+    next.owner = select.then_some(requested);
+    save(workspace, &next)?;
     Ok(
         json!({"status":if select {"ACTIVE"} else {"YIELDED"}, "projectId":project,
         "requestId":record.request_id,"taskRemainsOpen":true}),

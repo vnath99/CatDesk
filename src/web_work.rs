@@ -568,21 +568,21 @@ pub(crate) fn authorized_assignment(
     args: Value,
     key: &str,
 ) -> Result<Value, String> {
-    authorized_assignment_for_tool(workspace, args, key, false)
+    authorized_assignment_for_tool(workspace, args, key, None)
 }
 
 pub(crate) fn authorized_assignment_for_tool(
     workspace: &Path,
     args: Value,
     key: &str,
-    requires_lane: bool,
+    lane_call: Option<(&str, &str)>,
 ) -> Result<Value, String> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
     loop {
         let result = assigned_action(
             workspace,
             args.clone(),
-            AssignmentAction::Authorize { key, requires_lane },
+            AssignmentAction::Authorize { key, lane_call },
         );
         if matches!(
             result.as_ref().map_err(String::as_str),
@@ -712,8 +712,10 @@ fn manual_wake_once_with_preparation(
                 record.target == expected,
             )?;
             crate::project_mcp_task::authorized_manual_wake_assignment(scope, &record, key)?;
-            execution_lane::require_owner(workspace, &request.project_id, &record)?;
             wake_protocol_client::preflight_prepared_invitation(&prepared, &expected)?;
+            execution_lane::admit_owner(workspace, &request.project_id, &record, || {
+                crate::project_mcp_task::require_fresh_lane_call(scope, &record, call_id)
+            })?;
             crate::project_mcp_task::journal_manual_wake(
                 scope,
                 &record,
@@ -780,7 +782,7 @@ enum AssignmentAction<'a> {
     },
     Authorize {
         key: &'a str,
-        requires_lane: bool,
+        lane_call: Option<(&'a str, &'a str)>,
     },
 }
 
@@ -890,11 +892,27 @@ fn assigned_action(
                         )
                     }
                 }
-                AssignmentAction::Authorize { key, requires_lane } => {
+                AssignmentAction::Authorize { key, lane_call } => {
                     let archive =
                         crate::project_mcp_task::authorized_web_assignment(scope, &record, key)?;
-                    if requires_lane {
-                        execution_lane::require_owner(workspace, &request.project_id, &record)?;
+                    if let Some((task_id, call_id)) = lane_call {
+                        if record
+                            .task_assignment
+                            .as_ref()
+                            .is_none_or(|link| link.task_id != task_id)
+                        {
+                            return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
+                        }
+                        execution_lane::admit_owner(
+                            workspace,
+                            &request.project_id,
+                            &record,
+                            || {
+                                crate::project_mcp_task::require_fresh_lane_call(
+                                    scope, &record, call_id,
+                                )
+                            },
+                        )?;
                     }
                     // Do not acquire the task writer during authorization: stale or
                     // mismatched caller identity must refuse before task startup.

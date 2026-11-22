@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — ordered Web-lane handoff in development.** Waiting assignments advance in admission order after yield or verified closure, using the next authorized request. The installed Web coding and multi-project browser tests remain open. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_FIFO_2026_11_22.json).
+
 **November 22 — serial Web execution in development.** One persistent operator-selected assignment owns scoped edits, verification, Git actions and self-Wake. Queue order is operator-selected. The first installed Web cycle and multi-project browser acceptance remain open. [Evidence](docs/verification/WEB_SERIAL_EXECUTION_LANE_2026_11_22.json).
 
 **November 22 — safe release of exact Web work ownership.** Development checks pending effects and response evidence on both terminal outcomes. Terminal ownership safety is one prerequisite for yielding a shared lane. Installed Web continuation and serial lane acceptance remain open. [Evidence](docs/verification/WEB_ASSIGNED_WORK_RETIREMENT_2026_11_22.json).
