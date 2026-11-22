@@ -24,6 +24,7 @@ enum InstallBrokerAction {
     },
     Submit(std::path::PathBuf),
     SubmitLocal(std::path::PathBuf),
+    PreflightLocalIntake(std::path::PathBuf),
 }
 
 #[cfg(windows)]
@@ -86,19 +87,52 @@ fn parse_install_broker_action(args: &[String]) -> Result<Option<InstallBrokerAc
         }
         [_, action, flag, path]
             if ((action == "submit" && flag == "--approval-file")
-                || (action == "submit-local" && flag == "--request-file"))
+                || (matches!(action.as_str(), "submit-local" | "preflight-local-intake")
+                    && flag == "--request-file"))
                 && !path.is_empty()
                 && !path.chars().any(char::is_control)
                 && Path::new(path).is_absolute() =>
         {
-            Ok(Some(if action == "submit-local" {
-                InstallBrokerAction::SubmitLocal(path.into())
-            } else {
-                InstallBrokerAction::Submit(path.into())
+            Ok(Some(match action.as_str() {
+                "submit-local" => InstallBrokerAction::SubmitLocal(path.into()),
+                "preflight-local-intake" => InstallBrokerAction::PreflightLocalIntake(path.into()),
+                _ => InstallBrokerAction::Submit(path.into()),
             }))
         }
         _ => Err("WAKE_INSTALL_BROKER_ARGUMENTS_INVALID".into()),
     }
+}
+
+#[cfg(windows)]
+fn read_frozen_broker_request(path: &Path) -> Result<Vec<u8>> {
+    use std::{
+        io::Read,
+        os::windows::fs::{MetadataExt, OpenOptionsExt},
+    };
+    let metadata =
+        std::fs::symlink_metadata(path).map_err(|_| "WAKE_INSTALL_APPROVAL_UNAVAILABLE")?;
+    if !metadata.is_file()
+        || metadata.file_attributes() & 0x400 != 0
+        || metadata.len() == 0
+        || metadata.len() > 16 * 1024
+    {
+        return Err("WAKE_INSTALL_APPROVAL_INVALID".into());
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .custom_flags(0x0020_0000)
+        .open(path)
+        .map_err(|_| "WAKE_INSTALL_APPROVAL_UNAVAILABLE")?;
+    let mut bytes = Vec::new();
+    (&mut file)
+        .take(16 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "WAKE_INSTALL_APPROVAL_UNAVAILABLE")?;
+    if bytes.is_empty() || bytes.len() > 16 * 1024 {
+        return Err("WAKE_INSTALL_APPROVAL_INVALID".into());
+    }
+    Ok(bytes)
 }
 
 #[cfg(windows)]
@@ -108,7 +142,6 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
         install_broker_policy::load_fixed_broker_policy_read_only,
         install_broker_preflight::inspect_fixed_broker_read_only,
     };
-    use std::{io::Read, os::windows::fs::OpenOptionsExt};
     let Some(action) = parse_install_broker_action(args)? else {
         return Ok(None);
     };
@@ -150,6 +183,11 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
         return catdesk_wake::install_broker_lifecycle::start_fixed_broker_for_local_update()
             .map(Some);
     }
+    if let InstallBrokerAction::PreflightLocalIntake(path) = &action {
+        let request = read_frozen_broker_request(path)?;
+        return catdesk_wake::install_broker_client::inspect_local_user_review_intake(&request)
+            .map(Some);
+    }
     let preflight = inspect_fixed_broker_read_only()?;
     let policy = load_fixed_broker_policy_read_only()?;
     let local_update = matches!(action, InstallBrokerAction::SubmitLocal(_));
@@ -160,30 +198,7 @@ fn install_broker_action(args: &[String]) -> Result<Option<serde_json::Value>> {
             "stateStoreOpened":false,"serviceStarted":false,"installationAttempted":false}),
         )),
         InstallBrokerAction::Submit(path) | InstallBrokerAction::SubmitLocal(path) => {
-            let metadata = std::fs::symlink_metadata(&path)
-                .map_err(|_| "WAKE_INSTALL_APPROVAL_UNAVAILABLE")?;
-            use std::os::windows::fs::MetadataExt;
-            if !metadata.is_file()
-                || metadata.file_attributes() & 0x400 != 0
-                || metadata.len() == 0
-                || metadata.len() > 16 * 1024
-            {
-                return Err("WAKE_INSTALL_APPROVAL_INVALID".into());
-            }
-            let mut file = std::fs::OpenOptions::new()
-                .read(true)
-                .share_mode(1)
-                .custom_flags(0x0020_0000)
-                .open(path)
-                .map_err(|_| "WAKE_INSTALL_APPROVAL_UNAVAILABLE")?;
-            let mut bytes = Vec::new();
-            (&mut file)
-                .take(16 * 1024 + 1)
-                .read_to_end(&mut bytes)
-                .map_err(|_| "WAKE_INSTALL_APPROVAL_UNAVAILABLE")?;
-            if bytes.is_empty() || bytes.len() > 16 * 1024 {
-                return Err("WAKE_INSTALL_APPROVAL_INVALID".into());
-            }
+            let bytes = read_frozen_broker_request(&path)?;
             // Fixed policy/service/pipe attestation precedes the one write.
             // No state-root, service-start, signing or settings argument exists.
             let client = connect_fixed_broker_for_approval(&policy)?;
@@ -510,6 +525,41 @@ mod install_broker_cli_tests {
             parse_install_broker_action(&args(&["install-broker", "start-local-once"])).unwrap(),
             Some(InstallBrokerAction::StartLocalOnce)
         );
+        assert_eq!(
+            parse_install_broker_action(&args(&[
+                "install-broker",
+                "preflight-local-intake",
+                "--request-file",
+                r"C:\frozen.json"
+            ]))
+            .unwrap(),
+            Some(InstallBrokerAction::PreflightLocalIntake(
+                r"C:\frozen.json".into()
+            ))
+        );
+        for values in [
+            vec![
+                "install-broker",
+                "preflight-local-intake",
+                "--request-file",
+                "relative.json",
+            ],
+            vec![
+                "install-broker",
+                "preflight-local-intake",
+                "--root",
+                r"C:\state",
+            ],
+            vec![
+                "install-broker",
+                "preflight-local-intake",
+                "--request-file",
+                r"C:\frozen.json",
+                "--start",
+            ],
+        ] {
+            assert!(parse_install_broker_action(&args(&values)).is_err());
+        }
         let digest = "a".repeat(64);
         assert_eq!(
             parse_install_broker_action(&args(&["install-broker", "result", "3", &digest]))

@@ -271,11 +271,8 @@ pub(crate) struct SameStateReadPinsV3 {
     candidate: RuntimePackagePinsV3,
     previous: RuntimePackagePinsV3,
     planned: Vec<u8>,
-    receipts: Vec<(PathBuf, OfflineObjectPinV2, String)>,
     resume: Option<SameStateRetainedResumeV3>,
-    _receipt_directory: Option<OfflineObjectPinV2>,
-    receipt_root: PathBuf,
-    receipt_ancestors: Vec<(PathBuf, OfflineObjectPinV2)>,
+    review_intake: SameStateReviewIntakeV3,
 }
 
 enum SameStateIntakeV3 {
@@ -436,9 +433,7 @@ impl SameStateReadPinsV3 {
             }
         };
         let receipt_root = match intake {
-            SameStateIntakeV3::Fixed => {
-                PathBuf::from(r"C:\ProgramData\CatDesk\WakeSubmissionV1\receipts")
-            }
+            SameStateIntakeV3::Fixed => PathBuf::from(FIXED_REVIEW_INTAKE),
             #[cfg(test)]
             SameStateIntakeV3::Isolated(path) => path.join("receipts"),
         };
@@ -471,11 +466,8 @@ impl SameStateReadPinsV3 {
             candidate,
             previous,
             planned: Vec::new(),
-            receipts: Vec::new(),
             resume,
-            _receipt_directory: None,
-            receipt_root,
-            receipt_ancestors: Vec::new(),
+            review_intake: SameStateReviewIntakeV3::new(receipt_root),
         })
     }
     #[cfg(test)]
@@ -516,7 +508,7 @@ impl SameStateReadPinsV3 {
         {
             return Err("WAKE_SAME_STATE_PACKAGE_MISMATCH".into());
         }
-        self.pin_receipts(payload)?;
+        self.review_intake.pin_receipts(payload, self.rollback)?;
         let candidate_qualification = digest(
             &serde_json::to_vec(&payload.candidate)
                 .map_err(|_| "WAKE_SAME_STATE_APPROVAL_INVALID")?,
@@ -624,80 +616,6 @@ impl SameStateReadPinsV3 {
             },
         })
     }
-    fn pin_receipts(&mut self, payload: &SameStateRootSelectionApprovalV3) -> Result<()> {
-        let previous = payload.rollback_authority.release();
-        let working = previous
-            .working_evidence
-            .as_ref()
-            .ok_or("WAKE_SAME_STATE_WORKING_EVIDENCE_REQUIRED")?;
-        let mut roles = vec![
-            (
-                "candidate-local.json",
-                payload
-                    .candidate
-                    .local_qualification
-                    .receipt_sha256
-                    .as_str(),
-            ),
-            (
-                "candidate-review.json",
-                payload.candidate.independent_review.receipt_sha256.as_str(),
-            ),
-            (
-                "previous-local.json",
-                previous.local_qualification.receipt_sha256.as_str(),
-            ),
-            (
-                "previous-review.json",
-                previous.independent_review.receipt_sha256.as_str(),
-            ),
-            ("previous-working.json", working.receipt_sha256.as_str()),
-        ];
-        if self.rollback {
-            roles.retain(|(name, _)| name.starts_with("previous-"));
-        }
-        if let crate::install_broker_approval::same_state::SameStateRollbackAuthorityV3::ReviewedSourceReconstruction{reconstruction_receipt_sha256,..}=&payload.rollback_authority {
-            roles.push(("reconstruction.json",reconstruction_receipt_sha256));
-        }
-        if self.receipts.is_empty() {
-            self._receipt_directory = Some(
-                OfflineObjectPinV2::same_state_directory(&self.receipt_root)
-                    .map_err(|_| "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE")?,
-            );
-            for (name, expected) in &roles {
-                let path = self.receipt_root.join(name);
-                let mut pin = OfflineObjectPinV2::open(&path, false)
-                    .map_err(|_| "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE")?;
-                let raw = pin
-                    .read_bounded(1024 * 1024)
-                    .map_err(|_| "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE")?;
-                if digest(&raw) != *expected {
-                    return Err("WAKE_SAME_STATE_RECEIPT_MISMATCH".into());
-                }
-                validate_receipt(name, &raw, payload)?;
-                self.receipts.push((path, pin, (*expected).into()));
-            }
-        }
-        if self.receipts.len() != roles.len()
-            || self
-                .receipts
-                .iter()
-                .zip(&roles)
-                .any(|((path, _, sha), (name, expected))| {
-                    path.file_name().is_none_or(|v| v != *name) || sha != *expected
-                })
-        {
-            return Err("WAKE_SAME_STATE_RECEIPT_MISMATCH".into());
-        }
-        for ((_, pin, expected), (name, _)) in self.receipts.iter_mut().zip(&roles) {
-            let raw = pin.read_bounded(1024 * 1024)?;
-            if digest(&raw) != *expected {
-                return Err("WAKE_SAME_STATE_RECEIPT_MISMATCH".into());
-            }
-            validate_receipt(name, &raw, payload)?;
-        }
-        Ok(())
-    }
     pub(crate) fn revalidate_for_payload(
         &mut self,
         payload: &SameStateRootSelectionApprovalV3,
@@ -735,42 +653,13 @@ impl SameStateReadPinsV3 {
             self.previous.runtime_manifest_bytes(),
             payload.rollback_authority.release(),
         )?;
-        self.pin_receipts(payload)
+        self.review_intake.pin_receipts(payload, self.rollback)
     }
 
     pub(crate) fn require_protected_review_intake(&mut self) -> Result<()> {
-        if self.receipt_ancestors.is_empty() {
-            self.receipt_ancestors = self
-                .receipt_root
-                .ancestors()
-                .skip(1)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .map(|parent| {
-                    OfflineObjectPinV2::same_state_directory(parent)
-                        .map(|pin| (parent.to_path_buf(), pin))
-                })
-                .collect::<Result<Vec<_>>>()?;
-        }
-        let count = self.receipt_ancestors.len();
-        for (index, (path, pin)) in self.receipt_ancestors.iter().enumerate() {
-            pin.revalidate_path(path)?;
-            // The immediate parent is the fixed intake itself.
-            pin.require_review_intake_acl(index + 1 != count)?;
-        }
-        let directory = self
-            ._receipt_directory
-            .as_ref()
-            .ok_or("WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED")?;
-        directory.revalidate_path(&self.receipt_root)?;
-        directory.require_review_intake_acl(false)?;
-        for (path, pin, _) in &self.receipts {
-            pin.revalidate_path(path)?;
-            pin.require_review_intake_acl(false)?;
-        }
-        Ok(())
+        self.review_intake.require_protected_review_intake()
     }
+
     pub(crate) fn revalidate(&mut self) -> Result<()> {
         for (index, path) in self
             .root
@@ -809,6 +698,141 @@ impl SameStateReadPinsV3 {
         }
         self.candidate.revalidate()?;
         self.previous.revalidate()?;
+        self.review_intake.revalidate()
+    }
+}
+
+const FIXED_REVIEW_INTAKE: &str = r"C:\ProgramData\CatDesk\WakeSubmissionV1\receipts";
+
+struct SameStateReviewIntakeV3 {
+    receipt_directory: Option<OfflineObjectPinV2>,
+    receipt_root: PathBuf,
+    receipt_ancestors: Vec<(PathBuf, OfflineObjectPinV2)>,
+    receipts: Vec<(PathBuf, OfflineObjectPinV2, String)>,
+}
+
+impl SameStateReviewIntakeV3 {
+    fn new(receipt_root: PathBuf) -> Self {
+        Self {
+            receipt_directory: None,
+            receipt_root,
+            receipt_ancestors: Vec::new(),
+            receipts: Vec::new(),
+        }
+    }
+
+    fn pin_receipts(
+        &mut self,
+        payload: &SameStateRootSelectionApprovalV3,
+        rollback: bool,
+    ) -> Result<()> {
+        let previous = payload.rollback_authority.release();
+        let working = previous
+            .working_evidence
+            .as_ref()
+            .ok_or("WAKE_SAME_STATE_WORKING_EVIDENCE_REQUIRED")?;
+        let mut roles = vec![
+            (
+                "candidate-local.json",
+                payload
+                    .candidate
+                    .local_qualification
+                    .receipt_sha256
+                    .as_str(),
+            ),
+            (
+                "candidate-review.json",
+                payload.candidate.independent_review.receipt_sha256.as_str(),
+            ),
+            (
+                "previous-local.json",
+                previous.local_qualification.receipt_sha256.as_str(),
+            ),
+            (
+                "previous-review.json",
+                previous.independent_review.receipt_sha256.as_str(),
+            ),
+            ("previous-working.json", working.receipt_sha256.as_str()),
+        ];
+        if rollback {
+            roles.retain(|(name, _)| name.starts_with("previous-"));
+        }
+        if let crate::install_broker_approval::same_state::SameStateRollbackAuthorityV3::ReviewedSourceReconstruction{reconstruction_receipt_sha256,..}=&payload.rollback_authority {
+            roles.push(("reconstruction.json",reconstruction_receipt_sha256));
+        }
+        if self.receipts.is_empty() {
+            self.receipt_directory = Some(
+                OfflineObjectPinV2::same_state_directory(&self.receipt_root)
+                    .map_err(|_| "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE")?,
+            );
+            for (name, expected) in &roles {
+                let path = self.receipt_root.join(name);
+                let mut pin = OfflineObjectPinV2::open(&path, false)
+                    .map_err(|_| "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE")?;
+                let raw = pin
+                    .read_bounded(1024 * 1024)
+                    .map_err(|_| "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE")?;
+                if digest(&raw) != *expected {
+                    return Err("WAKE_SAME_STATE_RECEIPT_MISMATCH".into());
+                }
+                validate_receipt(name, &raw, payload)?;
+                self.receipts.push((path, pin, (*expected).into()));
+            }
+        }
+        if self.receipts.len() != roles.len()
+            || self
+                .receipts
+                .iter()
+                .zip(&roles)
+                .any(|((path, _, sha), (name, expected))| {
+                    path.file_name().is_none_or(|v| v != *name) || sha != *expected
+                })
+        {
+            return Err("WAKE_SAME_STATE_RECEIPT_MISMATCH".into());
+        }
+        for ((_, pin, expected), (name, _)) in self.receipts.iter_mut().zip(&roles) {
+            let raw = pin.read_bounded(1024 * 1024)?;
+            if digest(&raw) != *expected {
+                return Err("WAKE_SAME_STATE_RECEIPT_MISMATCH".into());
+            }
+            validate_receipt(name, &raw, payload)?;
+        }
+        Ok(())
+    }
+    fn require_protected_review_intake(&mut self) -> Result<()> {
+        if self.receipt_ancestors.is_empty() {
+            self.receipt_ancestors = self
+                .receipt_root
+                .ancestors()
+                .skip(1)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .map(|parent| {
+                    OfflineObjectPinV2::same_state_directory(parent)
+                        .map(|pin| (parent.to_path_buf(), pin))
+                })
+                .collect::<Result<Vec<_>>>()?;
+        }
+        let count = self.receipt_ancestors.len();
+        for (index, (path, pin)) in self.receipt_ancestors.iter().enumerate() {
+            pin.revalidate_path(path)?;
+            // The immediate parent is the fixed intake itself.
+            pin.require_review_intake_acl(index + 1 != count)?;
+        }
+        let directory = self
+            .receipt_directory
+            .as_ref()
+            .ok_or("WAKE_SAME_STATE_REVIEW_INTAKE_UNTRUSTED")?;
+        directory.revalidate_path(&self.receipt_root)?;
+        directory.require_review_intake_acl(false)?;
+        for (path, pin, _) in &self.receipts {
+            pin.revalidate_path(path)?;
+            pin.require_review_intake_acl(false)?;
+        }
+        Ok(())
+    }
+    fn revalidate(&mut self) -> Result<()> {
         for (path, pin, expected) in &mut self.receipts {
             pin.revalidate_path(path)?;
             if digest(&pin.read_bounded(1024 * 1024)?) != *expected {
@@ -817,6 +841,15 @@ impl SameStateReadPinsV3 {
         }
         Ok(())
     }
+}
+
+pub(crate) fn inspect_fixed_local_review_intake(
+    payload: &SameStateRootSelectionApprovalV3,
+) -> Result<()> {
+    let mut intake = SameStateReviewIntakeV3::new(PathBuf::from(FIXED_REVIEW_INTAKE));
+    intake.pin_receipts(payload, payload.operation == "ROLLBACK_SAME_STATE_RELEASE")?;
+    intake.require_protected_review_intake()?;
+    intake.revalidate()
 }
 
 pub(crate) struct SameStateInstallResources<'p> {

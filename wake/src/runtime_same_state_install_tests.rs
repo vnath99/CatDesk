@@ -520,11 +520,25 @@ fn missing_review_receipt_refuses_a_fresh_request_before_intent() {
         .same_state_admission_v3(&digest(&request), 1000)
         .unwrap();
     assert!(admission.resume_binding.is_none());
+    let receipt_dir = fixture.intake.join("receipts");
+    let mut review = SameStateReviewIntakeV3::new(receipt_dir.clone());
+    review.pin_receipts(&fixture.payload, false).unwrap();
+    review.revalidate().unwrap();
+    // The real fixture is user-writable. Correct bytes alone do not establish
+    // the protected review publisher's ownership.
+    assert!(review.require_protected_review_intake().is_err());
+    drop(review);
     std::fs::rename(
         fixture.intake.join("receipts/candidate-review.json"),
         fixture.path.join("retained-candidate-review.json"),
     )
     .unwrap();
+    assert_eq!(
+        SameStateReviewIntakeV3::new(receipt_dir)
+            .pin_receipts(&fixture.payload, false)
+            .unwrap_err(),
+        "WAKE_SAME_STATE_REVIEW_INTAKE_UNAVAILABLE"
+    );
     let operator = crate::install_broker_operator::isolated_same_state_operator_fixture(
         &fixture.policy.readback().unwrap().operator_sid_sha256,
     );

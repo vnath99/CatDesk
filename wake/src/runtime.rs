@@ -22,7 +22,9 @@ mod install_selection;
 #[path = "runtime_same_state_install.rs"]
 mod same_state_install;
 #[cfg(windows)]
-pub(crate) use same_state_install::{SameStateInstallResources, SameStateReadPinsV3};
+pub(crate) use same_state_install::{
+    SameStateInstallResources, SameStateReadPinsV3, inspect_fixed_local_review_intake,
+};
 #[path = "runtime_reobserve.rs"]
 mod reobserve;
 pub use install_selection::{

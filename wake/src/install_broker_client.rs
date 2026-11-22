@@ -1021,7 +1021,9 @@ fn local_intake_refusal_code(raw: &[u8], request_sha256: &str) -> Option<&'stati
     allowed_local_intake_refusal(&reply.error_code)
 }
 
-fn local_user_request_payload(request: &[u8]) -> Result<serde_json::Value> {
+fn decode_local_user_request(
+    request: &[u8],
+) -> Result<crate::install_broker_approval::same_state::SameStateRootSelectionApprovalV3> {
     use crate::install_broker_approval::same_state::{
         SameStateRootSelectionApprovalV3, encode_local_user_selection_request_v1,
     };
@@ -1048,7 +1050,39 @@ fn local_user_request_payload(request: &[u8]) -> Result<serde_json::Value> {
     {
         return Err("WAKE_SAME_STATE_REQUEST_INVALID".into());
     }
-    serde_json::to_value(decoded.payload).map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID".into())
+    Ok(decoded.payload)
+}
+
+fn local_user_request_payload(request: &[u8]) -> Result<serde_json::Value> {
+    serde_json::to_value(decode_local_user_request(request)?)
+        .map_err(|_| "WAKE_SAME_STATE_REQUEST_INVALID".into())
+}
+
+/// Verify only the fixed receipt bundle with the same rules used by the broker.
+/// This opens no endpoint and neither grants nor claims a request.
+pub fn inspect_local_user_review_intake(request: &[u8]) -> Result<serde_json::Value> {
+    let payload = decode_local_user_request(request)?;
+    let policy = crate::install_broker_policy::load_fixed_broker_policy_read_only()?;
+    policy.current_process_local_updater()?;
+    policy.same_state_resource_v2()?;
+    if payload.policy_sha256 != policy.readback()?.policy_sha256 {
+        return Err("WAKE_SAME_STATE_PROTECTED_POLICY_CHANGED".into());
+    }
+    if payload.reviewer_identity != policy.same_state_reviewer_identity_v2()? {
+        return Err("WAKE_SAME_STATE_REVIEWER_MISMATCH".into());
+    }
+    crate::runtime::inspect_fixed_local_review_intake(&payload)?;
+    policy.revalidate()?;
+    Ok(serde_json::json!({
+        "state":"WAKE_LOCAL_REVIEW_INTAKE_VERIFIED_ONLY",
+        "operation":payload.operation,
+        "requestSha256":format!("{:x}", Sha256::digest(request)),
+        "installGeneration":payload.install_generation,
+        "readOnly":true,
+        "serviceStarted":false,
+        "ledgerAdmissionPerformed":false,
+        "installationAuthorized":false
+    }))
 }
 
 pub(crate) fn same_state_complete_reply_matches(
