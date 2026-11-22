@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "verifiedUtc": "2026-11-22T08:56:35Z",
+  "scope": "ACTUAL_COMPILED_WINDOWS_CONTROLLER_AND_PUBLIC_FACADE_WITH_DISPOSABLE_PROMOTION_JOURNAL",
+  "sourceCommit": "a6132b0c3ab9a6bd78c884bf5dfedf5c1f06d2c3",
+  "priorSourceCommit": "d4ce3b5064ad746100f14f20f12d7884e34a96c1",
+  "developmentControllerSha256": "af12ba842dd9eb30f18ab488431ff9fa3ebcbc1460bd7ee8147724c486c40ce5",
+  "privateFixtureSha256": "5e37d9bd5e9de68992616f81d676f4153e159d90552a789e6b1c03a3dc8ed192",
+  "baseline": "The old facade refused the reproduced retained-completion case after the staged candidate was removed.",
+  "tests": {
+    "nativeCommand": "cargo test --locked --offline --target-dir target --bin catdesk routine_promote -- --test-threads=1 --quiet",
+    "nativePassed": 5,
+    "nativeFailed": 0,
+    "windowsPowerShell51": "PASS",
+    "powerShell7": "PASS",
+    "formatAndDiffCheck": "PASS",
+    "isolatedDevelopmentBuild": "PASS"
+  },
+  "compiledPublicCommand": {
+    "startedUtc": "2026-11-22T08:56:23.2695632Z",
+    "finishedUtc": "2026-11-22T08:56:25.8055357Z",
+    "complete": "PROMOTION_COMPLETED",
+    "completedServingReadback": "UNVERIFIED",
+    "pending": "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED",
+    "pendingPhase": "RESOLVE_CANDIDATE",
+    "ambiguous": "PROMOTION_FAILED_OR_AMBIGUOUS",
+    "stagedCandidateDirectoryPresent": false,
+    "exactPairAndControlRecordsPreserved": true,
+    "remainingOwners": 0,
+    "fixtureRemoved": true
+  },
+  "additionalFixtureChecks": {
+    "unfinishedClaimRefusesOtherArtifactBeforeStaging": true,
+    "terminalHistoryCannotCertifyRestoredDifferentPair": true,
+    "unboundOrMalformedTerminalProjectionNeverLaunchesCandidate": true,
+    "freshPromotionStillRequiresExistingAttestedCandidateAndReviewedPath": true
+  },
+  "limitations": "Journal records were deliberately synthetic and bound only to a disposable Windows pair. The actual development executable and public facade read and validated the records. This establishes no production release authority or serving acceptance.",
+  "productionActions": 0,
+  "installedAcceptance": false
+}

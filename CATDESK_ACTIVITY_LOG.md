@@ -1030,3 +1030,11 @@ Evidence: [docs/verification/ONE_SHOT_PROJECT_MANUAL_WAKE_SELECTION_2026_11_22.j
 Agent: Codex. Source: c9b4a7ffecbc09a0a0597975fc47f9f51208c034. Outcome: partial. The promotion facade verifies serving independently of the monitor signal. A real disposable Windows backend passed authenticated MCP and still answered after the facade exited. Both PowerShell fixture suites passed. Next: Obtain independent review and trusted build evidence for the frozen backend, then qualify the installed promotion and rollback. Verify the separately signed first Wake V3 selection before the actual v5 self-Wake cycle.
 
 Evidence: [docs/verification/PROMOTION_SERVING_AFTER_MONITOR_EXIT_2026_11_22.json](docs/verification/PROMOTION_SERVING_AFTER_MONITOR_EXIT_2026_11_22.json); command: powershell.exe -NoProfile -NonInteractive -File scripts/test-catdesk-lifecycle.ps1; exit 0; SHA-256 bd2ba76fb70b902f6d1d2a7ac7e05854e2567b52de385d77ad9224975932086f.
+
+<!-- catdesk-activity:nov22-promotion-retained-without-staging sha256:756970af378148434eda54731066c9ea985f7522bf35a16f92db6e08273496e9 -->
+
+## 2026-11-22T08:56:35Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: a6132b0c3ab9a6bd78c884bf5dfedf5c1f06d2c3. Outcome: partial. The one-hash facade reads a bound terminal promotion before resolving staged build files. The actual compiled Windows controller preserved the disposable canonical pair and journal, refused a pending claim, and reused failed or completed history without a second controller. Next: Obtain independent review and trusted build evidence for the frozen backend, then qualify installed promotion and rollback. Verify signed first Wake V3 selection before the real v5 edit and self-Wake cycle.
+
+Evidence: [docs/verification/PROMOTION_RETAINED_RESULT_WITHOUT_STAGING_2026_11_22.json](docs/verification/PROMOTION_RETAINED_RESULT_WITHOUT_STAGING_2026_11_22.json); command: cargo test --locked --offline --target-dir target --bin catdesk routine_promote -- --test-threads=1 --quiet; exit 0; SHA-256 0b5011d6d697a6e32cf066c3dd61068b7b81e1e83effc82842de6bd1862d7830.
