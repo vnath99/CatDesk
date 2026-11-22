@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_WINDOWS_PROMOTION_FACADE_PROCESS_AND_STREAM_FIXTURE",
+  "verifiedUtc": "2026-11-22T06:23:20Z",
+  "sourceCommit": "28a99b815e813e9ab71c446d5dd9b6d8e44bea51",
+  "nativeFixture": {
+    "resolver": "SIMULATED_ATTESTED_CANDIDATE_RESOLUTION",
+    "controller": "DISPOSABLE_COMPILED_EXECUTABLE",
+    "controllerExitedWhileDescendantHeldPipes": true,
+    "beforeFixFailedNewReconciliationAssertion": true,
+    "postExitDrainMilliseconds": 2000,
+    "returnedState": "REVIEWED_PROMOTION_RECONCILIATION_REQUIRED",
+    "returnedPhase": "RUN_CANDIDATE",
+    "descendantAliveWhenFacadeReturned": true,
+    "controllerInvocations": [
+      "promote-resolve",
+      "promote"
+    ],
+    "fixtureDescendantExitVerified": true
+  },
+  "tests": [
+    {
+      "script": "scripts/test-catdesk-lifecycle.ps1",
+      "powerShell7ExitCode": 0,
+      "windowsPowerShell51ExitCode": 0
+    }
+  ],
+  "githubReviewCheck": {
+    "pullRequest": 32,
+    "state": "MERGED",
+    "mergeCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "submittedReviews": 0,
+    "pendingReviewRequests": 0,
+    "catdeskReviewAuthorityEstablished": false
+  },
+  "installedProductionActions": 0,
+  "installedAcceptance": false
+}

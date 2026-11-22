@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — promotion controller exited with output still open.** The development one-hash facade allows up to two seconds to drain output after the controller exits. `REVIEWED_PROMOTION_RECONCILIATION_REQUIRED` with `RUN_CANDIDATE` means the attempt needs readback. Use the existing authenticated `catdesk_reviewed_build_promotion` action `RESULT` when the backend is serving. Match the recorded candidate digest to the original request. Preserve the transaction if readback is unavailable. [Evidence](docs/verification/PROMOTION_RETAINED_OUTPUT_PIPE_2026_11_22.json).
+
 **November 22 — status during an unfinished promotion.** If development `catdesk.ps1 status` reports `RECOVERY_AUTHORITY_REQUIRED`, check the original transaction with `catdesk.ps1 diagnose` and use its guarded reconciliation or rollback procedure. A matching executable and fingerprint can coexist with an unresolved journal. [Evidence](docs/verification/INTERRUPTED_PROMOTION_PUBLIC_STATUS_2026_11_22.json).
 
 **November 22 — relocated first Wake selection.** Use the local migration handoff for the checked operator command. The unchanged wrapper passed `-VerifyInputsOnly` after relocation and checks the signed state again before execution. Keep the original bootstrap envelope in place for the existing independent post-selection verifier. [Evidence](docs/verification/WAKE_RELOCATED_FIRST_SELECTION_PREFLIGHT_2026_11_22.json).
