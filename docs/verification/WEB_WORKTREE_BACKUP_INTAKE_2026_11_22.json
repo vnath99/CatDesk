@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T23:12:00Z",
+  "scope": "READ_ONLY_INTAKE_FOR_ORIGINAL_WEB_LINKED_GIT_BACKUP",
+  "baseline": "371ab500f73872a8509cb01ce4fdab9445463aee",
+  "retained": {
+    "existingArchiveSha256Verified": true,
+    "originalGitPointerPins": 3,
+    "assignedBranchPinned": true,
+    "assignedCommitPinned": true,
+    "privateManifestStoredOutsideRepository": true,
+    "checkedRetainedIndependentRepositoryRejectedForMissingWorktreeRecords": true,
+    "authoritativeOriginalBackupFound": false
+  },
+  "verification": {
+    "localWindowsTestsPassed": 2,
+    "realLinkedWorktreesPerFixture": 3,
+    "untouchedStagedMetadataVerified": true,
+    "mismatchedBacklinkRefused": true,
+    "mismatchedCommonDirectoryRefused": true,
+    "mismatchedPinnedBranchRefused": true,
+    "corruptAndMissingIndexesRefused": true,
+    "inPlaceAndAlternateStoreRefused": true
+  },
+  "operatorReadOnlyCommand": "python -I -B scripts/check-linked-worktree-backup.py --candidate <staged-original-git-directory> --manifest <verified-private-pins-json>",
+  "limits": "Intake checks linkage, HEAD and index readability. Full Git connectivity, working-file integrity, independent provenance and restoration authority are separate requirements.",
+  "protectedOrRestorationActions": 0,
+  "messagesSent": 0,
+  "firstInstalledWebCycleAccepted": false
+}

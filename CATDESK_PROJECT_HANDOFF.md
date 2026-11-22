@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 6:12 p.m. EST.** A private manifest now pins the three original linked Git entries and the exact assigned task branch and commit. Use it with the read-only backup checker as soon as an authoritative original backup is available. The frozen review, original task and installed release retain their existing state. [Evidence](docs/verification/WEB_WORKTREE_BACKUP_INTAKE_2026_11_22.json).
+
 **November 22, 6:04 p.m. EST.** The canonical control checkout exists, but its `.git` pointer leads into the same absent store as the two acceptance worktrees. Verify Git backing from the controller outward before checking a different reviewer destination. Preserve the frozen `56aa9912` review DRAFT. The development diagnostic reports the first failing workspace layer. [Evidence](docs/verification/WEB_WORKSPACE_BACKING_DIAGNOSTICS_2026_11_22.json).
 
 **November 22, 5:58 p.m. EST.** The task-bound Wake sender has a separate local preparation command for `BROWSER_ADAPTER_START_FAILED`. It uses the original assignment, current grant, stored checkpoint, event and prior delivery hash. The existing sender still controls delivery. The installed cycle still needs the independent backend review and original disposable Git backing. [Evidence](docs/verification/WEB_TASK_WAKE_STARTUP_RECOVERY_2026_11_22.json).

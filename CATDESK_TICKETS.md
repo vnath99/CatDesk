@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** Backup intake checks original linked Git metadata in scratch before restoring a missing Web workspace. Wrong backlinks, redirected common directories, wrong branches, missing or corrupt indexes, alternates and the in-place original path fail admission. [Evidence](docs/verification/WEB_WORKTREE_BACKUP_INTAKE_2026_11_22.json).
+
 **WAKE-LIFECYCLE, November 22.** The original shared Git backup must also contain the canonical control checkout's linked-worktree entry. The read-only target check distinguishes an unverified controller pointer, a missing project workspace, an unverified project pointer and an origin mismatch. [Evidence](docs/verification/WEB_WORKSPACE_BACKING_DIAGNOSTICS_2026_11_22.json).
 
 **WAKE-LIFECYCLE, November 22.** A proved adapter startup refusal no longer strands the task Wake in the development build. Generic retry refuses this task-bound event. A submission witness or a mismatched record keeps it fenced. [Evidence](docs/verification/WEB_TASK_WAKE_STARTUP_RECOVERY_2026_11_22.json).

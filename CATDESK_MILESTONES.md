@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — qualify read-only backup intake for the first Web cycle.** Three real linked worktrees passed in a scratch copy. The checked retained independent repository lacks the required entries. Restoring the actual shared Git store and running the installed Web cycle remain open. [Evidence](docs/verification/WEB_WORKTREE_BACKUP_INTAKE_2026_11_22.json).
+
 **November 22 — distinguish shared Git failures from Web pairing failures.** The development controller identifies the missing or unverified Git layer without probing the browser. Restoring the shared store is now also a prerequisite for canonical no-send review admission. The first installed Web coding cycle remains open. [Evidence](docs/verification/WEB_WORKSPACE_BACKING_DIAGNOSTICS_2026_11_22.json).
 
 **November 22 — recover a self-Wake startup refusal in development.** A task can keep its checkpoint and event identity after an adapter startup failure. Scoped Windows fixtures verify the recovery and the refusal of submission-witness cases. Installed Web acceptance remains open. [Evidence](docs/verification/WEB_TASK_WAKE_STARTUP_RECOVERY_2026_11_22.json).

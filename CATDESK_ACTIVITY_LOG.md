@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-22 23:12 UTC — prepare exact shared Git backup intake.** Three retained pointers identify the original control, registered Web project and assigned worktree entries. The assigned task supplies its pinned branch and commit. Real Windows Git fixtures verified the staged read and refusal of wrong or incomplete entries. [Evidence](docs/verification/WEB_WORKTREE_BACKUP_INTAKE_2026_11_22.json).
+
 **2026-11-22 23:04 UTC — identify the shared Git dependency of the canonical Web control checkout.** The original controller pointer and the disposable acceptance worktrees refer to the same missing Git store. The checked retained archive has no matching controller worktree record. The existing target read now identifies which Git check failed. [Evidence](docs/verification/WEB_WORKSPACE_BACKING_DIAGNOSTICS_2026_11_22.json).
 
 **2026-11-22 22:58 UTC — recover an exact task Wake after a proved adapter startup failure.** The local recovery command verifies the original call and the delivery-record hash. It preserves the failed delivery in the existing audit log before returning the same event to `CLAIMED`. [Evidence](docs/verification/WEB_TASK_WAKE_STARTUP_RECOVERY_2026_11_22.json).
