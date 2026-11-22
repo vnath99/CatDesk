@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-22T12:06:42.8571287Z",
+  "scope": "ACTUAL_PRIVATE_WINDOWS_BACKEND_LISTENER_EXIT_DURING_ROLLBACK_READBACK",
+  "sourceCommit": "26abdf104cac5dcc176bb92c38c83c4dda276781",
+  "fixtureSha256": "3aa7b8728f1abd5cbcffb6485c003ea09ea0aaaf2fa35cbddb30a9f97115e0f3",
+  "retainedBackendSha256": "6efc11e337e61fef914123fb9ef09fa245ac2f5fba7c110c3b337d3464d3c050",
+  "priorRegression": "A successful response still returned READY after the listener disappeared.",
+  "ownedExit": {
+    "authenticatedFinalHttpStatus": 200,
+    "exitedBeforeFinalListenerObservation": true,
+    "outcome": "TRANSPORT_VERIFICATION_FAILED",
+    "gate": "LOCAL_MCP_LAUNCHED_PROCESS_EXITED",
+    "retainedSelectorUnconfirmed": true,
+    "restoredPairVerified": true,
+    "listenerAbsent": true
+  },
+  "freshOwnedRecovery": {
+    "outcome": "LOCAL_BACKEND_READY",
+    "source": "LAST_KNOWN_GOOD",
+    "anonymousHttpStatus": 401,
+    "authenticatedHttpStatus": 200,
+    "retainedSelectorConfirmed": true,
+    "repeatedObservationStartedNoProcess": true,
+    "bothSlotsPreserved": true,
+    "configurationPreserved": true,
+    "promotionAuthorityPreserved": true,
+    "allOwnedProcessesExited": true,
+    "listenerClosed": true,
+    "fixtureRemoved": true
+  },
+  "comparison": {
+    "exactFailedCandidateExitCode": 23,
+    "restoredAndAuthenticatedExactPrevious": true,
+    "missingBinaryUsedExistingRepair": true,
+    "incompleteNativePromotionRefusedRollback": true,
+    "fixtureRemoved": true
+  },
+  "tests": {
+    "strictReadinessCasesEachEdition": 24,
+    "powerShellCore": {
+      "strictReadiness": "PASS",
+      "bootstrap": "PASS",
+      "consumerLifecycle": "PASS"
+    },
+    "windowsPowerShell": {
+      "strictReadiness": "PASS",
+      "bootstrap": "PASS",
+      "consumerLifecycle": "PASS_ON_SERIAL_RUN"
+    },
+    "testIsolationNote": "The Windows PowerShell consumer lifecycle suite failed the named-mutex absence assertion while both editions were running against the same workspace. It passed when run by itself."
+  },
+  "productionOperations": 0,
+  "externalConnectorCalls": 0,
+  "installedAcceptance": false,
+  "limits": "The Windows fixture used the existing isolated promotion authority records, real native listener/process inspection and a private loopback with retained backend bytes. Its owned test process was interrupted after its real response. No installed release, stable supervisor registration, review authority or Web path was exercised."
+}

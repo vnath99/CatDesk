@@ -1214,3 +1214,11 @@ Evidence: [docs/verification/PROMOTION_RETIREMENT_WITH_SERVING_SOURCE_2026_11_22
 Agent: Codex. Source: ca8f69d12091e9e62ee9faf2a0fd901500efad45. Outcome: partial. The enrolled routine Wake update can carry forward the exact signed predecessor source qualification and independent review. Windows fixtures selected the next candidate and retained the working fallback while enforcing all three remaining protected receipt roles. Broker image review and trusted receipt publication still gate installed use.. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
 
 Evidence: [docs/verification/WAKE_SIGNED_PREDECESSOR_NEXT_UPDATE_2026_11_22.json](docs/verification/WAKE_SIGNED_PREDECESSOR_NEXT_UPDATE_2026_11_22.json); command: cargo test --locked --offline --manifest-path wake/Cargo.toml --lib runtime::same_state_install; exit 0; SHA-256 fdd58a8b6b255a593b9e69234069432b469569262ecb52ac4cb2b6316d849d52.
+
+<!-- catdesk-activity:backend-rollback-post-probe-owner-20261122 sha256:177e7e0c41fd9cc12c554ec6662dc5a096a1d55fc3b1026475234edc7512f6f8 -->
+
+## 2026-11-22T12:07:17Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 26abdf104cac5dcc176bb92c38c83c4dda276781. Outcome: partial. The existing backend lifecycle now rechecks the exact listener after authenticated health. A private Windows fixture refused to confirm retained rollback when the actual backend exited after its authenticated reply. A fresh recovery confirmed the previous version and preserved both release slots and original records.. Next: Admit the original frozen backend review through an eligible independent route, complete the trusted producer and qualify installed promotion and rollback under the existing owner. Confirm first signed Wake V3 selection before the installed Web cycle.
+
+Evidence: [docs/verification/BACKEND_ROLLBACK_POST_PROBE_OWNER_2026_11_22.json](docs/verification/BACKEND_ROLLBACK_POST_PROBE_OWNER_2026_11_22.json); command: scripts/test-local-mcp-readiness-strict.ps1 and private native rollback listener fixture; exit 0; SHA-256 6f053dc2778f7e877addda1bf5bde1539146e6fdf357e850bdd623b7899acf34.
