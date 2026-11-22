@@ -870,3 +870,11 @@ Evidence: [docs/verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json](docs/ver
 Agent: Codex. Source: 486f50623a4e5552d6a37887773ed087e7360736. Outcome: partial. The exact Wake request readback reuses the protected Windows ledger without starting the broker. Non-elevated installed ledger access returned NOT_FOUND_NO_RETRY for a deliberate sentinel. Seventy-seven ledger tests and two CLI tests passed. Next: Use the signed first Wake selection and genuine independent backend review. Perform installed promotion, rollback and the Web cycle after authority is established.
 
 Evidence: [docs/verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json](docs/verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json); command: Windows exact ledger and CLI tests plus one non-elevated installed sentinel lookup; exit 0; SHA-256 cfe57249e1974623de14a241ba6f627a6505409bc786ff1453a550b7ab0d8fd9.
+
+<!-- catdesk-activity:nov22-wake-relocated-first-selection-preflight sha256:95527537b415606c7f5f75e7dbc8283ea4bacae261992150d180c2ff1773fbbd -->
+
+## 2026-11-22T06:09:40.0593433Z — WAKE-LIFECYCLE
+
+Agent: Codex. Source: 90e26478ee84dcdbda9171ef8a8d514843dfaa47. Outcome: partial. The unchanged first Wake V3 selection wrapper passed its relocated read-only preflight. The enrolled account matched, the broker was stopped, all 894 original pins matched, and no attempt or signature was created. Next: Run the original one-time purpose signing and selection in the enrolled Administrator session. Retain the original bootstrap witness for post-selection readback and continue the separate backend review.
+
+Evidence: [docs/verification/WAKE_RELOCATED_FIRST_SELECTION_PREFLIGHT_2026_11_22.json](docs/verification/WAKE_RELOCATED_FIRST_SELECTION_PREFLIGHT_2026_11_22.json); command: Exact relocated V3 wrapper in VerifyInputsOnly mode and original pin readback; exit 0; SHA-256 1460543f5d11ab1a573903bfae4c19a318099b663c03436ae1221f363580123e.

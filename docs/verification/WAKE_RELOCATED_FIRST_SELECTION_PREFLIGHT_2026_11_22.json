@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "scope": "ACTUAL_RELOCATED_READ_ONLY_FIRST_WAKE_SELECTION_PREFLIGHT",
+  "observedUtc": "2026-11-22T06:09:40.0593433Z",
+  "preservationObservedUtc": "2026-11-22T06:10:49.9090538Z",
+  "unchangedWrapperSha256": "4a19bb36f0e0eb34c6a1cb718d6a2c6f2bb7429d4c930f740f71cf988d2ec142",
+  "preflight": {
+    "state": "V3_INPUTS_VERIFIED",
+    "receiptCount": 6,
+    "payloadSha256": "c771d764a1a4c0d8065a823ccb6dc488d67520b92b92b774e23e3f82b4ca6bb9",
+    "preimageSha256": "4d38ab3f9d0f8fe57ab2e622b602e5e1084e384ab83eeaff5825eeb9390e5f91",
+    "fixedIntakeAbsent": true,
+    "serviceStopped": true,
+    "correctOperator": true,
+    "elevated": false,
+    "protectedWrites": 0
+  },
+  "attemptDirectoryPresentBefore": false,
+  "attemptDirectoryPresentAfter": false,
+  "preservation": {
+    "pins": 894,
+    "observed": 894,
+    "changed": 0,
+    "additional": 0,
+    "absoluteOriginalBootstrapWitnessStillNeeded": true,
+    "readbackDependenciesCopied": 3
+  },
+  "payloadExpiresUtc": "2026-11-23T02:57:13Z",
+  "minimumValiditySeconds": 300,
+  "signatureCreated": false,
+  "selectionExecuted": false,
+  "installedPromotionVerified": false
+}

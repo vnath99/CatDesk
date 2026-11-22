@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — relocated first Wake selection.** Use the local migration handoff for the checked operator command. The unchanged wrapper passed `-VerifyInputsOnly` after relocation and checks the signed state again before execution. Keep the original bootstrap envelope in place for the existing independent post-selection verifier. [Evidence](docs/verification/WAKE_RELOCATED_FIRST_SELECTION_PREFLIGHT_2026_11_22.json).
+
 **November 22 — read an exact Wake broker result.** The development controller supports `CatDeskWakeHost.exe install-broker result <generation> <request-sha256>`. Use the generation and SHA-256 of the exact original request bytes from the retained submission. `COMPLETE` reports recorded completion. `INCOMPLETE_NO_RETRY`, `NOT_FOUND_NO_RETRY`, and read failures require preservation of the original request. This command reads the fixed protected journal and starts no service. [Evidence](docs/verification/WAKE_BROKER_EXACT_RESULT_READBACK_2026_11_22.json).
 
 **November 22 — routine Wake intake refusals.** Development `install-broker submit-local --request-file <absolute-path>` can surface a fixed candidate or review intake error when the attested service proves the fresh request stopped before intent. Use the existing ledger to reconcile `WAKE_SAME_STATE_RESULT_UNKNOWN_NO_RETRY`. The dedicated producer's IPC still refuses and does not publish Wake receipts. [Evidence](docs/verification/WAKE_LOCAL_INTAKE_REFUSAL_2026_11_22.json).
