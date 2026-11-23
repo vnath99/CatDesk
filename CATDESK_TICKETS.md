@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** Fresh GitHub reconstruction replaces the dependency on restoring the deleted historical checkout for ongoing work. Local Git integrity and isolated registration passed. Open gates are admission through a supported serving-control scope, exact task pairing and fresh grant, and independently attributable backend review and producer evidence. No historical grant or receipt transfers to the new checkout. [Verification](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
+
 **RELEASE-RECOVERY, November 22.** Closed the interrupted regression run for the fresh signed preflight change. All 32 same-state Windows cases passed across bounded runs. The existing launch-exclusion timing and release safeguards continue to apply. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
 
 **RELEASE-RECOVERY, November 22.** Fresh signed Wake selections now have a read-only native check before submission. It reuses the current protected policy, exact artifact and review checks, and existing replay ledger. A preflight result creates no release authority. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).

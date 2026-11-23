@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-23T00:44:44Z",
+  "scope": "WINDOWS_GITHUB_SOURCE_RECONSTRUCTION_AND_ISOLATED_REGISTRATION",
+  "github": {
+    "origin": "https://github.com/vnath99/CatDesk.git",
+    "verifiedDevelopmentTip": "592c85aaeec533344bbd9290c908ffa29aa5c027",
+    "advertisedRefsCompared": 36
+  },
+  "privateInventory": {
+    "retainedRepositoryRows": 567,
+    "uniqueContentBlobs": 3281,
+    "statusPackets": 77,
+    "indexCopies": 216,
+    "trackedOverlayEntries": 51,
+    "individuallyRehashedChangedFileCopies": 16,
+    "knownSharedStoreCandidatesAbsentFromCapturedGithubRefs": 47,
+    "knownSharedStoreCandidatesWithVerifiedCustody": 31,
+    "knownSharedStoreCandidatesWithUnprovedCustody": 16,
+    "verifiedIndependentObjectsAbsentFromCapturedGithubRefs": 7,
+    "independentCommitCount": 6,
+    "independentTreeCount": 1
+  },
+  "reconstructed": {
+    "sourceAndTaskBase": "ac112e8c05c29566163dce8f6fb1f77f06a26a51",
+    "sourceAndTaskTree": "ccc432ab31383861962e3f6783f8ad42ea9d709e",
+    "linkedTaskUsesNewAdministrativeIdentity": true,
+    "independentControlUsesOwnGitDirectory": true,
+    "reviewCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "reviewTree": "4a83da9f2daa22e1ecabcf000beb6899fc5e60d1",
+    "cleanAllFour": true,
+    "fullFsckNoLazyFetchPassed": true,
+    "materializedTreeEntries": {
+      "source": 2087,
+      "task": 2087,
+      "control": 2254,
+      "review": 2119
+    }
+  },
+  "catdesk": {
+    "offlineInstalledImageSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "isolatedWebOnlyRegistrations": 2,
+    "isolatedRegistrationsUnbound": true,
+    "freshUnboundAssignmentDraft": true,
+    "draftLocalDocumentationPrecheckPassed": true,
+    "productionPinnedFilesUnchanged": 5,
+    "productionRegistrationsChanged": 0,
+    "protectedTransitions": 0,
+    "externalMessages": 0,
+    "independentReviewStarted": false,
+    "installedWebCycleAccepted": false,
+    "isolatedTargetReadback": {
+      "exitCode": 0,
+      "readOnly": true,
+      "diagnosticCode": "WEB_TARGET_RUNTIME_NOT_SELECTED",
+      "deliveryProved": false
+    }
+  },
+  "gates": {
+    "canonicalControlLastObserved": "WEB_TARGET_CONTROL_GIT_POINTER_UNVERIFIED",
+    "reviewSourceAvailable": true,
+    "reviewAdmission": "Requires an eligible independent destination and exact workspace authority. Retain the original draft; if its path is unavailable use a freshly validated source-bound draft and its own decision.",
+    "webAcceptance": "Verify the intended serving control scope and native pairing before associating the fresh task or granting edit, Git checkpoint and self-Wake."
+  }
+}

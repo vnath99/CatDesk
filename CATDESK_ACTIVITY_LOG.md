@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-23 00:44 UTC — reconstruct Git and preserve private evidence.** Verified the development tip, reconstructed disposable source and task checkouts and the exact `56aa9912` review tree from GitHub. An independent control clone accepted two isolated registrations through the frozen installed image. The private inventory verified custody of 31 of 47 known shared-store candidates absent from captured GitHub history and all seven independent objects. Custody of the other 16 remains unproved. [Verification](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
+
 **2026-11-22 23:31 UTC — finish the broader Windows same-state Wake regression.** The previous aggregate limit cut into the deliberate launch-exclusion waits. The 22 unfinished cases passed under separate bounds, including the 122.09-second interrupted-selection and rollback case. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
 
 **2026-11-22 23:23 UTC — add read-only preflight for a fresh signed Wake selection.** The development controller verifies the enrolled operator, exact signature, prospective generation and retained candidate and fallback evidence. It uses the existing ledger read lock and creates no intent. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
