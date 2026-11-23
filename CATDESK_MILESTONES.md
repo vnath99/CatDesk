@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — doctor distinguishes target authentication refusal.** Both supported PowerShell editions and actual retained v5 evidence passed. The source diagnostic identifies the relevant layer and preserves independent project evidence. Installed connector repair and the Web cycle remain open. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).
+
 **November 22 — distinguish installed v5 discovery from healthy local MCP.** Two connector discovery calls and one after the replaced tunnel owner returned target HTTP 401. The correctly configured local bearer returned 200. Live v5 recovery and the installed Web cycle remain open. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).
 
 **November 22 — reconstructed development serving qualified.** The new control checkout reached `DEVELOPMENT_UNPROTECTED`, the first-conversation intent reached `PREPARED`, and the isolated MCP catalog returned 78 tools after authentication. The target remains `UNBOUND`. The installed Web lifecycle and independent backend review remain open. [Verification](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).

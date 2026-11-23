@@ -112,6 +112,11 @@ try{
  Require ($browserLayer.facts.exchange -ceq 'UNATTRIBUTED' -and -not $browserLayer.facts.userResendAllowed -and -not $browserLayer.facts.genericLoadErrorRetryQualified -and $browserLayer.facts.independentProjectsMayContinue) 'assistant failure authorized USER resend or globally blocked projects'
  $import.observations=@(@{layer='CONNECTOR';code='CONNECTOR_TRANSPORT_NO_HTTP_STATUS'});Save $observation $import
  Require ((Layer (Invoke-Doctor -Import) 'CONNECTOR').code -ceq 'CONNECTOR_TRANSPORT_NO_HTTP_STATUS') 'no-status failure relabeled 429'
+ $import.observations=@(@{layer='CONNECTOR';code='CONNECTOR_TARGET_HTTP_401'},@{layer='LOCAL_MCP';code='LOCAL_MCP_READY'});Save $observation $import
+ $refusalReport=Invoke-Doctor -Import;$refusal=Layer $refusalReport 'CONNECTOR'
+ Require ($refusal.code -ceq 'CONNECTOR_TARGET_HTTP_401' -and $refusal.status -ceq 'UNVERIFIED' -and $refusal.provenance -ceq 'IMPORTED_ADVISORY') 'target auth refusal was conflated with an upstream outage or live probe'
+ Require ($refusal.nextDiagnostic -ceq 'VERIFY_CONFIGURED_LOCAL_BEARER_AND_EXISTING_TUNNEL_OWNER' -and $refusal.facts.reportedTargetHttpStatus -eq 401 -and $refusal.facts.runtimeBearerForwarding -ceq 'UNVERIFIED') 'target auth refusal asserted a missing bearer or suggested a retry'
+ Require ((Layer $refusalReport 'LOCAL_MCP').code -ceq 'LOCAL_MCP_READY' -and (Layer $refusalReport 'LOCAL_MCP').status -ceq 'UNVERIFIED' -and (Layer $refusalReport 'WAKE_QUEUE').code -ceq 'WAKE_UNKNOWN_OUTCOME' -and $refusalReport.runtimeStarts -eq 0 -and $refusalReport.networkRequests -eq 0 -and $refusalReport.repairs -eq 0) 'target auth refusal changed independent layers or performed an action'
  $import.observations=@(@{layer='CONNECTOR';code='CONNECTOR_RESPONSE_VERIFIED'});Save $observation $import
  $connectedReport=Invoke-Doctor -Import;$connected=Layer $connectedReport 'CONNECTOR'
  Require ($connected.status -ceq 'UNVERIFIED' -and $connected.provenance -ceq 'IMPORTED_ADVISORY' -and $connected.nextDiagnostic -ceq 'VERIFY_AUTHENTICATED_PROJECT_TASK_SCOPE') 'retained connector response requested polling or claimed current availability'
@@ -130,7 +135,8 @@ try{
  foreach($invalidCapability in @(
   @{layer='CONNECTOR';code='CONNECTOR_TASK_CALL_REPORTED_BLOCKED';status='PASS'},
   @{layer='CONNECTOR';code='CONNECTOR_TOOL_DISCOVERY_UNVERIFIED';facts=@{unknownCallReplayAllowed=$true}},
-  @{layer='LOCAL_MCP';code='CONNECTOR_TOOL_DISCOVERY_UNVERIFIED'})){
+  @{layer='LOCAL_MCP';code='CONNECTOR_TOOL_DISCOVERY_UNVERIFIED'},
+  @{layer='LOCAL_MCP';code='CONNECTOR_TARGET_HTTP_401'})){
   $import.observations=@($invalidCapability);Save $observation $import
   $invalidReport=Invoke-Doctor -Import
   Require ((Layer $invalidReport 'OBSERVATIONS').code -ceq 'OBSERVATIONS_INVALID' -and (Layer $invalidReport 'CONNECTOR').code -ceq 'CONNECTOR_NOT_PROBED') 'invalid capability observation partially applied or overrode authority'

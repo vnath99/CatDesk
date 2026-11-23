@@ -58,5 +58,22 @@
     "review": "Genuine independent review and immutable producer attestation are required for the exact frozen compatible backend.",
     "alternative": "A manual reconnect requires a coordinated maintenance window with a qualified lifecycle owner that cannot recreate the alias during stop/connect.",
     "acceptance": "Request one fresh connector check only after repair or an authorized release transition. Installed ChatGPT Web cycle remains open."
+  },
+  "followup": {
+    "observedUtc": "2026-11-23T01:04:50Z",
+    "scope": "SOURCE_DOCTOR_AND_EXISTING_NATIVE_CLIENT_COMMAND_INSPECTION",
+    "nativeClientOffersCoordinatedRestartOrPause": false,
+    "passiveConnectorCode": "CONNECTOR_TARGET_HTTP_401",
+    "connectorEvidenceProvenance": "IMPORTED_ADVISORY",
+    "localMcpEvidencePreservedSeparately": true,
+    "runtimeBearerForwardingProved": false,
+    "powershell7AssertionsPassed": 221,
+    "windowsPowershell51AssertionsPassed": 221,
+    "actualRetainedObservationImported": true,
+    "doctorNetworkRequests": 0,
+    "doctorRuntimeStarts": 0,
+    "doctorRepairs": 0,
+    "newConnectorRequests": 0,
+    "newRuntimeReconnects": 0
   }
 }

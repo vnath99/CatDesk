@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — import a known v5 target HTTP 401 into doctor.** Use `catdesk.ps1 doctor -ObservationFile <redacted-observation.json>` with the existing schema version 1, observed UTC timestamp and `RETAINED_REPORT` source. Use a `CONNECTOR` observation with code `CONNECTOR_TARGET_HTTP_401` only when the returned target status is established. The doctor keeps it advisory and directs the local configured bearer and existing tunnel-owner checks. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).
+
 **November 22 — reconcile a recreated tunnel owner before reconnecting.** A healthy `catdesk.ps1 diagnose` covers the local backend and official runtime health. A v5 discovery can still fail with target HTTP 401. If the existing alias reappears after a stop attempt, compare owner creation time and revalidate the target. Use the supported stop/connect only with coordinated lifecycle ownership, or proceed through the existing review and release path for a backend containing automatic bearer forwarding. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).
 
 ## November 22 — recover a development or disposable Web workspace from GitHub
