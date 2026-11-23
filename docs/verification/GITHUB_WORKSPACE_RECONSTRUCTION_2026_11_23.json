@@ -162,5 +162,28 @@
     "exactScheduledTaskExists": false,
     "canonicalDaemonParentIsFullStackMonitor": true,
     "ownerActions": 0
+  },
+  "reviewRouteInventory": {
+    "observedUtc": "2026-11-23T01:23:56Z",
+    "source": "INSTALLED_REGISTRATION_METADATA_AND_RETAINED_ADMISSION_EVIDENCE",
+    "installedProjectRows": 7,
+    "catdeskRelatedRegistrations": 4,
+    "catdeskRegistrationsUnderRetiredRoot": 3,
+    "canonicalPreviousAdmission": "WEB_REVIEW_PROJECT_BUSY",
+    "canonicalFreshAdmissionAttempted": false,
+    "recoveredProjectTarget": "UNBOUND",
+    "eligibleIndependentReviewerDestinationFound": false
+  },
+  "reconstructedEvidenceCustody": {
+    "observedUtc": "2026-11-23T01:24:40.057453Z",
+    "privateZipVerified": true,
+    "evidenceFilesReadBackExactly": 10,
+    "gitBindingRecords": 4,
+    "preservedReviewDraftState": "DRAFT",
+    "preservedInitialConversationState": "PREPARED",
+    "preservedTaskExecutionGrantPresent": false,
+    "includesGitAdministrativeFiles": false,
+    "includesBrowserProfileOrCredentialFiles": false,
+    "restoredAuthorities": 0
   }
 }

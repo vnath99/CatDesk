@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-23 01:24 UTC — preserve reconstructed review and task evidence.** Verified a private archive with ten evidence files and four Git binding records. The installed registry had one canonical CatDesk review route and three alternatives under the retired root. No new review submission, grant or production change occurred. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
+
 **2026-11-23 01:19 UTC — exercise native assignment inspection on the recovered task.** The initial draft used the wrong expected-artifact shape and was refused before task state existed. The corrected draft passed the native read-only check for the exact registered project and linked worktree. The source, task identity and pinned metadata were preserved. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
 
 **2026-11-23 01:11 UTC — validate the reconstructed backend review draft.** Confirmed that the original contract names the historical absolute workspace. The existing native contract workflow created one fresh draft at exact `56aa9912` in the reconstructed linked checkout. Durable readback confirms version 1, no approval, no provider handle and zero provider turns. The loopback owner exited and production retained its listener. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
