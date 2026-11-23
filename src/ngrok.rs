@@ -1,12 +1,12 @@
 use crate::openai_tunnel::{
-    OPENAI_TUNNEL_READINESS_TIMEOUT, OfficialRuntimeRecoveryStateV1, OfficialRuntimeStatus,
-    RuntimeMonitorConfig, RuntimeMonitorState, TunnelClientDiscoveryOptions,
-    build_runtime_connect_command, classify_official_runtime_recovery_state,
-    connect_official_runtime, credential_environment_present, default_user_tools_dir,
-    discover_tunnel_client, monitor_health_from_status, official_runtime_status,
-    probe_tunnel_client_readiness, run_tunnel_client_doctor, should_attempt_recovery,
-    spawn_tunnel_client_run, trusted_tunnel_client_executable_fingerprint,
-    tunnel_id_environment_present, verified_official_runtime_recovery_identity,
+    OPENAI_TUNNEL_READINESS_TIMEOUT, OfficialRuntimeRecoveryStateV1, RuntimeMonitorConfig,
+    RuntimeMonitorState, TunnelClientDiscoveryOptions, build_runtime_connect_command,
+    classify_official_runtime_recovery_state, connect_official_runtime,
+    credential_environment_present, default_user_tools_dir, discover_tunnel_client,
+    monitor_health_from_status, official_runtime_status, probe_tunnel_client_readiness,
+    run_tunnel_client_doctor, should_attempt_recovery, spawn_tunnel_client_run,
+    trusted_tunnel_client_executable_fingerprint, tunnel_id_environment_present,
+    verified_official_runtime_recovery_identity,
 };
 use crate::state::{SharedState, load_ngrok_authtoken, user_home_dir};
 use crate::tunnel::{
@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 
 const EXISTING_RUNTIME_NOT_READY_WARNING: &str =
     "Official tunnel-client runtime exists but is not ready; CatDesk will monitor it";
+const OFFICIAL_RUNTIME_STATUS_UNVERIFIED: &str = "OFFICIAL_RUNTIME_STATUS_UNVERIFIED";
 
 fn recovery_is_eligible_for_official_runtime(
     health: TransportHealth,
@@ -307,7 +308,15 @@ async fn configure_official_runtime_mode(
                 }
             }
         }
-        Ok(_) | Err(_) => {
+        Err(_) => {
+            set_transport_health(
+                &state,
+                TransportHealth::Degraded,
+                OFFICIAL_RUNTIME_STATUS_UNVERIFIED,
+            )
+            .await;
+        }
+        Ok(_) => {
             if !auto_connect {
                 set_transport_health(
                     &state,
@@ -442,10 +451,8 @@ async fn start_openai_runtime_monitor_if_needed(
             if !should_continue {
                 break;
             }
-            let runtime = official_runtime_status(&client_path, &alias)
-                .await
-                .unwrap_or_else(|error| OfficialRuntimeStatus::stopped(&alias, error.to_string()));
-            let (local_endpoint, health_base_url, auto_recover, mcp_auth_token) = {
+            let runtime = official_runtime_status(&client_path, &alias).await;
+            let (local_endpoint, auto_recover, mcp_auth_token) = {
                 let app = monitor_state.lock().await;
                 (
                     format!(
@@ -454,7 +461,6 @@ async fn start_openai_runtime_monitor_if_needed(
                         app.port,
                         app.mcp_path()
                     ),
-                    runtime.health_base_url.clone(),
                     app.openai_tunnel_config.auto_recover,
                     app.mcp_auth_token.clone(),
                 )
@@ -467,6 +473,24 @@ async fn start_openai_runtime_monitor_if_needed(
             )
             .await
             .is_ok();
+            let runtime = match runtime {
+                Ok(runtime) => runtime,
+                Err(_) => {
+                    {
+                        let mut app = monitor_state.lock().await;
+                        app.transport_health.health = TransportHealth::Degraded;
+                        app.transport_health.local_mcp =
+                            if local_mcp_ready { "READY" } else { "FAILED" }.into();
+                        app.transport_health.last_checked_at =
+                            Some(crate::tunnel::current_startup_time());
+                        app.transport_health.redacted_reason =
+                            Some(OFFICIAL_RUNTIME_STATUS_UNVERIFIED.into());
+                    }
+                    tokio::time::sleep(config.degraded_interval).await;
+                    continue;
+                }
+            };
+            let health_base_url = runtime.health_base_url.clone();
             let readiness = if let Some(health_base_url) = health_base_url.as_deref() {
                 probe_tunnel_client_readiness(health_base_url, OPENAI_TUNNEL_READINESS_TIMEOUT)
                     .await

@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 23.** Fixed the development startup and monitor paths that converted a failed official runtime status into absence and could reconnect during a maintenance handoff. A registered alias with failed status remains unverified. The installed 401 still requires the existing coordinated bearer-forwarding transition and a subsequent Web discovery. [Evidence](docs/verification/OFFICIAL_RUNTIME_STATUS_EVIDENCE_2026_11_23.json).
+
 **RELEASE-RECOVERY, November 23.** The dedicated backend reviewer registration and first-conversation context are prepared in the recovered scope. Canonical v5 returned `UNAUTHORIZED` with target HTTP 401. The command runner's current Windows Job has kill-on-close, and the installed full-stack owner lacks a verified public quiescence action. A coordinated existing-owner transition is the next connector operation. Retain the same alias and credential reference and verify one fresh discovery after the transition. The review DRAFT can advance after an eligible destination passes no-send admission. [Evidence](docs/verification/BACKEND_REVIEW_ROUTE_2026_11_23.json).
 
 **WAKE-LIFECYCLE, November 23.** The recovered coding project retains its verified local assignment. Pairing and a fresh execution grant await exact conversation and serving-scope verification. Installed acceptance still requires an actual Web edit, verification, scoped Git checkpoint, delivered self-Wake and next-turn continuation with zero Codex model calls. [Evidence](docs/verification/BACKEND_REVIEW_ROUTE_2026_11_23.json).

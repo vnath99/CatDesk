@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-23T11:38:00Z",
+  "scope": "WINDOWS_OFFICIAL_RUNTIME_READ_ONLY_SCHEMA_AND_DEVELOPMENT_RECOVERY",
+  "startingDevelopmentCommit": "c27fc4280e8e5e35ab30b73055ff920426658e9c",
+  "installedClient": {
+    "listSupportsJson": true,
+    "inventoryCommandExitCode": 0,
+    "structuredAliasCollection": true,
+    "inventoryRowHasAliasField": true,
+    "registeredRuntimeStatusExitCode": 0,
+    "registeredRuntimeProcessRunning": true,
+    "unregisteredRuntimeStatusExitCode": 1,
+    "unregisteredRuntimeStatusJsonAbsent": true,
+    "mutatingCommands": 0
+  },
+  "development": {
+    "registeredStatusFailureBecomesUnverified": true,
+    "requiresExplicitConsistentProcessState": true,
+    "unregisteredAliasRemainsEligibleForExistingRecovery": true,
+    "untrustedInventoryCannotProveAbsence": true,
+    "windowsTunnelModuleTestsPassed": 37,
+    "windowsTransportModuleTestsPassed": 4,
+    "windowsSubprocessFixtureUsed": true,
+    "frozenBackendCandidateChanged": false,
+    "installedOwnerChanged": false
+  },
+  "production": {
+    "freshV5Discoveries": 0,
+    "reconnects": 0,
+    "independentReviewStarted": false,
+    "installedWebLifecycleAccepted": false
+  }
+}

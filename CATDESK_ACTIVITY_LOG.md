@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-23 11:38 UTC — require runtime absence evidence before automatic reconnect.** Read-only Windows CLI checks confirmed the installed client's alias inventory shape and that an unregistered alias returns a nonzero status without JSON. Development startup and monitoring now distinguish this case from an unverifiable registered runtime. The existing connector, release selection and project bindings were preserved. [Evidence](docs/verification/OFFICIAL_RUNTIME_STATUS_EVIDENCE_2026_11_23.json).
+
 **2026-11-23 11:29 UTC — separate reviewer route preparation from release authority.** Registered a dedicated Web-only review project in the recovered control scope and staged its first-conversation context without submitting it. The development route check refused the unbound target. A single v5 discovery returned target HTTP 401 while the canonical listener remained in place. The existing contract, production registrations and release pair were preserved. [Evidence](docs/verification/BACKEND_REVIEW_ROUTE_2026_11_23.json).
 
 **2026-11-23 01:24 UTC — preserve reconstructed review and task evidence.** Verified a private archive with ten evidence files and four Git binding records. The installed registry had one canonical CatDesk review route and three alternatives under the retired root. No new review submission, grant or production change occurred. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).

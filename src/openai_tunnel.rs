@@ -1133,12 +1133,46 @@ pub async fn official_runtime_status(
         ],
         None,
     )
-    .await?;
+    .await;
+    let output = match output {
+        Ok(output) => output,
+        Err(status_error) => {
+            // An unregistered alias can make status exit nonzero. A timeout
+            // or other failed query for a registered alias proves no such thing.
+            let inventory = run_client_command(path, ["runtimes", "list", "--json"]).await?;
+            if runtime_alias_is_registered(alias, &inventory)? {
+                return Err(status_error);
+            }
+            return Ok(OfficialRuntimeStatus::stopped(
+                alias,
+                "official runtime alias is not registered",
+            ));
+        }
+    };
     let mut status = parse_runtime_status_json(alias, &output)?;
     if status.health_base_url.is_none() {
         status.health_base_url = runtime_health_url_from_file(alias, &output)?;
     }
     Ok(status)
+}
+
+fn runtime_alias_is_registered(alias: &str, text: &str) -> Result<bool, OpenaiTunnelError> {
+    let invalid = || OpenaiTunnelError::Command("runtime inventory was not valid".into());
+    if text.len() > MAX_CHILD_OUTPUT_BYTES {
+        return Err(invalid());
+    }
+    let inventory: Value = serde_json::from_str(text).map_err(|_| invalid())?;
+    let aliases = inventory["aliases"].as_array().ok_or_else(invalid)?;
+    let mut found = false;
+    for entry in aliases {
+        let listed = entry["alias"].as_str().ok_or_else(invalid)?;
+        validate_safe_alias(listed, "listed runtime alias").map_err(|_| invalid())?;
+        if listed != listed.trim() {
+            return Err(invalid());
+        }
+        found |= alias.eq_ignore_ascii_case(listed);
+    }
+    Ok(found)
 }
 
 pub async fn stop_official_runtime(path: &Path, alias: &str) -> Result<String, OpenaiTunnelError> {
@@ -1196,8 +1230,26 @@ pub fn parse_runtime_status_json(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let process_running = lookup_bool(&["process_running", "processRunning", "running"])
-        || matches!(status_text.as_str(), "running" | "ready" | "connected");
+    let mut process_running = match status_text.as_str() {
+        "running" | "ready" | "connected" => Some(true),
+        "stopped" | "not_running" => Some(false),
+        _ => None,
+    };
+    for field in ["process_running", "processRunning", "running"] {
+        if let Some(value) = object.get(field) {
+            let running = value.as_bool().ok_or_else(|| {
+                OpenaiTunnelError::Command("runtime process status was not a boolean".into())
+            })?;
+            if process_running.is_some_and(|observed| observed != running) {
+                return Err(OpenaiTunnelError::Command(
+                    "runtime process status disagreed".into(),
+                ));
+            }
+            process_running = Some(running);
+        }
+    }
+    let process_running = process_running
+        .ok_or_else(|| OpenaiTunnelError::Command("runtime process status was missing".into()))?;
     let healthy = lookup_bool(&["healthy", "health_ok", "healthOk"])
         || matches!(status_text.as_str(), "healthy" | "ready" | "connected");
     let ready =
@@ -2648,6 +2700,52 @@ mod tests {
             parse_runtime_status_json("catdesk-local", r#"{"alias":"other","status":"ready"}"#,)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn runtime_process_status_must_be_explicit_and_consistent() {
+        for ambiguous in [
+            r#"{}"#,
+            r#"{"error":"unavailable","ready":false}"#,
+            r#"{"process_running":"false"}"#,
+            r#"{"process_running":false,"running":true}"#,
+            r#"{"process_running":false,"status":"ready"}"#,
+        ] {
+            assert!(parse_runtime_status_json("fixture-alias", ambiguous).is_err());
+        }
+        let stopped =
+            parse_runtime_status_json("fixture-alias", r#"{"process_running":false}"#).unwrap();
+        assert!(!stopped.process_running);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn runtime_status_failure_requires_inventory_before_recovery() {
+        let root = temp_dir("runtime-inventory");
+        let path = root.join("fixture-client.cmd");
+        for (inventory, expect_absent) in [
+            (r#"{"aliases":[{"alias":"other-alias"}]}"#, true),
+            (r#"{"aliases":[]}"#, true),
+            (r#"{"aliases":[{"alias":"FIXTURE-ALIAS"}]}"#, false),
+            (r#"{"aliases":[{}]}"#, false),
+            (r#"{"error":"inventory unavailable"}"#, false),
+        ] {
+            std::fs::write(
+                &path,
+                format!(
+                    "@echo off\r\nif \"%1 %2 %3\"==\"runtimes list --json\" (echo {inventory} & exit /b 0)\r\nexit /b 1\r\n"
+                ),
+            )
+            .unwrap();
+            match official_runtime_status(&path, "fixture-alias").await {
+                Ok(status) => {
+                    assert!(expect_absent);
+                    assert!(!status.process_running);
+                }
+                Err(_) => assert!(!expect_absent),
+            }
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
