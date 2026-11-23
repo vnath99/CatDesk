@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — the frozen backend review can now be staged without the historical checkout.** Native create, validation and durable readback passed at exact `56aa9912`. Independent reviewer admission, report, acknowledgment and producer attestation remain open. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
+
 **November 22 — doctor distinguishes target authentication refusal.** Both supported PowerShell editions and actual retained v5 evidence passed. The source diagnostic identifies the relevant layer and preserves independent project evidence. Installed connector repair and the Web cycle remain open. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).
 
 **November 22 — distinguish installed v5 discovery from healthy local MCP.** Two connector discovery calls and one after the replaced tunnel owner returned target HTTP 401. The correctly configured local bearer returned 200. Live v5 recovery and the installed Web cycle remain open. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).

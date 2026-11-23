@@ -63,7 +63,7 @@
   "gates": {
     "canonicalControlLastObserved": "WEB_TARGET_CONTROL_GIT_POINTER_UNVERIFIED",
     "reviewSourceAvailable": true,
-    "reviewAdmission": "Requires an eligible independent destination and exact workspace authority. Retain the original draft; if its path is unavailable use a freshly validated source-bound draft and its own decision.",
+    "reviewAdmission": "The source-bound replacement is validated in DRAFT. Verify an eligible independent reviewer destination through no-send admission before seeking the draft's exact start decision. Independent review, acknowledgment, snapshot and producer authority remain absent.",
     "webAcceptance": "Verify the intended serving control scope and native pairing before associating the fresh task or granting edit, Git checkpoint and self-Wake."
   },
   "preparedServingControl": {
@@ -98,5 +98,38 @@
     "connectorChanges": 0,
     "externalMessages": 0,
     "installedAcceptance": false
+  },
+  "reconstructedNativeReviewDraft": {
+    "observedUtc": "2026-11-23T01:11:23.872660Z",
+    "originalContractHashVerified": true,
+    "originalContractBoundToHistoricalAbsolutePath": true,
+    "originalContractPreserved": true,
+    "exactSourceCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "exactSourceTree": "4a83da9f2daa22e1ecabcf000beb6899fc5e60d1",
+    "localLinkedReviewBranch": "codex/backend-review-reconstructed-nov23",
+    "sourceClean": true,
+    "expiresUtc": "2026-11-29T00:43:07Z",
+    "nativeCreateCalls": 1,
+    "nativeValidateCalls": 1,
+    "valid": true,
+    "state": "DRAFT",
+    "stateVersion": 1,
+    "durableEvents": 1,
+    "startReadiness": "APPROVAL_REQUIRED",
+    "runtimeAdmissionVerified": false,
+    "approvalPresent": false,
+    "providerHandlePresent": false,
+    "providerTurns": 0,
+    "completionReportPresent": false,
+    "preToolStartupRefusals": 2,
+    "preToolStartupCorrection": "Use the native path for initializing a fresh isolated configuration instead of a comment-only TOML file.",
+    "transientOwnerExitCode": 0,
+    "loopbackListenerExited": true,
+    "canonicalListenerOwnerUnchanged": true,
+    "browserStarts": 0,
+    "wakeStarts": 0,
+    "externalMessages": 0,
+    "producerInvoked": false,
+    "installedWebCycleAccepted": false
   }
 }

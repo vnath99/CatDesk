@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-23 01:11 UTC — validate the reconstructed backend review draft.** Confirmed that the original contract names the historical absolute workspace. The existing native contract workflow created one fresh draft at exact `56aa9912` in the reconstructed linked checkout. Durable readback confirms version 1, no approval, no provider handle and zero provider turns. The loopback owner exited and production retained its listener. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
+
 **2026-11-23 01:04 UTC — classify retained v5 target authentication refusals in doctor.** The passive diagnostic now retains `CONNECTOR_TARGET_HTTP_401` alongside independent local MCP and Wake evidence. Both PowerShell editions passed 221 assertions. The real retained observation imported without a network call, runtime start or repair. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).
 
 **2026-11-23 01:00 UTC — trace v5 discovery to target HTTP 401.** The canonical backend returned 401 anonymously and 200 using the configured bearer. A replacement official tunnel process appeared after the stop attempt, before any manual connect. One discovery after replacement still returned 401. Source comparison confirmed the installed backend predates the automatic forwarding fix included in frozen `56aa9912`. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).

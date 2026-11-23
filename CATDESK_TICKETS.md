@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 22.** Resolved the deleted path dependency for an inert native review draft. The replacement targets the same commit and tree under a fresh identity. Remaining release inputs are eligible review admission, the exact start decision, an attributable result and the existing producer checks. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
+
 **RELEASE-RECOVERY, November 22.** Source doctor accepts `CONNECTOR_TARGET_HTTP_401` as advisory evidence. The regression covers a separate local MCP readiness observation, preserved unknown Wake state, rejected wrong-layer input and zero active operations. This does not close the installed connector gate. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).
 
 **RELEASE-RECOVERY, November 22.** The live official tunnel can report ready while v5 discovery fails authentication. The installed source lacks automatic bearer forwarding. Frozen `56aa9912` includes the fix. Close the connector gate after a supported owner or release transition and one fresh discovery check. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).
