@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-23T11:51:00Z",
+  "scope": "READ_ONLY_RECOVERED_SCOPE_AND_INSTALLED_FINITE_OWNER_PIN_OBSERVATION",
+  "startingDevelopmentCommit": "f38502fa23720f44263696e8a95b9040b7ed8c2c",
+  "finiteServing": {
+    "installedInitialFilesPresentAndPlain": 14,
+    "recoveredInitialFilesPresentAndPlain": 4,
+    "recoveryHelperMatchesHistoricalAuthority": true,
+    "reconciliationScriptMatchesHistoricalAuthority": true,
+    "fixedWindowsPowerShellMatchesHistoricalAuthority": false,
+    "selectedSlot": "slot-b",
+    "selectedGeneration": 4,
+    "openPromotionTransactionPresent": false,
+    "currentPromotionAuthorizationMatchesInstalledReceipt": true,
+    "fixedWindowsPowerShellMatchesThatPromotionAuthorization": false,
+    "newListenersStarted": 0
+  },
+  "windowsPowerShell": {
+    "observedFrom64BitProcess": true,
+    "fixedSystemFilePlain": true,
+    "authenticode": "Valid",
+    "microsoftSigner": true,
+    "otherArchitectureMatchesHistoricalPin": false,
+    "systemFileNewerThanBothStoredAuthorizations": true,
+    "specificServicingEventEstablished": false
+  },
+  "development": {
+    "distinctClosedCode": "INSTALLED_BACKEND_POWERSHELL_IDENTITY_CHANGED",
+    "centralAndProjectOwnersSharePinCheck": true,
+    "existingFileHashAndPinChecksRetained": true,
+    "finiteInstalledBackendTestsPassed": 21,
+    "finiteInstalledProjectTestsPassed": 10,
+    "optInSelectedReleaseTestNotRun": true,
+    "finiteOwnerSourceUnchangedBetweenInstalledAndFrozenReviewCandidate": true
+  },
+  "protectedWrites": 0,
+  "canonicalInstalledImageMatchedExpectedIdentity": true,
+  "reviewStarted": false,
+  "installedWebLifecycleAccepted": false
+}

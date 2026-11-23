@@ -245,6 +245,40 @@ fn hash(path: &Path) -> Result<String, String> {
     }
     Ok(format!("{:x}", sha.finalize()))
 }
+#[cfg(windows)]
+fn verify_helper_pins(
+    authority: &Value,
+    reconcile: &Path,
+    recovery: &Path,
+    powershell: &Path,
+) -> Result<(), String> {
+    verify_helper_digests(
+        authority,
+        &hash(reconcile)?,
+        &hash(recovery)?,
+        &hash(powershell)?,
+    )
+}
+
+#[cfg(any(windows, test))]
+fn verify_helper_digests(
+    authority: &Value,
+    reconcile: &str,
+    recovery: &str,
+    powershell: &str,
+) -> Result<(), String> {
+    let authorization = &authority["authorization"];
+    if authorization["scriptSha256"] != reconcile
+        || authorization["recoveryHelperSha256"] != recovery
+    {
+        return Err("INSTALLED_BACKEND_HELPER_UNQUALIFIED".into());
+    }
+    if authorization["powershellSha256"] != powershell {
+        return Err("INSTALLED_BACKEND_POWERSHELL_IDENTITY_CHANGED".into());
+    }
+    Ok(())
+}
+
 fn regular(root: &Path, relative: &str, maximum: u64) -> Result<PathBuf, String> {
     let path = root.join(relative);
     let m = fs::symlink_metadata(&path).map_err(|_| "INSTALLED_BACKEND_FILE_UNAVAILABLE")?;
@@ -666,6 +700,7 @@ pub(crate) fn diagnostic_error_code(error: &str) -> &str {
         | "INSTALLED_BACKEND_BUDGET_INVALID"
         | "INSTALLED_BACKEND_AUTHORITY_UNPROVEN"
         | "INSTALLED_BACKEND_HELPER_UNQUALIFIED"
+        | "INSTALLED_BACKEND_POWERSHELL_IDENTITY_CHANGED"
         | "INSTALLED_BACKEND_INPUT_CHANGED"
         | "INSTALLED_BACKEND_INPUT_PIN_FAILED"
         | "INSTALLED_BACKEND_INSUFFICIENT_BUDGET"
@@ -1005,12 +1040,7 @@ fn run_owned(
         131072,
     )?;
     let powershell = super::trusted_windows_powershell(&root)?;
-    if authority["authorization"]["scriptSha256"] != hash(&reconcile)?
-        || authority["authorization"]["recoveryHelperSha256"] != hash(&recovery)?
-        || authority["authorization"]["powershellSha256"] != hash(&powershell)?
-    {
-        return Err("INSTALLED_BACKEND_HELPER_UNQUALIFIED".into());
-    }
+    verify_helper_pins(&authority, &reconcile, &recovery, &powershell)?;
     let _pins = [&binary, &recovery, &reconcile, &powershell]
         .into_iter()
         .map(|path| {
@@ -1023,13 +1053,10 @@ fn run_owned(
         .collect::<Result<Vec<_>, _>>()?;
     // The handles prevent further replacement; bind the bytes they now pin
     // before any helper is executed, rather than relying on an earlier read.
-    if hash(&binary)? != expected
-        || authority["authorization"]["scriptSha256"] != hash(&reconcile)?
-        || authority["authorization"]["recoveryHelperSha256"] != hash(&recovery)?
-        || authority["authorization"]["powershellSha256"] != hash(&powershell)?
-    {
+    if hash(&binary)? != expected {
         return Err("INSTALLED_BACKEND_INPUT_CHANGED".into());
     }
+    verify_helper_pins(&authority, &reconcile, &recovery, &powershell)?;
     let mut command = ps_command(&root, trust_command(&root, &recovery))?;
     command.stdin(Stdio::piped());
     let mut holder = OwnedCandidateChild::spawn(&mut command)?;
@@ -1232,6 +1259,37 @@ fn run_owned(_: &Path, _: u64, _: &str, _: Option<&CentralOptions>) -> Result<Va
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installed_helper_pins_distinguish_interpreter_drift() {
+        let reconcile = "a".repeat(64);
+        let recovery = "b".repeat(64);
+        let powershell = "c".repeat(64);
+        let changed = "d".repeat(64);
+        let authority = json!({"authorization":{
+            "scriptSha256":reconcile,
+            "recoveryHelperSha256":recovery,
+            "powershellSha256":powershell
+        }});
+        verify_helper_digests(&authority, &reconcile, &recovery, &powershell).unwrap();
+        assert_eq!(
+            verify_helper_digests(&authority, &reconcile, &recovery, &changed).unwrap_err(),
+            "INSTALLED_BACKEND_POWERSHELL_IDENTITY_CHANGED"
+        );
+        assert_eq!(
+            verify_helper_digests(&authority, &changed, &recovery, &powershell).unwrap_err(),
+            "INSTALLED_BACKEND_HELPER_UNQUALIFIED"
+        );
+        assert_eq!(
+            verify_helper_digests(&authority, &reconcile, &changed, &powershell).unwrap_err(),
+            "INSTALLED_BACKEND_HELPER_UNQUALIFIED"
+        );
+        assert_eq!(
+            diagnostic_error_code("INSTALLED_BACKEND_POWERSHELL_IDENTITY_CHANGED: private detail"),
+            "INSTALLED_BACKEND_POWERSHELL_IDENTITY_CHANGED"
+        );
+    }
+
     #[test]
     fn readiness_diagnostics_keep_every_gate_and_never_export_child_text() {
         let root = std::env::temp_dir()

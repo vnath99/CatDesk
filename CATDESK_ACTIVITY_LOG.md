@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-23 11:51 UTC — check installed serving prerequisites for the recovered control scope.** All 18 named initial files were present. The installed release scripts retained their authorized hashes and the current executable matched its installed identity. The fixed Microsoft-signed Windows PowerShell file failed both historical interpreter pins. Development now reports the interpreter mismatch separately. [Evidence](docs/verification/RECOVERED_CENTRAL_SERVING_INTERPRETER_PIN_2026_11_23.json).
+
 **2026-11-23 11:43 UTC — trace official same-tunnel reconnect and readiness.** Verified the installed client's version against upstream. Same-ID connect retains a running owner and writes native profile state before it checks reuse. The live runtime was running and returned readyz HTTP 200 with an MCP initialize authentication challenge. Development now preserves those two distinctions. [Evidence](docs/verification/OFFICIAL_RUNTIME_REUSE_AND_MCP_READINESS_2026_11_23.json).
 
 **2026-11-23 11:38 UTC — require runtime absence evidence before automatic reconnect.** Read-only Windows CLI checks confirmed the installed client's alias inventory shape and that an unregistered alias returns a nonzero status without JSON. Development startup and monitoring now distinguish this case from an unverifiable registered runtime. The existing connector, release selection and project bindings were preserved. [Evidence](docs/verification/OFFICIAL_RUNTIME_STATUS_EVIDENCE_2026_11_23.json).

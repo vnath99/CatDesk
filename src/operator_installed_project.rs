@@ -557,12 +557,7 @@ pub(super) fn run_owned(
         131072,
     )?;
     let powershell = super::super::trusted_windows_powershell(&root)?;
-    if auth["authorization"]["scriptSha256"] != hash(&reconcile)?
-        || auth["authorization"]["recoveryHelperSha256"] != hash(&recovery)?
-        || auth["authorization"]["powershellSha256"] != hash(&powershell)?
-    {
-        return Err("INSTALLED_BACKEND_HELPER_UNQUALIFIED".into());
-    }
+    verify_helper_pins(&auth, &reconcile, &recovery, &powershell)?;
     use std::os::windows::fs::OpenOptionsExt;
     let fixed_inputs = [&recovery, &reconcile, &powershell]
         .into_iter()
@@ -579,12 +574,7 @@ pub(super) fn run_owned(
         })
         .collect::<Result<Vec<_>, _>>()?;
     verify_pins(&fixed_inputs)?;
-    if auth["authorization"]["scriptSha256"] != hash(&reconcile)?
-        || auth["authorization"]["recoveryHelperSha256"] != hash(&recovery)?
-        || auth["authorization"]["powershellSha256"] != hash(&powershell)?
-    {
-        return Err("INSTALLED_BACKEND_HELPER_UNQUALIFIED".into());
-    }
+    verify_helper_pins(&auth, &reconcile, &recovery, &powershell)?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
