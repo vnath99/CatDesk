@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 23 — dedicated backend review route prepared locally.** The recovered control scope now holds an isolated review-only registration and inert first-conversation context for `56aa9912`. No eligible chat has been admitted through canonical v5. Target HTTP 401 and the canonical control checkout's Git backing remain distinct prerequisites. Independent assignment, producer authority, backend promotion and the installed Web coding cycle remain open. [Evidence](docs/verification/BACKEND_REVIEW_ROUTE_2026_11_23.json).
+
 **November 22 — recovered assignment passed native preflight.** The actual reconstructed project and linked task checkout qualified for the read-only check. The draft remains unbound and has no execution grant. Installed delivery, edit, checkpoint and self-Wake remain open. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
 
 **November 22 — the frozen backend review can now be staged without the historical checkout.** Native create, validation and durable readback passed at exact `56aa9912`. Independent reviewer admission, report, acknowledgment and producer attestation remain open. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).

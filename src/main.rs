@@ -2810,6 +2810,7 @@ fn operator_web_error_code(error: &str) -> &str {
             | "SCOPED_RECONCILE_RECEIPT_UNPROVEN"
             | "SCOPED_RECONCILE_SCOPE_CHANGED"
             | "SCOPED_RECONCILE_TIMEOUT"
+            | "SCOPED_PROJECT_SUBMISSION_UNRESOLVED"
             | "SCOPED_REVIEW_ARGUMENTS_INVALID"
             | "SCOPED_REVIEW_DUPLICATE_SUBMIT"
             | "SCOPED_REVIEW_EVENT_INVALID"
@@ -4403,6 +4404,7 @@ mod tests {
         );
         for code in [
             "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS",
+            "SCOPED_PROJECT_SUBMISSION_UNRESOLVED",
             "SCOPED_REVIEW_ARGUMENTS_INVALID",
             "SCOPED_REVIEW_DUPLICATE_SUBMIT",
             "SCOPED_REVIEW_EVENT_INVALID",

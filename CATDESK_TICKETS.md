@@ -1,5 +1,9 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 23.** The dedicated backend reviewer registration and first-conversation context are prepared in the recovered scope. Canonical v5 returned `UNAUTHORIZED` with target HTTP 401. The command runner's current Windows Job has kill-on-close, and the installed full-stack owner lacks a verified public quiescence action. A coordinated existing-owner transition is the next connector operation. Retain the same alias and credential reference and verify one fresh discovery after the transition. The review DRAFT can advance after an eligible destination passes no-send admission. [Evidence](docs/verification/BACKEND_REVIEW_ROUTE_2026_11_23.json).
+
+**WAKE-LIFECYCLE, November 23.** The recovered coding project retains its verified local assignment. Pairing and a fresh execution grant await exact conversation and serving-scope verification. Installed acceptance still requires an actual Web edit, verification, scoped Git checkpoint, delivered self-Wake and next-turn continuation with zero Codex model calls. [Evidence](docs/verification/BACKEND_REVIEW_ROUTE_2026_11_23.json).
+
 **WAKE-LIFECYCLE, November 22.** Native fresh-assignment preflight now checks the recovered worktree before Web admission. Actual disk readback confirmed a passing digest, unchanged registry and Wake config and no task state. The established installed scope, reviewer and release gates remain open. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
 
 **RELEASE-RECOVERY, November 22.** Resolved the deleted path dependency for an inert native review draft. The replacement targets the same commit and tree under a fresh identity. Remaining release inputs are eligible review admission, the exact start decision, an attributable result and the existing producer checks. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).

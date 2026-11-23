@@ -99,6 +99,61 @@ fn require_stopped(store: &Store) -> Result<(), String> {
     Ok(())
 }
 
+/// Inspect the route before freezing an authorization. Exact message, owner,
+/// and grant checks still belong to the ordinary review preflight.
+pub(crate) fn route_preflight(
+    workspace: &Path,
+    project: &str,
+    request: &str,
+) -> Result<Value, String> {
+    let read_target = || {
+        let paired = mcp::operator_read_project_web_target_diagnosed(workspace, project)
+            .map_err(|failure| failure.code)?
+            .ok_or("WEB_REVIEW_PAIRED_TARGET_REQUIRED")?;
+        protocol::Target::new(paired.generation, paired.url)
+    };
+    let expected = read_target()?;
+    let store = Store::open_read_only(&wake_protocol_client::wake_root_for_workspace(workspace)?)?;
+    require_stopped(&store)?;
+    store.observe_host_idle()?;
+    let work = WorkLedger::status(workspace, project);
+    if work["status"] == "ATTENTION"
+        || !work["active"].is_null()
+        || store
+            .timers_for_project(project)?
+            .iter()
+            .any(|timer| timer.response_state != catdesk_wake::store::ResponseState::Complete)
+    {
+        return Err("WEB_REVIEW_PROJECT_BUSY".into());
+    }
+    let event = WorkRequest::event_id_for(project, request);
+    if store.delivery(&event)?.is_some()
+        || store.timer(&event)?.is_some()
+        || store
+            .events()?
+            .iter()
+            .any(|queued| queued.event_id == event)
+    {
+        return Err("WEB_REVIEW_REQUEST_ALREADY_PUBLISHED".into());
+    }
+    if store.has_unresolved_scoped_submission(project, &expected, &event)? {
+        return Err("SCOPED_PROJECT_SUBMISSION_UNRESOLVED".into());
+    }
+    if read_target()? != expected {
+        return Err("WEB_REVIEW_TARGET_CHANGED".into());
+    }
+    Ok(json!({
+        "status": "REVIEW_ROUTE_PREFLIGHT_ONLY",
+        "projectId": project,
+        "requestId": request,
+        "targetGeneration": expected.generation,
+        "targetSha256": expected.digest,
+        "readOnly": true,
+        "reviewAuthorized": false,
+        "connectorVerified": false
+    }))
+}
+
 // Caller retains the registered project lease, registry lock and stopped host
 // lease. This prepares only the original reserved event; it cannot send/refund.
 fn prepare_retry(

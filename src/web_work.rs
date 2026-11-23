@@ -19,6 +19,7 @@ mod review;
 pub(crate) use review::action as review_action;
 #[cfg(all(test, windows))]
 pub(crate) use review::review_fixture;
+pub(crate) use review::route_preflight as review_route_preflight;
 #[path = "web_work_delivery.rs"]
 mod delivery;
 pub(crate) use delivery::deliver;
@@ -1110,9 +1111,13 @@ impl WorkRequest {
     }
 
     fn event_id(&self) -> String {
+        Self::event_id_for(&self.project_id, &self.request_id)
+    }
+
+    fn event_id_for(project: &str, request: &str) -> String {
         format!(
             "web-work-{}",
-            protocol::digest(&format!("{}\0{}", self.project_id, self.request_id))
+            protocol::digest(&format!("{project}\0{request}"))
         )
     }
 

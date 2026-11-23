@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-23 11:29 UTC — separate reviewer route preparation from release authority.** Registered a dedicated Web-only review project in the recovered control scope and staged its first-conversation context without submitting it. The development route check refused the unbound target. A single v5 discovery returned target HTTP 401 while the canonical listener remained in place. The existing contract, production registrations and release pair were preserved. [Evidence](docs/verification/BACKEND_REVIEW_ROUTE_2026_11_23.json).
+
 **2026-11-23 01:24 UTC — preserve reconstructed review and task evidence.** Verified a private archive with ten evidence files and four Git binding records. The installed registry had one canonical CatDesk review route and three alternatives under the retired root. No new review submission, grant or production change occurred. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
 
 **2026-11-23 01:19 UTC — exercise native assignment inspection on the recovered task.** The initial draft used the wrong expected-artifact shape and was refused before task state existed. The corrected draft passed the native read-only check for the exact registered project and linked worktree. The source, task identity and pinned metadata were preserved. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).

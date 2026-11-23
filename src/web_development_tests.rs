@@ -203,8 +203,29 @@ async fn scoped_review_preflight_preserves_runtime_and_keeps_projects_independen
     let before_config = fs::read(wake_root.join("config.json")).unwrap();
     let before_control = fs::read(wake_root.join("control.json")).unwrap();
     let before_registry = fs::read(control.join(".catdesk/projects/projects.json")).unwrap();
+    assert_eq!(
+        crate::web_work::review_route_preflight(&control, "catdesk", "new-review").unwrap_err(),
+        "WEB_REVIEW_PAIRED_TARGET_REQUIRED"
+    );
     let mut inputs = Vec::new();
     for id in ["alpha", "beta"] {
+        let route = web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "review",
+                "route-preflight",
+                "--project-id",
+                id,
+                "--request-id",
+                "routine-review",
+            ],
+        )
+        .await;
+        assert_eq!(route["status"], "REVIEW_ROUTE_PREFLIGHT_ONLY");
+        assert_eq!(route["reviewAuthorized"], false);
+        assert_eq!(route["connectorVerified"], false);
         let target = Store::open(&wake_root).unwrap().config().unwrap().targets[id].clone();
         let request = json!({"projectId":id,"requestId":"routine-review",
             "expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,
@@ -256,9 +277,13 @@ async fn scoped_review_preflight_preserves_runtime_and_keeps_projects_independen
     let store = Store::open(&wake_root).unwrap();
     assert!(store.events().unwrap().is_empty());
     let target = &store.config().unwrap().targets["beta"];
+    let published_event = format!(
+        "web-work-{}",
+        catdesk_wake::protocol::digest("beta\0existing-beta-send")
+    );
     let previous = store
         .produce_expected(
-            "existing-beta-send",
+            &published_event,
             "beta",
             "engineering_attention",
             "Prior fixture work",
@@ -278,6 +303,19 @@ async fn scoped_review_preflight_preserves_runtime_and_keeps_projects_independen
         .unwrap();
     drop(owner);
     assert!(store.timer(&previous.event_id).unwrap().is_none());
+    assert_eq!(
+        crate::web_work::review_route_preflight(&control, "beta", "existing-beta-send")
+            .unwrap_err(),
+        "WEB_REVIEW_REQUEST_ALREADY_PUBLISHED"
+    );
+    assert_eq!(
+        crate::web_work::review_route_preflight(&control, "beta", "routine-review").unwrap_err(),
+        "SCOPED_PROJECT_SUBMISSION_UNRESOLVED"
+    );
+    assert_eq!(
+        crate::web_work::review_route_preflight(&control, "alpha", "routine-review").unwrap()["status"],
+        "REVIEW_ROUTE_PREFLIGHT_ONLY"
+    );
     for operation in ["preflight", "run"] {
         assert_eq!(
             crate::web_work::review_action(&control, operation, inputs[1].clone()).unwrap_err(),

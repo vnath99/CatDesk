@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-23T11:29:00Z",
+  "scope": "RECOVERED_REVIEW_ROUTE_PREPARATION_AND_CANONICAL_V5_OBSERVATION",
+  "startingDevelopmentCommit": "53e80cbbe7e141d888c4437b72961011c47d2ab9",
+  "frozenBackendSource": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "reviewer": {
+    "newRecoveredRegistration": "REGISTERED_WEB_ONLY",
+    "controlMode": "DEVELOPMENT_UNPROTECTED",
+    "target": "UNBOUND",
+    "firstConversationIntent": "PREPARED",
+    "firstConversationSubmitted": false,
+    "independentDestinationVerified": false,
+    "exactAdmissionPassed": false,
+    "nativeDraftApproved": false,
+    "nativeDraftClaimed": false,
+    "externalMessages": 0,
+    "existingLocalRegistrationsPreserved": true,
+    "canonicalRegistryHashUnchanged": true
+  },
+  "developmentRouteCheck": {
+    "observedStatus": "WEB_REVIEW_PAIRED_TARGET_REQUIRED",
+    "exitCode": 2,
+    "registryAndWakeFilesHashMatched": 3,
+    "focusedWindowsRegressionPassed": true,
+    "fixedErrorRedactionRegressionPassed": true,
+    "fixtureScopes": [
+      "unbound route",
+      "two paired review-only fixtures",
+      "duplicate request identity",
+      "uncertain submission confined to its project"
+    ],
+    "grantsCreated": 0,
+    "wakeDeliveriesCreated": 0
+  },
+  "canonicalV5": {
+    "calls": 1,
+    "caller": "Codex v5 connector",
+    "errorCode": "UNAUTHORIZED",
+    "source": "target_http",
+    "upstreamStatus": 401,
+    "canonicalListenerImageMatched": true,
+    "canonicalControlGitVerificationPassed": false,
+    "runtimeRestartAttempts": 0,
+    "currentCommandRunnerJobKillOnClose": true,
+    "installedFullStackOwnerQuiescenceProcedureVerified": false
+  },
+  "promotionAuthority": {
+    "resolver": "resolve_reviewed_promotion_review_authority",
+    "nativeAcknowledgedIndependentFinalReviewRequired": true,
+    "immutableReviewedSourceAndBuildRequired": true,
+    "chatgptConversationUrlRequiredByResolver": false,
+    "producerAttested": false,
+    "promotionPerformed": false
+  },
+  "installedWebLifecycleAccepted": false
+}

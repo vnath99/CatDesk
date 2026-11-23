@@ -155,6 +155,10 @@ pub(crate) enum WebAction {
         operation: String,
         input_file: PathBuf,
     },
+    ReviewRoutePreflight {
+        project_id: String,
+        request_id: String,
+    },
     WorkRequest {
         project_id: String,
         input_file: PathBuf,
@@ -693,6 +697,19 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                     input_file: input_file.into(),
                 })
             }
+        }
+        ("review", "route-preflight") => {
+            let request_id = options
+                .remove("--request-id")
+                .filter(|id| id.len() <= 128 && catdesk_wake::protocol::valid_id(id))
+                .ok_or("WEB_USAGE: --request-id is required")?;
+            if !options.is_empty() {
+                return Err("WEB_USAGE: unexpected review route option".into());
+            }
+            Ok(WebAction::ReviewRoutePreflight {
+                project_id: project_id.into(),
+                request_id: request_id.into(),
+            })
         }
         (
             "review",
@@ -2284,6 +2301,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             &operation,
             read_work_input(&input_file, &project_id)?,
         ),
+        WebAction::ReviewRoutePreflight {
+            project_id,
+            request_id,
+        } => crate::web_work::review_route_preflight(&workspace, &project_id, &request_id),
         WebAction::WorkRequest {
             project_id,
             input_file,
