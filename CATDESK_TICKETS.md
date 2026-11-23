@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**WAKE-LIFECYCLE, November 22.** The replacement development control passed real Windows preparation, Git integrity, registration and authenticated loopback MCP tests. The remaining Web gate is admission through the authorized serving scope with a verified target and fresh task authority. Review completion, producer attestation and release selection remain separate gates. [Verification](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
+
 **WAKE-LIFECYCLE, November 22.** Fresh GitHub reconstruction replaces the dependency on restoring the deleted historical checkout for ongoing work. Local Git integrity and isolated registration passed. Open gates are admission through a supported serving-control scope, exact task pairing and fresh grant, and independently attributable backend review and producer evidence. No historical grant or receipt transfers to the new checkout. [Verification](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
 
 **RELEASE-RECOVERY, November 22.** Closed the interrupted regression run for the fresh signed preflight change. All 32 same-state Windows cases passed across bounded runs. The existing launch-exclusion timing and release safeguards continue to apply. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).

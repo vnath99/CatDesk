@@ -35,6 +35,10 @@
       "task": 2087,
       "control": 2254,
       "review": 2119
+    },
+    "reviewOfflineLockedCargoMetadata": {
+      "headlessBinaryTarget": true,
+      "localWakePathDependency": true
     }
   },
   "catdesk": {
@@ -61,5 +65,38 @@
     "reviewSourceAvailable": true,
     "reviewAdmission": "Requires an eligible independent destination and exact workspace authority. Retain the original draft; if its path is unavailable use a freshly validated source-bound draft and its own decision.",
     "webAcceptance": "Verify the intended serving control scope and native pairing before associating the fresh task or granting edit, Git checkpoint and self-Wake."
+  },
+  "preparedServingControl": {
+    "observedUtc": "2026-11-23T00:54:41.288084Z",
+    "mode": "DEVELOPMENT_UNPROTECTED",
+    "preparedStatus": "PREPARED_STOPPED",
+    "prepareBeforeGitInit": true,
+    "gitTip": "da514cdcdb1d1f720b6a0d824c13d96507766244",
+    "gitFsckPassed": true,
+    "verifiedPackageComponents": 4,
+    "pythonFilesCopied": 9800,
+    "initializationPhase": "PREPARED",
+    "destinationIssued": false,
+    "targetStatus": "UNBOUND",
+    "isolatedWebOnlyRegistrations": 2,
+    "productionPinsUnchangedAfterPreparation": 5,
+    "productionListenerOwnerUnchanged": true,
+    "loopback": {
+      "anonymousHttp": 401,
+      "authenticatedHttp": 200,
+      "catalogHttp": 200,
+      "toolCount": 78,
+      "schedulerDisabled": true,
+      "ownerResult": "FOREGROUND_BACKEND_EXITED",
+      "listenerExited": true,
+      "priorProbeAttempts": [
+        "Readiness observer used the child frame schema for the outer owner frame",
+        "The second observer rejected its readiness check before MCP requests; the final probe verified each field, including physical workspace identity"
+      ]
+    },
+    "browserStarts": 0,
+    "connectorChanges": 0,
+    "externalMessages": 0,
+    "installedAcceptance": false
   }
 }

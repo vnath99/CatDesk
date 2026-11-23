@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — reconstructed development serving qualified.** The new control checkout reached `DEVELOPMENT_UNPROTECTED`, the first-conversation intent reached `PREPARED`, and the isolated MCP catalog returned 78 tools after authentication. The target remains `UNBOUND`. The installed Web lifecycle and independent backend review remain open. [Verification](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
+
 **November 22 — GitHub reconstruction qualified locally.** The clean GitHub source, linked task, independent control and linked review checkouts passed integrity checks. CatDesk accepted fresh isolated registrations and the new task's local verification command passed. The first installed v5 edit, scoped Git checkpoint, delivered self-Wake and next-turn continuation remain open. [Verification](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
 
 **November 22 — complete the Windows same-state regression for fresh signed preflight.** All 32 existing and new cases now have passing fixture evidence. This includes selection, rollback, recovery after interruptions, and read-only preflight preservation. Installed acceptance remains open. [Evidence](docs/verification/WAKE_FRESH_SIGNED_SELECTION_PREFLIGHT_2026_11_22.json).
