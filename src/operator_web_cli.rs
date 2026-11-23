@@ -206,6 +206,10 @@ pub(crate) enum WebAction {
         input_file: PathBuf,
         assignment_file: PathBuf,
     },
+    WorkAssignmentPreflight {
+        project_id: String,
+        assignment_file: PathBuf,
+    },
     WorkResumePrepare {
         project_id: String,
         input_file: PathBuf,
@@ -562,6 +566,23 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 retirement_id: retirement_id.into(),
                 expected_generation,
                 expected_digest,
+            })
+        }
+        ("work", "assignment-preflight") => {
+            let path = options
+                .remove("--assignment-file")
+                .filter(|path| {
+                    path.len() <= 4096
+                        && !path.chars().any(char::is_control)
+                        && Path::new(path).is_absolute()
+                })
+                .ok_or("WEB_USAGE: --assignment-file requires an absolute path")?;
+            if !options.is_empty() {
+                return Err("WEB_USAGE: unexpected assignment preflight option".into());
+            }
+            Ok(WebAction::WorkAssignmentPreflight {
+                project_id: project_id.into(),
+                assignment_file: path.into(),
             })
         }
         (
@@ -2359,6 +2380,18 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             read_work_input(&input_file, &project_id)?,
             &assignment_file,
         ),
+        WebAction::WorkAssignmentPreflight {
+            project_id,
+            assignment_file,
+        } => {
+            let project =
+                crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+                    &workspace,
+                    &project_id,
+                )
+                .map_err(|_| "PROJECT_TASK_REGISTRATION_UNAVAILABLE")?;
+            crate::project_mcp_task::preflight_fresh_assignment(&project, &assignment_file)
+        }
         WebAction::WorkResumePrepare {
             project_id,
             input_file,
@@ -3978,6 +4011,41 @@ mod tests {
             let mut invalid = args(&common);
             invalid.extend(args(&[option, "value"]));
             assert!(parse(&invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn assignment_preflight_accepts_only_a_project_and_absolute_draft() {
+        let path = std::env::temp_dir().join("assignment.json");
+        let base = args(&[
+            "operator",
+            "web",
+            "work",
+            "assignment-preflight",
+            "--project-id",
+            "alpha",
+            "--assignment-file",
+            path.to_str().unwrap(),
+        ]);
+        assert_eq!(
+            parse(&base).unwrap(),
+            WebAction::WorkAssignmentPreflight {
+                project_id: "alpha".into(),
+                assignment_file: path
+            }
+        );
+        let mut relative = base.clone();
+        *relative.last_mut().unwrap() = "assignment.json".into();
+        assert!(parse(&relative).is_err());
+        for flags in [
+            &["--execute"][..],
+            &["--allow-manual-wake"][..],
+            &["--input-file", "pins.json"][..],
+            &["--workspace", "other"][..],
+        ] {
+            let mut changed = base.clone();
+            changed.extend(args(flags));
+            assert!(parse(&changed).is_err());
         }
     }
 

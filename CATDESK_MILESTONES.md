@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 22 — recovered assignment passed native preflight.** The actual reconstructed project and linked task checkout qualified for the read-only check. The draft remains unbound and has no execution grant. Installed delivery, edit, checkpoint and self-Wake remain open. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
+
 **November 22 — the frozen backend review can now be staged without the historical checkout.** Native create, validation and durable readback passed at exact `56aa9912`. Independent reviewer admission, report, acknowledgment and producer attestation remain open. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
 
 **November 22 — doctor distinguishes target authentication refusal.** Both supported PowerShell editions and actual retained v5 evidence passed. The source diagnostic identifies the relevant layer and preserves independent project evidence. Installed connector repair and the Web cycle remain open. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).

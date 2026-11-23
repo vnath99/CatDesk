@@ -337,6 +337,31 @@ fn inspect_assignment(
     })
 }
 
+/// Check a new assignment before a Web request and its grant exist.
+pub(crate) fn preflight_fresh_assignment(
+    project: &ResolvedProjectScopeV1,
+    path: &Path,
+) -> Result<Value, String> {
+    let inspected = inspect_assignment(project, path, 30)?;
+    if inspected.web_work.is_some() {
+        return Err("PROJECT_TASK_PREFLIGHT_REQUIRES_UNBOUND_ASSIGNMENT".into());
+    }
+    match fs::symlink_metadata(state_root(project, &inspected.contract.task_id)) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        _ => return Err("PROJECT_TASK_PREFLIGHT_EXISTING_OR_UNAVAILABLE_STATE".into()),
+    }
+    let bytes =
+        std::str::from_utf8(&inspected.bytes).map_err(|_| "PROJECT_TASK_ASSIGNMENT_INVALID")?;
+    Ok(json!({
+        "status": "FRESH_ASSIGNMENT_VALIDATED",
+        "projectId": project.project.project_id,
+        "taskId": inspected.contract.task_id,
+        "assignmentSha256": catdesk_wake::protocol::digest(bytes),
+        "readOnly": true,
+        "executionAuthorized": false
+    }))
+}
+
 fn state_root(project: &ResolvedProjectScopeV1, task_id: &str) -> PathBuf {
     project
         .control_workspace
@@ -2273,6 +2298,52 @@ pub(crate) mod tests {
 
     fn call(id: &str, tool: &str, arguments: Value) -> Value {
         json!({"taskId":"task-fixture","callId":id,"tool":tool,"arguments":arguments})
+    }
+
+    #[test]
+    fn fresh_assignment_preflight_checks_worktree_without_creating_task_state() {
+        let (scope, _, path) = fixture("alpha");
+        let bytes = fs::read_to_string(&path).unwrap();
+        let directory = state_root(&scope, "task-fixture");
+        let result = preflight_fresh_assignment(&scope, &path).unwrap();
+        assert_eq!(result["status"], "FRESH_ASSIGNMENT_VALIDATED");
+        assert_eq!(
+            result["assignmentSha256"],
+            catdesk_wake::protocol::digest(&bytes)
+        );
+        assert_eq!(result["readOnly"], true);
+        assert_eq!(result["executionAuthorized"], false);
+        assert!(!directory.exists());
+
+        let mut assignment: Value = serde_json::from_str(&bytes).unwrap();
+        assignment["contract"]["featureBranch"] = json!("codex/unrelated");
+        fs::write(&path, assignment.to_string()).unwrap();
+        assert_eq!(
+            preflight_fresh_assignment(&scope, &path).unwrap_err(),
+            "PROJECT_TASK_WORKTREE_IDENTITY_MISMATCH"
+        );
+
+        assignment["contract"]["featureBranch"] = json!("codex/web-task");
+        let event = format!(
+            "web-work-{}",
+            catdesk_wake::protocol::digest("alpha\0request-a")
+        );
+        assignment["webWork"] = json!({"requestId":"request-a","eventId":event});
+        fs::write(&path, assignment.to_string()).unwrap();
+        assert_eq!(
+            preflight_fresh_assignment(&scope, &path).unwrap_err(),
+            "PROJECT_TASK_PREFLIGHT_REQUIRES_UNBOUND_ASSIGNMENT"
+        );
+        assert!(!directory.exists());
+
+        fs::write(&path, bytes).unwrap();
+        fs::create_dir_all(&directory).unwrap();
+        assert_eq!(
+            preflight_fresh_assignment(&scope, &path).unwrap_err(),
+            "PROJECT_TASK_PREFLIGHT_EXISTING_OR_UNAVAILABLE_STATE"
+        );
+        assert_eq!(fs::read_dir(&directory).unwrap().count(), 0);
+        remove_read_scope_fixture(&scope);
     }
 
     fn read_scope_fixture(id: &str) -> (ResolvedProjectScopeV1, PathBuf, PathBuf) {

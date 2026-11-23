@@ -1,5 +1,7 @@
 # CatDesk project handoff
 
+**November 22, 8:19 p.m. EST — use the validated recovered assignment input.** Keep the first malformed draft in private custody. The corrected input retains the same fresh task identity and declares its diff and verification artifacts. Native preflight passed against the registered recovered source and task. The canonical full-stack monitor was tied to its existing Run-key registration. No separately pausable scheduled task was found. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
+
 **November 22, 8:11 p.m. EST — reconstructed native backend review draft validated.** The historical draft remains in private custody. The replacement is bound to the clean linked checkout at exact `56aa9912` and expires at the original November 29 deadline. No reviewer is assigned or running. Establish an independent destination, pass no-send admission, and then obtain the fresh draft's exact start decision. [Evidence](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
 
 **November 22, 8:04 p.m. EST — doctor can show the retained connector refusal without probing again.** The installed tunnel client exposes stop and connect but no coordinated restart or pause. The last observed canonical backend runs in full-stack mode with autostart enabled. A manual recovery needs an approved window and confirmed lifecycle ownership. Continue with exact independent backend review when its existing route becomes eligible. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).

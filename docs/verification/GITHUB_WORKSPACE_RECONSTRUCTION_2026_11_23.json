@@ -131,5 +131,36 @@
     "externalMessages": 0,
     "producerInvoked": false,
     "installedWebCycleAccepted": false
+  },
+  "freshAssignmentPreflight": {
+    "observedUtc": "2026-11-23T01:19:00Z",
+    "scope": "DEVELOPMENT_OPERATOR_CLI_AND_ACTUAL_RECONSTRUCTED_WORKTREE",
+    "originalInputRefused": "PROJECT_TASK_ASSIGNMENT_INVALID",
+    "correctedExpectedArtifacts": [
+      "DIFF",
+      "VERIFICATION"
+    ],
+    "originalUnboundDraftPreserved": true,
+    "freshTaskIdentityPreserved": true,
+    "state": "FRESH_ASSIGNMENT_VALIDATED",
+    "assignmentDigestMatched": true,
+    "readOnly": true,
+    "executionAuthorized": false,
+    "taskStateAbsent": true,
+    "pinnedFilesUnchanged": 4,
+    "browserStarts": 0,
+    "externalMessages": 0,
+    "installedAcceptance": false,
+    "finalReadbackUtc": "2026-11-23T01:21:29.7388847Z",
+    "focusedRustTestsPassed": 3,
+    "refusedUnregisteredProject": "PROJECT_TASK_REGISTRATION_UNAVAILABLE",
+    "productionListenerOwnerUnchanged": true
+  },
+  "maintenanceOwner": {
+    "source": "CURRENT_WINDOWS_INVENTORY",
+    "exactFullStackRunKeyMatches": true,
+    "exactScheduledTaskExists": false,
+    "canonicalDaemonParentIsFullStackMonitor": true,
+    "ownerActions": 0
   }
 }
