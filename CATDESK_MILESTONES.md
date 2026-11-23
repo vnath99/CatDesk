@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 23 — live readiness ambiguity reproduced without a reconnect.** The runtime's own endpoint reported ready and challenged MCP initialize. Development now surfaces the challenge and leaves an already running runtime under its existing owner. Canonical authenticated discovery and the installed Web coding cycle still need qualification. [Evidence](docs/verification/OFFICIAL_RUNTIME_REUSE_AND_MCP_READINESS_2026_11_23.json).
+
 **November 23 — automatic runtime recovery now requires verified process state in development.** The official client exposed a read-only alias inventory on this host. Startup and monitoring preserve a registered runtime when status cannot be verified, while an unregistered alias can still use the existing recovery path. Installed qualification and canonical v5 restoration remain open. [Evidence](docs/verification/OFFICIAL_RUNTIME_STATUS_EVIDENCE_2026_11_23.json).
 
 **November 23 — dedicated backend review route prepared locally.** The recovered control scope now holds an isolated review-only registration and inert first-conversation context for `56aa9912`. No eligible chat has been admitted through canonical v5. Target HTTP 401 and the canonical control checkout's Git backing remain distinct prerequisites. Independent assignment, producer authority, backend promotion and the installed Web coding cycle remain open. [Evidence](docs/verification/BACKEND_REVIEW_ROUTE_2026_11_23.json).

@@ -30,11 +30,12 @@ fn recovery_is_eligible_for_official_runtime(
     credential_present: bool,
     tunnel_id_present: bool,
 ) -> bool {
-    if !auto_recover || !local_mcp_ready || !credential_present || !tunnel_id_present {
-        return false;
-    }
-    matches!(health, TransportHealth::Disconnected)
-        || (matches!(health, TransportHealth::Degraded) && runtime_is_running)
+    auto_recover
+        && local_mcp_ready
+        && credential_present
+        && tunnel_id_present
+        && !runtime_is_running
+        && matches!(health, TransportHealth::Disconnected)
 }
 
 fn clear_existing_runtime_not_ready_warning(warnings: &mut Vec<String>) {
@@ -193,13 +194,12 @@ async fn configure_official_runtime_mode(
     state: SharedState,
     client_path: PathBuf,
 ) -> Result<(), String> {
-    let (alias, profile, auto_connect, auto_recover, local_mcp_url, mcp_auth_token) = {
+    let (alias, profile, auto_connect, local_mcp_url, mcp_auth_token) = {
         let app = state.lock().await;
         (
             app.openai_tunnel_config.runtime_alias.clone(),
             app.openai_tunnel_config.profile_name.clone(),
             app.openai_tunnel_config.auto_connect,
-            app.openai_tunnel_config.auto_recover,
             format!(
                 "http://{}:{}{}",
                 app.mcp_bind_host,
@@ -236,22 +236,6 @@ async fn configure_official_runtime_mode(
             );
         }
         Ok(status) if status.process_running => {
-            let local_mcp_ready = crate::tunnel::run_mcp_endpoint_self_check(
-                &local_mcp_url,
-                mcp_auth_token.as_deref(),
-                crate::tunnel::MCP_SELF_CHECK_TIMEOUT,
-                false,
-            )
-            .await
-            .is_ok();
-            let recovery_identity = verified_official_runtime_recovery_identity(
-                &client_path,
-                &trusted_client_identity,
-                &alias,
-                &profile,
-                &status,
-            )
-            .ok();
             let mut app = state.lock().await;
             app.ngrok_running = false;
             app.ngrok_url = None;
@@ -259,54 +243,13 @@ async fn configure_official_runtime_mode(
             app.transport_health =
                 TransportHealthSnapshot::configured_unverified(app.tunnel_config.remote_self_check);
             app.transport_health.health = TransportHealth::Connecting;
-            app.transport_health.redacted_reason = Some(if !local_mcp_ready {
-                "OFFICIAL_RUNTIME_REATTACH_WAITING_LOCAL_MCP".into()
-            } else if !auto_recover {
-                "OFFICIAL_RUNTIME_REATTACH_DISABLED".into()
-            } else if recovery_identity.is_none() {
-                "OFFICIAL_RUNTIME_IDENTITY_UNAVAILABLE".into()
-            } else if !tunnel_id_environment_present(|name| std::env::var_os(name)) {
-                "OFFICIAL_RUNTIME_TUNNEL_REFERENCE_UNAVAILABLE".into()
-            } else if !credential_environment_present(|name| std::env::var_os(name)) {
-                "OFFICIAL_RUNTIME_CREDENTIAL_REFERENCE_UNAVAILABLE".into()
-            } else {
-                "OFFICIAL_RUNTIME_REATTACH_PENDING".into()
-            });
+            // Same-tunnel connect reuses a running owner. It cannot reload
+            // that owner's environment and still writes native profile state.
+            app.transport_health.redacted_reason =
+                Some("OFFICIAL_RUNTIME_RUNNING_NOT_READY".into());
             app.transport_health
                 .warnings
                 .push(EXISTING_RUNTIME_NOT_READY_WARNING.into());
-            let reconnect_now = local_mcp_ready
-                && auto_recover
-                && recovery_identity.is_some()
-                && tunnel_id_environment_present(|name| std::env::var_os(name))
-                && credential_environment_present(|name| std::env::var_os(name));
-            if reconnect_now {
-                app.log(
-                    "WARN",
-                    "Attempting bounded official runtime reattach through the configured alias"
-                        .into(),
-                );
-            }
-            drop(app);
-            if reconnect_now {
-                if let Ok(tunnel_id) = std::env::var("CATDESK_OPENAI_TUNNEL_ID") {
-                    if connect_official_runtime(
-                        &client_path,
-                        &alias,
-                        &tunnel_id,
-                        &local_mcp_url,
-                        mcp_auth_token.as_deref(),
-                    )
-                    .await
-                    .is_err()
-                    {
-                        let mut app = state.lock().await;
-                        app.transport_health.health = TransportHealth::Degraded;
-                        app.transport_health.redacted_reason =
-                            Some("OFFICIAL_RUNTIME_REATTACH_FAILED".into());
-                    }
-                }
-            }
         }
         Err(_) => {
             set_transport_health(
@@ -532,13 +475,19 @@ async fn start_openai_runtime_monitor_if_needed(
                 runtime_for_health.redacted_reason =
                     Some("OFFICIAL_RUNTIME_IDENTITY_UNAVAILABLE".into());
             }
-            let (health, reason) = monitor_health_from_status(
+            let (mut health, mut reason) = monitor_health_from_status(
                 &runtime_for_health,
                 local_mcp_ready,
                 &mut state_tracker,
                 &config,
                 Instant::now(),
             );
+            if health == TransportHealth::ConnectedVerified
+                && let Some(note) = readiness.and_then(|report| report.redacted_reason)
+            {
+                health = TransportHealth::ConfiguredUnverified;
+                reason = Some(note);
+            }
             {
                 let mut app = monitor_state.lock().await;
                 app.transport_health.health = health;
@@ -563,8 +512,7 @@ async fn start_openai_runtime_monitor_if_needed(
                 auto_recover,
                 credential_environment_present(|name| std::env::var_os(name)),
                 tunnel_id_environment_present(|name| std::env::var_os(name)),
-            ) && (!runtime_for_health.process_running || existing_runtime_identity.is_some())
-                && should_attempt_recovery(&mut state_tracker, &config, Instant::now())
+            ) && should_attempt_recovery(&mut state_tracker, &config, Instant::now())
             {
                 if let Ok(tunnel_id) = std::env::var("CATDESK_OPENAI_TUNNEL_ID") {
                     let command = build_runtime_connect_command(
@@ -638,8 +586,12 @@ pub async fn refresh_openai_readiness_from_admin_url(state: &SharedState) {
     match probe_tunnel_client_readiness(&admin_url, OPENAI_TUNNEL_READINESS_TIMEOUT).await {
         Ok(report) if report.ready => {
             let mut app = state.lock().await;
-            app.transport_health.health = TransportHealth::ConnectedVerified;
-            app.transport_health.redacted_reason = None;
+            app.transport_health.health = if report.redacted_reason.is_some() {
+                TransportHealth::ConfiguredUnverified
+            } else {
+                TransportHealth::ConnectedVerified
+            };
+            app.transport_health.redacted_reason = report.redacted_reason;
             app.transport_health.last_checked_at = Some(crate::tunnel::current_startup_time());
             clear_existing_runtime_not_ready_warning(&mut app.transport_health.warnings);
             let ready_warning = "OpenAI tunnel-client /readyz returned ready".to_string();
@@ -856,12 +808,12 @@ mod tests {
     }
 
     #[test]
-    fn existing_degraded_runtime_recovery_requires_every_safety_gate_and_budget() {
+    fn automatic_runtime_recovery_requires_absence_and_every_safety_gate() {
         let config = monitor_config();
         let now = Instant::now();
         let mut tracker = RuntimeMonitorState::default();
 
-        assert!(recovery_is_eligible_for_official_runtime(
+        assert!(!recovery_is_eligible_for_official_runtime(
             TransportHealth::Degraded,
             true,
             true,
@@ -883,8 +835,8 @@ mod tests {
             (true, true, true, false),
         ] {
             assert!(!recovery_is_eligible_for_official_runtime(
-                TransportHealth::Degraded,
-                true,
+                TransportHealth::Disconnected,
+                false,
                 local_mcp_ready,
                 auto_recover,
                 credential_present,
@@ -910,6 +862,14 @@ mod tests {
         assert!(recovery_is_eligible_for_official_runtime(
             TransportHealth::Disconnected,
             false,
+            true,
+            true,
+            true,
+            true,
+        ));
+        assert!(!recovery_is_eligible_for_official_runtime(
+            TransportHealth::Disconnected,
+            true,
             true,
             true,
             true,

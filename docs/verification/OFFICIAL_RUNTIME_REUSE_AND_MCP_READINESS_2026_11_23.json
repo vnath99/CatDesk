@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-23T11:43:00Z",
+  "scope": "PINNED_OFFICIAL_CLIENT_SOURCE_AND_READ_ONLY_INSTALLED_RUNTIME_PROBE",
+  "startingDevelopmentCommit": "0379aa56f2d14d6fcfbc23b210032f0bd7adc17e",
+  "officialClient": {
+    "version": "0.0.14",
+    "sourceCommit": "0f870e50a973fa820d4c409000059e181e8d242b",
+    "githubReleaseTagPeeledMatchesVersion": true,
+    "managerSource": "https://github.com/openai/tunnel-client/blob/0f870e50a973fa820d4c409000059e181e8d242b/pkg/codexplugin/manager.go#L398-L454",
+    "processReuseSource": "https://github.com/openai/tunnel-client/blob/0f870e50a973fa820d4c409000059e181e8d242b/pkg/codexplugin/session/session.go#L382-L411",
+    "readinessSource": "https://github.com/openai/tunnel-client/blob/0f870e50a973fa820d4c409000059e181e8d242b/pkg/runtimehealth/health.go",
+    "sameTunnelIdReusesRunningProcess": true,
+    "sameTunnelIdCanRewriteNativeProfileBeforeReuse": true,
+    "documentedInPlaceReloadAvailable": false
+  },
+  "installedObservation": {
+    "runtimeProcessRunning": true,
+    "runtimeReportedReady": true,
+    "readyzHttp": 200,
+    "readyzMcpInitializeAuthChallenge": true,
+    "readyzMcpStartupProbeTimedOut": false,
+    "loopbackHealthProbeOnly": true,
+    "rawBodyPublished": false,
+    "newV5Discoveries": 0,
+    "nativeRuntimeMutations": 0
+  },
+  "development": {
+    "automaticConnectPreservesRunningRuntime": true,
+    "missingMcpProbeEvidenceKeepsConnectionUnverified": true,
+    "windowsTunnelModuleTestsPassed": 38,
+    "windowsTransportModuleTestsPassed": 4,
+    "loopbackReadinessFixtureCoversAuthTimeoutUnexpectedAndOversizedBodies": true,
+    "frozenBackendCandidateChanged": false,
+    "installedReleaseChanged": false
+  },
+  "independentReviewStarted": false,
+  "installedWebLifecycleAccepted": false
+}

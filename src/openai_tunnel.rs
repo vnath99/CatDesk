@@ -1413,11 +1413,12 @@ pub async fn probe_tunnel_client_readiness(
         }
 
         match client.get(ready_url.clone()).send().await {
-            Ok(response) if response.status().is_success() && health_live => {
+            Ok(mut response) if response.status().is_success() && health_live => {
+                let reason = read_successful_readyz_note(&mut response).await;
                 return Ok(OpenaiTunnelReadiness {
                     ready: true,
                     health_live,
-                    redacted_reason: None,
+                    redacted_reason: reason.map(str::to_owned),
                 });
             }
             Ok(response) if response.status().is_success() => {
@@ -1446,6 +1447,34 @@ pub async fn probe_tunnel_client_readiness(
         health_live,
         redacted_reason: last_reason,
     })
+}
+
+async fn read_successful_readyz_note(response: &mut reqwest::Response) -> Option<&'static str> {
+    const MAX_READYZ_BYTES: usize = 1024;
+    const UNVERIFIED: &str = "OFFICIAL_RUNTIME_MCP_PROBE_UNVERIFIED";
+    let mut body = Vec::new();
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) if body.len() + chunk.len() <= MAX_READYZ_BYTES => {
+                body.extend_from_slice(&chunk)
+            }
+            Ok(None) => break,
+            Ok(Some(_)) | Err(_) => return Some(UNVERIFIED),
+        }
+    }
+    let Ok(text) = std::str::from_utf8(&body) else {
+        return Some(UNVERIFIED);
+    };
+    let text = text.trim();
+    if text == "ready" {
+        None
+    } else if text.starts_with("ready (mcp initialize requires auth:") {
+        Some("OFFICIAL_RUNTIME_MCP_INITIALIZE_REQUIRES_AUTH")
+    } else if text.starts_with("ready (mcp startup probe timed out:") {
+        Some("OFFICIAL_RUNTIME_MCP_PROBE_TIMED_OUT")
+    } else {
+        Some(UNVERIFIED)
+    }
 }
 
 pub fn normalize_admin_base_url(value: &str) -> Result<reqwest::Url, OpenaiTunnelError> {
@@ -2577,7 +2606,43 @@ mod tests {
                 .expect("probe");
         assert!(report.health_live);
         assert!(report.ready);
+        assert!(report.redacted_reason.is_none());
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn readiness_retains_only_fixed_mcp_probe_notes() {
+        use axum::{Router, routing::get};
+        for (body, expected) in [
+            (
+                "ready (mcp initialize requires auth: fixture response)".into(),
+                "OFFICIAL_RUNTIME_MCP_INITIALIZE_REQUIRES_AUTH",
+            ),
+            (
+                "ready (mcp startup probe timed out: fixture response)".into(),
+                "OFFICIAL_RUNTIME_MCP_PROBE_TIMED_OUT",
+            ),
+            (
+                "unexpected readiness format".into(),
+                "OFFICIAL_RUNTIME_MCP_PROBE_UNVERIFIED",
+            ),
+            ("x".repeat(2048), "OFFICIAL_RUNTIME_MCP_PROBE_UNVERIFIED"),
+        ] {
+            let app = Router::new()
+                .route("/healthz", get(|| async { "live" }))
+                .route("/readyz", get(move || async move { body }));
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let report =
+                probe_tunnel_client_readiness(&format!("http://{addr}"), Duration::from_secs(1))
+                    .await
+                    .unwrap();
+            server.abort();
+            let _ = server.await;
+            assert!(report.health_live && report.ready);
+            assert_eq!(report.redacted_reason.as_deref(), Some(expected));
+        }
     }
 
     #[test]
