@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-23T00:59:28.415045Z",
+  "scope": "INSTALLED_BACKEND_AND_EXISTING_V5_TUNNEL_AUTH_OBSERVATION",
+  "installed": {
+    "sourceCommit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "canonicalSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "localListenerMatchesCanonical": true,
+    "localAnonymousInitializeHttp": 401,
+    "localConfiguredBearerInitializeHttp": 200,
+    "publicDiagnosisState": "HEALTHY",
+    "officialRuntimeStatusReady": true,
+    "autostartEnabled": true,
+    "fullStackMonitorObserved": true
+  },
+  "connector": {
+    "scope": "Codex v5 connector discovery",
+    "before": {
+      "calls": 2,
+      "errorCode": "UNAUTHORIZED",
+      "source": "target_http",
+      "upstreamStatus": 401
+    },
+    "afterReplacement": {
+      "calls": 1,
+      "errorCode": "UNAUTHORIZED",
+      "source": "target_http",
+      "upstreamStatus": 401
+    },
+    "targetMatchedConfiguredLocalMcp": true,
+    "tunnelMatchedExistingCredentialReference": true,
+    "privateCorrelationRetained": true,
+    "originalWebConversationObserved": false
+  },
+  "reconnectAttempt": {
+    "installedHelperMatchesReviewedSourceBlob": true,
+    "stopAttempts": 1,
+    "manualConnectAttempts": 0,
+    "originalHelperMutationSummaryWasNotRetained": true,
+    "wrapperReadWrongMutationField": true,
+    "readback": "EXACT_RUNTIME_STOP_UNPROVEN",
+    "replacementRuntimeAppearedAfterStopAttempt": true,
+    "replacementRuntimeReady": true,
+    "replacementParentNoLongerObservable": true,
+    "runtimeConfigurationAndCanonicalPairUnchanged": true,
+    "productionBackendOwnerUnchanged": true,
+    "retried": false
+  },
+  "sourceComparison": {
+    "installedIncludesAutomaticBearerForwardingFix": false,
+    "reviewCandidateIncludesAutomaticBearerForwardingFix": true,
+    "fix": "e2d28eb5de852afe83574cd2ce39c297951139c9",
+    "reviewCandidate": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "liveReplacementEnvironmentRead": false,
+    "qualification": "Source difference explains why a recreated runtime can be ready and still reject discovery. The exact live process environment and exact launcher were not established."
+  },
+  "gates": {
+    "review": "Genuine independent review and immutable producer attestation are required for the exact frozen compatible backend.",
+    "alternative": "A manual reconnect requires a coordinated maintenance window with a qualified lifecycle owner that cannot recreate the alias during stop/connect.",
+    "acceptance": "Request one fresh connector check only after repair or an authorized release transition. Installed ChatGPT Web cycle remains open."
+  }
+}

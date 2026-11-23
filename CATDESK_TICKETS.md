@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 22.** The live official tunnel can report ready while v5 discovery fails authentication. The installed source lacks automatic bearer forwarding. Frozen `56aa9912` includes the fix. Close the connector gate after a supported owner or release transition and one fresh discovery check. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).
+
 **WAKE-LIFECYCLE, November 22.** The replacement development control passed real Windows preparation, Git integrity, registration and authenticated loopback MCP tests. The remaining Web gate is admission through the authorized serving scope with a verified target and fresh task authority. Review completion, producer attestation and release selection remain separate gates. [Verification](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).
 
 **WAKE-LIFECYCLE, November 22.** Fresh GitHub reconstruction replaces the dependency on restoring the deleted historical checkout for ongoing work. Local Git integrity and isolated registration passed. Open gates are admission through a supported serving-control scope, exact task pairing and fresh grant, and independently attributable backend review and producer evidence. No historical grant or receipt transfers to the new checkout. [Verification](docs/verification/GITHUB_WORKSPACE_RECONSTRUCTION_2026_11_23.json).

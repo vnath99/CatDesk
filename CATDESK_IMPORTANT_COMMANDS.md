@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 22 — reconcile a recreated tunnel owner before reconnecting.** A healthy `catdesk.ps1 diagnose` covers the local backend and official runtime health. A v5 discovery can still fail with target HTTP 401. If the existing alias reappears after a stop attempt, compare owner creation time and revalidate the target. Use the supported stop/connect only with coordinated lifecycle ownership, or proceed through the existing review and release path for a backend containing automatic bearer forwarding. [Evidence](docs/verification/V5_BEARER_FORWARDING_OWNER_REPLACEMENT_2026_11_23.json).
+
 ## November 22 — recover a development or disposable Web workspace from GitHub
 
 1. Inventory the retained archive privately. Compare known local-only objects with captured GitHub branch and tag reachability, and check custody of indexes, staged changes, local patches and review and delivery records before relying on the reconstruction. Use a new directory outside the active installation.
