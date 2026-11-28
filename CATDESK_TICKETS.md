@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 28.** Verified backend-only support on the current installed image. `LOCAL_DAEMON.ownerMode` now distinguishes verified full-stack and backend-only ownership in development diagnostics. The current owner is full-stack. A qualified owner transition still precedes bearer-forwarding reconnect and the first fresh Web verification. [Evidence](docs/verification/BACKEND_ONLY_HANDOFF_OWNER_MODE_2026_11_28.json).
+
 **RELEASE-RECOVERY, November 28.** Development can renew finite-serving interpreter evidence through a completed reviewed promotion for the exact installed artifact. It preserves the helper-script pins, authenticated startup, lifecycle lease and selected-release checks. The current installation and tunnel are unchanged. Review admission still depends on the authorized existing-owner bearer repair and a verified destination. [Evidence](docs/verification/FINITE_SERVING_REVIEWED_INTERPRETER_2026_11_28.json).
 
 **RELEASE-RECOVERY, November 23.** The finite installed central and project listeners now distinguish interpreter drift in development. Actual read-only checks matched the two release scripts, confirmed the signed OS interpreter, and found a different digest from the pinned interpreter. The installed authority, listener and rollback were preserved. Re-establish finite serving under separately reviewed authority before using the recovered scope with canonical v5. [Evidence](docs/verification/RECOVERED_CENTRAL_SERVING_INTERPRETER_PIN_2026_11_23.json).

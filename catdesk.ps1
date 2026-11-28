@@ -1043,7 +1043,11 @@ function Invoke-LayeredDiagnosis {
             [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'FAILED' -Gate 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'))
         } else {
             $localDaemonReady = $true
-            [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'READY' -Gate 'READY'))
+            $daemonLayer = New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'READY' -Gate 'READY'
+            $ownerMode = [string]$listener.OwnerMode
+            if ($ownerMode -cnotin @('FULL_STACK', 'BACKEND_ONLY')) { $ownerMode = 'UNVERIFIED' }
+            $daemonLayer | Add-Member -NotePropertyName 'ownerMode' -NotePropertyValue $ownerMode
+            [void]$layers.Add($daemonLayer)
         }
     } catch {
         [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'FAILED' -Gate 'LOCAL_MCP_LISTENER_UNAVAILABLE'))

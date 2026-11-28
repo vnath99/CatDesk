@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T15:39:00Z",
+  "scope": "READ_ONLY_INSTALLED_STARTUP_CAPABILITY_AND_DEVELOPMENT_OWNER_DIAGNOSTIC",
+  "startingDevelopmentCommit": "1df9f30e98dbceba9c693e86bb008e03f84d5677",
+  "installed": {
+    "canonicalImageAndFingerprintMatched": true,
+    "listenerPort": 3200,
+    "listenerMode": "FULL_STACK",
+    "backendOnlyCheckSupported": true,
+    "backendOnlyCheckProcessExited": true,
+    "backendOnlyCheckExitCode": 0,
+    "originalListenerUnchanged": true,
+    "existingBackendOnlyStartCanReuseHealthyFullStackOwner": true,
+    "protectedWrites": 0,
+    "servingProcessesStarted": 0,
+    "tunnelReconnects": 0
+  },
+  "development": {
+    "diagnosticLayer": "LOCAL_DAEMON",
+    "ownerModeValues": ["FULL_STACK", "BACKEND_ONLY", "UNVERIFIED"],
+    "requiresCanonicalListenerIdentity": true,
+    "exportsProcessCommandLine": false,
+    "liveReadOnlyDiagnosisReportedFullStack": true,
+    "powerShell7LifecycleAndBootstrapSuitesPassed": true,
+    "windowsPowerShell51LifecycleAndBootstrapSuitesPassed": true,
+    "installed": false
+  },
+  "liveWebLifecycleAccepted": false
+}

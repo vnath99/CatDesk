@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 28 — verified the installed image can start backend-only.** The canonical listener is still a full-stack daemon. Development diagnosis can distinguish the two modes and refuses to infer an exact mode from unsupported arguments. The owner handoff, same-tunnel reconnect and installed Web acceptance remain open. [Evidence](docs/verification/BACKEND_ONLY_HANDOFF_OWNER_MODE_2026_11_28.json).
+
 **November 28 — removed a future finite-serving dependency on stale historical interpreter bytes in development.** A controller containing the change can use a completed reviewed promotion for the exact selected image and current platform interpreter. The installed release predates the change and its promotion still pins the earlier interpreter. The existing v5 connector and first installed Web coding cycle remain open. [Evidence](docs/verification/FINITE_SERVING_REVIEWED_INTERPRETER_2026_11_28.json).
 
 **November 23 — bounded installed serving authority checked for the recovered scope.** The launcher and frozen candidate include the same finite central owner. The prepared and installed files needed for the initial gate are available, and the existing interpreter hash would refuse serving before helper execution. This is separate from v5 authentication and the installed Web coding acceptance. [Evidence](docs/verification/RECOVERED_CENTRAL_SERVING_INTERPRETER_PIN_2026_11_23.json).

@@ -460,7 +460,14 @@ function Get-LoopbackCatDeskListener {
         $executablePath=[string]$row.ExecutablePath;$commandLine=[string]$row.CommandLine
         if([string]$row.Name -ne 'catdesk.exe' -or $ownerPid -lt 1 -or [string]::IsNullOrWhiteSpace($creationTimeUtc) -or [string]::IsNullOrWhiteSpace($executablePath) -or $commandLine -notmatch '(?i)(?:^|\s)--catdesk-daemon(?:\s|$)'){throw "local MCP port is not a verifiable CatDesk process"}
         $actual=(Resolve-Path -LiteralPath $executablePath -ErrorAction Stop).Path;$actualHash=(Get-FileHash -Algorithm SHA256 -LiteralPath $actual).Hash.ToLowerInvariant()
-        [pscustomobject]@{Pid=$ownerPid;CreationTimeUtc=$creationTimeUtc;Path=$actual;Sha256=$actualHash;MatchesCanonical=($actual.Equals([string]$identity.Path,[StringComparison]::OrdinalIgnoreCase) -and $actualHash -eq [string]$identity.Sha256)}
+        $ownerMode = if ($commandLine -cmatch '\s--catdesk-daemon\s+--backend-only\s*$') {
+            'BACKEND_ONLY'
+        } elseif ($commandLine -cmatch '\s--catdesk-daemon\s*$') {
+            'FULL_STACK'
+        } else {
+            'UNVERIFIED'
+        }
+        [pscustomobject]@{Pid=$ownerPid;CreationTimeUtc=$creationTimeUtc;Path=$actual;Sha256=$actualHash;MatchesCanonical=($actual.Equals([string]$identity.Path,[StringComparison]::OrdinalIgnoreCase) -and $actualHash -eq [string]$identity.Sha256);OwnerMode=$ownerMode}
     }
 }
 
