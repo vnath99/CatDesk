@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 28, 2:25 p.m. EST.** Controlled live response capture works without an operator message relay. CatDesk recovered the original reviewer setup without resending, captured part one, and recovered the complete 33,980-character second response after a development reader correction. Final source-review verdict, protected producer qualification, installed v5 authentication and the installed edit through next-turn self-Wake remain open. [Live reviewer and response-reader evidence](docs/verification/REVIEWER_ADMISSION_AND_RESPONSE_CAPTURE_2026_11_28.json).
+
 **2026-11-28 18:15 UTC.** The edit, native verification and scoped Git checkpoint passed together on a disposable Windows linked worktree through the exact frozen backend. This run used zero model calls and a synthetic initial receipt. Installed ChatGPT Web invocation, delivery of a self-Wake and the next Web turn remain open. [Windows qualification and acceptance evidence](docs/verification/FIRST_WEB_CHECKPOINT_AND_REVIEWER_HOME_2026_11_28.json).
 
 **2026-11-28 17:47 UTC.** Verified the development controller against the actual unpaired reviewer registration. It reached the human sign-in boundary and preserved project state. Interactive sign-in, reviewer conversation setup, backend release attestation and installed Web coding remain outstanding. [Development build, test counts and real admission](docs/verification/FIRST_CHAT_LOGIN_ADMISSION_2026_11_28.json).

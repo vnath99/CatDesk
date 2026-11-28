@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T19:26:40Z",
+  "localTimeZone": "America/New_York",
+  "scope": "CONTROLLED_LIVE_REVIEW_ADMISSION_AND_RESPONSE_CAPTURE_IN_EXISTING_DEVELOPMENT_RUNTIME",
+  "developmentSource": "5898ed9d83cfe8cc125b8b4517d69c82e6dce6f9",
+  "frozenBackendSource": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+  "authentication": {
+    "operatorSignInCompleted": true,
+    "loginClosure": "LOGIN_WINDOW_CLOSED_UNVERIFIED",
+    "subsequentHome": "INITIAL_HOME_READINESS_OBSERVED",
+    "editor": "READY",
+    "composer": "EMPTY",
+    "generation": "IDLE",
+    "nativeAccountConversationObserved": true,
+    "v5ConnectorAuthenticated": false
+  },
+  "initialization": {
+    "originalSetupSubmissions": 1,
+    "initialOutcome": "BOOTSTRAP_OUTCOME_UNKNOWN",
+    "underlyingReason": "UNCLASSIFIED_POST_SUBMIT_FAILURE_RETAINED; the original underlying error was not recorded",
+    "originalJournalPreservedPrivately": true,
+    "nativeCandidateAndAcknowledgmentObserved": true,
+    "browserVerifiedOriginalUserAndAcknowledgment": true,
+    "idleBeforeRefreshAndPersistenceVerified": true,
+    "noSendRecoveryPreflight": "INITIALIZATION_READBACK_VERIFIED_NOT_COMMITTED",
+    "guardedRecovery": "BOUND",
+    "recoveredWithoutSend": true,
+    "targetGeneration": 1,
+    "registryAndWakeExactUrlAndDigestAgree": true,
+    "executionGrantCreated": false
+  },
+  "reviewAdmission": {
+    "originalReconstructedContractReused": true,
+    "sourceAndTreeVerified": true,
+    "sourceWorktreeClean": true,
+    "noSendRoute": "REVIEW_ROUTE_PREFLIGHT_ONLY",
+    "nativeContractValid": true,
+    "exactStartApprovalReceived": true,
+    "nativeClaim": "WAITING_FOR_CHATGPT",
+    "stateVersion": 4,
+    "providerTurnCount": 1,
+    "nativeModelCalls": 0,
+    "frozenMessagesApproved": 5,
+    "maximumOwnerSecondsPerMessage": 180,
+    "messagesDispatchedAtCheckpoint": 3
+  },
+  "approvalPacketCorrection": {
+    "issue": "Windows newline translation changed the saved workflow JSON from its advertised checksum.",
+    "resolution": "The CRLF original was retained. Converting only CRLF to LF reproduced the exact approved checksum before any consent registration, native claim or review dispatch.",
+    "frozenPromptTextChanged": false
+  },
+  "responses": [
+    {
+      "part": 1,
+      "exactUserReceipt": true,
+      "browserEventVerified": true,
+      "characters": 18549,
+      "publicSourceBlobsChecked": 3,
+      "verdict": "PARTIAL_STATIC_REVIEW",
+      "limitationsPreserved": true
+    },
+    {
+      "part": 2,
+      "exactUserReceipt": true,
+      "completeBodyCharacters": 33980,
+      "initialCapturedPrefix": 32768,
+      "initialReaderRefusal": "WEB_REVIEW_RESPONSE_NOT_COMPLETE",
+      "correctedReadEventVerified": true,
+      "correctedReadCharacters": 33980,
+      "correctedReadNewMessages": 0,
+      "correctedReadMilliseconds": 40181,
+      "publicSourceBlobsChecked": 4,
+      "verdict": "STATIC_REVIEW_PERFORMED_WITH_COVERAGE_GAPS",
+      "limitationsPreserved": true
+    }
+  ],
+  "readerCorrection": {
+    "maxExplicitReviewBodyBytes": 49152,
+    "original32768ProfileAccepted": true,
+    "userReservationBytes": 16384,
+    "ordinaryReadBytes": 8192,
+    "wireBytes": 65536,
+    "receiptScopeAndInstabilityGuardsRetained": true,
+    "tests": {
+      "adapterPassed": 48,
+      "focusedNativeBoundaryPassed": true,
+      "fullDomMethodsRun": 140,
+      "initialDomBoundaryErrors": 2,
+      "affectedMethodsContainingThoseErrors": 1,
+      "correctedReviewPairMethodsPassed": 3,
+      "unaffectedMethodsPassedInitially": 139,
+      "fullSuiteRepeatedAfterCorrection": false,
+      "rustfmtAndDiffCheckPassed": true
+    }
+  },
+  "developmentSelection": {
+    "result": "PACKAGE_UPDATED_STOPPED",
+    "mode": "DEVELOPMENT_UNPROTECTED",
+    "onlyPythonReadersChanged": true,
+    "hostAndBackendExecutableBytesReused": true,
+    "originalPackageFourHashesPreserved": true,
+    "preservedStatePins": 11,
+    "changedStatePins": 0,
+    "hostStarted": false,
+    "recurringSchedulerStarted": false,
+    "controllerSha256": "de6553fe6c7055fd47b4c82b236ecdd5118ae063dbdb17dbbb5332cec7a9aaa8"
+  },
+  "reviewerReportedDependency": {
+    "origin": "Independent response; the controller made no new connector probe",
+    "catdeskStatus": "UNAUTHORIZED",
+    "publicCode": "Reported GitHub blobs matched frozen source"
+  },
+  "remaining": {
+    "partThreeRunning": true,
+    "finalReviewVerdict": false,
+    "producerAuthority": false,
+    "protectedBackendPromotion": false,
+    "protectedWakePromotion": false,
+    "canonicalConnectorChanged": false,
+    "historicalUnknownTaskReplays": 0,
+    "installedWebEditCheckpointSelfWakeContinuationAccepted": false
+  }
+}
