@@ -183,6 +183,7 @@ pub(crate) enum WebDevelopmentAction {
     },
     InspectReadiness {
         project_id: String,
+        initial_intent_id: Option<String>,
         frozen_request: Option<(PathBuf, String)>,
     },
     InspectReviewRequest {
@@ -408,13 +409,17 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
                     initial_intent_id: initial_intent(&args[7..args.len()-usize::from(execute)])?,
                 })
             }
+        Some("inspect-readiness") if args.len() == 7 && args[3] == "--project-id"
+            && catdesk_wake::protocol::valid_id(&args[4]) =>
+            Ok(WebDevelopmentAction::InspectReadiness { project_id: args[4].clone(),
+                initial_intent_id: initial_intent(&args[5..])?, frozen_request: None }),
         Some("inspect-readiness") if matches!(args.len(),5|9) && args[3]=="--project-id"
             && catdesk_wake::protocol::valid_id(&args[4])
             && (args.len()==5 || (args[5]=="--frozen-observation-file" && args[7]=="--expected-request-sha256"
                 && !args[6].is_empty() && args[6].len()<=4096 && !args[6].chars().any(char::is_control)
                 && args[8].len()==64
                 && args[8].bytes().all(|b|b.is_ascii_digit()||(b'a'..=b'f').contains(&b)))) =>
-            Ok(WebDevelopmentAction::InspectReadiness {project_id:args[4].clone(),
+            Ok(WebDevelopmentAction::InspectReadiness {project_id:args[4].clone(), initial_intent_id:None,
                 frozen_request:if args.len()==9 {Some((PathBuf::from(&args[6]),args[8].clone()))}else{None}}),
         Some("inspect-review-request") if matches!(args.len(),9|10) && args[3]=="--workflow-intent"
             && args[5]=="--expected-workflow-sha256" && args[7]=="--turn"
@@ -536,12 +541,33 @@ fn inspect_web_development_readiness(
     workspace: &Path,
     project_id: &str,
     frozen_request: Option<(&Path, &str)>,
+    initial_intent: Option<&str>,
 ) -> Result<serde_json::Value, String> {
     let workspace = workspace
         .canonicalize()
         .map_err(|_| "DEV_WORKSPACE_UNAVAILABLE")?;
     let root = catdesk_wake::development_runtime::root_for_workspace(&workspace)?
         .ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    if let Some(intent) = initial_intent {
+        if frozen_request.is_some() {
+            return Err("DEV_INITIAL_READINESS_ARGUMENTS_INVALID".into());
+        }
+        #[cfg(windows)]
+        {
+            let (proof, check) = web::prepared_login(&workspace, project_id, intent)?;
+            let mut result = catdesk_wake::development_runtime::inspect_initial_readiness(
+                &workspace, &proof, check,
+            )?;
+            result["projectId"] = json!(project_id);
+            result["intentId"] = json!(intent);
+            return Ok(result);
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = intent;
+            return Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into());
+        }
+    }
     let lease = acquire_web_work_lease(&workspace, project_id)?;
     let target = mcp::operator_read_project_web_target(&workspace, project_id)
         .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
@@ -1219,6 +1245,7 @@ pub(crate) async fn execute_operator_action(
                 } => login_web_development(workspace, &project_id, initial_intent_id.as_deref()),
                 WebDevelopmentAction::InspectReadiness {
                     project_id,
+                    initial_intent_id,
                     frozen_request,
                 } => inspect_web_development_readiness(
                     workspace,
@@ -1226,6 +1253,7 @@ pub(crate) async fn execute_operator_action(
                     frozen_request
                         .as_ref()
                         .map(|(path, hash)| (path.as_path(), hash.as_str())),
+                    initial_intent_id.as_deref(),
                 ),
                 WebDevelopmentAction::ReconcileLogin {
                     project_id,
@@ -3345,6 +3373,39 @@ mod tests {
     }
 
     #[test]
+    fn initial_home_readiness_cli_requires_explicit_project_intent_and_refuses_extra_modes() {
+        let mut args = [
+            "operator",
+            "web-dev-runtime",
+            "inspect-readiness",
+            "--project-id",
+            "alpha",
+            "--initial-intent-id",
+            "first",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        assert!(
+            matches!(parse_operator_action(args.clone()), Ok(Some(OperatorAction::WebDevelopment(
+            WebDevelopmentAction::InspectReadiness { project_id, initial_intent_id: Some(intent), frozen_request:None }
+        ))) if project_id=="alpha" && intent=="first")
+        );
+        for extra in [
+            "--send",
+            "--url",
+            "--profile",
+            "--inspect-app-menu",
+            "--frozen-observation-file",
+        ] {
+            let mut extended = args.clone();
+            extended.push(extra.into());
+            assert!(parse_operator_action(extended).is_err());
+        }
+        args[6] = "../other".into();
+        assert!(parse_operator_action(args).is_err());
+    }
+
+    #[test]
     fn initial_login_arguments_require_project_intent_and_fixed_destination() {
         let login = [
             "operator",
@@ -3406,7 +3467,7 @@ mod tests {
             "DEV_RUNTIME_NOT_PREPARED"
         );
         assert_eq!(
-            inspect_web_development_readiness(&workspace, "alpha", None).unwrap_err(),
+            inspect_web_development_readiness(&workspace, "alpha", None, None).unwrap_err(),
             "DEV_RUNTIME_NOT_PREPARED"
         );
         fs::remove_dir(workspace).unwrap();

@@ -14,6 +14,153 @@ from unittest import mock
 
 
 class ReadinessProbeTests(unittest.TestCase):
+
+    def test_initial_home_reads_scoped_chip_and_composer_without_actions(self):
+        spec = importlib.util.spec_from_file_location(
+            "readiness_dom_fixture", Path(__file__).with_name("test_wake_bridge_current_dom.py"))
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        bridge = Path(__file__).resolve().parents[1] / "scripts/wake_bridge.py"
+        with tempfile.TemporaryDirectory() as profile:
+            sink = self.probe.load_observation_sink(
+                bridge, hashlib.sha256(bridge.read_bytes()).hexdigest(), Path(profile), None)
+            self.assertIsNone(sink.source_url)
+            for options, final, marker in [
+                (dict(v5Chip=True), "HOME", "MARKER_PRESENT"),
+                (dict(v5Chip=True, appChipAncestor={"tag":"fieldset", "attrs":{"disabled":True}}), "HOME", "UNPROVEN"),
+                (dict(v5Chip=True, appChipAncestor={"tag":"div", "attrs":{"aria-disabled":"TRUE"}}), "HOME", "UNPROVEN"),
+                (dict(v5Chip=True, appChipAttributes={"aria-selected":"FALSE"}), "HOME", "MARKER_NOT_OBSERVED"),
+                (dict(outsideV5=True, foreignChip=True), "HOME", "MARKER_NOT_OBSERVED"),
+                (dict(v5Chip=True, appControlOutsideForm=True), "HOME", "MARKER_NOT_OBSERVED"),
+                (dict(v5Chip=True, appDraft="PRIVATE_@CatDesk-Local-Tunnel-v5"), "HOME", "UNPROVEN"),
+                (dict(v5Chip=True, observationStop=True), "HOME", "UNPROVEN"),
+                (dict(v5Chip=True, appAttachment=True), "HOME", "UNPROVEN"),
+                (dict(v5Chip=True, appFileInput=True, appSelectedFile=True), "HOME", "UNPROVEN"),
+                (dict(v5Chip=True, duplicateAppEditor=True), "HOME", "UNPROVEN"),
+                (dict(v5Chip=True, appHistoryContainer=True), "HOME", "UNPROVEN"),
+                (dict(v5Chip=True, appExpanded="true"), "HOME", "UNPROVEN"),
+                (dict(v5Chip=True, observationLogin=True), "LOGIN_VISIBLE", "UNPROVEN"),
+                (dict(observationNetwork=True), "CHROME_ERROR", "UNPROVEN"),
+                (dict(observationCaptcha=True), "CAPTCHA_VISIBLE", "UNPROVEN"),
+                (dict(location="https://chat.openai.com/"), "TARGET_DRIFT", "UNPROVEN"),
+                (dict(location="https://chatgpt.com/?private=x"), "TARGET_DRIFT", "UNPROVEN"),
+                (dict(location="https://chatgpt.com/c/PRIVATE_CHAT"), "TARGET_DRIFT", "UNPROVEN"),
+                (dict(location="https://auth.openai.com/log-in"), "LOGIN_VISIBLE", "UNPROVEN"),
+                (dict(location="chrome-error://chromewebdata/"), "CHROME_ERROR", "UNPROVEN"),
+                (dict(metadataLocation="https://chatgpt.com/c/drift"), "TARGET_DRIFT", "UNPROVEN"),
+            ]:
+                args = dict(location=self.probe.INITIAL_HOME, appForm=True, userProjectionRows=[])
+                cdp = fixture.CurrentDom(**(args | options))
+                with self.subTest(options=options):
+                    observed, surface, app = self.probe.inspect_initial_home(sink, cdp, 1)
+                    self.assertEqual((observed, app), (final, marker))
+                    if final == "HOME":
+                        self.assertEqual(surface["route"], "HOME")
+                    self.assertNotIn("PRIVATE_", str(surface))
+
+    def test_initial_home_never_reports_marker_after_surface_or_route_drift(self):
+        ready = dict(route="HOME", document="COMPLETE", editor="READY", history="ABSENT",
+                     composer="EMPTY", generation="IDLE", assistant="ABSENT")
+        sink = mock.Mock()
+        for surfaces, routes in [
+            ([ready, dict(ready, composer="DRAFT_PRESENT")], ["HOME"]),
+            ([ready, ready], ["HOME", "TARGET_DRIFT"]),
+        ]:
+            sink.browser_surface_observation.side_effect = surfaces
+            with mock.patch.object(self.probe, "initial_home_route", side_effect=routes), \
+                    mock.patch.object(self.probe, "initial_home_app_marker", return_value="MARKER_PRESENT"):
+                state, surface, marker = self.probe.inspect_initial_home(sink, object(), 1)
+            self.assertNotEqual(state, "HOME")
+            self.assertIsNone(surface)
+            self.assertEqual(marker, "UNPROVEN")
+
+    def test_initial_home_requires_editable_composer_for_readiness_and_chip_observation(self):
+        spec = importlib.util.spec_from_file_location(
+            "readiness_editor_fixture", Path(__file__).with_name("test_wake_bridge_current_dom.py"))
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        bridge = Path(__file__).resolve().parents[1] / "scripts/wake_bridge.py"
+        with tempfile.TemporaryDirectory() as profile:
+            sink = self.probe.load_observation_sink(
+                bridge, hashlib.sha256(bridge.read_bytes()).hexdigest(), Path(profile), None)
+            for textarea in (True, False):
+                for extra, usable in [
+                    ({}, True),
+                    ({"appEditorAttributes": {"disabled": True}}, False),
+                    ({"appEditorAttributes": {"readonly": ""}}, False),
+                    ({"appEditorAttributes": {"aria-readonly": "true"}}, False),
+                    ({"appEditorAncestor": {"tag": "fieldset", "attrs": {"disabled": True}}}, False),
+                    ({"appEditorAncestor": {"tag": "div", "attrs": {"aria-disabled": "TRUE"}}}, False),
+                    ({"appEditorAncestor": {"tag": "div", "attrs": {"aria-readonly": "true"}}}, False),
+                ]:
+                    with self.subTest(textarea=textarea, extra=extra):
+                        options = dict(location=self.probe.INITIAL_HOME, appForm=True, v5Chip=True,
+                                       appTextarea=textarea, userProjectionRows=[], **extra)
+                        state, surface, marker = self.probe.inspect_initial_home(
+                            sink, fixture.CurrentDom(**options), 1)
+                        self.assertEqual(state, "HOME")
+                        self.assertEqual(surface["editor"], "READY" if usable else "UNKNOWN")
+                        self.assertEqual(marker, "MARKER_PRESENT" if usable else "UNPROVEN")
+            for extra in [{"appEditorAttributes": {"contenteditable": "false"}},
+                          {"appEditorAttributes": {"readonly": ""}, "appDraft": "PRIVATE_DRAFT"},
+                          {"appEditorAttributes": {"disabled": True}, "observationStop": True}]:
+                options = dict(location=self.probe.INITIAL_HOME, appForm=True, v5Chip=True,
+                               userProjectionRows=[], **extra)
+                state, surface, marker = self.probe.inspect_initial_home(sink, fixture.CurrentDom(**options), 1)
+                self.assertEqual((state, surface["editor"], marker), ("HOME", "UNKNOWN", "UNPROVEN"))
+                if extra.get("appDraft"):
+                    self.assertEqual(surface["composer"], "DRAFT_PRESENT")
+                if extra.get("observationStop"):
+                    self.assertEqual(surface["generation"], "ACTIVE")
+                self.assertNotIn("PRIVATE", str(surface))
+
+    def test_initial_home_uses_single_fixed_navigation_and_final_observation(self):
+        with tempfile.TemporaryDirectory() as profile:
+            args = ["probe", "--initial-home", "--profile", profile, "--seconds", "5",
+                    "--read-only", "--await-start", "--primitives", "wake_bridge.py",
+                    "--primitives-sha256", "a"*64]
+            browser = mock.MagicMock()
+            owner = mock.MagicMock()
+            owner.__enter__.return_value = browser
+            surface = dict(route="HOME", document="COMPLETE", editor="READY", composer="EMPTY",
+                           generation="IDLE", history="ABSENT", assistant="ABSENT",
+                           exchange="UNATTRIBUTED", recovery="OBSERVATION_ONLY")
+            output = io.StringIO()
+            with mock.patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=lambda **_: owner)}), \
+                    mock.patch.object(sys, "argv", args), mock.patch.object(sys, "stdin", io.StringIO("START\n")), \
+                    mock.patch.object(self.probe, "load_observation_sink") as load, \
+                    mock.patch.object(self.probe, "inspect_initial_home", return_value=(
+                        "HOME", surface, "MARKER_PRESENT")) as inspect, contextlib.redirect_stdout(output):
+                self.assertEqual(self.probe.main(), 0)
+            load.assert_called_once_with(Path("wake_bridge.py"), "a"*64, Path(profile), None)
+            inspect.assert_called_once_with(load.return_value, browser.cdp, 5.0)
+            browser.activate_cdp_mode.assert_called_once_with("https://chatgpt.com/")
+            self.assertEqual(browser.cdp.mock_calls, [])
+            lines = output.getvalue().splitlines()
+            self.assertEqual(lines[-3:], ["PROBE:HOME_APP:MARKER_PRESENT",
+                                         "PROBE:PHASE:BROWSER_CLOSED", "PROBE:FINAL:HOME"])
+            self.assertEqual(sum(line.startswith("PROBE:SURFACE:") for line in lines), 1)
+            self.assertFalse(any("TAB" in line for line in lines))
+
+    def test_initial_home_rejects_mixed_modes_missing_owner_and_foreign_url(self):
+        with tempfile.TemporaryDirectory() as profile:
+            required = ["--read-only", "--await-start", "--profile", profile,
+                        "--primitives", "wake_bridge.py", "--primitives-sha256", "a"*64]
+            cases = [required+[flag] for flag in ("--inspect-app-menu", "--task-diagnostics",
+                     "--receipt-only", "--response-only", "--inspect-historical-trace")]
+            cases += [required+["--frozen-observation-file", "private"], required+["--delivery-file", "private"],
+                      required[1:], required[:1]+required[2:], required[:2]+required[4:], required[:-2]]
+            for options in cases:
+                with self.subTest(options=options), mock.patch.object(sys, "stdin", io.StringIO("START\n")), \
+                        mock.patch.object(sys, "argv", ["probe", "--initial-home", *options]), \
+                        mock.patch.object(self.probe, "load_observation_sink") as load:
+                    self.assertEqual(self.probe.main(), 2)
+                    load.assert_not_called()
+            with mock.patch.object(sys, "argv", ["probe", "--initial-home", "--conversation-url",
+                                                  "https://chatgpt.com/c/x", *required]), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                self.probe.main()
+
     def test_frozen_observation_distinguishes_trusted_representation_mismatch_without_body(self):
         for trusted,state in [(0,'EXPECTED_USER_NOT_OBSERVED_OUTCOME_UNKNOWN'),
                               (1,'RESPONSE_USER_REPRESENTATION_MISMATCH')]:

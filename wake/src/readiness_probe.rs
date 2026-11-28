@@ -662,6 +662,22 @@ fn run_assigned_observer(
     result.and(input_result)
 }
 
+#[cfg(test)]
+#[test]
+fn initial_home_probe_export_accepts_only_fixed_v5_marker_categories() {
+    let rows = sanitized_rows(
+        "PROBE:HOME_APP:MARKER_PRESENT\nPROBE:HOME_APP:arbitrary private app\nPROBE:HOME_APP:MARKER_NOT_OBSERVED\nPROBE:HOME_APP:UNPROVEN\nPROBE:HOME_APP:MARKER_PRESENT extra",
+    );
+    assert_eq!(
+        rows,
+        [
+            "PROBE:HOME_APP:MARKER_PRESENT",
+            "PROBE:HOME_APP:MARKER_NOT_OBSERVED",
+            "PROBE:HOME_APP:UNPROVEN"
+        ]
+    );
+}
+
 fn sanitized_rows(text: &str) -> Vec<String> {
     text.lines()
         .filter(|line| {
@@ -676,6 +692,12 @@ fn sanitized_rows(text: &str) -> Vec<String> {
             }
             if state.starts_with("APP:") {
                 return composer_app_observation(line).is_some();
+            }
+            if let Some(marker) = state.strip_prefix("HOME_APP:") {
+                return matches!(
+                    marker,
+                    "MARKER_PRESENT" | "MARKER_NOT_OBSERVED" | "UNPROVEN"
+                );
             }
             if state.starts_with("APP_MENU:") {
                 return app_menu_observation(line).is_some();

@@ -45,7 +45,14 @@ def load_observation_sink(path, expected_sha256, profile, url):
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     exec(compile(content, str(path), "exec"), module.__dict__)
-    sink = module.CdpSink(url, profile, 30, 20)
+    if url is None:
+        if module.NEW_CONVERSATION_HOME != INITIAL_HOME:
+            raise ValueError("initial Home primitives unsupported")
+        sink = module.NewConversationSink(None, profile, 30, 20)
+        if sink.url != INITIAL_HOME:
+            raise ValueError("initial Home target mismatch")
+    else:
+        sink = module.CdpSink(url, profile, 30, 20)
     if not callable(getattr(sink, "browser_surface_observation", None)):
         raise ValueError("observation primitives unsupported")
     sink.frozen_observation_digest = lambda message: module.digest(module.normalize_message(message))
@@ -568,9 +575,159 @@ def recover_empty_home(cdp, url):
     except Exception:
         return "NAVIGATION_FAILED"
 
+INITIAL_HOME = "https://chatgpt.com/"
+HOME_MARKERS = {"MARKER_PRESENT", "MARKER_NOT_OBSERVED", "UNPROVEN"}
+
+
+def initial_route_class(url):
+    if not isinstance(url, str) or not url:
+        return "OBSERVATION_UNAVAILABLE"
+    if url == INITIAL_HOME:
+        return "HOME"
+    if url.startswith("chrome-error://"):
+        return "CHROME_ERROR"
+    if url.startswith(("https://chatgpt.com/auth/", "https://auth.openai.com/")):
+        return "LOGIN_VISIBLE"
+    return "TARGET_DRIFT"
+
+
+def initial_home_route(sink, cdp):
+    driver = initial_route_class(cdp.get_current_url())
+    # Return only a route class from the current document, including on auth redirects.
+    document = sink.cdp_value(cdp.evaluate("""(() => {
+        if (window.top !== window.self) return 'TARGET_DRIFT';
+        const href = location.href;
+        if (href === 'https://chatgpt.com/') return 'HOME';
+        if (href.startsWith('chrome-error://')) return 'CHROME_ERROR';
+        if (href.startsWith('https://chatgpt.com/auth/') ||
+            href.startsWith('https://auth.openai.com/')) return 'LOGIN_VISIBLE';
+        return 'TARGET_DRIFT';
+    })()"""))
+    if document not in {"HOME", "CHROME_ERROR", "LOGIN_VISIBLE", "TARGET_DRIFT"}:
+        return "OBSERVATION_UNAVAILABLE"
+    if driver == document or (driver == "HOME" and document == "CHROME_ERROR"):
+        return document
+    return "TARGET_DRIFT"
+
+
+def initial_home_app_marker(sink, cdp):
+    # The selected .85 conversation observer validates /c URLs. Home has a
+    # distinct, exact document guard and a single, unambiguous composer form.
+    # Only marked app pills qualify. Plain @ text and menu items do not.
+    value = sink.cdp_value(cdp.evaluate("""(() => {
+        if (window.top !== window.self || location.href !== 'https://chatgpt.com/' ||
+            document.readyState !== 'complete') return 'EDITOR_UNPROVEN';
+        const visible = node => {
+            const style = window.getComputedStyle(node);
+            return node.getClientRects().length && style.display !== 'none' &&
+                style.visibility !== 'hidden' && !node.closest('[hidden],[inert],[aria-hidden="true"]');
+        };
+        const history = "[data-message-author-role],[data-content-search-turn-key]," +
+            "[data-content-search-unit-key],[data-testid^='conversation-turn-'],article[data-turn]," +
+            "[data-user-message-bubble],h4[data-conversation-role]";
+        if (document.querySelector(history)) return 'EDITOR_UNPROVEN';
+        const foreign = "aside,nav,[role='menu'],[role='menuitem'],[role='listbox']," +
+            "[role='option'],[role='dialog'],dialog,[popover],[data-floating-ui-portal]";
+        const editors = [...document.querySelectorAll("#prompt-textarea,div.ProseMirror[contenteditable='true']," +
+            "[contenteditable='true'][data-lexical-editor='true']")].filter(visible);
+        if (editors.length !== 1) return 'EDITOR_UNPROVEN';
+        const editor = editors[0], form = editor.closest('form');
+        if (!form || form.closest(foreign) || editor.closest(foreign) ||
+            (editor.tagName.toLowerCase() !== 'textarea' && editor.isContentEditable !== true) ||
+            editor.readOnly || editor.disabled || editor.matches(':disabled') ||
+            editor.closest("[disabled],[readonly],[aria-disabled='true' i],[aria-readonly='true' i]," +
+                "[contenteditable='false' i]")) return 'EDITOR_UNPROVEN';
+        if ((editor.value ?? editor.textContent) !== '' ||
+            editor.querySelector('img,video,audio,input,[data-file-id]') ||
+            document.querySelector("[data-testid*='attachment' i],[data-testid*='file-thumbnail' i]"))
+            return 'UNPROVEN';
+        const transient = "button[data-testid='stop-button'],button[aria-label*='stop' i]," +
+            "[role='menu'],[role='listbox'],[role='dialog'],dialog[open]";
+        if ([...document.querySelectorAll(transient)].some(visible) ||
+            [...form.querySelectorAll("[aria-expanded='true']")].some(visible)) return 'UNPROVEN';
+        for (const input of form.querySelectorAll("input[type='file']")) {
+            if (!input.files || input.files.length !== 0 || input.value) return 'UNPROVEN';
+        }
+        const chips = form.querySelectorAll("[data-testid='app-chip'],[data-testid='app-pill']");
+        if (chips.length > 16) return 'UNPROVEN';
+        let matches = 0;
+        for (const chip of chips) {
+            if (!visible(chip) || editor.contains(chip) || chip.contains(editor) || chip.closest(foreign) ||
+                chip.closest('form') !== form || chip.matches("[aria-selected='false' i]")) continue;
+            const label = chip.getAttribute('aria-label') ?? (
+                chip.childNodes.length === 1 && chip.childNodes[0].nodeType === 3
+                ? chip.childNodes[0].nodeValue : '');
+            if (typeof label !== 'string' || label.length > 64) continue;
+            if (label.trim() === 'CatDesk-Local-Tunnel-v5' ||
+                label.trim() === '@CatDesk-Local-Tunnel-v5') {
+                if (chip.disabled || chip.matches(':disabled') ||
+                    chip.closest("[disabled],[aria-disabled='true' i]")) return 'UNPROVEN';
+                matches++;
+            }
+        }
+        return matches === 1 ? 'MARKER_PRESENT' : matches === 0 ? 'MARKER_NOT_OBSERVED' : 'UNPROVEN';
+    })()"""))
+    return value if isinstance(value, str) and value in HOME_MARKERS else "EDITOR_UNPROVEN"
+
+
+class _InitialHomeDocument:
+    """Restrict the pinned surface reader's evaluation to the exact top document."""
+    def __init__(self, cdp):
+        self.cdp = cdp
+
+    def evaluate(self, script):
+        return self.cdp.evaluate(
+            "(window.top === window.self && location.href === 'https://chatgpt.com/')"
+            " ? (" + script + ") : null"
+        )
+
+
+def inspect_initial_home(sink, cdp, seconds):
+    deadline = time.monotonic() + seconds
+    document = _InitialHomeDocument(cdp)
+    try:
+        while True:
+            route = initial_home_route(sink, cdp)
+            if route != "HOME":
+                return route, None, "UNPROVEN"
+            surface = sink.browser_surface_observation(document)
+            final = surface_state(surface)
+            if surface["route"] != "HOME":
+                # The pinned reader may observe a login/security/error surface
+                # at the Home URL. Ignore any stale conversation evidence.
+                if final not in {"LOGIN_VISIBLE", "CAPTCHA_VISIBLE", "CHROME_ERROR"}:
+                    return "OBSERVATION_UNAVAILABLE", None, "UNPROVEN"
+                break
+            if surface["document"] == "COMPLETE" or time.monotonic() >= deadline:
+                break
+            time.sleep(0.25)
+        marker = "UNPROVEN"
+        if final == "HOME" and surface["editor"] == "READY":
+            evidence = "EDITOR_UNPROVEN"
+            if (surface["document"] == "COMPLETE" and surface["history"] == "ABSENT"
+                    and surface["assistant"] == "ABSENT"):
+                evidence = initial_home_app_marker(sink, cdp)
+                if sink.browser_surface_observation(document) != surface:
+                    return "OBSERVATION_UNAVAILABLE", None, "UNPROVEN"
+            if evidence == "EDITOR_UNPROVEN":
+                # The pinned surface reader proves DOM presence; Home additionally
+                # requires an editable, enabled control in the scoped composer.
+                surface = dict(surface, editor="UNKNOWN")
+            elif surface["generation"] == "IDLE" and surface["composer"] == "EMPTY":
+                marker = evidence
+        route = initial_home_route(sink, cdp)
+        if route != "HOME":
+            return route, None, "UNPROVEN"
+        return final, surface, marker
+    except Exception:
+        return "OBSERVATION_UNAVAILABLE", None, "UNPROVEN"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Read-only CatDesk Wake profile readiness probe")
-    parser.add_argument("--conversation-url", required=True)
+    destination = parser.add_mutually_exclusive_group(required=True)
+    destination.add_argument("--conversation-url")
+    destination.add_argument("--initial-home", action="store_true")
     parser.add_argument("--seconds", type=float, default=45.0)
     parser.add_argument("--await-start", action="store_true")
     # Internal development owner supplies only its independently validated
@@ -595,8 +752,17 @@ def main():
     args = parser.parse_args()
     if args.await_start and sys.stdin.readline() != "START\n":
         return 2
-    url = args.conversation_url
-    if conversation_id(url) is None:
+    if args.initial_home and (
+            not args.await_start or not args.read_only or args.profile is None or
+            args.primitives is None or args.primitives_sha256 is None or
+            any(value is not None for value in (args.delivery_file, args.delivery_sha256,
+                args.frozen_observation_file, args.frozen_observation_sha256)) or
+            any((args.receipt_only, args.response_only, args.historical_response, args.task_diagnostics,
+                 args.source_review_diagnostics, args.await_existing_response, args.inspect_app_menu,
+                 args.inspect_response_trace, args.inspect_historical_trace))):
+        return 2
+    url = INITIAL_HOME if args.initial_home else args.conversation_url
+    if not args.initial_home and conversation_id(url) is None:
         print("PROBE:BAD_URL", flush=True); return 2
     if not 5 <= args.seconds <= 120:
         print("PROBE:BAD_DURATION", flush=True); return 2
@@ -606,7 +772,7 @@ def main():
     sink = None
     if args.primitives is not None or args.primitives_sha256 is not None:
         try:
-            sink = load_observation_sink(args.primitives, args.primitives_sha256, profile, url)
+            sink = load_observation_sink(args.primitives, args.primitives_sha256, profile, args.conversation_url)
         except Exception:
             print("PROBE:FINAL:OBSERVATION_UNAVAILABLE", flush=True)
             return 0
@@ -669,16 +835,9 @@ def main():
     # Receipt readiness and persistence proof share one budget, including browser
     # startup. Other observation modes retain their existing timing behavior.
     receipt_deadline = time.monotonic() + args.seconds if receipt_delivery is not None else None
-    print("PROBE:PHASE:IMPORT_BROWSER", flush=True)
-    from seleniumbase import SB
     def report_tab(facts):
         print("PROBE:TAB:" + json.dumps(facts, separators=(",", ":"), sort_keys=True), flush=True)
-    print("PROBE:PHASE:BROWSER_START", flush=True)
-    with SB(uc=True, user_data_dir=str(profile)) as sb:
-        print("PROBE:PHASE:CDP_NAVIGATION", flush=True)
-        sb.activate_cdp_mode(url)
-        cdp = sb.cdp
-        print("PROBE:PHASE:OBSERVING", flush=True)
+    def observe_conversation(cdp):
         if args.profile is not None:
             print("PROBE:" + select_registered_target_tab(cdp, url, report_tab), flush=True)
         last = None
@@ -751,6 +910,22 @@ def main():
                     report_response_trace(sink,cdp,response_delivery,historical=True)
             else:
                 print("PROBE:RESPONSE_STATE:UNPROVEN", flush=True)
+        return final
+
+    print("PROBE:PHASE:IMPORT_BROWSER", flush=True)
+    from seleniumbase import SB
+    print("PROBE:PHASE:BROWSER_START", flush=True)
+    with SB(uc=True, user_data_dir=str(profile)) as sb:
+        print("PROBE:PHASE:CDP_NAVIGATION", flush=True)
+        sb.activate_cdp_mode(url)
+        print("PROBE:PHASE:OBSERVING", flush=True)
+        if args.initial_home:
+            final, surface, marker = inspect_initial_home(sink, sb.cdp, args.seconds)
+            if surface is not None:
+                print("PROBE:SURFACE:" + json.dumps(surface, separators=(",", ":"), sort_keys=True), flush=True)
+            print("PROBE:HOME_APP:" + marker, flush=True)
+        else:
+            final = observe_conversation(sb.cdp)
     print("PROBE:PHASE:BROWSER_CLOSED", flush=True)
     print("PROBE:FINAL:" + final, flush=True)
     return 0

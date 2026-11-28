@@ -2344,9 +2344,15 @@ fn cleanup_login_child(
     Ok(exit)
 }
 
+#[derive(Clone, Copy)]
+enum ReadinessDestination<'a> {
+    Conversation(&'a str),
+    InitialHome(&'a InitialLogin),
+}
+
 fn development_readiness_command(
     prepared: &LoginPreflight,
-    target_url: &str,
+    destination: ReadinessDestination<'_>,
 ) -> Result<(Command, &'static [u8])> {
     let program = include_bytes!("../../scripts/wake_readiness_visual_probe.py");
     let loader = crate::readiness_probe::embedded_program_loader(program).map_err(str::to_owned)?;
@@ -2357,9 +2363,16 @@ fn development_readiness_command(
         .arg(loader)
         .arg("--await-start")
         .arg("--profile")
-        .arg(&prepared.profile)
-        .arg("--conversation-url")
-        .arg(target_url)
+        .arg(&prepared.profile);
+    match destination {
+        ReadinessDestination::Conversation(url) => {
+            command.arg("--conversation-url").arg(url);
+        }
+        ReadinessDestination::InitialHome(_) => {
+            command.arg("--initial-home");
+        }
+    }
+    command
         .arg("--primitives")
         .arg(&prepared.primitives)
         .arg("--primitives-sha256")
@@ -2389,9 +2402,40 @@ pub fn inspect_readiness_with_frozen_request(
         .target_generation
         .ok_or("DEV_LOGIN_TARGET_NOT_REGISTERED")?;
     let root = prepared.root.clone();
-    inspect_prepared_readiness(workspace, prepared, target_url, frozen_request, &|| {
-        require_observed_target_generation(&Store::open(&root)?, target_url, generation)
-    })
+    inspect_prepared_readiness(
+        workspace,
+        prepared,
+        ReadinessDestination::Conversation(target_url),
+        frozen_request,
+        &|| require_observed_target_generation(&Store::open(&root)?, target_url, generation),
+    )
+}
+
+/// Observe only the fixed Home in the existing stopped development profile.
+/// Its caller retains the same project and journal pins as initial login.
+pub fn inspect_initial_readiness(
+    workspace: &Path,
+    proof: &InitialLogin,
+    check: impl Fn(&Store) -> Result<()>,
+) -> Result<Value> {
+    let prepared = owner_profile_preflight(workspace, None, &|store| check(store).map(|_| None))?;
+    let store = Store::open_read_only(&prepared.root)?;
+    let selected = validated_authority(workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    if selected.0 != prepared.root {
+        return Err("DEV_RUNTIME_SELECTED_ROOT_MISMATCH".into());
+    }
+    inspect_prepared_readiness(
+        workspace,
+        prepared,
+        ReadinessDestination::InitialHome(proof),
+        None,
+        &|| {
+            if validated_authority(workspace)?.as_ref() != Some(&selected) {
+                return Err("DEV_RUNTIME_SELECTED_ROOT_MISMATCH".into());
+            }
+            check(&store)
+        },
+    )
 }
 
 /// Called only by the local operator's existing approved-review workflow.
@@ -2411,7 +2455,7 @@ pub fn inspect_approved_review_request(
     let mut result = inspect_prepared_readiness(
         workspace,
         prepared,
-        target_url,
+        ReadinessDestination::Conversation(target_url),
         Some((request, expected)),
         keep_approved,
     )?;
@@ -2429,15 +2473,18 @@ pub fn inspect_approved_review_request(
 fn inspect_prepared_readiness(
     workspace: &Path,
     prepared: LoginPreflight,
-    target_url: &str,
+    destination: ReadinessDestination<'_>,
     frozen_request: Option<(&Path, &str)>,
     keep_target_current: &dyn Fn() -> Result<()>,
 ) -> Result<Value> {
     keep_target_current()?;
     // Keep the compiled probe off Windows' bounded command line. The existing
     // contained runner supplies its verified bytes and START only over stdin.
-    let (mut command, program) = development_readiness_command(&prepared, target_url)?;
+    let (mut command, program) = development_readiness_command(&prepared, destination)?;
     if let Some((path, expected)) = frozen_request {
+        if matches!(destination, ReadinessDestination::InitialHome(_)) {
+            return Err("DEV_INITIAL_READINESS_ARGUMENTS_INVALID".into());
+        }
         plain(path, false)?;
         if hash_file(path, 65536)? != expected {
             return Err("DEV_OBSERVATION_REQUEST_CHANGED".into());
@@ -2449,11 +2496,12 @@ fn inspect_prepared_readiness(
             .arg(expected);
     }
     let marker = dev_dir(&canonical_workspace(workspace)?).join("login-active.json");
-    write_json_new(
-        &marker,
-        &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
-        "targetSha256":protocol::digest(target_url),"startedUtc":now()}),
-    )?;
+    let owner_record = match destination {
+        ReadinessDestination::Conversation(url) => json!({"schemaVersion":1,
+            "purpose":"DEV_LOGIN_OWNED_BROWSER_V1","targetSha256":protocol::digest(url),"startedUtc":now()}),
+        ReadinessDestination::InitialHome(proof) => proof.marker(),
+    };
+    write_json_new(&marker, &owner_record)?;
     let mut rows = Vec::new();
     let result = crate::readiness_probe::run_bounded_observed_program(
         &mut command,
@@ -2479,6 +2527,10 @@ fn inspect_prepared_readiness(
         return Err("DEV_OBSERVATION_REQUEST_CHANGED".into());
     }
     keep_target_current()?;
+    let target_url = match destination {
+        ReadinessDestination::InitialHome(_) => return initial_home_readiness_result(&rows),
+        ReadinessDestination::Conversation(url) => url,
+    };
     let browser_observation = if final_state == "OBSERVATION_UNAVAILABLE" {
         None
     } else {
@@ -2513,6 +2565,77 @@ fn inspect_prepared_readiness(
         result["resendAuthorized"] = json!(false);
     }
     Ok(result)
+}
+
+fn initial_home_readiness_result(rows: &[String]) -> Result<Value> {
+    let invalid = "DEV_INITIAL_READINESS_OBSERVATION_UNPROVEN";
+    let mut frames = rows.iter().map(String::as_str);
+    for expected in [
+        "PROBE:PHASE:IMPORT_BROWSER",
+        "PROBE:PHASE:BROWSER_START",
+        "PROBE:PHASE:CDP_NAVIGATION",
+        "PROBE:PHASE:OBSERVING",
+    ] {
+        if frames.next() != Some(expected) {
+            return Err(invalid.into());
+        }
+    }
+    let first = frames.next().ok_or(invalid)?;
+    let (surface, marker_frame) = if first.starts_with("PROBE:SURFACE:") {
+        (
+            Some(crate::readiness_probe::surface_observation(first).ok_or(invalid)?),
+            frames.next().ok_or(invalid)?,
+        )
+    } else {
+        (None, first)
+    };
+    let marker = marker_frame
+        .strip_prefix("PROBE:HOME_APP:")
+        .ok_or(invalid)?;
+    if !matches!(
+        marker,
+        "MARKER_PRESENT" | "MARKER_NOT_OBSERVED" | "UNPROVEN"
+    ) || frames.next() != Some("PROBE:PHASE:BROWSER_CLOSED")
+    {
+        return Err(invalid.into());
+    }
+    let final_state = frames
+        .next()
+        .and_then(|row| row.strip_prefix("PROBE:FINAL:"))
+        .ok_or(invalid)?;
+    let route = match final_state {
+        "HOME" => "HOME",
+        "LOGIN_VISIBLE" => "AUTH_REQUIRED",
+        "CAPTCHA_VISIBLE" => "SECURITY_CHECK",
+        "CHROME_ERROR" => "NETWORK_ERROR",
+        "TARGET_DRIFT" => "TARGET_DRIFT",
+        "OBSERVATION_UNAVAILABLE" => "UNKNOWN",
+        _ => return Err(invalid.into()),
+    };
+    if frames.next().is_some()
+        || (route == "HOME" && surface.is_none())
+        || surface
+            .as_ref()
+            .is_some_and(|value| value["route"] != route)
+        || (marker != "UNPROVEN"
+            && !surface.as_ref().is_some_and(|value| {
+                route == "HOME"
+                    && value["document"] == "COMPLETE"
+                    && value["history"] == "ABSENT"
+                    && value["assistant"] == "ABSENT"
+                    && value["editor"] == "READY"
+                    && value["composer"] == "EMPTY"
+                    && value["generation"] == "IDLE"
+            }))
+    {
+        return Err(invalid.into());
+    }
+    Ok(
+        json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"INITIAL_HOME_READINESS_OBSERVED",
+        "finalState":final_state,"browserObservation":surface,"v5ComposerMarker":marker,
+        "appToolAvailability":"UNVERIFIED","authenticationVerified":false,"browserReadOnly":true,
+        "sendAttempted":false,"hostStarted":false,"schedulerStarted":false,"ownedTreeExited":true}),
+    )
 }
 
 /// Open only the prepared development browser profile for manual sign-in.
@@ -4341,7 +4464,9 @@ mod tests {
         let prepared = login_preflight(&workspace, target).unwrap();
         // This is the builder called by inspect_readiness, not a parallel test
         // construction. Inspect arguments without launching Python or a browser.
-        let (command, program) = development_readiness_command(&prepared, target).unwrap();
+        let (command, program) =
+            development_readiness_command(&prepared, ReadinessDestination::Conversation(target))
+                .unwrap();
         let source = std::str::from_utf8(program).unwrap();
         assert_eq!(
             program,
@@ -4526,6 +4651,120 @@ mod tests {
             .get("alpha")
             .cloned()
             .ok_or("missing fixture target".into())
+    }
+
+    #[test]
+    fn initial_home_readiness_requires_one_complete_scoped_observation_and_closed_owner() {
+        let sample = json!({"route":"HOME","document":"COMPLETE","history":"ABSENT","editor":"READY",
+            "composer":"EMPTY","generation":"IDLE","assistant":"ABSENT","exchange":"UNATTRIBUTED",
+            "recovery":"OBSERVATION_ONLY"});
+        let frames = |surface: &Value, chip: &str, state: &str| {
+            [
+                "PROBE:PHASE:IMPORT_BROWSER".into(),
+                "PROBE:PHASE:BROWSER_START".into(),
+                "PROBE:PHASE:CDP_NAVIGATION".into(),
+                "PROBE:PHASE:OBSERVING".into(),
+                format!("PROBE:SURFACE:{surface}"),
+                format!("PROBE:HOME_APP:{chip}"),
+                "PROBE:PHASE:BROWSER_CLOSED".into(),
+                format!("PROBE:FINAL:{state}"),
+            ]
+            .to_vec()
+        };
+        for marker in ["MARKER_PRESENT", "MARKER_NOT_OBSERVED", "UNPROVEN"] {
+            let report = initial_home_readiness_result(&frames(&sample, marker, "HOME")).unwrap();
+            assert_eq!(report["v5ComposerMarker"], marker);
+            assert_eq!(report["appToolAvailability"], "UNVERIFIED");
+            assert_eq!(report["authenticationVerified"], false);
+            assert!(report.get("registeredTargetGeneration").is_none());
+        }
+        for (key, value) in [
+            ("composer", "DRAFT_PRESENT"),
+            ("generation", "ACTIVE"),
+            ("document", "LOADING"),
+            ("editor", "AMBIGUOUS"),
+            ("history", "PRESENT"),
+            ("assistant", "PRESENT"),
+        ] {
+            let mut changed = sample.clone();
+            changed[key] = json!(value);
+            assert!(
+                initial_home_readiness_result(&frames(&changed, "MARKER_PRESENT", "HOME")).is_err()
+            );
+            let report =
+                initial_home_readiness_result(&frames(&changed, "UNPROVEN", "HOME")).unwrap();
+            assert_eq!(report["browserObservation"][key], value);
+        }
+        for (state, route) in [
+            ("TARGET_DRIFT", "TARGET_DRIFT"),
+            ("LOGIN_VISIBLE", "AUTH_REQUIRED"),
+            ("CHROME_ERROR", "NETWORK_ERROR"),
+            ("CAPTCHA_VISIBLE", "SECURITY_CHECK"),
+        ] {
+            let mut other = sample.clone();
+            other["route"] = json!(route);
+            assert!(
+                initial_home_readiness_result(&frames(&other, "MARKER_PRESENT", state)).is_err()
+            );
+            assert_eq!(
+                initial_home_readiness_result(&frames(&other, "UNPROVEN", state)).unwrap()["finalState"],
+                state
+            );
+        }
+        let mut duplicate = frames(&sample, "MARKER_PRESENT", "HOME");
+        duplicate.insert(5, duplicate[4].clone());
+        assert!(initial_home_readiness_result(&duplicate).is_err());
+        let mut missing_close = frames(&sample, "MARKER_PRESENT", "HOME");
+        missing_close.remove(6);
+        assert!(initial_home_readiness_result(&missing_close).is_err());
+        assert!(initial_home_readiness_result(&frames(&sample, "PRIVATE_VALUE", "HOME")).is_err());
+        assert!(
+            initial_home_readiness_result(&frames(&sample, "UNPROVEN", "TARGET_DRIFT")).is_err()
+        );
+    }
+
+    #[test]
+    fn initial_home_readiness_uses_fixed_home_and_existing_owner_without_delivery_arguments() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let journal = parent.join("intent.json");
+        fs::write(&journal, b"prepared fixture").unwrap();
+        let (proof, _pin) = InitialLogin::pin("alpha", "first", &journal).unwrap();
+        let selected = owner_profile_preflight(&workspace, None, &|_| Ok(None)).unwrap();
+        assert_eq!(selected.target_generation, None);
+        let (command, program) =
+            development_readiness_command(&selected, ReadinessDestination::InitialHome(&proof))
+                .unwrap();
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(
+            &args[3..],
+            &[
+                OsStr::new("--await-start"),
+                OsStr::new("--profile"),
+                selected.profile.as_os_str(),
+                OsStr::new("--initial-home"),
+                OsStr::new("--primitives"),
+                selected.primitives.as_os_str(),
+                OsStr::new("--primitives-sha256"),
+                OsStr::new(&selected.primitives_sha256),
+                OsStr::new("--read-only"),
+                OsStr::new("--seconds"),
+                OsStr::new("20")
+            ]
+        );
+        assert_eq!(
+            program,
+            include_bytes!("../../scripts/wake_readiness_visual_probe.py")
+        );
+        drop(selected);
+        assert_eq!(
+            inspect_initial_readiness(&workspace, &proof, |_| Err("FIXTURE_INTENT_CHANGED".into()))
+                .unwrap_err(),
+            "FIXTURE_INTENT_CHANGED"
+        );
+        assert!(!dev_dir(&workspace).join("login-active.json").exists());
+        drop(_pin);
+        cleanup(&parent);
     }
 
     #[test]

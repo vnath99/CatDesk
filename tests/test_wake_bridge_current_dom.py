@@ -303,8 +303,15 @@ if (options.observationCaptcha) document.children.push(el('iframe', {title:'capt
 if (options.observationNetwork) document.children.push(el('div', {id:'main-frame-error'}), el('div', {id:'error-code'}));
 let appMenuControl=null,appPanel=null;
 if (options.appForm) {
-  const editor=el('div',{id:'prompt-textarea',contenteditable:'true'},options.appDraft || '');
-  editor.isContentEditable=true;
+  const textarea = options.appTextarea === true;
+  const attributes = textarea ? {} : {contenteditable:'true'};
+  const editor = el(textarea ? 'textarea' : 'div',
+    {id:'prompt-textarea', ...attributes, ...options.appEditorAttributes}, options.appDraft || '');
+  editor.isContentEditable = !textarea && editor.getAttribute('contenteditable') === 'true';
+  if (textarea) {
+    editor.value = options.appDraft || '';
+    editor.readOnly = editor.hasAttribute('readonly');
+  }
   const controls=Array.from({length:options.appPlusCount ?? 1},()=>el('button',{
     'data-testid':'composer-plus-btn',type:options.appPlusType || 'button',
     'aria-expanded':options.appExpanded || 'false',disabled:options.appDisabled || false},'PRIVATE_CONTROL'));
@@ -336,9 +343,14 @@ if (options.appForm) {
     if(options.ambiguousPortalAfterOpen&&options.appExpanded==='true') append(document,el('div',{'data-floating-ui-portal':''},'',[el('button',{},'PRIVATE_OTHER_PANEL')]));
   }
   if(options.appSemanticLabel) for(const control of controls){delete control.attrs['data-testid'];control.attrs['aria-label']=options.appSemanticLabel;}
-  if(options.v5Chip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'CatDesk-Local-Tunnel-v5'}));
+  if(options.v5Chip) {
+    const chip=el('button',{'data-testid':'app-chip','aria-label':'CatDesk-Local-Tunnel-v5',...options.appChipAttributes});
+    controls.push(options.appChipAncestor ? el(options.appChipAncestor.tag,options.appChipAncestor.attrs,'',[chip]) : chip);
+  }
   if(options.foreignChip) controls.push(el('button',{'data-testid':'app-chip','aria-label':'PRIVATE_OTHER_APP'}));
-  const form=el('form',{},'',[editor,...(options.appControlOutsideForm?[]:controls)]);
+  const editorContainer = options.appEditorAncestor
+    ? el(options.appEditorAncestor.tag, options.appEditorAncestor.attrs, '', [editor]) : editor;
+  const form=el('form',{},'',[editorContainer,...(options.appControlOutsideForm?[]:controls)]);
   if(options.appInlinePanel&&appPanel) append(form,appPanel);
   if(options.appFileInput){
     const input=el('input',{type:'file'});
