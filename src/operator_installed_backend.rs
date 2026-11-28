@@ -247,17 +247,117 @@ fn hash(path: &Path) -> Result<String, String> {
 }
 #[cfg(windows)]
 fn verify_helper_pins(
+    root: &Path,
     authority: &Value,
     reconcile: &Path,
     recovery: &Path,
     powershell: &Path,
-) -> Result<(), String> {
-    verify_helper_digests(
+    installed_sha: &str,
+) -> Result<Option<CompletedPromotionInterpreterPins>, String> {
+    let powershell_sha = hash(powershell)?;
+    match verify_helper_digests(
         authority,
         &hash(reconcile)?,
         &hash(recovery)?,
-        &hash(powershell)?,
-    )
+        &powershell_sha,
+    ) {
+        Ok(()) => Ok(None),
+        Err(reason) if reason == "INSTALLED_BACKEND_POWERSHELL_IDENTITY_CHANGED" => {
+            pin_completed_promotion_interpreter(root, powershell, &powershell_sha, installed_sha)
+                .map(Some)
+                .map_err(|_| reason)
+        }
+        Err(reason) => Err(reason),
+    }
+}
+
+#[cfg(windows)]
+struct CompletedPromotionInterpreterPins {
+    _control: crate::windows_protected_fs::ProtectedDirectoryGuard,
+    _recovery: crate::windows_protected_fs::ProtectedDirectoryGuard,
+    _files: [fs::File; 4],
+}
+
+#[cfg(windows)]
+fn pin_completed_promotion_interpreter(
+    root: &Path,
+    powershell: &Path,
+    powershell_sha: &str,
+    installed_sha: &str,
+) -> Result<CompletedPromotionInterpreterPins, String> {
+    use crate::windows_protected_fs::{
+        ProtectedDirectoryGuard, open_relative_regular_file, read_optional_relative_regular,
+        read_relative_regular,
+    };
+    const LABEL: &str = "installed serving interpreter proof";
+    const UNPROVEN: &str = "INSTALLED_BACKEND_AUTHORITY_UNPROVEN";
+    let mut control = ProtectedDirectoryGuard::acquire_read_only(root, LABEL)?;
+    control.descend_existing(".catdesk", LABEL)?;
+    control.descend_existing("promotion-control", LABEL)?;
+    let mut recovery = ProtectedDirectoryGuard::acquire_read_only(root, LABEL)?;
+    recovery.descend_existing(".catdesk", LABEL)?;
+    recovery.descend_existing("promotion-recovery", LABEL)?;
+    let files = [
+        open_relative_regular_file(&control, "authorization.json", LABEL)?,
+        open_relative_regular_file(&control, "claim.json", LABEL)?,
+        open_relative_regular_file(&control, "result.json", LABEL)?,
+        open_relative_regular_file(&recovery, "reviewed-promotion.json", LABEL)?,
+    ];
+    if read_optional_relative_regular(&recovery, "promotion-transaction.json", 4096, LABEL)?
+        .is_some()
+    {
+        return Err(UNPROVEN.into());
+    }
+    let authorization: crate::daemon_reload::ReviewedPromotionAuthorizationV1 =
+        serde_json::from_slice(&read_relative_regular(
+            &control,
+            "authorization.json",
+            8192,
+            LABEL,
+        )?)
+        .map_err(|_| UNPROVEN)?;
+    let handoff: Value = serde_json::from_slice(&read_relative_regular(
+        &recovery,
+        "reviewed-promotion.json",
+        2048,
+        LABEL,
+    )?)
+    .map_err(|_| UNPROVEN)?;
+    let result = crate::daemon_reload::existing_local_promotion_result(root, installed_sha)?
+        .ok_or(UNPROVEN)?;
+    if authorization.trusted_powershell_sha256 != powershell_sha
+        || Path::new(&authorization.trusted_powershell_path) != powershell
+        || !serving_promotion_handoff_matches(&handoff, &authorization, &result, installed_sha)
+    {
+        return Err(UNPROVEN.into());
+    }
+    Ok(CompletedPromotionInterpreterPins {
+        _control: control,
+        _recovery: recovery,
+        _files: files,
+    })
+}
+
+#[cfg(any(windows, test))]
+fn serving_promotion_handoff_matches(
+    handoff: &Value,
+    authorization: &crate::daemon_reload::ReviewedPromotionAuthorizationV1,
+    result: &crate::daemon_reload::ReviewedPromotionResultV1,
+    installed_sha: &str,
+) -> bool {
+    handoff.as_object().is_some_and(|object| object.len() == 7)
+        && handoff["schemaVersion"] == 1
+        && handoff["stage"] == "CANONICAL_HANDOFF_PROVEN"
+        && handoff["canonicalRelativePath"] == r"target\release\catdesk.exe"
+        && handoff["candidateHash"] == installed_sha
+        && handoff["canonicalSha256"] == installed_sha
+        && handoff["transactionId"] == authorization.transaction_id
+        && handoff["authorizationId"] == authorization.authorization_id
+        && result.state == "PROMOTION_COMPLETED"
+        && result.candidate_sha256 == installed_sha
+        && authorization.candidate_sha256 == installed_sha
+        && result.transaction_id == authorization.transaction_id
+        && result.authorization_generation == authorization.generation
 }
 
 #[cfg(any(windows, test))]
@@ -1040,7 +1140,6 @@ fn run_owned(
         131072,
     )?;
     let powershell = super::trusted_windows_powershell(&root)?;
-    verify_helper_pins(&authority, &reconcile, &recovery, &powershell)?;
     let _pins = [&binary, &recovery, &reconcile, &powershell]
         .into_iter()
         .map(|path| {
@@ -1056,7 +1155,14 @@ fn run_owned(
     if hash(&binary)? != expected {
         return Err("INSTALLED_BACKEND_INPUT_CHANGED".into());
     }
-    verify_helper_pins(&authority, &reconcile, &recovery, &powershell)?;
+    let _promotion_interpreter_pins = verify_helper_pins(
+        &root,
+        &authority,
+        &reconcile,
+        &recovery,
+        &powershell,
+        &expected,
+    )?;
     let mut command = ps_command(&root, trust_command(&root, &recovery))?;
     command.stdin(Stdio::piped());
     let mut holder = OwnedCandidateChild::spawn(&mut command)?;
@@ -1259,6 +1365,115 @@ fn run_owned(_: &Path, _: u64, _: &str, _: Option<&CentralOptions>) -> Result<Va
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn completed_promotion_pins_interpreter_only_for_its_proven_installed_release() {
+        let root = std::env::temp_dir().join(uuid::Uuid::new_v4().simple().to_string());
+        let control = root.join(".catdesk/promotion-control");
+        let recovery = root.join(".catdesk/promotion-recovery");
+        fs::create_dir_all(&control).unwrap();
+        fs::create_dir_all(&recovery).unwrap();
+        let powershell = root.join("fixture-fixed-host.exe");
+        let digest = "a".repeat(64);
+        let interpreter_digest = "b".repeat(64);
+        let transaction = "c".repeat(32);
+        let authorization_id = "d".repeat(32);
+        let claim_id = "e".repeat(32);
+        let authorization = json!({
+            "schemaVersion":1, "generation":3, "authorizationId":authorization_id,
+            "expiresAtUnix":1, "candidateRelativePath":"candidate.exe",
+            "candidateSha256":digest, "priorCanonicalSha256":"prior",
+            "promotionScriptSha256":"script", "trustedPowershellPath":powershell,
+            "trustedPowershellSha256":interpreter_digest, "reviewSessionId":"review",
+            "reviewRecordId":"report", "reviewRecordSha256":"review-digest",
+            "transactionId":transaction, "claimId":claim_id, "buildAttestationSha256":"build",
+            "buildAttemptId":"build", "snapshotId":"snapshot", "snapshotAuthorityDigest":"authority",
+            "snapshotManifestDigest":"manifest", "buildPolicySha256":"policy",
+            "cargoSha256":"cargo", "rustcSha256":"rust",
+            "snapshotExpected":{"session_id":"review","project_id":"catdesk",
+                "approved_contract_hash":"review","logical_task_id":"review","completion_artifact_ids":[],
+                "current_outputs":[],"baseline_observations":[]}
+        });
+        let claim = json!({
+            "schemaVersion":1, "authorizationId":authorization_id, "claimId":claim_id,
+            "transactionId":transaction, "candidateRelativePath":"candidate.exe",
+            "state":"CLAIMED_PENDING"
+        });
+        let result = json!({
+            "schemaVersion":1, "state":"PROMOTION_COMPLETED", "authorizationGeneration":3,
+            "candidateSha256":digest, "transactionId":transaction
+        });
+        let handoff = json!({
+            "schemaVersion":1, "authorizationId":authorization_id, "transactionId":transaction,
+            "stage":"CANONICAL_HANDOFF_PROVEN", "candidateHash":digest,
+            "canonicalSha256":digest, "canonicalRelativePath":r"target\release\catdesk.exe"
+        });
+        let inputs = [
+            (control.join("authorization.json"), authorization),
+            (control.join("claim.json"), claim),
+            (control.join("result.json"), result),
+            (recovery.join("reviewed-promotion.json"), handoff),
+        ];
+        for (path, value) in &inputs {
+            fs::write(path, value.to_string()).unwrap();
+        }
+        let pins =
+            pin_completed_promotion_interpreter(&root, &powershell, &interpreter_digest, &digest)
+                .unwrap();
+        assert!(fs::write(&inputs[0].0, b"replacement").is_err());
+        drop(pins);
+        assert!(
+            pin_completed_promotion_interpreter(&root, &powershell, &"f".repeat(64), &digest)
+                .is_err()
+        );
+        assert!(
+            pin_completed_promotion_interpreter(
+                &root,
+                &powershell,
+                &interpreter_digest,
+                &"f".repeat(64)
+            )
+            .is_err()
+        );
+        for (index, field, changed) in [
+            (0, "trustedPowershellPath", json!(root.join("other.exe"))),
+            (1, "transactionId", json!("f".repeat(32))),
+            (2, "state", json!("PROMOTION_FAILED_OR_AMBIGUOUS")),
+            (2, "authorizationGeneration", json!(2)),
+            (3, "authorizationId", json!("f".repeat(32))),
+        ] {
+            let (path, value) = &inputs[index];
+            let mut different = value.clone();
+            different[field] = changed;
+            fs::write(path, different.to_string()).unwrap();
+            assert!(
+                pin_completed_promotion_interpreter(
+                    &root,
+                    &powershell,
+                    &interpreter_digest,
+                    &digest
+                )
+                .is_err(),
+                "a change to {field} must refuse"
+            );
+            fs::write(path, value.to_string()).unwrap();
+        }
+        let pending = recovery.join("promotion-transaction.json");
+        fs::write(&pending, "{}").unwrap();
+        assert!(
+            pin_completed_promotion_interpreter(&root, &powershell, &interpreter_digest, &digest)
+                .is_err()
+        );
+        fs::remove_file(pending).unwrap();
+        for (path, _) in inputs {
+            fs::remove_file(path).unwrap();
+        }
+        fs::remove_dir(control).unwrap();
+        fs::remove_dir(recovery).unwrap();
+        fs::remove_dir(root.join(".catdesk")).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
 
     #[test]
     fn installed_helper_pins_distinguish_interpreter_drift() {

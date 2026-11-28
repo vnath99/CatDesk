@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 28 — removed a future finite-serving dependency on stale historical interpreter bytes in development.** A controller containing the change can use a completed reviewed promotion for the exact selected image and current platform interpreter. The installed release predates the change and its promotion still pins the earlier interpreter. The existing v5 connector and first installed Web coding cycle remain open. [Evidence](docs/verification/FINITE_SERVING_REVIEWED_INTERPRETER_2026_11_28.json).
+
 **November 23 — bounded installed serving authority checked for the recovered scope.** The launcher and frozen candidate include the same finite central owner. The prepared and installed files needed for the initial gate are available, and the existing interpreter hash would refuse serving before helper execution. This is separate from v5 authentication and the installed Web coding acceptance. [Evidence](docs/verification/RECOVERED_CENTRAL_SERVING_INTERPRETER_PIN_2026_11_23.json).
 
 **November 23 — live readiness ambiguity reproduced without a reconnect.** The runtime's own endpoint reported ready and challenged MCP initialize. Development now surfaces the challenge and leaves an already running runtime under its existing owner. Canonical authenticated discovery and the installed Web coding cycle still need qualification. [Evidence](docs/verification/OFFICIAL_RUNTIME_REUSE_AND_MCP_READINESS_2026_11_23.json).

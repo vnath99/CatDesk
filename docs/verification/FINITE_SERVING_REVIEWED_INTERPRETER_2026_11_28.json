@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T15:32:00Z",
+  "scope": "INSTALLED_READ_ONLY_STATE_AND_DEVELOPMENT_INTERPRETER_AUTHORITY",
+  "startingDevelopmentCommit": "46fac9d0319eccaf513c99bd40109f2fd5b24c7b",
+  "installed": {
+    "oneListenerMatchesCanonicalImage": true,
+    "openPromotionTransactionPresent": false,
+    "terminalResultCompleted": true,
+    "promotionAuthorizationAndResultMatchCanonicalHandoff": true,
+    "currentWindowsPowerShellMatchesPromotionPin": false,
+    "protectedWrites": 0,
+    "servingProcessesStarted": 0
+  },
+  "review": {
+    "frozenSource": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "state": "DRAFT",
+    "providerTurns": 0,
+    "startApprovalPresent": false,
+    "expiresUtc": "2026-11-29T00:43:07Z"
+  },
+  "connector": {
+    "freshDiscoveries": 1,
+    "caller": "Codex v5 connector",
+    "error": "UNAUTHORIZED",
+    "source": "target_http",
+    "httpStatus": 401,
+    "runtimeReconnects": 0
+  },
+  "development": {
+    "usesExistingCompletedPromotionEvidence": true,
+    "requiresExactInterpreterAndInstalledArtifact": true,
+    "retainsHelperScriptPinsAndSelectedReleaseChecks": true,
+    "retainsHistoricalAuthorityBytes": true,
+    "windowsFiniteServingTestsPassed": 32,
+    "optInInstalledSelectedReleaseTestNotRun": true,
+    "fixtureProvesPinExclusionAndRefusesMismatchedAndPendingPromotion": true,
+    "productionInstalled": false
+  },
+  "installedWebLifecycleAccepted": false
+}

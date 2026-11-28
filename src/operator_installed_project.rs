@@ -557,9 +557,8 @@ pub(super) fn run_owned(
         131072,
     )?;
     let powershell = super::super::trusted_windows_powershell(&root)?;
-    verify_helper_pins(&auth, &reconcile, &recovery, &powershell)?;
     use std::os::windows::fs::OpenOptionsExt;
-    let fixed_inputs = [&recovery, &reconcile, &powershell]
+    let fixed_inputs = [&binary, &recovery, &reconcile, &powershell]
         .into_iter()
         .map(|path| Ok((path.clone(), hash(path)?)))
         .collect::<Result<Vec<_>, String>>()?;
@@ -574,7 +573,14 @@ pub(super) fn run_owned(
         })
         .collect::<Result<Vec<_>, _>>()?;
     verify_pins(&fixed_inputs)?;
-    verify_helper_pins(&auth, &reconcile, &recovery, &powershell)?;
+    let _promotion_interpreter_pins = verify_helper_pins(
+        &root,
+        &auth,
+        &reconcile,
+        &recovery,
+        &powershell,
+        &hash(&binary)?,
+    )?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

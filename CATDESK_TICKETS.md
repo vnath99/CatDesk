@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 28.** Development can renew finite-serving interpreter evidence through a completed reviewed promotion for the exact installed artifact. It preserves the helper-script pins, authenticated startup, lifecycle lease and selected-release checks. The current installation and tunnel are unchanged. Review admission still depends on the authorized existing-owner bearer repair and a verified destination. [Evidence](docs/verification/FINITE_SERVING_REVIEWED_INTERPRETER_2026_11_28.json).
+
 **RELEASE-RECOVERY, November 23.** The finite installed central and project listeners now distinguish interpreter drift in development. Actual read-only checks matched the two release scripts, confirmed the signed OS interpreter, and found a different digest from the pinned interpreter. The installed authority, listener and rollback were preserved. Re-establish finite serving under separately reviewed authority before using the recovered scope with canonical v5. [Evidence](docs/verification/RECOVERED_CENTRAL_SERVING_INTERPRETER_PIN_2026_11_23.json).
 
 **RELEASE-RECOVERY, November 23.** Development automatic reconnect now waits for a stopped or absent runtime and preserves a live official owner. A readyz HTTP 200 with an auth challenge, timeout or unreadable evidence can be locally ready with MCP discovery unverified. The current release still needs the coordinated bearer-forwarding transition and exact v5 Web verification. [Evidence](docs/verification/OFFICIAL_RUNTIME_REUSE_AND_MCP_READINESS_2026_11_23.json).
