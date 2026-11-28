@@ -454,9 +454,9 @@ function Get-ReconnectRuntimeOwner {
 }
 
 function Test-ReconnectBackendOwner {
-    param($Local, $Canonical, $Expected)
+    param($Local, $Canonical, $Expected, [ValidateSet('BACKEND_ONLY','FULL_STACK')][string]$OwnerMode = 'BACKEND_ONLY')
     $Current = Get-LoopbackCatDeskListener -Port $Local.Port -Canonical $Canonical
-    if ($null -eq $Current -or $null -eq $Expected -or -not $Current.MatchesCanonical -or $Current.OwnerMode -cne 'BACKEND_ONLY' -or
+    if ($null -eq $Current -or $null -eq $Expected -or -not $Current.MatchesCanonical -or $Current.OwnerMode -cne $OwnerMode -or
         $Current.Pid -ne $Expected.Pid -or $Current.CreationTimeUtc -cne $Expected.CreationTimeUtc) { return $false }
     $daemons = @(Get-CatDeskDaemonProcessCandidates -Canonical $Canonical)
     return ($daemons.Count -eq 1 -and $daemons[0].MatchesCanonical -and
@@ -554,7 +554,11 @@ function Invoke-ExistingRuntimeReconnect {
         $canonical = Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $ExpectedBackendSha256
         $local = Get-ConfiguredLocalMcp -Path $fixedConfig
         $backend = Get-LoopbackCatDeskListener -Port $local.Port -Canonical $canonical
-        if (-not (Test-ReconnectBackendOwner $local $canonical $backend)) { return 'SECURE_MCP_RECONNECT_BACKEND_ONLY_REQUIRED' }
+        $planBeforeHandoff = -not $ExecuteReconnect -and $null -ne $backend -and $backend.OwnerMode -ceq 'FULL_STACK'
+        $requiredMode = if ($planBeforeHandoff) { 'FULL_STACK' } else { 'BACKEND_ONLY' }
+        if (-not (Test-ReconnectBackendOwner $local $canonical $backend -OwnerMode $requiredMode)) {
+            return 'SECURE_MCP_RECONNECT_BACKEND_ONLY_REQUIRED'
+        }
         [void](Get-LocalMcpRuntimeAuthorization -ForwardBearer $true)
         if (-not [Environment]::GetEnvironmentVariable('CONTROL_PLANE_API_KEY')) { return 'SECURE_MCP_RECONNECT_RUNTIME_CREDENTIAL_UNAVAILABLE' }
         $config = Read-CatDeskMcpConfig -Path $fixedConfig
@@ -576,6 +580,7 @@ function Invoke-ExistingRuntimeReconnect {
         $attempt = Assert-CatDeskRecoveryContainedPath -Root $root -Path (Join-Path $evidenceDirectory "secure-mcp-reconnect-$digest.json") -Label 'reconnect attempt' -AllowMissingLeaf
         $resultPath = Assert-CatDeskRecoveryContainedPath -Root $root -Path (Join-Path $evidenceDirectory "secure-mcp-reconnect-$digest.result.json") -Label 'reconnect result' -AllowMissingLeaf
         if ((Test-Path -LiteralPath $attempt) -or (Test-Path -LiteralPath $resultPath)) { return 'SECURE_MCP_RECONNECT_ATTEMPT_EXISTS_NO_RETRY' }
+        if ($planBeforeHandoff) { return 'SECURE_MCP_RECONNECT_READY_AFTER_BACKEND_HANDOFF' }
         if (-not $ExecuteReconnect) { return 'SECURE_MCP_RECONNECT_PREFLIGHT_READY' }
         Write-ReconnectEvidence -Path $attempt -State 'SECURE_MCP_RECONNECT_INTENT'
         $outcome = Invoke-ReconnectRuntimeTransition ([pscustomobject]@{

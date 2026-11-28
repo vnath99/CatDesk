@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-28 16:00 UTC — verify reconnect prerequisites before the backend handoff.** The installed full-stack backend and original Secure MCP owner passed the development read-only preflight together and stayed running. Windows PowerShell 5.1 and PowerShell 7 passed the paired handoff and reconnect tests. [Evidence](docs/verification/SECURE_MCP_COMBINED_PREFLIGHT_2026_11_28.json).
+
 **2026-11-28 15:55 UTC — qualify the same-alias Secure MCP reconnect path.** The development helper refused the actual full-stack listener before any lifecycle operation. Windows fixtures checked one stop and one bearer-forwarding connect, exact old-owner exit, profile/config readback, and retained intent on uncertain results. [Evidence](docs/verification/SECURE_MCP_SAME_ALIAS_RECONNECT_2026_11_28.json).
 
 **2026-11-28 15:47 UTC — exercised the same-image handoff preflight against the installed owner.** The development facade verified the full-stack listener, fixed release and existing bearer-protected MCP without starting or stopping a serving process. The current command runner refused persistent handoff eligibility. The exact native listener creation time was required after a direct CIM sample differed. [Evidence](docs/verification/BACKEND_ONLY_LIFECYCLE_HANDOFF_2026_11_28.json).

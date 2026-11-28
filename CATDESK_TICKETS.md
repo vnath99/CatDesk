@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 28.** The reconnect preflight now checks bearer, client, alias, profile and original owner before the backend handoff. Actual read-only preflight passed. Execution still requires a verified backend-only owner. Obtain independent controller review and qualify its Windows execution owner before the live transition. [Evidence](docs/verification/SECURE_MCP_COMBINED_PREFLIGHT_2026_11_28.json).
+
 **RELEASE-RECOVERY, November 28.** The guarded same-alias reconnect uses the existing client and release lifecycle lease, pins the original runtime PID/time, verifies its exit, and validates the replacement and retained profile/configuration. An unresolved result leaves a durable attempt fence. Source qualification passed. The live operation requires independent review, an eligible operator process and a proven backend-only listener. [Evidence](docs/verification/SECURE_MCP_SAME_ALIAS_RECONNECT_2026_11_28.json).
 
 **RELEASE-RECOVERY, November 28.** The bounded same-image handoff reuses the existing lifecycle lease, fixed configuration, exact owner stop, and authenticated verification. An ambiguous replacement returns recovery required. A failed verified replacement can restore the original full-stack mode with the original image. Live preflight passed and the current Codex process did not qualify to own execution. [Evidence](docs/verification/BACKEND_ONLY_LIFECYCLE_HANDOFF_2026_11_28.json).

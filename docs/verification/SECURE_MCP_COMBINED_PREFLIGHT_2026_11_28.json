@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T16:00:00Z",
+  "scope": "INSTALLED_READ_ONLY_PREFLIGHT_AND_ISOLATED_HANDOFF_RECONNECT_GATES",
+  "startingDevelopmentCommit": "4c9ca89c5bb995f8b756798b98b29636d7e6a705",
+  "installedReadOnly": {
+    "state": "SECURE_MCP_RECONNECT_READY_AFTER_BACKEND_HANDOFF",
+    "runtimeOriginalInstanceStillPresent": true,
+    "backendOwnerUnchanged": true,
+    "executeRequested": false,
+    "nativeStopCommandsInvoked": 0,
+    "nativeConnectCommandsInvoked": 0,
+    "freshV5Discoveries": 0,
+    "protectedWrites": 0
+  },
+  "development": {
+    "powerShell7": {
+      "handoffBehavioralSuitePassed": true,
+      "bearerForwardingChecksPassed": 25
+    },
+    "windowsPowerShell51": {
+      "handoffBehavioralSuitePassed": true,
+      "bearerForwardingChecksPassed": 25
+    },
+    "backendOnlyReadyPermitsReconnectGate": true,
+    "restoredFullStackRefusedByReconnectGate": true,
+    "ambiguousHandoffRefusedByReconnectGate": true,
+    "actualOwnedBearerChildPassed": true
+  },
+  "webDiscoveryVerified": false,
+  "installedWebLifecycleAccepted": false
+}

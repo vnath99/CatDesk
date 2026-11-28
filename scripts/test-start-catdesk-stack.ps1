@@ -739,6 +739,15 @@ try {
       $node = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name }, $true)
       . ([scriptblock]::Create($node.Extent.Text))
     }
+    $reconnectTokens = $null
+    $reconnectErrors = $null
+    $reconnectAst = [Management.Automation.Language.Parser]::ParseFile(
+      (Join-Path $PSScriptRoot 'setup-secure-mcp.ps1'), [ref]$reconnectTokens, [ref]$reconnectErrors)
+    if ($reconnectErrors.Count) { throw 'reconnect controller did not parse' }
+    $ownerGate = $reconnectAst.Find({
+      param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Test-ReconnectBackendOwner'
+    }, $true)
+    . ([scriptblock]::Create($ownerGate.Extent.Text))
     $HandoffBackendOnly = $true
     $ExpectedBuildSha256 = 'a' * 64
     $ExpectedOwnerPid = 7101
@@ -799,6 +808,12 @@ try {
       $script:handoffActions.Clear()
     }
     $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
+    $reconnectLocal = Get-ConfiguredLocalMcp
+    $reconnectRelease = Get-CanonicalCatDeskIdentity -ExpectedHash $ExpectedBuildSha256
+    if (-not (Test-ReconnectBackendOwner $reconnectLocal $reconnectRelease $script:handoffListener -OwnerMode 'FULL_STACK') -or
+        (Test-ReconnectBackendOwner $reconnectLocal $reconnectRelease $script:handoffListener)) {
+      throw 'reconnect must distinguish pre-handoff planning from execution'
+    }
     $Mode = 'plan'; $Execute = $false
     Assert-Handoff 'BACKEND_HANDOFF_PREFLIGHT_READY' ''
     $Mode = 'recover'; $Execute = $true
@@ -809,12 +824,21 @@ try {
     Assert-Handoff 'BACKEND_HANDOFF_OWNER_CHANGED' ''
     $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
     Assert-Handoff 'BACKEND_HANDOFF_LOCAL_READY' 'stop-original,start-backend-only'
+    if (-not (Test-ReconnectBackendOwner $reconnectLocal $reconnectRelease $script:handoffListener)) {
+      throw 'verified backend-only handoff did not pass the reconnect gate'
+    }
     $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
     $script:handoffFault = 'readiness'
     Assert-Handoff 'BACKEND_HANDOFF_FULL_STACK_RESTORED' 'stop-original,start-backend-only,stop-owned-replacement,restore-full-stack'
+    if (Test-ReconnectBackendOwner $reconnectLocal $reconnectRelease $script:handoffListener) {
+      throw 'restored full-stack owner passed the reconnect execution gate'
+    }
     $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
     $script:handoffFault = 'racer'
     Assert-Handoff 'BACKEND_HANDOFF_RECOVERY_REQUIRED' 'stop-original'
+    if (Test-ReconnectBackendOwner $reconnectLocal $reconnectRelease $script:handoffListener) {
+      throw 'ambiguous handoff passed the reconnect execution gate'
+    }
   }
   $assessmentNode=$ast.Find({param($n)$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-CanonicalReleaseRecoveryAssessment'},$true);if($null -eq $assessmentNode){throw 'missing read-only recovery assessment'};$assessmentSource=$assessmentNode.Extent.Text;if($assessmentSource -match 'Start-Process|Stop-Process|Invoke-OrderedOfficialRuntimeMigration|Test-OfficialRuntimeVerified'){throw 'read-only recovery assessment acquired daemon or tunnel authority'}
   if($source -match [regex]::Escape($route)){throw "test route leaked into bootstrap source"};foreach($required in @("--catdesk-daemon","--catdesk-binagotchy-cli","Start-CatDeskBinagotchyGui","catdesk_instruction","delegated_run_list","Get-VerifiedBuildFingerprint","healthz","readyz","Get-OfficialRuntimeVerification","Get-RedactedReadinessFailureGate","Save-RedactedRecoveryEvidence","Invoke-BoundedTunnelClient","Invoke-BoundedCodexProbe","Initialize-BoundedNativeProcessType","Invoke-SilentLoopbackHttp","ConvertTo-NativeCommandLineArgument","process.Kill()")){if($source -notmatch [regex]::Escape($required)){throw "missing $required"}};if($source -match "& \$clientPath runtimes status"){throw "unbounded runtime status remains"};if($source -match '& \$codex\.Source'){throw "unbounded Codex prerequisite probe remains"};if($source -match "--auto-start-computer"){throw "legacy TUI launch remains"}

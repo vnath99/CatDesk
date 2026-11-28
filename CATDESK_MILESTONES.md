@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 28 — backend handoff and Secure MCP reconnect can be planned before interruption.** The live read-only check verified the original owners and reconnect prerequisites together. The regression tests refused execution after restoration of full-stack mode or an ambiguous handoff. The installed transition, Web discovery and Web coding cycle remain open. [Evidence](docs/verification/SECURE_MCP_COMBINED_PREFLIGHT_2026_11_28.json).
+
 **November 28 — guarded Secure MCP reconnect qualified in development.** The same alias, tunnel ID, target and profile are bound to the original native process, and reconnect is allowed only after its confirmed exit and authenticated backend-only readiness. The installed full-stack owner correctly refused preflight. Actual authenticated v5 discovery, independent review and the installed Web coding cycle remain open. [Evidence](docs/verification/SECURE_MCP_SAME_ALIAS_RECONNECT_2026_11_28.json).
 
 **November 28 — same-image lifecycle handoff implemented in development.** The new read-only preflight confirmed the current installed release supports authenticated backend-only startup and matched its full-stack owner. The execution path holds the existing lifecycle lease and can restore the original mode on a failed launch. Installed handoff and external connector repair still await qualification. [Evidence](docs/verification/BACKEND_ONLY_LIFECYCLE_HANDOFF_2026_11_28.json).
