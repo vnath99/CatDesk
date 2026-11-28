@@ -47,5 +47,29 @@
     "productionProcessesStopped": 0
   },
   "installedTransitionExecuted": false,
-  "installedWebLifecycleAccepted": false
+  "installedWebLifecycleAccepted": false,
+  "gitHubReviewRoute": {
+    "draftPullRequest": 43,
+    "url": "https://github.com/vnath99/CatDesk/pull/43",
+    "exactHeadAndBaseVerified": true,
+    "connectedRepositoryObserved": true,
+    "repositoryFollowsPersonalPreferences": true,
+    "personalAutomaticReviewOn": false,
+    "manualReviewRequested": false,
+    "independentResultAccepted": false,
+    "productionAttestationGranted": false
+  },
+  "followUpWindowsOwnerEvidence": {
+    "observedUtc": "2026-11-28T16:47:00Z",
+    "installedLogonRegistrationMode": "FULL_STACK",
+    "currentListenerMode": "FULL_STACK",
+    "matchingScheduledTasks": 0,
+    "restrictedShellAccessUnverified": true,
+    "readOnlyApprovedProbeVerified": true,
+    "attemptedQualification": "AUTO_REVIEW_REFUSED_BEFORE_EXECUTION",
+    "refusalClass": "REPEATED_REJECTED_SCHEDULED_TASK_CREATION_AND_EXECUTION",
+    "taskRegistered": false,
+    "processActions": 0,
+    "protectedWrites": 0
+  }
 }

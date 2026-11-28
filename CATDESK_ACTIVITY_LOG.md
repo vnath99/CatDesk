@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-28 16:47 UTC | Open the exact Secure MCP controller review.** GitHub Code Review lists CatDesk. The repository follows personal preferences, and that automatic review preference is off. Draft PR #43 pins the existing exact base and `3ce3f70` head. Read-only Windows inspection confirmed the full-stack logon entry and listener. Automatic approval review refused the disposable Scheduler probe before execution. [GitHub draft PR #43](https://github.com/vnath99/CatDesk/pull/43).
+
 **2026-11-28 16:16 UTC | Freeze Secure MCP recovery review inputs.** Pinned the exact controller files and test evidence at `3ce3f70`. The read-only Windows check found no accessible shell outside a Job and no exact registered scheduled-task owner. The command runner refused a disposable, demand-only owner probe before execution. [Review intake and owner evidence](docs/verification/SECURE_MCP_RECOVERY_CONTROLLER_REVIEW_INTAKE_2026_11_28.json).
 
 **2026-11-28 16:12 UTC | Pinned Windows tunnel client confirmed bearer forwarding.** The real executable authenticated and completed MCP initialization on a disposable loopback target after CatDesk injected its child-only bearer. Initialization without forwarding was refused. Both cases sent traffic to a separate loopback control-plane server, which received zero MCP bearer matches. The owned processes and fixture listeners exited. [Evidence](docs/verification/SECURE_MCP_PINNED_NATIVE_LOOPBACK_2026_11_28.json).

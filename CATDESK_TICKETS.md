@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 28.** Draft PR #43 provides an exact public review target through the existing GitHub Code Review connection. Review has not been requested or accepted. The installed full-stack Run entry cannot run the maintenance handoff, and auto-review refused the disposable Scheduler probe. A qualified Windows execution owner remains required. [GitHub draft PR #43](https://github.com/vnath99/CatDesk/pull/43).
+
 **RELEASE-RECOVERY, November 28.** Recovery controller scope and Git blob identities are frozen for independent review. Existing Windows shell candidates did not qualify. The command runner rejected the disposable read-only Scheduler fixture before process creation. That refusal leaves production and the ordinary outside-Job requirement unchanged. [Review intake and owner evidence](docs/verification/SECURE_MCP_RECOVERY_CONTROLLER_REVIEW_INTAKE_2026_11_28.json).
 
 **RELEASE-RECOVERY, November 28.** The actual v0.0.14 executable consumed the forwarded bearer and completed loopback MCP initialization. No MCP bearer reached a separate local control-plane listener. This qualifies the local client behavior for the planned recovery. The installed v5 path and independent reviewer admission remain open. [Evidence](docs/verification/SECURE_MCP_PINNED_NATIVE_LOOPBACK_2026_11_28.json).

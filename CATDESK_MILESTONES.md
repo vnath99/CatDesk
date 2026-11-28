@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 28 | GitHub review route available for the exact Secure MCP controller.** Draft PR #43 is pinned to the review base and `3ce3f70`. The independent review result, Windows execution owner, authenticated installed v5 call, and installed Web lifecycle remain open. [GitHub draft PR #43](https://github.com/vnath99/CatDesk/pull/43).
+
 **November 28 | Exact Secure MCP recovery-controller review intake is ready.** The pinned controller includes the native bearer-forwarding qualification. Independent review and a qualified execution owner remain open. [Review intake and owner evidence](docs/verification/SECURE_MCP_RECOVERY_CONTROLLER_REVIEW_INTAKE_2026_11_28.json).
 
 **November 28 | Actual native bearer forwarding qualified in isolation.** The installed tunnel-client executable initialized a synthetic MCP target using CatDesk's existing child-only authorization. The fixture also verified that it never sent the MCP bearer to the separate control-plane listener. Actual canonical v5 recovery and reviewer admission remain open. [Evidence](docs/verification/SECURE_MCP_PINNED_NATIVE_LOOPBACK_2026_11_28.json).
