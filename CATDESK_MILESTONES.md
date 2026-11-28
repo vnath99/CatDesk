@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**2026-11-28 18:15 UTC.** The edit, native verification and scoped Git checkpoint passed together on a disposable Windows linked worktree through the exact frozen backend. This run used zero model calls and a synthetic initial receipt. Installed ChatGPT Web invocation, delivery of a self-Wake and the next Web turn remain open. [Windows qualification and acceptance evidence](docs/verification/FIRST_WEB_CHECKPOINT_AND_REVIEWER_HOME_2026_11_28.json).
+
 **2026-11-28 17:47 UTC.** Verified the development controller against the actual unpaired reviewer registration. It reached the human sign-in boundary and preserved project state. Interactive sign-in, reviewer conversation setup, backend release attestation and installed Web coding remain outstanding. [Development build, test counts and real admission](docs/verification/FIRST_CHAT_LOGIN_ADMISSION_2026_11_28.json).
 
 **2026-11-28 17:24 UTC.** Completed independent source review of the frozen recovery controller. The November 28 Windows read-only check verified the existing local backend, exact tunnel process and target. The tunnel reported an MCP authentication challenge. Installed v5 authentication, release attestation for `56aa9912`, and the installed Web edit through next-turn self-Wake remain open. [Independent review and Windows evidence](docs/verification/SECURE_MCP_INDEPENDENT_REVIEW_2026_11_28.json).

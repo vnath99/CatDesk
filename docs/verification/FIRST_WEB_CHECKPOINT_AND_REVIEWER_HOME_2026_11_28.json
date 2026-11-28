@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T18:15:34Z",
+  "previousCheckpoint": "970064c025077ffc85ac0fc001a97d5fcc7acd0d",
+  "scope": "LOCAL_DEVELOPMENT_AND_DISPOSABLE_WINDOWS_QUALIFICATION",
+  "installedBackend": {
+    "source": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+    "sha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "compatibilityEvidence": "src/project_mcp_task.rs defines a deny_unknown_fields assignment without checkpointPaths. The reconstructed task requires this field for its scoped checkpoint. Source inspection establishes incompatibility at assignment deserialization.",
+    "changed": false
+  },
+  "frozenCandidate": {
+    "source": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "artifactSha256BeforeAndAfter": "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465",
+    "taskBase": "ac112e8c05c29566163dce8f6fb1f77f06a26a51",
+    "checkout": "One independent disposable project and a separate linked task worktree",
+    "history": "Complete base snapshot and the 13 exact public commit objects consumed by the documentation checker. This test did not restore complete ancestral history.",
+    "grant": "Fixture-owned scoped task with synthetic initial SENT receipt and one temporary execution key",
+    "channel": "Authenticated private loopback via the frozen backend's command-only reserved task envelope",
+    "test": "web_task_dispatch::tests::frozen_docs_verifier_and_scoped_checkpoint",
+    "verificationProfile": "verify-docs",
+    "argv": [
+      "<approved-python>",
+      "-I",
+      "-B",
+      "scripts/catdesk_docs.py",
+      "check"
+    ],
+    "file": "CATDESK_IMPORTANT_COMMANDS.md",
+    "stages": [
+      "patch.preview",
+      "patch.apply",
+      "verify.command",
+      "git.checkpoint"
+    ],
+    "modelCalls": 0,
+    "browserDeliveries": 0,
+    "realRegisteredAssignmentUsed": false,
+    "preparationFindings": [
+      "The first shallow fixture's verifier refused. Its checker output was not retained, so the specific reason for that refusal is unknown.",
+      "Fetching history to depth one for the additional commit tips tried to traverse an unavailable promised historical tree. Offline setup stopped before launching the backend. The final fixture loads the complete public base snapshot and just the exact commit objects the checker reads."
+    ],
+    "checkpointLinkedToVerificationCall": true,
+    "registeredSourceUnchanged": true,
+    "processExited": true,
+    "listenerClosed": true,
+    "fixtureDirectoryRemoved": true,
+    "executionKeyRemoved": true,
+    "initialPassingRun": {
+      "observedUtc": "2026-11-28T18:07:44Z",
+      "testSeconds": 60.98,
+      "testBinarySha256": "0facce7df79f422f574c6a0fa6b6816a863c5310d9e489cc6e89d2936b44721a"
+    },
+    "finalRun": {
+      "testSeconds": 57.43,
+      "exitCode": 0,
+      "testsPassed": 1,
+      "filtered": 2213,
+      "testBinarySha256": "5e0ef66855ccca6808d557b40e5dc13c76a0b4ce02b33a146033ffdacf00a370",
+      "fixtureGitBlob": "0e0d4c8378017044b181d757c6f6683395182fe8",
+      "hostAndSandboxCheckerReportEqual": true,
+      "passed": true,
+      "primaryDocuments": 5,
+      "tickets": 442,
+      "milestones": 4,
+      "internalLinksChecked": 521,
+      "errors": 0,
+      "fullCommittedDocumentEqualsSingleReplacementAfterEolNormalization": true,
+      "registeredSourceHeadAndFileUnchanged": true,
+      "soleChangedPathAndParentVerified": true
+    },
+    "testSourceCommit": "354efe565461206ae343e524f55a7904cf394fca",
+    "independentReview": {
+      "owner": "backend_admission",
+      "verdict": "PASS",
+      "scope": "Test fixture, attribution of verification and checkpoint evidence, isolation and cleanup. Protected release authority is separate."
+    }
+  },
+  "readiness": {
+    "command": "operator web-dev-runtime inspect-readiness --project-id <project> --initial-intent-id <prepared-intent>",
+    "maturity": "SOURCE_TESTED",
+    "regularSignInExeSha256": "c1e316516e75a0c072d3595d1dad561eaff3c33c42563eefb8aba4b37dd0059e",
+    "signInBuildContainsNewObserver": false,
+    "newTests": {
+      "rust": 4,
+      "python": 5
+    },
+    "testsPassed": {
+      "operator": 6,
+      "wake": 14,
+      "pythonReadiness": 66
+    },
+    "applicationActivationProved": false,
+    "authenticationProved": false,
+    "liveProfileObserved": false,
+    "independentReview": {
+      "owner": "recovery_source_review",
+      "verdict": "PASS",
+      "findingsResolved": [
+        "A disabled or read-only editor now yields UNKNOWN usability and UNPROVEN chip state, preserving separately observed drafts and generation.",
+        "Disabled matching chips, including via a fieldset or ARIA ancestor, cannot establish chip presence."
+      ],
+      "scope": "Source and fixtures. A visible chip establishes no authentication or tool availability."
+    },
+    "sourceCommit": "07be81547a41171587074e34f533292b1fa79e93",
+    "finalDistinctRegressionCount": 86,
+    "ownedLiveBrowserOpened": false
+  },
+  "selectedDevelopmentBridge": {
+    "sha256": "eea29aff3cb6518a2c03e97bbb361d3e52357b5e47a81ca63fdaaa69da890f5d",
+    "artifact": "wake_bridge.py",
+    "version": "1.0.0-dev.85",
+    "fixture": "New embedded observer evaluated against the exact selected development package with disposable DOM and dummy profile.",
+    "results": {
+      "emptyHome": "MARKER_NOT_OBSERVED",
+      "scopedV5Chip": "MARKER_PRESENT",
+      "draftWithChip": "UNPROVEN",
+      "login": "LOGIN_VISIBLE",
+      "networkError": "CHROME_ERROR",
+      "conversationRedirect": "TARGET_DRIFT"
+    },
+    "fixtureDirectoryRemoved": true,
+    "browserStarts": 0,
+    "messagesSent": 0,
+    "finalRun": "The two complete synthetic DOM test matrices passed with the hash-checked .85 bridge and the revised observer, including disabled controls, route drift and draft cases."
+  },
+  "installedAcceptance": {
+    "installedV5AuthenticatedThisQualification": false,
+    "actualChatGptWebCaller": false,
+    "webEditThroughCheckpoint": false,
+    "selfWakeDelivered": false,
+    "continuingAssistantTurn": false
+  },
+  "next": {
+    "review": "After the bounded reviewer sign-in, use the qualified updated observer on the exact prepared intent, then perform the supported reviewer setup and no-send admission before requesting the exact review-start decision.",
+    "serving": "A same-alias authenticated v5 transition still needs a qualified lifecycle owner and safe recovery of the retained runtime, or an independently reviewed backend promotion. Prior evidence and no-replay fences continue to apply.",
+    "task": "Verify serving scope and actual chat URL, pair the recovered project, then associate the newly bound assignment with its fresh request and queue event. Use an explicit scoped grant for the edit, verification, checkpoint and manual self-Wake."
+  }
+}
