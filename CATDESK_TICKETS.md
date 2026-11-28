@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**2026-11-28 17:47 UTC.** First-project development login is now admissible for the recovered reviewer. It requires an exact unsent initialization intent and existing isolated profile. After manual sign-in, verify cleanup and the intended reviewer route before starting the protected backend review. The installed tunnel authentication issue remains tracked separately. [Development build, test counts and real admission](docs/verification/FIRST_CHAT_LOGIN_ADMISSION_2026_11_28.json).
+
 **2026-11-28 17:24 UTC.** Recovery-controller source review completed with findings. The v0.0.14 client cannot condition a stop on the observed instance. Full-stack rollback in the installed release may start transport and enqueue eligible work. Keep automated handoff and alias replacement closed until their maintenance scope can be enforced. The registered full-stack logon monitor is a separate lifecycle owner. The backend producer still needs a genuine review for its exact Web contract; the controller review supplies no backend release authority. [Independent review and Windows evidence](docs/verification/SECURE_MCP_INDEPENDENT_REVIEW_2026_11_28.json).
 
 **2026-11-28 16:57 UTC | Handoff during slow startup.** Fixed a premature rollback in the development controller. Keep the `3ce3f70` review pinned. Before selecting newer controller bytes, obtain independent coverage of the readiness change as well. The `56aa9912` release retains its own producer requirements. [Windows verification](docs/verification/BACKEND_HANDOFF_STARTUP_TIMEOUT_2026_11_28.json).

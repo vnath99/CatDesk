@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T17:47:51Z",
+  "scope": "DEVELOPMENT_CONTROLLER_AND_ACTUAL_RECOVERED_PROJECT_NONINTERACTIVE_LOGIN_ADMISSION",
+  "sourceCommit": "5bffa04b1c6254d9e0a342a8edd56952e81da433",
+  "review": {
+    "owner": "recovery_source_review",
+    "process": "Independent delegated source review",
+    "verdict": "PASS",
+    "coverage": [
+      "Exact project, registration and PREPARED journal with no send evidence",
+      "Read-only creation queue admission; reject active and mismatched identities",
+      "Nonblocking state reads under existing ownership leases",
+      "Journal content and Windows file identity required during interrupted login recovery",
+      "Existing paired-login marker compatibility and fixed Home-only browser action"
+    ],
+    "nativeBackendAttestation": false
+  },
+  "build": {
+    "type": "Local development CLI, prior to source checkpoint",
+    "base": "97a626043d57ae5e4cc6730ca92840127b2e0739",
+    "workingInputsChangedFromBase": true,
+    "reviewedSourceMatchesCheckpoint": true,
+    "matchedBuildInputs": 225,
+    "buildInputFingerprintBeforeAndAfter": "525992b4b52da19615db9b24c784d1f9666d8049fea5fca06dd12ed1c6b4a9c4",
+    "exeSha256": "c1e316516e75a0c072d3595d1dad561eaff3c33c42563eefb8aba4b37dd0059e",
+    "exeBytes": 78642176
+  },
+  "tests": {
+    "operatorLogin": 9,
+    "wakeLoginAndRecovery": 18,
+    "approvedReviewRegression": 1,
+    "pythonLoginHelper": 4,
+    "failed": 0
+  },
+  "realAdmission": {
+    "workingDirectory": "Reconstructed serving-control checkout",
+    "selectedProfile": "Existing isolated development profile",
+    "explicitUnpairedReviewIntent": true,
+    "closedStdin": true,
+    "exitCode": 2,
+    "state": "DEV_LOGIN_INTERACTIVE_TERMINAL_REQUIRED",
+    "preservedComparedFiles": [
+      "project registry",
+      "original prepared journal",
+      "development authority",
+      "activation",
+      "Wake control",
+      "Wake config",
+      "current selection"
+    ],
+    "hashesOfAllSevenUnchanged": true,
+    "loginMarkerAbsentAfter": true,
+    "profileEmptyAfter": true,
+    "developmentImageHashUnchanged": true
+  },
+  "remaining": {
+    "operatorSignIn": "Interactive browser authentication in the existing development profile",
+    "normalCleanupStatus": "LOGIN_WINDOW_CLOSED_UNVERIFIED",
+    "firstChatSetupSent": false,
+    "frozenBackendReviewStarted": false,
+    "installedV5Authenticated": false,
+    "installedWebEditThroughSelfWakeVerified": false
+  }
+}

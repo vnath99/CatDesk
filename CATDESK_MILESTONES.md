@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**2026-11-28 17:47 UTC.** Verified the development controller against the actual unpaired reviewer registration. It reached the human sign-in boundary and preserved project state. Interactive sign-in, reviewer conversation setup, backend release attestation and installed Web coding remain outstanding. [Development build, test counts and real admission](docs/verification/FIRST_CHAT_LOGIN_ADMISSION_2026_11_28.json).
+
 **2026-11-28 17:24 UTC.** Completed independent source review of the frozen recovery controller. The November 28 Windows read-only check verified the existing local backend, exact tunnel process and target. The tunnel reported an MCP authentication challenge. Installed v5 authentication, release attestation for `56aa9912`, and the installed Web edit through next-turn self-Wake remain open. [Independent review and Windows evidence](docs/verification/SECURE_MCP_INDEPENDENT_REVIEW_2026_11_28.json).
 
 **2026-11-28 16:57 UTC | Development handoff qualification.** The replacement backend and the restored full-stack backend can now prove authenticated readiness after a transient local probe timeout. The fixture also verified immediate refusal on a protocol failure, owner drift, and deadline expiry. Installed v5 recovery and the first Web coding cycle remain open. [Windows verification](docs/verification/BACKEND_HANDOFF_STARTUP_TIMEOUT_2026_11_28.json).
