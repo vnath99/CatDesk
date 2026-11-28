@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**2026-11-28 16:57 UTC | Handoff during slow startup.** Fixed a premature rollback in the development controller. Keep the `3ce3f70` review pinned. Before selecting newer controller bytes, obtain independent coverage of the readiness change as well. The `56aa9912` release retains its own producer requirements. [Windows verification](docs/verification/BACKEND_HANDOFF_STARTUP_TIMEOUT_2026_11_28.json).
+
 **RELEASE-RECOVERY, November 28.** Draft PR #43 provides an exact public review target through the existing GitHub Code Review connection. Review has not been requested or accepted. The installed full-stack Run entry cannot run the maintenance handoff, and auto-review refused the disposable Scheduler probe. A qualified Windows execution owner remains required. [GitHub draft PR #43](https://github.com/vnath99/CatDesk/pull/43).
 
 **RELEASE-RECOVERY, November 28.** Recovery controller scope and Git blob identities are frozen for independent review. Existing Windows shell candidates did not qualify. The command runner rejected the disposable read-only Scheduler fixture before process creation. That refusal leaves production and the ordinary outside-Job requirement unchanged. [Review intake and owner evidence](docs/verification/SECURE_MCP_RECOVERY_CONTROLLER_REVIEW_INTAKE_2026_11_28.json).

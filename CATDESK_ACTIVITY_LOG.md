@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-28 16:57 UTC.** On the frozen controller a local timeout ended the handoff after one probe even when the fixture would pass the second. Both Windows PowerShell 5.1 and PowerShell 7 passed the updated bootstrap suite. The installed autostart command reported `AUTOSTART_REGISTERED_MONITOR_STOPPED`. The exact supervisor process count was zero. [Windows verification](docs/verification/BACKEND_HANDOFF_STARTUP_TIMEOUT_2026_11_28.json).
+
 **2026-11-28 16:47 UTC | Open the exact Secure MCP controller review.** GitHub Code Review lists CatDesk. The repository follows personal preferences, and that automatic review preference is off. Draft PR #43 pins the existing exact base and `3ce3f70` head. Read-only Windows inspection confirmed the full-stack logon entry and listener. Automatic approval review refused the disposable Scheduler probe before execution. [GitHub draft PR #43](https://github.com/vnath99/CatDesk/pull/43).
 
 **2026-11-28 16:16 UTC | Freeze Secure MCP recovery review inputs.** Pinned the exact controller files and test evidence at `3ce3f70`. The read-only Windows check found no accessible shell outside a Job and no exact registered scheduled-task owner. The command runner refused a disposable, demand-only owner probe before execution. [Review intake and owner evidence](docs/verification/SECURE_MCP_RECOVERY_CONTROLLER_REVIEW_INTAKE_2026_11_28.json).

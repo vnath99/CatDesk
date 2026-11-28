@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T16:57:12.4523279Z",
+  "scope": "DEVELOPMENT_HANDOFF_REGRESSION_AND_READ_ONLY_INSTALLED_SUPERVISOR_STATUS",
+  "frozenController": "3ce3f7015776292525306e454d2990a85cbc4c7f",
+  "baselineReproduction": {
+    "readinessSequence": [
+      "LOCAL_MCP_RESPONSE_TIMEOUT",
+      "READY"
+    ],
+    "ownedListenerStayedPresent": true,
+    "probesPerformed": 1,
+    "accepted": false,
+    "processActions": 0
+  },
+  "development": {
+    "controllerGitBlob": "25e0089052da845ab1f83ce0b0e4c522afdebffd",
+    "fixtureGitBlob": "a18af0d3ca9fd9917e5d3ad0fb14d06493b38289",
+    "suite": "scripts/test-start-catdesk-stack.ps1",
+    "windowsPowerShell51": "PASS",
+    "powerShell7": "PASS",
+    "scope": [
+      "Exact backend-only child authenticated after one local timeout without rollback",
+      "Protocol refusal stopped the owned replacement and restored full-stack mode",
+      "Restored full-stack owner authenticated after one local timeout",
+      "Timeout at the deadline caused no further probe",
+      "A changed listener after timeout caused no further probe"
+    ]
+  },
+  "installedObservation": {
+    "command": "catdesk.ps1 autostart status",
+    "state": "AUTOSTART_REGISTERED_MONITOR_STOPPED",
+    "startupRegistrationScope": "FULL_STACK",
+    "exactMonitorProcesses": 0,
+    "jobMembership": "NO_EXACT_MONITOR_TO_QUERY",
+    "reasonMonitorAbsent": "UNKNOWN",
+    "registrationChanges": 0,
+    "processActions": 0,
+    "tunnelReconnects": 0
+  },
+  "review": {
+    "pullRequest": 43,
+    "base": "1df9f30e98dbceba9c693e86bb008e03f84d5677",
+    "head": "3ce3f7015776292525306e454d2990a85cbc4c7f",
+    "commentCount": 0,
+    "reviewRequests": 0,
+    "reviews": 0,
+    "followUpSourceReviewedByIndependentReviewer": false
+  },
+  "installedWebAcceptance": false
+}

@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**2026-11-28 16:57 UTC | Development handoff qualification.** The replacement backend and the restored full-stack backend can now prove authenticated readiness after a transient local probe timeout. The fixture also verified immediate refusal on a protocol failure, owner drift, and deadline expiry. Installed v5 recovery and the first Web coding cycle remain open. [Windows verification](docs/verification/BACKEND_HANDOFF_STARTUP_TIMEOUT_2026_11_28.json).
+
 **November 28 | GitHub review route available for the exact Secure MCP controller.** Draft PR #43 is pinned to the review base and `3ce3f70`. The independent review result, Windows execution owner, authenticated installed v5 call, and installed Web lifecycle remain open. [GitHub draft PR #43](https://github.com/vnath99/CatDesk/pull/43).
 
 **November 28 | Exact Secure MCP recovery-controller review intake is ready.** The pinned controller includes the native bearer-forwarding qualification. Independent review and a qualified execution owner remain open. [Review intake and owner evidence](docs/verification/SECURE_MCP_RECOVERY_CONTROLLER_REVIEW_INTAKE_2026_11_28.json).

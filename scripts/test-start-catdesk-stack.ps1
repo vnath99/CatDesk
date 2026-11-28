@@ -755,6 +755,7 @@ try {
     $script:handoffIndependent = $true
     $script:handoffFault = ''
     $script:handoffActions = [Collections.Generic.List[string]]::new()
+    $script:handoffProbeGates = [Collections.Generic.Queue[string]]::new()
     $fixtureLease = $null
     function Get-CatDeskReleaseStartupGate { param($Root,$HeldLifecycleLease) if ($Execute -and $null -eq $HeldLifecycleLease) { throw 'execution lost its lifecycle lease' }; 'READY' }
     function Get-CanonicalCatDeskIdentity { param($Root,$ExpectedHash,$FingerprintPath) if($ExpectedHash -cne $ExpectedBuildSha256){throw 'expected image missing'}; [pscustomobject]@{Path='fixture-image';Sha256=$ExpectedHash} }
@@ -770,7 +771,8 @@ try {
     function Get-LocalMcpReadiness { param($LocalMcp,$Canonical,$ExpectedDaemonProcess,[switch]$RequireBearer)
       if (-not $RequireBearer) { throw 'auth requirement disappeared' }
       if ($ExpectedDaemonProcess -and $ExpectedDaemonProcess.Id -ne $script:handoffListener.Pid) { throw 'wrong owned child' }
-      [pscustomobject]@{Ready=$script:handoffFault -ne 'readiness' -or $script:handoffListener.OwnerMode -eq 'FULL_STACK'}
+      $gate = if ($ExpectedDaemonProcess -and $script:handoffProbeGates.Count) { $script:handoffProbeGates.Dequeue() } else { 'READY' }
+      [pscustomobject]@{Ready=$gate -ceq 'READY';Gate=$gate}
     }
     function Stop-CatDeskListenerProcessForRecovery { param($LocalMcp,$Canonical,$Candidate,$FailureMessage)
       Assert-FixtureLifecycleLeaseHeld $root 'handoff-stop'
@@ -828,10 +830,38 @@ try {
       throw 'verified backend-only handoff did not pass the reconnect gate'
     }
     $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
-    $script:handoffFault = 'readiness'
+    $script:handoffProbeGates.Enqueue('LOCAL_MCP_RESPONSE_TIMEOUT')
+    $script:handoffProbeGates.Enqueue('READY')
+    Assert-Handoff 'BACKEND_HANDOFF_LOCAL_READY' 'stop-original,start-backend-only'
+    if ($script:handoffProbeGates.Count) { throw 'replacement never verified after its first timeout' }
+    $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
+    # A protocol failure still refuses the replacement immediately. The same
+    # bounded wait also lets the restored owner complete its own initialization.
+    $script:handoffProbeGates.Enqueue('LOCAL_MCP_PROTOCOL_UNREADY')
+    $script:handoffProbeGates.Enqueue('LOCAL_MCP_RESPONSE_TIMEOUT')
+    $script:handoffProbeGates.Enqueue('READY')
     Assert-Handoff 'BACKEND_HANDOFF_FULL_STACK_RESTORED' 'stop-original,start-backend-only,stop-owned-replacement,restore-full-stack'
+    if ($script:handoffProbeGates.Count) { throw 'restored owner never completed its authenticated probe' }
     if (Test-ReconnectBackendOwner $reconnectLocal $reconnectRelease $script:handoffListener) {
       throw 'restored full-stack owner passed the reconnect execution gate'
+    }
+    $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
+    & {
+      $script:handoffTime = [datetime]::UtcNow
+      function Get-BackendOnlyUtcNow { $script:handoffTime }
+      function Start-Sleep { param($Milliseconds) $script:handoffTime = $script:handoffTime.AddMilliseconds($Milliseconds) }
+      $script:handoffProbeGates.Enqueue('LOCAL_MCP_RESPONSE_TIMEOUT')
+      $script:handoffProbeGates.Enqueue('READY')
+      $owner = [pscustomobject]@{Id=$ExpectedOwnerPid;HasExited=$false}
+      if ((Wait-BackendHandoffOwner $owner $reconnectLocal $reconnectRelease 'FULL_STACK' $script:handoffTime.AddMilliseconds(200)) -or
+          $script:handoffProbeGates.Count -ne 1) { throw 'handoff started another probe after its deadline' }
+      $script:handoffProbeGates.Clear()
+      function Start-Sleep { param($Milliseconds) $script:handoffListener = New-HandoffListener 7107 'FULL_STACK' }
+      $script:handoffProbeGates.Enqueue('LOCAL_MCP_RESPONSE_TIMEOUT')
+      $script:handoffProbeGates.Enqueue('READY')
+      if ((Wait-BackendHandoffOwner $owner $reconnectLocal $reconnectRelease 'FULL_STACK' $script:handoffTime.AddSeconds(5)) -or
+          $script:handoffProbeGates.Count -ne 1) { throw 'handoff probed a changed owner after a timeout' }
+      $script:handoffProbeGates.Clear()
     }
     $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
     $script:handoffFault = 'racer'

@@ -1,5 +1,7 @@
 # CatDesk important commands
 
+**November 28 | Check the supervisor before a serving handoff.** Run `.\catdesk.ps1 autostart status` from the installed root in the owning account. `AUTOSTART_REGISTERED_MONITOR_STOPPED` identifies a registered startup entry whose monitor is absent. It establishes neither the daemon's health nor an execution owner for the handoff. [Windows verification](docs/verification/BACKEND_HANDOFF_STARTUP_TIMEOUT_2026_11_28.json).
+
 **November 28 | Request the exact recovery-controller review on GitHub.** Use one manual `@codex review` on the exact draft only after the operator authorizes the public request. Require an attributable result that covers the pinned commit, changed controller files, current-owner handoff, credential scope, and ambiguous outcomes. The full-stack logon entry cannot demand-run the handoff. Keep production serving until the unchanged outside-Job guard passes in a supported owner. [GitHub draft PR #43](https://github.com/vnath99/CatDesk/pull/43).
 
 **November 28 | Qualify the recovery owner and controller.** Use the exact source and evidence in the intake for independent review. Preserve the existing backend and tunnel until a supported Windows owner passes the unchanged outside-Job guard. The observed logon registration does not authorize a demand start. The attempted disposable Scheduler probe was rejected before execution. [Review intake and owner evidence](docs/verification/SECURE_MCP_RECOVERY_CONTROLLER_REVIEW_INTAKE_2026_11_28.json).

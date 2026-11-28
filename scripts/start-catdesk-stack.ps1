@@ -1471,7 +1471,12 @@ function Wait-BackendHandoffOwner {
         if ($null -ne $listener) {
             if (-not $listener.MatchesCanonical -or $listener.Pid -ne $Process.Id -or
                 $listener.OwnerMode -cne $OwnerMode) { return $false }
-            return [bool](Get-LocalMcpReadiness -LocalMcp $Local -Canonical $Canonical -ExpectedDaemonProcess $Process -RequireBearer).Ready
+            if ($Process.HasExited -or (Get-BackendOnlyUtcNow) -ge $Deadline) { return $false }
+            $probe = Get-LocalMcpReadiness -LocalMcp $Local -Canonical $Canonical -ExpectedDaemonProcess $Process -RequireBearer
+            if ($probe.Ready) { return (-not $Process.HasExited -and (Get-BackendOnlyUtcNow) -lt $Deadline) }
+            # A slow local MCP startup can time out after the listener first appears.
+            # Recheck ownership on the next poll before another authenticated probe.
+            if ($probe.Gate -cne 'LOCAL_MCP_RESPONSE_TIMEOUT') { return $false }
         }
         Start-Sleep -Milliseconds 250
     }
