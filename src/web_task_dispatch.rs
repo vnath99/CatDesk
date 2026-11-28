@@ -1810,34 +1810,29 @@ pub(crate) mod tests {
         );
     }
 
-    #[cfg(windows)]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    #[ignore = "explicit bounded qualification with the installed native Windows command sandbox"]
-    async fn cached_http_checkpoint_precedes_manual_wake() {
-        let project = "cached-http-cycle";
-        let (control, assignment, wake, mut pins, event) =
-            crate::web_work::tests::assignment_fixture_for(project);
-        let mut envelope: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+    fn grant_cycle_checkpoint(
+        control: PathBuf,
+        mut pins: Value,
+        assignment: &Path,
+        envelope: Value,
+        event: &protocol::Event,
+        wake: &Store,
+        manual_wake: bool,
+    ) -> Fixture {
+        let project = &event.project_id;
         let task = PathBuf::from(envelope["contract"]["workspace"].as_str().unwrap());
-        let findstr =
-            PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/findstr.exe");
-        envelope["contract"]["allowedCommandProfiles"] = json!(["check-content"]);
-        envelope["commandProfiles"] = json!([{
-            "id":"check-content", "argv":[findstr, "/L", "/C:{ 42 }", r"src\lib.rs"], "timeoutSeconds":25
-        }]);
-        envelope["checkpointPaths"] = json!(["src/lib.rs"]);
         let content = serde_json::to_string_pretty(&envelope).unwrap();
-        fs::write(&assignment, &content).unwrap();
+        fs::write(assignment, &content).unwrap();
         pins["assignmentSha256"] = json!(protocol::digest(&content));
-        wake.publish(&event).unwrap();
-        crate::web_work::associate(&control, pins.clone(), &assignment).unwrap();
-        sent(&wake, &event);
+        wake.publish(event).unwrap();
+        crate::web_work::associate(&control, pins.clone(), assignment).unwrap();
+        sent(wake, event);
         let key_path = fresh_fixture_key_path(&control, project);
         let grant = crate::web_work::execution_permission_with_git_capabilities(
             &control,
             pins.clone(),
             false,
-            true,
+            manual_wake,
             None,
             true,
             false,
@@ -1849,7 +1844,7 @@ pub(crate) mod tests {
             .project
             .workspace;
         let key = serde_json::from_slice(&owned_key.bytes).unwrap();
-        let f = Fixture {
+        Fixture {
             control,
             pins,
             key,
@@ -1857,7 +1852,274 @@ pub(crate) mod tests {
             native,
             keys: vec![owned_key],
             _native_queue: None,
+        }
+    }
+
+    /// Only the randomly allocated root created by assignment_fixture_for can be removed.
+    struct DocsCycleRoot(PathBuf);
+    impl Drop for DocsCycleRoot {
+        fn drop(&mut self) {
+            if let Err(error) = fs::remove_dir_all(&self.0) {
+                eprintln!("disposable docs fixture cleanup failed: {error}");
+                assert!(std::thread::panicking(), "docs fixture retained");
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "exact frozen Windows backend and fixed docs verifier on a new offline linked worktree"]
+    async fn frozen_docs_verifier_and_scoped_checkpoint() {
+        const BASE: &str = "ac112e8c05c29566163dce8f6fb1f77f06a26a51";
+        const FROZEN: &str = "eeacab849df818d08ebdf948ca0d3b7b5e83923b0cc475c798f613cbad71a465";
+        const DOC: &str = "CATDESK_IMPORTANT_COMMANDS.md";
+        const TITLE: &str = "# CatDesk important commands";
+        const EDIT: &str = "# CatDesk important commands\n\nThis disposable documentation fixture verifies the scoped checkpoint.";
+
+        let image = PathBuf::from(std::env::var_os("CATDESK_FROZEN_BACKEND_TEST_IMAGE").unwrap());
+        assert_eq!(
+            std::env::var("CATDESK_FROZEN_BACKEND_TEST_SHA256").unwrap(),
+            FROZEN
+        );
+        let seed = PathBuf::from(std::env::var_os("CATDESK_DOCS_TEST_LOCAL_SOURCE").unwrap());
+        let python = PathBuf::from(std::env::var_os("CATDESK_DOCS_TEST_PYTHON").unwrap());
+        assert!(seed.is_absolute() && seed.join(".git").is_dir());
+        assert!(python.is_absolute() && python.is_file());
+
+        // Fetch only this public snapshot from a local repository into the fresh fixture.
+        // Both the native and assigned worktree then use its objects without writing the seed.
+        let git_bytes = |dir: &Path, args: &[&str], input: &[u8]| {
+            use std::{
+                io::Write,
+                process::{Command, Stdio},
+            };
+            let mut child = Command::new("git")
+                .current_dir(dir)
+                .env("GIT_ALLOW_PROTOCOL", "file")
+                .env("GIT_NO_LAZY_FETCH", "1")
+                .args(["-c", "core.hooksPath=NUL"])
+                .args(args)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            child.stdin.take().unwrap().write_all(input).unwrap();
+            let result = child.wait_with_output().unwrap();
+            assert!(
+                result.status.success(),
+                "offline fixture Git {} failed; exit={:?}",
+                args[0],
+                result.status.code()
+            );
+            result.stdout
         };
+        let git =
+            move |dir: &Path, args: &[&str]| String::from_utf8(git_bytes(dir, args, &[])).unwrap();
+        let project = "frozen-docs-cycle";
+        let (control, assignment, wake, pins, event) =
+            crate::web_work::tests::assignment_fixture_for(project);
+        let root = assignment.parent().unwrap().canonicalize().unwrap();
+        assert_eq!(
+            root.parent().unwrap(),
+            std::env::temp_dir().canonicalize().unwrap()
+        );
+        assert!(
+            uuid::Uuid::parse_str(
+                root.file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .strip_prefix("project-task-")
+                    .unwrap()
+            )
+            .is_ok()
+        );
+        let cleanup = DocsCycleRoot(root);
+        let mut contract: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+        let task = PathBuf::from(contract["contract"]["workspace"].as_str().unwrap());
+        let native = resolve_registered_project_from_control_root(&control, project)
+            .unwrap()
+            .project
+            .workspace;
+        assert_eq!(task.parent(), Some(cleanup.0.as_path()));
+        assert_eq!(native.parent(), Some(cleanup.0.as_path()));
+        let handoff = git(
+            &seed,
+            &["show", &format!("{BASE}:CATDESK_PROJECT_HANDOFF.md")],
+        );
+        let commits: std::collections::BTreeSet<_> = handoff
+            .split(|ch: char| !(ch.is_ascii_digit() || ('a'..='f').contains(&ch)))
+            .filter(|word| word.len() == 40)
+            .collect();
+        assert_eq!(commits.len(), 13, "unexpected public handoff commit set");
+        git(
+            &native,
+            &[
+                "fetch",
+                "--no-tags",
+                "--depth=1",
+                seed.to_str().unwrap(),
+                BASE,
+            ],
+        );
+        // The seed can be a partial clone. The checker reads these commit objects,
+        // not their historic trees. Import their exact bytes without traversing parents.
+        let commit_list = commits.iter().copied().collect::<Vec<_>>().join("\n") + "\n";
+        let pack = git_bytes(
+            &seed,
+            &["pack-objects", "--stdout", "--no-reuse-delta"],
+            commit_list.as_bytes(),
+        );
+        git_bytes(&native, &["index-pack", "--stdin"], &pack);
+        git(&native, &["switch", "-q", "-c", "docs-native", BASE]);
+        git(&task, &["switch", "-q", "-c", "docs-web", BASE]);
+        let initial = fs::read(native.join(DOC)).unwrap();
+        assert_eq!(fs::read(task.join(DOC)).unwrap(), initial);
+        for commit in &commits {
+            git(&task, &["cat-file", "-e", &format!("{commit}^{{commit}}")]);
+        }
+        let original = std::str::from_utf8(&initial).unwrap();
+        assert_eq!(original.matches(TITLE).count(), 1);
+        let documentation = task.join(DOC);
+        let expected = original.replacen(TITLE, EDIT, 1);
+        fs::write(&documentation, &expected).unwrap();
+        let checker = std::process::Command::new(&python)
+            .current_dir(&task)
+            .args(["-I", "-B", "scripts/catdesk_docs.py", "check"])
+            .env("GIT_ALLOW_PROTOCOL", "file")
+            .env("GIT_NO_LAZY_FETCH", "1")
+            .output()
+            .unwrap();
+        fs::write(&documentation, &initial).unwrap();
+        let report: Value = serde_json::from_slice(&checker.stdout).unwrap();
+        assert!(
+            checker.status.success() && report["passed"] == true,
+            "preflight documentation checker failed; exit={:?}, errors={:?}",
+            checker.status.code(),
+            report["errors"].as_array().map(Vec::len)
+        );
+        assert_eq!(report["errors"], json!([]));
+        assert_eq!(report["internalLinksChecked"], 521);
+        println!(
+            "docs preflight passed on the same linked worktree and postimage, with all 13 public handoff commits available"
+        );
+        contract["baseCommit"] = json!(BASE);
+        contract["contract"]["featureBranch"] = json!("docs-web");
+        contract["contract"]["allowedPaths"] = json!([DOC]);
+        contract["contract"]["allowedCommandProfiles"] = json!(["verify-docs"]);
+        contract["contract"]["verificationProfile"] = json!("verify-docs");
+        contract["commandProfiles"] = json!([{"id":"verify-docs","argv":[python,"-I","-B","scripts/catdesk_docs.py","check"],"timeoutSeconds":30}]);
+        contract["checkpointPaths"] = json!([DOC]);
+        let f = grant_cycle_checkpoint(control, pins, &assignment, contract, &event, &wake, false);
+        let token = uuid::Uuid::new_v4().simple().to_string();
+        let (address, url, mut child) =
+            start_frozen_cycle_backend(&image, &f.control, "/docs-cycle/mcp", &token).await;
+        // Keep ownership of the backend outside the assertions, also when a task call fails.
+        let run = tokio::spawn(async move {
+            let client = reqwest::Client::builder()
+                .no_proxy()
+                .timeout(Duration::from_secs(45))
+                .build()
+                .unwrap();
+            let rpc = |id, tool, args| {
+                let mut body = request(&f, id, tool, args);
+                let command = format!("{}{}", CACHED_COMMAND_PREFIX, body["params"]["arguments"]);
+                body["params"] = json!({"name":"run_command","arguments":{"command":command}});
+                let operation = client.post(&url).bearer_auth(&token).json(&body);
+                async move {
+                    let reply = operation
+                        .send()
+                        .await
+                        .unwrap()
+                        .error_for_status()
+                        .unwrap()
+                        .json::<Value>()
+                        .await
+                        .unwrap();
+                    assert!(
+                        reply.get("error").is_none(),
+                        "{tool} refused: {}",
+                        reply["error"]["message"]
+                    );
+                    assert_eq!(reply["result"]["isError"], false, "{tool} failed");
+                    assert_eq!(
+                        reply["result"]["_meta"]["catdeskTaskTransport"]["shellExecuted"],
+                        false
+                    );
+                    reply["result"]["structuredContent"]["payload"].clone()
+                }
+            };
+            rpc(
+                "preview",
+                "patch.preview",
+                json!({"patchId":"docs","operations":[{"path":DOC,"old":TITLE,"new":EDIT}]}),
+            )
+            .await;
+            rpc("apply", "patch.apply", json!({"patchId":"docs"})).await;
+            let verified = rpc("verify", "verify.command", json!({"profile":"verify-docs"})).await;
+            let stdout = verified["stdout"].as_str().unwrap_or_default();
+            let stderr = verified["stderr"].as_str().unwrap_or_default();
+            let denied = stderr.to_ascii_lowercase().contains("denied");
+            let unresolved = stdout.contains("HANDOFF_COMMIT_UNRESOLVED");
+            assert_eq!(verified["success"],true,
+                "docs verification failed; code={} timedOut={} cleanup={} denied={denied} unresolved={unresolved} stdoutBytes={} stderrBytes={}",
+                verified["exitCode"],verified["timedOut"],verified["cleanupProved"],stdout.len(),stderr.len());
+            assert_eq!(verified["cleanupProved"], true);
+            assert_eq!(verified["modelCalls"], 0);
+            let sandbox_report: Value = serde_json::from_str(stdout).expect("sandbox checker report is not JSON");
+            assert_eq!(sandbox_report, report, "sandbox and native preflight checker reports differ");
+            println!("sandbox documentation check: primaryDocuments={} tickets={} milestones={} internalLinksChecked={} errors=0",
+                sandbox_report["primaryDocuments"],sandbox_report["tickets"],sandbox_report["milestones"],sandbox_report["internalLinksChecked"]);
+            let saved = rpc(
+                "checkpoint",
+                "git.checkpoint",
+                json!({"verificationCallIds":["verify"]}),
+            )
+            .await;
+            assert_eq!(saved["status"], "CHECKPOINTED");
+            assert_eq!(git(&f.task, &["rev-parse", "HEAD^"]).trim(), BASE);
+            assert_eq!(
+                git(
+                    &f.task,
+                    &["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"]
+                )
+                .trim(),
+                DOC
+            );
+            let committed = git(&f.task, &["show", &format!("HEAD:{DOC}")]);
+            assert!(committed.replace("\r\n","\n") == expected.replace("\r\n","\n"), "complete committed document differs from the single replacement");
+            assert_eq!(git(&f.native, &["rev-parse", "HEAD"]).trim(), BASE);
+            assert_eq!(fs::read(f.native.join(DOC)).unwrap(), initial);
+        })
+        .await;
+        child.kill().await.ok();
+        child.wait().await.unwrap();
+        assert!(tokio::net::TcpStream::connect(address).await.is_err());
+        drop(wake);
+        let root = cleanup.0.clone();
+        drop(cleanup);
+        assert!(!root.exists());
+        if let Err(error) = run {
+            std::panic::resume_unwind(error.into_panic());
+        }
+    }
+
+    #[cfg(windows)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "explicit bounded qualification with the installed native Windows command sandbox"]
+    async fn cached_http_checkpoint_precedes_manual_wake() {
+        let project = "cached-http-cycle";
+        let (control, assignment, wake, pins, event) =
+            crate::web_work::tests::assignment_fixture_for(project);
+        let mut envelope: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+        let findstr =
+            PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32/findstr.exe");
+        envelope["contract"]["allowedCommandProfiles"] = json!(["check-content"]);
+        envelope["commandProfiles"] = json!([{
+            "id":"check-content", "argv":[findstr, "/L", "/C:{ 42 }", r"src\lib.rs"], "timeoutSeconds":25
+        }]);
+        envelope["checkpointPaths"] = json!(["src/lib.rs"]);
+        let f = grant_cycle_checkpoint(control, pins, &assignment, envelope, &event, &wake, true);
         let wake = ready_manual_wake(&f);
         let original = fs::read(f.native.join("src/lib.rs")).unwrap();
         let token = uuid::Uuid::new_v4().simple().to_string();
