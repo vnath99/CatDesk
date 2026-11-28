@@ -425,19 +425,47 @@ function Find-TunnelClient {
 }
 
 function Get-ConfiguredLocalMcp {
-    param([string]$Path)
+    param([string]$Path, [IO.FileStream]$PinnedFile)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "configured local MCP endpoint is unavailable" }
-    $text=[IO.File]::ReadAllText($Path); if($text.Length -gt 1048576){throw "configured local MCP endpoint is invalid"}
+    if ($null -ne $PinnedFile) {
+        if (-not $PinnedFile.CanRead -or $PinnedFile.Length -gt 1048576 -or
+            $PinnedFile.Name -ine [IO.Path]::GetFullPath($Path)) { throw 'configured local MCP endpoint is invalid' }
+        $PinnedFile.Position = 0
+        $reader = [IO.StreamReader]::new($PinnedFile, [Text.UTF8Encoding]::new($false, $true), $true, 4096, $true)
+        try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    } else {
+        $text = [IO.File]::ReadAllText($Path)
+    }
+    if ($text.Length -gt 1048576) { throw 'configured local MCP endpoint is invalid' }
     $section=""; $sections=0; $bindHost=$null; $port=$null; $route=$null
     foreach($line in [regex]::Split($text,"`r?`n")) {
         $trim=$line.Trim()
-        if($trim -match '^\[([A-Za-z0-9_.-]+)\]\s*(?:#.*)?$') {$section=$Matches[1];if($section -eq "mcp"){$sections++};continue}
-        if($section -ne "mcp"){continue}
-        if($trim -match '^bind_host\s*=\s*"([^"]+)"\s*(?:#.*)?$'){if($null -ne $bindHost){throw "configured local MCP endpoint is invalid"};$bindHost=$Matches[1];continue}
-        if($trim -match '^port\s*=\s*(\d+)\s*(?:#.*)?$'){if($null -ne $port){throw "configured local MCP endpoint is invalid"};$port=[int]$Matches[1];continue}
-        if($trim -match '^route_id\s*=\s*"([^"]+)"\s*(?:#.*)?$'){if($null -ne $route){throw "configured local MCP endpoint is invalid"};$route=$Matches[1]}
+        if ($null -ne $PinnedFile) {
+            if ($trim.StartsWith('#')) { continue }
+            # Multi-line strings and unsupported table syntax cannot supply endpoint authority.
+            if ($trim.Contains('"""') -or $trim.Contains(([string][char]39 * 3)) -or
+                ($trim.StartsWith('[') -and $trim -cnotmatch '^\[[A-Za-z0-9_.-]+\]\s*(?:#.*)?$')) {
+                throw 'configured local MCP endpoint is invalid'
+            }
+        }
+        if($trim -match '^\[([A-Za-z0-9_.-]+)\]\s*(?:#.*)?$') {$section=$Matches[1];if($section -ceq "mcp"){$sections++};continue}
+        if ($null -ne $PinnedFile -and $trim -and
+            ($section -ceq 'mcp' -or $section -ceq '') -and $trim -cnotmatch '^[A-Za-z0-9_-]+\s*=') {
+            # Quoted, escaped or dotted names can redefine an apparent simple key.
+            throw 'configured local MCP endpoint is invalid'
+        }
+        if($section -cne "mcp"){continue}
+        if($trim -cmatch '^bind_host\s*=\s*"([^"]+)"\s*(?:#.*)?$'){if($null -ne $bindHost){throw "configured local MCP endpoint is invalid"};$bindHost=$Matches[1];continue}
+        if($trim -cmatch '^port\s*=\s*(\d+)\s*(?:#.*)?$'){if($null -ne $port){throw "configured local MCP endpoint is invalid"};$digits=$Matches[1];if ($null -ne $PinnedFile -and $digits -cnotmatch '^[1-9][0-9]{0,4}$'){throw 'configured local MCP endpoint is invalid'};$port=[int]$digits;continue}
+        if($trim -cmatch '^route_id\s*=\s*"([^"]+)"\s*(?:#.*)?$'){if($null -ne $route){throw "configured local MCP endpoint is invalid"};$route=$Matches[1];continue}
+        if ($null -ne $PinnedFile -and $trim -match '^(?:bind_host|port|route_id)\b') {
+            throw 'configured local MCP endpoint is invalid'
+        }
     }
     if($sections -ne 1 -or $bindHost -notin @("127.0.0.1","localhost","::1") -or $port -lt 1 -or $port -gt 65535 -or $route -notmatch '^[A-Za-z0-9_-]{24,96}$'){throw "configured local MCP endpoint is invalid"}
+    if ($null -ne $PinnedFile -and ($bindHost -cne '127.0.0.1' -or $route -match 'placeholder|redacted')) {
+        throw 'configured local MCP endpoint is invalid'
+    }
     $authority=if($bindHost -eq "::1"){"[$bindHost]"}else{$bindHost}
     [pscustomobject]@{Port=$port; Uri="http://$authority`:$port/$route/mcp"}
 }
@@ -470,7 +498,7 @@ function Get-LoopbackCatDeskListener {
         } else {
             'UNVERIFIED'
         }
-        [pscustomobject]@{Pid=$ownerPid;CreationTimeUtc=$creationTimeUtc;Path=$actual;Sha256=$actualHash;MatchesCanonical=($actual.Equals([string]$identity.Path,[StringComparison]::OrdinalIgnoreCase) -and $actualHash -eq [string]$identity.Sha256);OwnerMode=$ownerMode}
+        [pscustomobject]@{ListenAddresses=@($listeners | ForEach-Object { $_.LocalAddress });Pid=$ownerPid;CreationTimeUtc=$creationTimeUtc;Path=$actual;Sha256=$actualHash;MatchesCanonical=($actual.Equals([string]$identity.Path,[StringComparison]::OrdinalIgnoreCase) -and $actualHash -eq [string]$identity.Sha256);OwnerMode=$ownerMode}
     }
 }
 
@@ -1518,7 +1546,7 @@ function Invoke-BackendOnlyHandoff {
         return
     }
     if (-not $Execute) {
-        Write-RedactedStatus 'BACKEND_HANDOFF_PREFLIGHT_READY' 'read-only handoff preflight passed'
+        Write-RedactedStatus 'BACKEND_HANDOFF_FULL_STACK_ROLLBACK_UNQUALIFIED' 'original owner verified; rollback can start transport and dispatch eligible work'
         return
     }
 
@@ -1581,11 +1609,17 @@ function Invoke-BackendOnlyHandoff {
 function Invoke-CanonicalStackBootstrap {
     $root=(Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
     if($ReadyTimeoutSeconds -lt 5 -or $ReadyTimeoutSeconds -gt 180){throw 'readiness timeout is invalid'}
-    if($Mode -eq 'plan' -or -not $Execute){Invoke-CanonicalStackBootstrapCore;return}
-    if ($HandoffBackendOnly -and -not (Test-IndependentBackendHandoffHost)) {
-        Write-RedactedStatus 'BACKEND_HANDOFF_INDEPENDENT_OWNER_REQUIRED' 'persistent handoff requires an independent operator process'
+    if ($HandoffBackendOnly -and $Execute) {
+        if (-not (Test-IndependentBackendHandoffHost)) {
+            Write-RedactedStatus 'BACKEND_HANDOFF_INDEPENDENT_OWNER_REQUIRED' 'persistent handoff requires an independent operator process'
+        } else {
+            # A failed handoff restores full-stack startup, which can dispatch due Wake work.
+            # Keep the installed owner serving until that rollback can honor the maintenance scope.
+            Write-RedactedStatus 'BACKEND_HANDOFF_FULL_STACK_ROLLBACK_UNQUALIFIED' 'rollback can start transport and dispatch eligible work'
+        }
         return
     }
+    if($Mode -eq 'plan' -or -not $Execute){Invoke-CanonicalStackBootstrapCore;return}
     $lease=$null
     try{
         try{$lease=Enter-CatDeskStoppedLifecycleLease -Root $root}catch{

@@ -801,8 +801,15 @@ try {
       [void]$script:handoffActions.Add('restore-full-stack')
       Start-HandoffFixtureChild 7103 'FULL_STACK'
     }
-    function Assert-Handoff([string]$ExpectedState,[string]$ExpectedActions) {
-      $frame = Invoke-CanonicalStackBootstrap | ConvertFrom-Json
+    function Assert-Handoff([string]$ExpectedState,[string]$ExpectedActions,[switch]$IsolatedTransition) {
+      if ($IsolatedTransition) {
+        # Exercise the retained transition only with simulated owners and the disposable root.
+        $lease = Enter-CatDeskStoppedLifecycleLease -Root $root
+        try { $frame = Invoke-BackendOnlyHandoff -Root $root -StoppedLifecycleLease $lease | ConvertFrom-Json }
+        finally { $lease.Dispose() }
+      } else {
+        $frame = Invoke-CanonicalStackBootstrap | ConvertFrom-Json
+      }
       if ($frame.State -cne $ExpectedState -or ($script:handoffActions -join ',') -cne $ExpectedActions) {
         throw "handoff fixture expected $ExpectedState but observed $($frame.State) / $($script:handoffActions -join ',')"
       }
@@ -817,22 +824,28 @@ try {
       throw 'reconnect must distinguish pre-handoff planning from execution'
     }
     $Mode = 'plan'; $Execute = $false
-    Assert-Handoff 'BACKEND_HANDOFF_PREFLIGHT_READY' ''
+    Assert-Handoff 'BACKEND_HANDOFF_FULL_STACK_ROLLBACK_UNQUALIFIED' ''
     $Mode = 'recover'; $Execute = $true
     $script:handoffIndependent = $false
     Assert-Handoff 'BACKEND_HANDOFF_INDEPENDENT_OWNER_REQUIRED' ''
     $script:handoffIndependent = $true
+    Assert-Handoff 'BACKEND_HANDOFF_FULL_STACK_ROLLBACK_UNQUALIFIED' ''
+    $Mode = 'plan'
+    Assert-Handoff 'BACKEND_HANDOFF_FULL_STACK_ROLLBACK_UNQUALIFIED' ''
+    $Execute = $false
     $script:handoffListener.CreationTimeUtc = '2026-11-28T12:00:01.0000000Z'
     Assert-Handoff 'BACKEND_HANDOFF_OWNER_CHANGED' ''
+    $Execute = $true
+    $Mode = 'recover'
     $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
-    Assert-Handoff 'BACKEND_HANDOFF_LOCAL_READY' 'stop-original,start-backend-only'
+    Assert-Handoff 'BACKEND_HANDOFF_LOCAL_READY' 'stop-original,start-backend-only' -IsolatedTransition
     if (-not (Test-ReconnectBackendOwner $reconnectLocal $reconnectRelease $script:handoffListener)) {
       throw 'verified backend-only handoff did not pass the reconnect gate'
     }
     $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
     $script:handoffProbeGates.Enqueue('LOCAL_MCP_RESPONSE_TIMEOUT')
     $script:handoffProbeGates.Enqueue('READY')
-    Assert-Handoff 'BACKEND_HANDOFF_LOCAL_READY' 'stop-original,start-backend-only'
+    Assert-Handoff 'BACKEND_HANDOFF_LOCAL_READY' 'stop-original,start-backend-only' -IsolatedTransition
     if ($script:handoffProbeGates.Count) { throw 'replacement never verified after its first timeout' }
     $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
     # A protocol failure still refuses the replacement immediately. The same
@@ -840,7 +853,7 @@ try {
     $script:handoffProbeGates.Enqueue('LOCAL_MCP_PROTOCOL_UNREADY')
     $script:handoffProbeGates.Enqueue('LOCAL_MCP_RESPONSE_TIMEOUT')
     $script:handoffProbeGates.Enqueue('READY')
-    Assert-Handoff 'BACKEND_HANDOFF_FULL_STACK_RESTORED' 'stop-original,start-backend-only,stop-owned-replacement,restore-full-stack'
+    Assert-Handoff 'BACKEND_HANDOFF_FULL_STACK_RESTORED' 'stop-original,start-backend-only,stop-owned-replacement,restore-full-stack' -IsolatedTransition
     if ($script:handoffProbeGates.Count) { throw 'restored owner never completed its authenticated probe' }
     if (Test-ReconnectBackendOwner $reconnectLocal $reconnectRelease $script:handoffListener) {
       throw 'restored full-stack owner passed the reconnect execution gate'
@@ -865,7 +878,7 @@ try {
     }
     $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
     $script:handoffFault = 'racer'
-    Assert-Handoff 'BACKEND_HANDOFF_RECOVERY_REQUIRED' 'stop-original'
+    Assert-Handoff 'BACKEND_HANDOFF_RECOVERY_REQUIRED' 'stop-original' -IsolatedTransition
     if (Test-ReconnectBackendOwner $reconnectLocal $reconnectRelease $script:handoffListener) {
       throw 'ambiguous handoff passed the reconnect execution gate'
     }
