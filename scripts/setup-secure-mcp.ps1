@@ -1,7 +1,7 @@
 param(
     [ValidateSet("managed_ephemeral_ngrok", "external_tunnel", "openai_secure_tunnel")]
     [string]$TransportMode = "openai_secure_tunnel",
-    [ValidateSet("plan", "install", "configure", "connect", "start_all", "status", "repair", "migrate", "stop", "rollback")]
+    [ValidateSet("plan", "install", "configure", "connect", "start_all", "status", "repair", "migrate", "stop", "rollback", "reconnect")]
     [string]$Mode = "plan",
     [switch]$Plan,
     [switch]$InstallClient,
@@ -22,11 +22,22 @@ param(
     [string]$LocalMcpUrlPlaceholder = "http://127.0.0.1:<port>/<persistent-route>/mcp",
     [string]$ConfigPath = "",
     [ValidateRange(1, 30)][int]$RuntimeCommandTimeoutSeconds = 15,
+    [string]$ReconnectWorkspace,
+    [string]$ExpectedBackendSha256,
+    [string]$ExpectedTunnelClientSha256,
+    [int]$ExpectedRuntimeOwnerPid,
+    [string]$ExpectedRuntimeOwnerCreatedUtc,
+    [switch]$ExecuteReconnect,
     [switch]$LegacyDirectManaged
 )
 
 $ErrorActionPreference = "Stop"
 
+if ($Mode -eq 'reconnect' -and ($Plan -or $InstallClient -or $ConfigureCatDesk -or $ConnectRuntime -or
+    $StartAll -or $Status -or $Repair -or $MigrateOfficialRuntime -or $StopRuntime -or $RollbackClient)) {
+    '{"mode":"reconnect","state":"SECURE_MCP_RECONNECT_ARGUMENTS_CONFLICT","webDiscoveryVerified":false}'
+    return
+}
 if ($Plan) { $Mode = "plan" }
 if ($InstallClient) { $Mode = "install" }
 if ($ConfigureCatDesk) { $Mode = "configure" }
@@ -399,7 +410,7 @@ function Get-LocalMcpRuntimeAuthorization {
 }
 
 function Connect-Runtime {
-    param([string]$ClientPath, $McpConfig)
+    param([string]$ClientPath, $McpConfig, [string]$ExistingProfileDirectory = '')
     # Validate the target before checking any runtime inputs or invoking the
     # tunnel client.  This keeps redacted presentation values fail-closed.
     $localMcpUrl = Get-LocalMcpRuntimeUrl -McpConfig $McpConfig
@@ -408,8 +419,224 @@ function Connect-Runtime {
     if (-not [Environment]::GetEnvironmentVariable("CONTROL_PLANE_API_KEY")) {
         throw "CONTROL_PLANE_API_KEY must be present in the process environment for runtime connect"
     }
-    Invoke-BoundedTunnelClient -Path $ClientPath -CommandArgs @("runtimes", "connect", "--alias", $RuntimeAlias, "--tunnel-id", $TunnelId, "--runtime-api-key", "env:CONTROL_PLANE_API_KEY", "--mcp-server-url", $localMcpUrl) -TimeoutSeconds $RuntimeCommandTimeoutSeconds -McpAuthorization $mcpAuthorization | Out-Null
+    $arguments = @("runtimes", "connect", "--alias", $RuntimeAlias, "--tunnel-id", $TunnelId, "--runtime-api-key", "env:CONTROL_PLANE_API_KEY", "--mcp-server-url", $localMcpUrl)
+    if ($ExistingProfileDirectory) { $arguments += @('--profile', $ProfileName, '--profile-dir', $ExistingProfileDirectory) }
+    Invoke-BoundedTunnelClient -Path $ClientPath -CommandArgs $arguments -TimeoutSeconds $RuntimeCommandTimeoutSeconds -McpAuthorization $mcpAuthorization | Out-Null
     return "connect invoked"
+}
+
+function Read-ReconnectRuntimeStatus {
+    param([string]$ClientPath, [string]$Target)
+    $result = Invoke-BoundedTunnelClient -Path $ClientPath -CommandArgs @('runtimes', 'status', $RuntimeAlias, '--json') -TimeoutSeconds $RuntimeCommandTimeoutSeconds
+    $status = $result.Stdout | ConvertFrom-Json -ErrorAction Stop
+    if ($status -isnot [pscustomobject] -or $status.alias -cne $RuntimeAlias -or
+        $status.tunnel_id -cne $TunnelId -or $status.profile_name -cne $ProfileName -or
+        $status.process_running -isnot [bool] -or -not [IO.Path]::IsPathRooted([string]$status.profile_path)) {
+        throw 'SECURE_MCP_RECONNECT_IDENTITY_UNPROVEN'
+    }
+    if ($status.process_running -and ($status.process.alias -cne $RuntimeAlias -or
+        $status.process.tunnel_id -cne $TunnelId -or $status.process.mode -cne 'process' -or
+        $status.process.target_kind -cne 'server_url' -or $status.process.target_value -cne $Target -or
+        $status.healthy -isnot [bool] -or $status.ready -isnot [bool])) {
+        throw 'SECURE_MCP_RECONNECT_IDENTITY_UNPROVEN'
+    }
+    return $status
+}
+
+function Get-ReconnectRuntimeOwner {
+    param($Status, [string]$ClientPath)
+    $ownerPid = [int]$Status.process.pid
+    if (-not $Status.process_running -or $ownerPid -le 0) { throw 'SECURE_MCP_RECONNECT_OWNER_CHANGED' }
+    $owner = Get-Process -Id $ownerPid -ErrorAction Stop
+    $null = $owner.Handle
+    if ($owner.HasExited -or $owner.Path -ine $ClientPath) { throw 'SECURE_MCP_RECONNECT_OWNER_CHANGED' }
+    return $owner
+}
+
+function Test-ReconnectBackendOwner {
+    param($Local, $Canonical, $Expected, [ValidateSet('BACKEND_ONLY','FULL_STACK')][string]$OwnerMode = 'BACKEND_ONLY')
+    $Current = Get-LoopbackCatDeskListener -Port $Local.Port -Canonical $Canonical
+    if ($null -eq $Current -or $null -eq $Expected -or -not $Current.MatchesCanonical -or $Current.OwnerMode -cne $OwnerMode -or
+        $Current.Pid -ne $Expected.Pid -or $Current.CreationTimeUtc -cne $Expected.CreationTimeUtc) { return $false }
+    $daemons = @(Get-CatDeskDaemonProcessCandidates -Canonical $Canonical)
+    return ($daemons.Count -eq 1 -and $daemons[0].MatchesCanonical -and
+        $daemons[0].Pid -eq $Current.Pid -and $daemons[0].CreationTimeUtc -ceq $Current.CreationTimeUtc -and
+        (Get-LocalMcpReadiness -LocalMcp $Local -Canonical $Canonical -RequireBearer).Ready)
+}
+
+function Get-ReconnectMcpProbeState {
+    param($Status)
+    # The registered alias's direct probe avoids the client's fallback to
+    # another runtime. Top-level readiness also accepts auth challenges.
+    $probe = $Status
+    foreach ($name in @('local', 'health', 'readyz')) {
+        if ($null -eq $probe) { break }
+        $property = $probe.PSObject.Properties[$name]
+        if ($null -eq $property) { $probe = $null; break }
+        $probe = $property.Value
+    }
+    if ($null -eq $probe -or @($probe.PSObject.Properties.Name) -notcontains 'body' -or
+        @($probe.PSObject.Properties.Name) -notcontains 'ok' -or @($probe.PSObject.Properties.Name) -notcontains 'status' -or
+        $probe.ok -isnot [bool] -or -not $probe.ok -or $probe.status -ne 200 -or
+        $probe.body -isnot [string] -or $probe.body.Length -gt 1024) {
+        return 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY'
+    }
+    $body = $probe.body.Trim()
+    if ($body -ceq 'ready') { return 'SECURE_MCP_RECONNECT_RUNTIME_READY' }
+    if ($body.StartsWith('ready (mcp initialize requires auth:', [StringComparison]::Ordinal)) {
+        return 'SECURE_MCP_RECONNECT_MCP_AUTH_REQUIRED_NO_RETRY'
+    }
+    if ($body.StartsWith('ready (mcp startup probe timed out:', [StringComparison]::Ordinal)) {
+        return 'SECURE_MCP_RECONNECT_MCP_PROBE_TIMED_OUT_NO_RETRY'
+    }
+    return 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY'
+}
+
+function Invoke-ReconnectRuntimeTransition {
+    param($Plan)
+    $stage = 'PREFLIGHT'
+    try {
+        $current = Read-ReconnectRuntimeStatus -ClientPath $Plan.Client -Target $Plan.Target
+        if (-not $current.process_running -or $current.process.pid -ne $Plan.Original.Id -or $Plan.Original.HasExited -or
+            $current.profile_path -ine $Plan.Profile -or (Get-FileHash -LiteralPath $Plan.Profile).Hash -cne $Plan.ProfileHash -or
+            (Get-FileHash -LiteralPath $Plan.ConfigPath).Hash -cne $Plan.ConfigHash -or
+            -not (Test-ReconnectBackendOwner $Plan.Local $Plan.Canonical $Plan.Backend)) { return 'SECURE_MCP_RECONNECT_OWNER_CHANGED' }
+        $stage = 'STOP'
+        Invoke-BoundedTunnelClient -Path $Plan.Client -CommandArgs @('runtimes', 'stop', $RuntimeAlias) -TimeoutSeconds $RuntimeCommandTimeoutSeconds | Out-Null
+        $stopped = Read-ReconnectRuntimeStatus -ClientPath $Plan.Client -Target $Plan.Target
+        if ($stopped.process_running -or -not $Plan.Original.HasExited -or $stopped.profile_path -ine $Plan.Profile -or
+            (Get-FileHash -LiteralPath $Plan.Profile).Hash -cne $Plan.ProfileHash -or
+            (Get-FileHash -LiteralPath $Plan.ConfigPath).Hash -cne $Plan.ConfigHash -or
+            -not (Test-ReconnectBackendOwner $Plan.Local $Plan.Canonical $Plan.Backend)) { return 'SECURE_MCP_RECONNECT_STOP_UNPROVEN_NO_RETRY' }
+
+        $stage = 'CONNECT'
+        Connect-Runtime -ClientPath $Plan.Client -McpConfig $Plan.Config -ExistingProfileDirectory $Plan.ProfileDirectory | Out-Null
+        $ready = Read-ReconnectRuntimeStatus -ClientPath $Plan.Client -Target $Plan.Target
+        $newOwner = Get-ReconnectRuntimeOwner -Status $ready -ClientPath $Plan.Client
+        if ($newOwner.Id -eq $Plan.Original.Id -or -not $ready.healthy -or -not $ready.ready -or $ready.profile_path -ine $Plan.Profile -or
+            (Get-FileHash -LiteralPath $Plan.Profile).Hash -cne $Plan.ProfileHash -or
+            (Get-FileHash -LiteralPath $Plan.ConfigPath).Hash -cne $Plan.ConfigHash -or
+            -not (Test-ReconnectBackendOwner $Plan.Local $Plan.Canonical $Plan.Backend)) { return 'SECURE_MCP_RECONNECT_RESULT_UNPROVEN_NO_RETRY' }
+        return Get-ReconnectMcpProbeState -Status $ready
+    } catch {
+        if ($stage -eq 'STOP') { return 'SECURE_MCP_RECONNECT_STOP_UNPROVEN_NO_RETRY' }
+        if ($stage -eq 'CONNECT') { return 'SECURE_MCP_RECONNECT_RESULT_UNPROVEN_NO_RETRY' }
+        return 'SECURE_MCP_RECONNECT_PREFLIGHT_REFUSED'
+    }
+}
+
+function Write-ReconnectEvidence {
+    param([string]$Path,[string]$State)
+    $record = [ordered]@{schemaVersion=1; observedUtc=[DateTimeOffset]::UtcNow.ToString('o'); state=$State}
+    $bytes = [Text.Encoding]::UTF8.GetBytes(($record | ConvertTo-Json -Compress))
+    $file = [IO.File]::Open($Path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+    try { $file.Write($bytes,0,$bytes.Length); $file.Flush($true) }
+    finally { $file.Dispose() }
+}
+
+function Invoke-ExistingRuntimeReconnect {
+    $lease = $null
+    $clientPin = $null
+    try {
+        if ($LegacyDirectManaged -or $TransportMode -cne 'openai_secure_tunnel' -or -not $ForwardLocalMcpBearer -or
+            $RuntimeAlias -cnotmatch '\A[A-Za-z0-9_.-]{1,64}\z' -or $ProfileName -cne $RuntimeAlias -or
+            $TunnelId -cnotmatch '\Atunnel_[a-z0-9]{32}\z' -or
+            $ExpectedBackendSha256 -cnotmatch '\A[a-f0-9]{64}\z' -or $ExpectedTunnelClientSha256 -cnotmatch '\A[a-f0-9]{64}\z' -or
+            $ExpectedRuntimeOwnerPid -le 0 -or $ExpectedRuntimeOwnerCreatedUtc -cnotmatch '\A[0-9TZ+:.\-]{20,33}\z' -or
+            [string]::IsNullOrWhiteSpace($ReconnectWorkspace) -or
+            -not [IO.Path]::IsPathRooted($ReconnectWorkspace)) { return 'SECURE_MCP_RECONNECT_EXPECTED_IDENTITY_REQUIRED' }
+        $fixedConfig = Join-Path $UserProfile '.catdesk\config.toml'
+        if ([IO.Path]::GetFullPath($ConfigPath) -ine [IO.Path]::GetFullPath($fixedConfig)) { return 'SECURE_MCP_RECONNECT_CONFIG_UNAVAILABLE' }
+        $fixedClient = Join-Path $UserProfile '.catdesk\tools\tunnel-client\current\tunnel-client.exe'
+        if ([string]::IsNullOrWhiteSpace($TunnelClientPath) -or
+            [IO.Path]::GetFullPath($TunnelClientPath) -ine [IO.Path]::GetFullPath($fixedClient)) {
+            return 'SECURE_MCP_RECONNECT_CLIENT_CHANGED'
+        }
+        $root = (Resolve-Path -LiteralPath $ReconnectWorkspace).Path
+        # Import only the lifecycle proof functions. The bootstrap and this
+        # helper intentionally have different bounded tunnel-client runners.
+        $engine = Join-Path $PSScriptRoot 'start-catdesk-stack.ps1'
+        $lifecycle = New-Module -Name 'CatDeskReconnectLifecycle' -ArgumentList $engine,$root,$fixedConfig -ScriptBlock {
+            param($EnginePath,$ReleaseRoot,$ConfigFile)
+            . $EnginePath -Workspace $ReleaseRoot -ConfigPath $ConfigFile
+            Export-ModuleMember -Function @(
+                'Resolve-TrustedBootstrapHelperPath', 'Test-IndependentBackendHandoffHost',
+                'Enter-CatDeskStoppedLifecycleLease', 'Get-CatDeskReleaseStartupGate', 'Assert-CatDeskRecoveryContainedPath',
+                'Get-ConfiguredRuntimeAlias', 'Read-OfficialRuntimeProcessMode',
+                'Get-CanonicalCatDeskIdentity', 'Get-ConfiguredLocalMcp',
+                'Get-LoopbackCatDeskListener', 'Get-CatDeskDaemonProcessCandidates',
+                'Get-LocalMcpReadiness'
+            )
+        }
+        Import-Module $lifecycle -Scope Local
+        $pinnedClient = Resolve-TrustedBootstrapHelperPath -Path $fixedClient -FailureMessage 'client identity unproven'
+        $clientPin = [IO.File]::Open($pinnedClient, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        if ((Get-FileHash -LiteralPath $pinnedClient).Hash.ToLowerInvariant() -cne $ExpectedTunnelClientSha256) { return 'SECURE_MCP_RECONNECT_CLIENT_CHANGED' }
+        if ($ExecuteReconnect) {
+            if (-not (Test-IndependentBackendHandoffHost)) { return 'SECURE_MCP_RECONNECT_INDEPENDENT_OWNER_REQUIRED' }
+            $lease = Enter-CatDeskStoppedLifecycleLease -Root $root
+        }
+        if ((Get-CatDeskReleaseStartupGate -Root $root -HeldLifecycleLease $lease) -cne 'READY') { return 'SECURE_MCP_RECONNECT_RELEASE_UNAVAILABLE' }
+        if ((Get-ConfiguredRuntimeAlias -Path $fixedConfig) -cne $RuntimeAlias -or
+            (Read-OfficialRuntimeProcessMode -Path $fixedConfig) -cne 'official_runtime') { return 'SECURE_MCP_RECONNECT_CONFIG_UNAVAILABLE' }
+        $canonical = Get-CanonicalCatDeskIdentity -Root $root -ExpectedHash $ExpectedBackendSha256
+        $local = Get-ConfiguredLocalMcp -Path $fixedConfig
+        $backend = Get-LoopbackCatDeskListener -Port $local.Port -Canonical $canonical
+        $planBeforeHandoff = -not $ExecuteReconnect -and $null -ne $backend -and $backend.OwnerMode -ceq 'FULL_STACK'
+        $requiredMode = if ($planBeforeHandoff) { 'FULL_STACK' } else { 'BACKEND_ONLY' }
+        if (-not (Test-ReconnectBackendOwner $local $canonical $backend -OwnerMode $requiredMode)) {
+            return 'SECURE_MCP_RECONNECT_BACKEND_ONLY_REQUIRED'
+        }
+        [void](Get-LocalMcpRuntimeAuthorization -ForwardBearer $true)
+        if (-not [Environment]::GetEnvironmentVariable('CONTROL_PLANE_API_KEY')) { return 'SECURE_MCP_RECONNECT_RUNTIME_CREDENTIAL_UNAVAILABLE' }
+        $config = Read-CatDeskMcpConfig -Path $fixedConfig
+        $target = Get-LocalMcpRuntimeUrl $config
+        $status = Read-ReconnectRuntimeStatus -ClientPath $pinnedClient -Target $target
+        $original = Get-ReconnectRuntimeOwner -Status $status -ClientPath $pinnedClient
+        if ($original.Id -ne $ExpectedRuntimeOwnerPid -or
+            $original.StartTime.ToUniversalTime().ToString('o') -cne $ExpectedRuntimeOwnerCreatedUtc) { return 'SECURE_MCP_RECONNECT_OWNER_CHANGED' }
+        $profile = Resolve-TrustedBootstrapHelperPath -Path $status.profile_path -FailureMessage 'runtime profile identity unproven'
+        $profileDirectory = (Split-Path -Parent $profile)
+        if ($profileDirectory -ine $status.profile_dir) { return 'SECURE_MCP_RECONNECT_IDENTITY_UNPROVEN' }
+        $profileHash = (Get-FileHash -LiteralPath $profile).Hash
+        $configHash = (Get-FileHash -LiteralPath $fixedConfig).Hash
+        $evidenceDirectory = Assert-CatDeskRecoveryContainedPath -Root $root -Path (Join-Path $root '.catdesk\recovery-evidence') -Label 'reconnect evidence'
+        $identity = "$RuntimeAlias\0$TunnelId\0$ExpectedRuntimeOwnerPid\0$ExpectedRuntimeOwnerCreatedUtc"
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { $digest = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($identity))).Replace('-','').ToLowerInvariant() }
+        finally { $sha.Dispose() }
+        $attempt = Assert-CatDeskRecoveryContainedPath -Root $root -Path (Join-Path $evidenceDirectory "secure-mcp-reconnect-$digest.json") -Label 'reconnect attempt' -AllowMissingLeaf
+        $resultPath = Assert-CatDeskRecoveryContainedPath -Root $root -Path (Join-Path $evidenceDirectory "secure-mcp-reconnect-$digest.result.json") -Label 'reconnect result' -AllowMissingLeaf
+        if ((Test-Path -LiteralPath $attempt) -or (Test-Path -LiteralPath $resultPath)) { return 'SECURE_MCP_RECONNECT_ATTEMPT_EXISTS_NO_RETRY' }
+        if ($planBeforeHandoff) { return 'SECURE_MCP_RECONNECT_READY_AFTER_BACKEND_HANDOFF' }
+        if (-not $ExecuteReconnect) { return 'SECURE_MCP_RECONNECT_PREFLIGHT_READY' }
+        Write-ReconnectEvidence -Path $attempt -State 'SECURE_MCP_RECONNECT_INTENT'
+        $outcome = Invoke-ReconnectRuntimeTransition ([pscustomobject]@{
+            Client=$pinnedClient; Target=$target; Original=$original; Profile=$profile
+            ProfileHash=$profileHash; ProfileDirectory=$profileDirectory
+            ConfigPath=$fixedConfig; ConfigHash=$configHash; Config=$config
+            Local=$local; Canonical=$canonical; Backend=$backend
+        })
+        try { Write-ReconnectEvidence -Path $resultPath -State $outcome }
+        catch { return 'SECURE_MCP_RECONNECT_RESULT_UNPROVEN_NO_RETRY' }
+        return $outcome
+    } catch {
+        return 'SECURE_MCP_RECONNECT_PREFLIGHT_REFUSED'
+    } finally {
+        if ($null -ne $clientPin) { $clientPin.Dispose() }
+        if ($null -ne $lease) { $lease.Dispose() }
+    }
+}
+
+if ($Mode -eq 'reconnect') {
+    [ordered]@{ mode = 'reconnect'; state = (Invoke-ExistingRuntimeReconnect); webDiscoveryVerified = $false } |
+        ConvertTo-Json -Compress
+    return
+}
+if ($ExecuteReconnect -or $ReconnectWorkspace -or $ExpectedBackendSha256 -or $ExpectedTunnelClientSha256 -or
+    $ExpectedRuntimeOwnerPid -or $ExpectedRuntimeOwnerCreatedUtc) {
+    '{"state":"SECURE_MCP_RECONNECT_ARGUMENTS_CONFLICT","webDiscoveryVerified":false}'
+    return
 }
 
 $clientPath = if ($Mode -eq "migrate") { $null } else { Find-TunnelClient -ExplicitPath $TunnelClientPath }

@@ -16,7 +16,7 @@ $setup=Join-Path $PSScriptRoot 'setup-secure-mcp.ps1'
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($setup,[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'SETUP_PARSE_FAILED'}
-foreach($name in @('ConvertTo-NativeCommandLineArgument','Initialize-BoundedNativeProcessType','Invoke-BoundedTunnelClient','Get-LocalMcpRuntimeAuthorization','Get-LocalMcpRuntimeUrl','Test-SafeRuntimeRoute','Connect-Runtime')){
+foreach($name in @('ConvertTo-NativeCommandLineArgument','Initialize-BoundedNativeProcessType','Invoke-BoundedTunnelClient','Get-LocalMcpRuntimeAuthorization','Get-LocalMcpRuntimeUrl','Test-SafeRuntimeRoute','Connect-Runtime','Get-ReconnectMcpProbeState','Invoke-ReconnectRuntimeTransition','Write-ReconnectEvidence')){
     $nodes=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true))
     if($nodes.Count -ne 1){throw 'HELPER_IDENTITY_INVALID'}
     . ([scriptblock]::Create($nodes[0].Extent.Text))
@@ -88,6 +88,93 @@ if(!$valid){exit 1}
     $config.BindHost='example.com'
     try{$null=Connect-Runtime -ClientPath $hostImage -McpConfig $config;throw 'REMOTE_TARGET_ACCEPTED'}catch{Need ($_.Exception.Message -ne 'REMOTE_TARGET_ACCEPTED') 'REMOTE_TARGET_ACCEPTED'}
     Need ($script:connectCalls -eq 2) 'REMOTE_TARGET_STARTED_RUNTIME';$checks++
+    & {
+        $profile = Join-Path $root 'fixture-profile.yaml'
+        $configFile = Join-Path $root 'fixture-config.toml'
+        $intent = Join-Path $root 'fixture-intent.json'
+        [IO.File]::WriteAllText($profile,'immutable fixture profile')
+        [IO.File]::WriteAllText($configFile,'immutable fixture config')
+        try {
+            Write-ReconnectEvidence -Path $intent -State 'SECURE_MCP_RECONNECT_INTENT'
+            try {
+                Write-ReconnectEvidence -Path $intent -State 'replace'
+                throw 'INTENT_OVERWRITE_ACCEPTED'
+            } catch [IO.IOException] {}
+            Need ((Get-Content -LiteralPath $intent -Raw | ConvertFrom-Json).state -ceq 'SECURE_MCP_RECONNECT_INTENT') 'INTENT_WAS_NOT_PRESERVED'
+            $script:transitions = [Collections.Generic.List[string]]::new()
+            $script:readIteration = 0
+            $original=[pscustomobject]@{Id=23;HasExited=$false}
+            $plan=[pscustomobject]@{
+                Client=$hostImage;Target='fixture-local-target';Original=$original;Profile=$profile
+                ProfileDirectory=$root;ProfileHash=(Get-FileHash -LiteralPath $profile).Hash
+                ConfigPath=$configFile;ConfigHash=(Get-FileHash -LiteralPath $configFile).Hash
+                Config=$config;Local=$null;Canonical=$null;Backend=$null
+            }
+            function Test-ReconnectBackendOwner { param($Local,$Canonical,$Expected) return $fault -cne 'backend-changed' }
+            function Read-ReconnectRuntimeStatus {
+                param($ClientPath,$Target)
+                $script:readIteration++
+                $running = $script:readIteration -ne 2 -or $fault -ceq 'stop-raced'
+                $pidValue = if ($script:readIteration -eq 3 -or $fault -ceq 'owner-changed') { 24 } else { 23 }
+                $body = switch ($fault) {
+                    'auth-challenge' { 'ready (mcp initialize requires auth: redacted fixture)' }
+                    'probe-timeout' { 'ready (mcp startup probe timed out: redacted fixture)' }
+                    'unknown-probe' { 'ready (unexpected shape)' }
+                    'oversized-probe' { 'x' * 1025 }
+                    default { 'ready' }
+                }
+                $directProbe = if ($fault -cne 'fallback-ready') {
+                    [pscustomobject]@{ok=$true;status=200;body=$body}
+                }
+                [pscustomobject]@{process_running=$running;process=@{pid=$pidValue};profile_path=$profile;healthy=$true;ready=$true
+                    local=[pscustomobject]@{
+                        health=if ($fault -eq 'missing-direct-health') { [pscustomobject]@{} } else { [pscustomobject]@{readyz=$directProbe} }
+                        effective_health=[pscustomobject]@{readyz=[pscustomobject]@{ok=$true;status=200;body='ready'}}
+                    }
+                }
+            }
+            function Get-ReconnectRuntimeOwner { param($Status,$ClientPath) [pscustomobject]@{Id=[int]$Status.process.pid} }
+            function Invoke-BoundedTunnelClient {
+                param($Path,$CommandArgs,$TimeoutSeconds)
+                Need (($CommandArgs -join ' ') -ceq "runtimes stop $RuntimeAlias") 'WRONG_RUNTIME_STOP'
+                [void]$script:transitions.Add('stop')
+                $original.HasExited = $fault -cne 'exit-unproven'
+            }
+            function Connect-Runtime {
+                param($ClientPath,$McpConfig,$ExistingProfileDirectory)
+                Need ($ExistingProfileDirectory -ceq $root) 'PROFILE_DIRECTORY_CHANGED'
+                [void]$script:transitions.Add('connect')
+                if ($fault -ceq 'connect-timeout') { throw 'fixture-uncertain-timeout' }
+                if ($fault -ceq 'profile-bytes') { [IO.File]::WriteAllText($profile,'changed fixture profile') }
+            }
+            foreach ($case in @(
+                @('', 'SECURE_MCP_RECONNECT_RUNTIME_READY', 'stop,connect'),
+                @('owner-changed', 'SECURE_MCP_RECONNECT_OWNER_CHANGED', ''),
+                @('backend-changed', 'SECURE_MCP_RECONNECT_OWNER_CHANGED', ''),
+                @('stop-raced', 'SECURE_MCP_RECONNECT_STOP_UNPROVEN_NO_RETRY', 'stop'),
+                @('exit-unproven', 'SECURE_MCP_RECONNECT_STOP_UNPROVEN_NO_RETRY', 'stop'),
+                @('connect-timeout', 'SECURE_MCP_RECONNECT_RESULT_UNPROVEN_NO_RETRY', 'stop,connect'),
+                @('profile-bytes', 'SECURE_MCP_RECONNECT_RESULT_UNPROVEN_NO_RETRY', 'stop,connect'),
+                @('auth-challenge', 'SECURE_MCP_RECONNECT_MCP_AUTH_REQUIRED_NO_RETRY', 'stop,connect'),
+                @('probe-timeout', 'SECURE_MCP_RECONNECT_MCP_PROBE_TIMED_OUT_NO_RETRY', 'stop,connect'),
+                @('unknown-probe', 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY', 'stop,connect'),
+                @('oversized-probe', 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY', 'stop,connect'),
+                @('fallback-ready', 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY', 'stop,connect'),
+                @('missing-direct-health', 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY', 'stop,connect')
+            )) {
+                $fault = $case[0]
+                $script:transitions.Clear()
+                $script:readIteration = 0
+                $original.HasExited=$false
+                $outcome = Invoke-ReconnectRuntimeTransition -Plan $plan
+                Need ($outcome -ceq $case[1] -and ($script:transitions -join ',') -ceq $case[2]) "RECONNECT_CASE_FAILED $fault $outcome"
+                [IO.File]::WriteAllText($profile,'immutable fixture profile')
+            }
+        } finally {
+            foreach ($path in @($profile,$configFile,$intent)) { [IO.File]::Delete($path) }
+        }
+    }
+    $checks += 14
     @{state='PASS';checks=$checks;actualOwnedChild=$true;officialRuntimeStarts=0;operatorProfileReads=0;productionAuthChanges=0;parentEnvironmentPreserved=$true}|ConvertTo-Json -Compress
 }finally{
     foreach($name in $names){[Environment]::SetEnvironmentVariable($name,$before[$name],'Process')}

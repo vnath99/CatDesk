@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T16:05:00Z",
+  "scope": "READ_ONLY_EXISTING_OWNER_AUTH_CLASSIFICATION_AND_ISOLATED_RECONNECT_TESTS",
+  "startingDevelopmentCommit": "cb3f05e893ad1a469b53c6a1801294ec9aae2d8f",
+  "upstream": {
+    "version": "0.0.14",
+    "sourceCommit": "0f870e50a973fa820d4c409000059e181e8d242b",
+    "statusPayload": "https://github.com/openai/tunnel-client/blob/0f870e50a973fa820d4c409000059e181e8d242b/pkg/codexplugin/manager.go#L983-L1060",
+    "runtimeReadiness": "https://github.com/openai/tunnel-client/blob/0f870e50a973fa820d4c409000059e181e8d242b/pkg/runtimehealth/health.go#L349-L396"
+  },
+  "installedReadOnly": {
+    "runtimeProcessPresent": true,
+    "topLevelHealthy": true,
+    "topLevelReady": true,
+    "directReadyzStatus": 200,
+    "classification": "SECURE_MCP_RECONNECT_MCP_AUTH_REQUIRED_NO_RETRY",
+    "rawBodyRetainedInPublicEvidence": false,
+    "runtimeStops": 0,
+    "runtimeConnects": 0,
+    "v5Calls": 0
+  },
+  "development": {
+    "powerShell7AssertionsPassed": 31,
+    "windowsPowerShell51AssertionsPassed": 31,
+    "unknownProbeRemainsFenced": true,
+    "fallbackHealthCannotProveSelectedAlias": true
+  },
+  "reviewAdmissionPassed": false,
+  "webDiscoveryVerified": false,
+  "installedWebLifecycleAccepted": false
+}

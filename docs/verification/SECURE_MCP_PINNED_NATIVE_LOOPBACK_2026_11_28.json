@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T16:12:00Z",
+  "scope": "PINNED_ACTUAL_WINDOWS_CLIENT_FOREGROUND_LOOPBACK_BEARER_QUALIFICATION",
+  "startingDevelopmentCommit": "b2e97716f7839344b98a6a772f6040c999a2bc16",
+  "nativeClient": {
+    "version": "0.0.14",
+    "sourceCommit": "0f870e50a973fa820d4c409000059e181e8d242b",
+    "sha256": "fcc85a69ec0ad82518e4f8964f60c45e31787957782a0fc9c1b0c44e82d61b9b",
+    "upstreamConfiguration": "https://github.com/openai/tunnel-client/blob/0f870e50a973fa820d4c409000059e181e8d242b/docs/configuration.md"
+  },
+  "command": "python -I -B scripts/test-secure-mcp-native-loopback.py",
+  "negativeControl": {
+    "mcpRequests": 6,
+    "matchingBearer": 0,
+    "initializeRequests": 1,
+    "sessionInitialized": false,
+    "controlPlaneRequests": 7,
+    "controlPlaneMcpBearerMatches": 0
+  },
+  "bearerForwarded": {
+    "mcpRequests": 8,
+    "matchingBearer": 8,
+    "initializeRequests": 1,
+    "initializeAuthMatches": 1,
+    "sessionInitialized": true,
+    "controlPlaneRequests": 7,
+    "controlPlaneMcpBearerMatches": 0
+  },
+  "isolation": {
+    "usedOnlySyntheticCredentialsAndConfiguredLoopbackTargets": true,
+    "actualOwnedRuntimeExitsProved": 2,
+    "fixtureListenersClosed": true,
+    "temporaryStateRemoved": true,
+    "managedRuntimesCreated": 0,
+    "installedLifecycleActions": 0,
+    "webConnectorCalls": 0
+  },
+  "reviewAdmissionPassed": false,
+  "installedWebLifecycleAccepted": false
+}

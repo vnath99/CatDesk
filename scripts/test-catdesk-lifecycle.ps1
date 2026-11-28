@@ -114,7 +114,9 @@ $realCanonicalRoot = $null
 
 try {
     Require ($source -match [regex]::Escape('$PSScriptRoot')) 'facade resolves all internal paths from its own root'
-    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake', 'promote'\)") 'exact public command vocabulary is present'
+    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake', 'promote', 'handoff-backend-only'\)") 'exact public command vocabulary is present'
+    $unscopedHandoff = Invoke-FixtureFacade -Command 'handoff-backend-only' -Seams $base | ConvertFrom-Json
+    Require ($unscopedHandoff.state -ceq 'BACKEND_HANDOFF_RELEASE_UNAVAILABLE' -and $actions.Count -eq 0) 'handoff refuses a substituted configuration before mutation'
     Require ($source -notmatch '(?i)provision-catdesk-release|cargo\s+(build|run|test)|tunnel-client.*(stop|remove)|runtimes\s+(stop|rm)') 'facade contains no compile/provision or tunnel stop/remove route'
     Require ($source -notmatch 'Stop-Process\s+-Id\s+\$processId') 'public stop never reacquires destructive authority by PID alone'
     Require ($source -match 'Stop-CatDeskListenerProcessForRecovery\s+-LocalMcp\s+\$endpoint\s+-Canonical\s+\$identity\s+-Candidate\s+\$candidate') 'public stop reuses the exact pinned listener process-instance mutation boundary'
@@ -964,13 +966,19 @@ static class PromotionRefusal {
     $readyDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $ready | ConvertFrom-Json
     Require ($readyDiagnosis.state -eq 'HEALTHY' -and $readyDiagnosis.primaryLayer -eq 'NONE' -and $readyDiagnosis.nextAction -eq 'NONE') 'healthy diagnosis reports no failing layer or recovery action'
     Require ((@($readyDiagnosis.layers) | Where-Object { $_.state -eq 'FAILED' }).Count -eq 0) 'healthy diagnosis has no failed layers'
+    Require ((@($readyDiagnosis.layers) | Where-Object layer -CEQ 'LOCAL_DAEMON').ownerMode -ceq 'UNVERIFIED') 'missing mode evidence is distinct from an authenticated listener'
+    $backendOnlyOwner = $ready.Clone()
+    $backendOnlyOwner.Listener = { [pscustomobject]@{ Pid = 49; MatchesCanonical = $true; OwnerMode = 'BACKEND_ONLY' } }
+    $backendOnlyDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $backendOnlyOwner | ConvertFrom-Json
+    Require ((@($backendOnlyDiagnosis.layers) | Where-Object layer -CEQ 'LOCAL_DAEMON').ownerMode -ceq 'BACKEND_ONLY') 'diagnosis projects the exact restricted owner mode'
     Require ($actions.Count -eq 0) 'healthy diagnosis remains non-mutating'
 
     $listenerMismatchDiagnosisSeams = $ready.Clone()
-    $listenerMismatchDiagnosisSeams.Listener = { param($local, $identity) [pscustomobject]@{ Pid = 52; MatchesCanonical = $false } }
+    $listenerMismatchDiagnosisSeams.Listener = { param($local, $identity) [pscustomobject]@{ Pid = 52; MatchesCanonical = $false; OwnerMode = 'BACKEND_ONLY' } }
     $listenerMismatchDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $listenerMismatchDiagnosisSeams | ConvertFrom-Json
     Require ($listenerMismatchDiagnosis.state -eq 'DEGRADED' -and $listenerMismatchDiagnosis.primaryLayer -eq 'LOCAL_DAEMON' -and $listenerMismatchDiagnosis.nextAction -eq 'RUN_RECOVER') 'diagnose identifies listener identity mismatch as the local-daemon repair layer'
     Require ((@($listenerMismatchDiagnosis.layers) | Where-Object { $_.layer -eq 'LOCAL_DAEMON' }).gate -eq 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH') 'diagnose preserves listener identity mismatch gate'
+    Require ($null -eq (@($listenerMismatchDiagnosis.layers) | Where-Object layer -CEQ 'LOCAL_DAEMON').ownerMode) 'foreign listener mode cannot prove canonical handoff readiness'
 
     $protocolFailure = $ready.Clone()
     $protocolFailure.LocalMcpReadiness = { param($local, $identity) [pscustomobject]@{ Ready = $false; Gate = 'LOCAL_MCP_RESPONSE_TIMEOUT' } }

@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake', 'promote')]
+    [ValidateSet('install', 'start', 'status', 'diagnose', 'doctor', 'recover', 'stop', 'autostart', 'wake', 'promote', 'handoff-backend-only')]
     [string]$Command,
     [Parameter(Position = 1)]
     [string]$AutostartAction = '',
@@ -15,6 +15,9 @@ param(
     [string]$BuildFingerprintPath = '',
     [int]$ReadyTimeoutSeconds = 180,
     [switch]$BackendOnly,
+    [int]$HandoffOwnerPid,
+    [string]$HandoffOwnerCreatedUtc,
+    [switch]$ExecuteHandoff,
     [string]$ObservationFile = '',
     [string]$ProjectWorkspace = '',
     [string]$WakeRoot = '',
@@ -1043,7 +1046,11 @@ function Invoke-LayeredDiagnosis {
             [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'FAILED' -Gate 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'))
         } else {
             $localDaemonReady = $true
-            [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'READY' -Gate 'READY'))
+            $daemonLayer = New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'READY' -Gate 'READY'
+            $ownerMode = [string]$listener.OwnerMode
+            if ($ownerMode -cnotin @('FULL_STACK', 'BACKEND_ONLY')) { $ownerMode = 'UNVERIFIED' }
+            $daemonLayer | Add-Member -NotePropertyName 'ownerMode' -NotePropertyValue $ownerMode
+            [void]$layers.Add($daemonLayer)
         }
     } catch {
         [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'FAILED' -Gate 'LOCAL_MCP_LISTENER_UNAVAILABLE'))
@@ -1116,6 +1123,31 @@ function Invoke-LayeredDiagnosis {
     }
 
     Write-LifecycleDiagnosis -State 'HEALTHY' -PrimaryLayer 'NONE' -NextAction 'NONE' -Layers $layers
+}
+
+function Invoke-LifecycleBackendHandoff {
+    $fixedConfig = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.catdesk\config.toml'
+    $fixedFingerprint = Join-Path $Workspace 'target\release\catdesk.exe.sha256'
+    if ($RollbackFromSha256 -or $RollbackFailedPromotion -or
+        [IO.Path]::GetFullPath($ConfigPath) -ine [IO.Path]::GetFullPath($fixedConfig) -or
+        [IO.Path]::GetFullPath($BuildFingerprintPath) -ine [IO.Path]::GetFullPath($fixedFingerprint)) {
+        Write-LifecycleStatus 'BACKEND_HANDOFF_RELEASE_UNAVAILABLE'
+        return
+    }
+    $mode = if ($ExecuteHandoff) { 'recover' } else { 'plan' }
+    $raw = @(& $enginePath -Mode $mode -Workspace $Workspace -ConfigPath $ConfigPath -ExpectedBuildSha256 $ExpectedBuildSha256 -BuildFingerprintPath $BuildFingerprintPath -ReadyTimeoutSeconds $ReadyTimeoutSeconds -HandoffBackendOnly -ExpectedOwnerPid $HandoffOwnerPid -ExpectedOwnerCreatedUtc $HandoffOwnerCreatedUtc -Execute:$ExecuteHandoff)
+    $result = if ($raw.Count -eq 1 -and $raw[0] -is [string] -and $raw[0].Length -le 2048) {
+        $raw[0] | ConvertFrom-Json -ErrorAction Stop
+    }
+    $state = [string]$result.State
+    if ($state -cnotin @(
+        'BACKEND_HANDOFF_EXPECTED_IDENTITY_REQUIRED', 'BACKEND_HANDOFF_INDEPENDENT_OWNER_REQUIRED',
+        'BACKEND_HANDOFF_RELEASE_UNAVAILABLE', 'BACKEND_HANDOFF_OWNER_CHANGED',
+        'BACKEND_HANDOFF_PREFLIGHT_REFUSED', 'BACKEND_HANDOFF_PREFLIGHT_READY',
+        'BACKEND_HANDOFF_LOCAL_READY', 'BACKEND_HANDOFF_FULL_STACK_RESTORED',
+        'BACKEND_HANDOFF_RECOVERY_REQUIRED', 'RELEASE_LIFECYCLE_BUSY', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED'
+    )) { $state = 'BACKEND_HANDOFF_RECOVERY_REQUIRED' }
+    Write-LifecycleStatus $state
 }
 
 function Invoke-CatDeskOnlyStop {
@@ -1441,6 +1473,9 @@ function Invoke-LifecycleReviewedPromotion {
 }
 
 try {
+    if ($Command -ne 'handoff-backend-only' -and ($HandoffOwnerPid -or $HandoffOwnerCreatedUtc -or $ExecuteHandoff)) {
+        throw 'handoff options require handoff-backend-only'
+    }
     if ($RollbackFailedPromotion -and ($Command -cne 'recover' -or -not $BackendOnly -or
         $ExpectedBuildSha256 -or $RollbackFromSha256)) {
         Write-LifecycleStatus 'RECOVERY_AUTHORITY_REQUIRED' 'scope=SUPERVISED_BACKEND_ROLLBACK'
@@ -1466,6 +1501,7 @@ try {
             Invoke-CatDeskDoctor -ObservationFile $ObservationFile -ProjectWorkspace $ProjectWorkspace -WakeRoot $WakeRoot -Human:$Human
         }
         'stop' { Invoke-CatDeskOnlyStop }
+        'handoff-backend-only' { Invoke-LifecycleBackendHandoff }
         'autostart' { Invoke-AutostartLifecycle }
         'wake' { Invoke-WakePolicyLifecycle }
         'promote' { Invoke-LifecycleReviewedPromotion }
