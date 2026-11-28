@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 28 | Actual native bearer forwarding qualified in isolation.** The installed tunnel-client executable initialized a synthetic MCP target using CatDesk's existing child-only authorization. The fixture also verified that it never sent the MCP bearer to the separate control-plane listener. Actual canonical v5 recovery and reviewer admission remain open. [Evidence](docs/verification/SECURE_MCP_PINNED_NATIVE_LOOPBACK_2026_11_28.json).
+
 **November 28 | Separate runtime readiness from MCP authentication.** Live read-only evidence confirmed that the existing runtime's HTTP 200 carries an MCP initialization auth challenge. Development reconnect now classifies the alias's own probe before permitting Web discovery. Installed recovery and the Web coding cycle remain open. [Evidence](docs/verification/SECURE_MCP_RECONNECT_AUTH_READBACK_2026_11_28.json).
 
 **November 28 — backend handoff and Secure MCP reconnect can be planned before interruption.** The live read-only check verified the original owners and reconnect prerequisites together. The regression tests refused execution after restoration of full-stack mode or an ambiguous handoff. The installed transition, Web discovery and Web coding cycle remain open. [Evidence](docs/verification/SECURE_MCP_COMBINED_PREFLIGHT_2026_11_28.json).

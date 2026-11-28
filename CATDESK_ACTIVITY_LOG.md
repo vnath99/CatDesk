@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-28 16:12 UTC | Pinned Windows tunnel client confirmed bearer forwarding.** The real executable authenticated and completed MCP initialization on a disposable loopback target after CatDesk injected its child-only bearer. Initialization without forwarding was refused. Both cases sent traffic to a separate loopback control-plane server, which received zero MCP bearer matches. The owned processes and fixture listeners exited. [Evidence](docs/verification/SECURE_MCP_PINNED_NATIVE_LOOPBACK_2026_11_28.json).
+
 **2026-11-28 16:05 UTC | Secure MCP readback.** The pinned client reported the existing process running and ready. Its own `/readyz` response was HTTP 200 with an MCP initialization auth challenge. The development reconnect helper now retains that distinction. PowerShell 7 and Windows PowerShell 5.1 each passed 31 focused assertions. [Evidence](docs/verification/SECURE_MCP_RECONNECT_AUTH_READBACK_2026_11_28.json).
 
 **2026-11-28 16:00 UTC — verify reconnect prerequisites before the backend handoff.** The installed full-stack backend and original Secure MCP owner passed the development read-only preflight together and stayed running. Windows PowerShell 5.1 and PowerShell 7 passed the paired handoff and reconnect tests. [Evidence](docs/verification/SECURE_MCP_COMBINED_PREFLIGHT_2026_11_28.json).
