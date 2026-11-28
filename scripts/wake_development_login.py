@@ -33,7 +33,7 @@ def main(argv=None, input_stream=None, output_stream=None, browser_factory=None)
         return 2
     try:
         profile = Path(argv[0])
-        url = validate_conversation_url(argv[1])
+        url = "https://chatgpt.com/" if argv[1] == "--initial-home" else validate_conversation_url(argv[1])
         if not profile.is_absolute() or not profile.is_dir() or profile.is_symlink():
             return 2
         # Rust assigns the still-idle helper to its private kill-on-close Job

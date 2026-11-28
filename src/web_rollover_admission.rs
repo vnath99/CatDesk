@@ -345,6 +345,27 @@ pub(super) fn try_acquire(
     }
 }
 
+/// Inspect the existing creation queue while the caller holds the project lease.
+pub(super) fn require_initial_login_eligible(
+    root: &Path,
+    identity: &Identity,
+) -> Result<(), String> {
+    identity.validate()?;
+    if identity.purpose != Purpose::InitialConversation {
+        return Err("WEB_INITIAL_LOGIN_ADMISSION_CONFLICT".into());
+    }
+    existing_directory(root)?;
+    let journal = load(root)?;
+    if journal.entries.iter().any(|entry| {
+        entry.identity.project_id == identity.project_id
+            && entry.identity.intent_id == identity.intent_id
+            && (entry.identity != *identity || entry.phase != Phase::Waiting)
+    }) {
+        return Err("WEB_INITIAL_LOGIN_ADMISSION_CONFLICT".into());
+    }
+    Ok(())
+}
+
 pub(super) fn status(root: &Path, identity: &Identity) -> Result<Value, String> {
     identity.validate()?;
     let journal = load(root)?;
@@ -410,6 +431,94 @@ pub(super) fn record_initialization_readback(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initial_login_admission_checks_exact_identity_and_phase_without_writes() {
+        let root = fixture();
+        let identity = Identity {
+            purpose: Purpose::InitialConversation,
+            source_generation: 0,
+            ..key("alpha")
+        };
+        let check = |expected: bool| {
+            let path = journal_path(&root);
+            let bytes = std::fs::read(&path).ok();
+            assert_eq!(
+                require_initial_login_eligible(&root, &identity).is_ok(),
+                expected
+            );
+            assert_eq!(std::fs::read(&path).ok(), bytes);
+            assert_eq!(
+                std::fs::read_dir(&root).unwrap().count(),
+                usize::from(bytes.is_some())
+            );
+        };
+        check(true);
+        assert!(require_initial_login_eligible(&root, &key("alpha")).is_err());
+        let mut invalid = identity.clone();
+        invalid.source_generation = 1;
+        assert!(require_initial_login_eligible(&root, &invalid).is_err());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0);
+
+        let write_entry = |identity: Identity, phase| {
+            save(
+                &root,
+                &Journal {
+                    schema_version: 1,
+                    next_sequence: 2,
+                    entries: vec![Entry {
+                        identity,
+                        phase,
+                        first_sequence: 1,
+                        sequence: 1,
+                        first_enqueued_utc: 1,
+                        updated_utc: 1,
+                    }],
+                },
+            )
+            .unwrap();
+        };
+        for phase in [
+            Phase::Waiting,
+            Phase::Active,
+            Phase::Quarantined,
+            Phase::CreationRecorded,
+        ] {
+            write_entry(identity.clone(), phase);
+            check(phase == Phase::Waiting);
+        }
+        for changed in [
+            Identity {
+                source_digest: "c".repeat(64),
+                ..identity.clone()
+            },
+            Identity {
+                message_digest: "d".repeat(64),
+                ..identity.clone()
+            },
+            key("alpha"),
+        ] {
+            write_entry(changed, Phase::Waiting);
+            check(false);
+        }
+        for unrelated in [
+            Identity {
+                project_id: "sibling".into(),
+                ..identity.clone()
+            },
+            Identity {
+                intent_id: "other".into(),
+                ..identity.clone()
+            },
+        ] {
+            write_entry(unrelated, Phase::Active);
+            check(true);
+        }
+        std::fs::write(journal_path(&root), b"invalid journal").unwrap();
+        check(false);
+        std::fs::remove_file(journal_path(&root)).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
 
     #[test]
     fn initialization_readback_closes_only_the_original_inactive_owner_entry() {

@@ -179,6 +179,7 @@ pub(crate) enum WebDevelopmentAction {
     },
     Login {
         project_id: String,
+        initial_intent_id: Option<String>,
     },
     InspectReadiness {
         project_id: String,
@@ -192,6 +193,7 @@ pub(crate) enum WebDevelopmentAction {
     },
     ReconcileLogin {
         project_id: String,
+        initial_intent_id: Option<String>,
         marker_sha256: String,
         execute: bool,
     },
@@ -367,6 +369,15 @@ pub(crate) fn parse_operator_action(
 }
 
 fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction, String> {
+    let initial_intent = |args: &[String]| -> Result<Option<String>, String> {
+        match args {
+            [] => Ok(None),
+            [flag, id] if flag == "--initial-intent-id" && catdesk_wake::protocol::valid_id(id) => {
+                Ok(Some(id.clone()))
+            }
+            _ => Err("DEV_LOGIN_INITIAL_INTENT_ARGUMENTS_INVALID".into()),
+        }
+    };
     match args.get(2).map(String::as_str) {
         Some("reconcile-root-view") => {
             let hash = |v: &str| v.len() == 64
@@ -385,14 +396,18 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
                 _ => Err("reconcile-root-view requires --expected-authority-sha256 <sha256>; execution additionally requires --expected-root-view-sha256 <sha256> --execute".into()),
             }
         }
-        Some("reconcile-login") if matches!(args.len(), 7 | 8)
+        Some("reconcile-login") if (7..=10).contains(&args.len())
             && args[3] == "--project-id" && args[5] == "--expected-marker-sha256"
             && catdesk_wake::protocol::valid_id(&args[4])
             && args[6].len() == 64
             && args[6].bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-            && (args.len() == 7 || args[7] == "--execute") => Ok(WebDevelopmentAction::ReconcileLogin {
-                project_id: args[4].clone(), marker_sha256: args[6].clone(), execute: args.len() == 8,
-            }),
+            => {
+                let execute = args.last().is_some_and(|last| last == "--execute");
+                Ok(WebDevelopmentAction::ReconcileLogin {
+                    project_id: args[4].clone(), marker_sha256: args[6].clone(), execute,
+                    initial_intent_id: initial_intent(&args[7..args.len()-usize::from(execute)])?,
+                })
+            }
         Some("inspect-readiness") if matches!(args.len(),5|9) && args[3]=="--project-id"
             && catdesk_wake::protocol::valid_id(&args[4])
             && (args.len()==5 || (args[5]=="--frozen-observation-file" && args[7]=="--expected-request-sha256"
@@ -410,10 +425,10 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
             Ok(WebDevelopmentAction::InspectReviewRequest {workflow:PathBuf::from(&args[4]),
                 expected_sha256:args[6].clone(),turn:args[8].parse().map_err(|_|"review turn required")?,
                 preflight_only:args.len()==10}),
-        Some("login") if args.len() == 5
+        Some("login") if matches!(args.len(), 5 | 7)
             && args[3] == "--project-id"
             && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::Login {
-                project_id: args[4].clone(),
+                project_id: args[4].clone(), initial_intent_id: initial_intent(&args[5..])?,
             }),
         Some("retry") if args.len() == 7
             && args[3] == "--project-id" && args[5] == "--event-id"
@@ -480,16 +495,32 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
                 .ok_or("WEB_DEVELOPMENT_PAUSED_BUDGET_INVALID")?;
             Ok(WebDevelopmentAction::RunPausedBounded { maximum_seconds })
         }
-        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, recover-package, record-verification --input-file <file>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, run, run-paused --max-runtime-seconds <1..180>, or run-backend [--max-runtime-seconds <1..900>]".into()),
+        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, recover-package, record-verification --input-file <file>, login --project-id <id> [--initial-intent-id <id>], enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, run, run-paused --max-runtime-seconds <1..180>, or run-backend [--max-runtime-seconds <1..900>]".into()),
     }
 }
 
-fn login_web_development(workspace: &Path, project_id: &str) -> Result<serde_json::Value, String> {
+fn login_web_development(
+    workspace: &Path,
+    project_id: &str,
+    initial_intent: Option<&str>,
+) -> Result<serde_json::Value, String> {
     let workspace = workspace
         .canonicalize()
         .map_err(|_| "DEV_WORKSPACE_UNAVAILABLE")?;
     let root = catdesk_wake::development_runtime::root_for_workspace(&workspace)?
         .ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    if let Some(intent) = initial_intent {
+        #[cfg(not(windows))]
+        {
+            let _ = intent;
+            return Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into());
+        }
+        #[cfg(windows)]
+        {
+            let (proof, check) = web::prepared_login(&workspace, project_id, intent)?;
+            return catdesk_wake::development_runtime::login_initial(&workspace, &proof, check);
+        }
+    }
     let target = mcp::operator_read_project_web_target(&workspace, project_id)
         .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
         .ok_or("DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?;
@@ -551,7 +582,26 @@ fn reconcile_web_development_login(
     project: &str,
     marker_sha256: &str,
     execute: bool,
+    initial_intent: Option<&str>,
 ) -> Result<serde_json::Value, String> {
+    if let Some(intent) = initial_intent {
+        #[cfg(not(windows))]
+        {
+            let _ = intent;
+            return Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into());
+        }
+        #[cfg(windows)]
+        {
+            let (proof, check) = web::prepared_login(workspace, project, intent)?;
+            return catdesk_wake::development_runtime::reconcile_initial_login(
+                workspace,
+                marker_sha256,
+                execute,
+                &proof,
+                check,
+            );
+        }
+    }
     let mut result = catdesk_wake::development_runtime::reconcile_login(
         workspace,
         marker_sha256,
@@ -1163,9 +1213,10 @@ pub(crate) async fn execute_operator_action(
                     project_id,
                     event_id,
                 } => retry_web_development(workspace, &project_id, &event_id),
-                WebDevelopmentAction::Login { project_id } => {
-                    login_web_development(workspace, &project_id)
-                }
+                WebDevelopmentAction::Login {
+                    project_id,
+                    initial_intent_id,
+                } => login_web_development(workspace, &project_id, initial_intent_id.as_deref()),
                 WebDevelopmentAction::InspectReadiness {
                     project_id,
                     frozen_request,
@@ -1178,11 +1229,16 @@ pub(crate) async fn execute_operator_action(
                 ),
                 WebDevelopmentAction::ReconcileLogin {
                     project_id,
+                    initial_intent_id,
                     marker_sha256,
                     execute,
-                } => {
-                    reconcile_web_development_login(workspace, &project_id, &marker_sha256, execute)
-                }
+                } => reconcile_web_development_login(
+                    workspace,
+                    &project_id,
+                    &marker_sha256,
+                    execute,
+                    initial_intent_id.as_deref(),
+                ),
                 WebDevelopmentAction::InspectReviewRequest {
                     workflow,
                     expected_sha256,
@@ -2787,7 +2843,7 @@ mod tests {
                     .map(str::to_string)
             ),
             Ok(Some(OperatorAction::WebDevelopment(
-                WebDevelopmentAction::Login { project_id }
+                WebDevelopmentAction::Login { project_id, initial_intent_id: None }
             ))) if project_id == "alpha"
         ));
         assert!(matches!(
@@ -3289,12 +3345,64 @@ mod tests {
     }
 
     #[test]
+    fn initial_login_arguments_require_project_intent_and_fixed_destination() {
+        let login = [
+            "operator",
+            "web-dev-runtime",
+            "login",
+            "--project-id",
+            "alpha",
+        ];
+        let args = |suffix: &[&str]| {
+            login
+                .iter()
+                .chain(suffix)
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        };
+        assert!(
+            matches!(parse_operator_action(args(&["--initial-intent-id", "first"])),
+            Ok(Some(OperatorAction::WebDevelopment(WebDevelopmentAction::Login {
+                project_id, initial_intent_id: Some(intent) }))) if project_id == "alpha" && intent == "first")
+        );
+        for suffix in [
+            vec!["--initial-intent-id"],
+            vec!["--initial-intent-id", "../first"],
+            vec!["--url", "https://chatgpt.com/"],
+            vec!["--initial-intent-id", "first", "--send"],
+        ] {
+            assert!(parse_operator_action(args(&suffix)).is_err());
+        }
+        let hash = "a".repeat(64);
+        let base = [
+            "operator",
+            "web-dev-runtime",
+            "reconcile-login",
+            "--project-id",
+            "alpha",
+            "--expected-marker-sha256",
+            &hash,
+            "--initial-intent-id",
+            "first",
+        ]
+        .map(str::to_string)
+        .to_vec();
+        let mut execute = base.clone();
+        execute.push("--execute".into());
+        for (args, committed) in [(base, false), (execute, true)] {
+            assert!(matches!(parse_operator_action(args),
+                Ok(Some(OperatorAction::WebDevelopment(WebDevelopmentAction::ReconcileLogin {
+                    initial_intent_id: Some(intent), execute, .. }))) if intent == "first" && execute == committed));
+        }
+    }
+
+    #[test]
     fn web_development_login_requires_prepared_root_before_any_browser_action() {
         let workspace =
             std::env::temp_dir().join(format!("catdesk-login-unprepared-{}", Uuid::new_v4()));
         fs::create_dir(&workspace).unwrap();
         assert_eq!(
-            login_web_development(&workspace, "alpha").unwrap_err(),
+            login_web_development(&workspace, "alpha", None).unwrap_err(),
             "DEV_RUNTIME_NOT_PREPARED"
         );
         assert_eq!(

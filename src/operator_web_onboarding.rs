@@ -294,8 +294,16 @@ fn summary(record: &InitialConversation) -> Value {
 }
 
 fn unbound(workspace: &Path, wake: &Store, record: &InitialConversation) -> Result<(), String> {
+    unbound_with_config(workspace, &wake.config()?, record)
+}
+
+fn unbound_with_config(
+    workspace: &Path,
+    config: &catdesk_wake::store::Config,
+    record: &InitialConversation,
+) -> Result<(), String> {
     if registered_project(workspace, &record.project_id)? != record.registration
-        || wake.config()?.targets.contains_key(&record.project_id)
+        || config.targets.contains_key(&record.project_id)
     {
         return Err("WEB_INITIAL_REGISTRATION_CHANGED".into());
     }
@@ -304,6 +312,62 @@ fn unbound(workspace: &Path, wake: &Store, record: &InitialConversation) -> Resu
         return Err("WEB_INITIAL_PROJECT_WORK_PENDING".into());
     }
     Ok(())
+}
+
+/// Hold the same project lease as initialize/execute throughout interactive
+/// login or marker recovery. Re-read the frozen intent and the selected store
+/// under the browser owner's locks before admitting either operation.
+#[cfg(windows)]
+pub(crate) fn prepared_login<'a>(
+    workspace: &'a Path,
+    project: &'a str,
+    intent: &str,
+) -> Result<
+    (
+        catdesk_wake::development_runtime::InitialLogin,
+        impl Fn(&Store) -> Result<(), String> + 'a,
+    ),
+    String,
+> {
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let (proof, check_pin) = catdesk_wake::development_runtime::InitialLogin::pin(
+        project,
+        intent,
+        &store.root.join(FILE),
+    )?;
+    let record = load(&store)?.ok_or("WEB_INITIAL_INTENT_REQUIRED")?;
+    if record.intent_id != intent
+        || record.phase != Phase::Prepared
+        || record.registration.verification_profile != "web_only_v1"
+        || store.active()?.is_some()
+        || store.handoff_request()?.is_some()
+    {
+        return Err("WEB_INITIAL_LOGIN_PREPARED_INTENT_REQUIRED".into());
+    }
+    let journal_sha256 = recovery_hash(&record)?;
+    Ok((proof, move |wake: &Store| {
+        check_pin()?;
+        let current = load(&store)?.ok_or("WEB_INITIAL_INTENT_REQUIRED")?;
+        let registered = resolve_registered_project_from_control_root(workspace, project)
+            .map_err(|_| "WEB_INITIAL_REGISTERED_SCOPE_REQUIRED")?;
+        if recovery_hash(&current)? != journal_sha256 || registered.project != current.registration
+        {
+            return Err("WEB_INITIAL_LOGIN_INTENT_CHANGED".into());
+        }
+        wake.with_config_read_only(|config| {
+            unbound_with_config(workspace, config, &current)?;
+            if config.retired_targets.contains_key(project)
+                || config
+                    .history
+                    .iter()
+                    .any(|entry| entry.project_id == project)
+            {
+                return Err("WEB_INITIAL_LOGIN_TARGET_HISTORY_PRESENT".into());
+            }
+            admission::require_initial_login_eligible(wake.root(), &current.identity())
+        })?;
+        check_pin()
+    }))
 }
 
 pub(crate) fn prepare(
@@ -875,6 +939,88 @@ mod first_conversation_tests {
         drop(ticket);
         drop(store);
         (parent, control, wake, input)
+    }
+
+    #[test]
+    fn initial_login_closed_stdin_checks_real_admission_and_leaves_project_state_unchanged() {
+        use std::io::IsTerminal;
+        use std::process::{Command, Stdio};
+        const CHILD: &str = "CATDESK_TEST_INITIAL_LOGIN_CLOSED_STDIN";
+        if std::env::var_os(CHILD).is_none() {
+            let test = std::thread::current();
+            let result = Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", test.name().unwrap()])
+                .env(CHILD, "1")
+                .stdin(Stdio::null())
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}{}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+            assert!(String::from_utf8_lossy(&result.stdout).contains("1 passed"));
+            return;
+        }
+        assert!(!std::io::stdin().is_terminal());
+        let (_parent, control, wake) = fixture();
+        prepare(&control, "first", "initial-first", context("first")).unwrap();
+        let path = control.join(".catdesk/web-rollovers/first").join(FILE);
+        let config = wake.join("config.json");
+        let journal = fs::read(&path).unwrap();
+        let binding = fs::read(&config).unwrap();
+        for (project, intent) in [("first", Some("initial-first")), ("alpha", None)] {
+            assert_eq!(
+                crate::operator_facade::login_web_development(&control, project, intent)
+                    .unwrap_err(),
+                "DEV_LOGIN_INTERACTIVE_TERMINAL_REQUIRED"
+            );
+        }
+        assert_eq!(fs::read(path).unwrap(), journal);
+        assert_eq!(fs::read(config).unwrap(), binding);
+        assert!(
+            !control
+                .join(".catdesk/web-development/login-active.json")
+                .exists()
+        );
+        assert!(!wake.join("rollover-admission.json").exists());
+    }
+
+    #[test]
+    fn initial_login_holds_prepared_project_lease_and_rechecks_exact_registration() {
+        let (_parent, control, wake) = fixture();
+        prepare(&control, "first", "initial-first", context("first")).unwrap();
+        let path = control.join(".catdesk/web-rollovers/first").join(FILE);
+        let original = fs::read(&path).unwrap();
+        let wake_writer = Store::open(&wake).unwrap();
+        let wake = Store::open_read_only(&wake).unwrap();
+        assert!(prepared_login(&control, "second", "initial-first").is_err());
+        assert!(prepared_login(&control, "first", "other").is_err());
+        let (_proof, check) = prepared_login(&control, "first", "initial-first").unwrap();
+        check(&wake).unwrap();
+        assert!(ProjectStore::open_existing(&control, "first").is_err());
+        assert_eq!(fs::read(&path).unwrap(), original);
+        assert!(!wake.root().join("rollover-admission.json").exists());
+        let lock = File::open(wake.root().join("transaction.lock")).unwrap();
+        lock.try_lock().unwrap();
+        assert_eq!(check(&wake).unwrap_err(), "CONFIG_LOCK_BUSY");
+        drop(lock);
+        wake_writer
+            .set_target("first", 0, "https://chatgpt.com/c/stray")
+            .unwrap();
+        assert!(check(&wake).is_err());
+        assert_eq!(fs::read(&path).unwrap(), original);
+    }
+
+    #[test]
+    fn initial_login_refuses_uncertain_first_submission_without_mutation() {
+        let (_parent, control, _, _) = unknown_fixture();
+        let path = control.join(".catdesk/web-rollovers/first").join(FILE);
+        let before = fs::read(&path).unwrap();
+        assert!(matches!(prepared_login(&control, "first", "initial-first"),
+            Err(error) if error == "WEB_INITIAL_LOGIN_PREPARED_INTENT_REQUIRED"));
+        assert_eq!(fs::read(&path).unwrap(), before);
     }
 
     fn observed(record: &InitialConversation, input: &RecoveryInput) -> runtime::BootstrapReceipt {

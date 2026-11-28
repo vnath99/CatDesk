@@ -28,6 +28,20 @@ class FakeBrowser:
 
 
 class DevelopmentLoginTests(unittest.TestCase):
+    def test_initial_home_requires_internal_selector_and_opens_only_home(self):
+        with tempfile.TemporaryDirectory() as profile:
+            log = []
+            factory = lambda **kwargs: FakeBrowser(log, **kwargs)
+            for invalid in ("https://chatgpt.com/", "--initial-home/", "--initial-home?next=x"):
+                self.assertEqual(login.main([profile, invalid], io.StringIO("START\n\n"),
+                                            io.StringIO(), factory), 2)
+            self.assertEqual(log, [])
+            self.assertEqual(login.main([profile, "--initial-home"], io.StringIO("START\n\n"),
+                                        io.StringIO(), factory), 0)
+            self.assertEqual(log, [("created", {"uc": True, "headless": False,
+                                                "user_data_dir": profile}),
+                                   ("entered",), ("opened", "https://chatgpt.com/"), ("closed",)])
+
     def test_exact_conversation_routes_only(self):
         for url in (
             "https://chatgpt.com/c/canary-1",

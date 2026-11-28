@@ -58,7 +58,7 @@ mod foreground;
 
 #[path = "development_login_recovery.rs"]
 mod login_recovery;
-pub use login_recovery::reconcile_login;
+pub use login_recovery::{InitialLogin, reconcile_initial_login, reconcile_login};
 
 #[path = "development_root_view.rs"]
 mod root_view;
@@ -1722,7 +1722,10 @@ fn conversation_id(url: &str) -> Result<&str> {
 }
 
 fn validate_against_production(authority: &Authority, target_url: &str) -> Result<()> {
-    let wanted = conversation_id(target_url)?;
+    validate_production_roots(authority, Some(conversation_id(target_url)?))
+}
+
+fn validate_production_roots(authority: &Authority, wanted: Option<&str>) -> Result<()> {
     for item in &authority.production_roots {
         let root = Path::new(&item.path);
         let observed = match fs::symlink_metadata(root) {
@@ -1755,7 +1758,7 @@ fn validate_against_production(authority: &Authority, target_url: &str) -> Resul
             target
                 .validate()
                 .map_err(|_| "DEV_PRODUCTION_TARGETS_INVALID")?;
-            if conversation_id(&target.url)? == wanted {
+            if Some(conversation_id(&target.url)?) == wanted {
                 return Err("DEV_TARGET_SHARED_WITH_PRODUCTION".into());
             }
         }
@@ -2129,7 +2132,7 @@ struct LoginPreflight {
     profile: PathBuf,
     primitives: PathBuf,
     primitives_sha256: String,
-    target_generation: u64,
+    target_generation: Option<u64>,
     _host: crate::store::HostLease,
     _browser: File,
 }
@@ -2189,7 +2192,7 @@ fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight>
             .targets
             .values()
             .find(|target| target.url == target_url)
-            .map(|target| target.generation)
+            .map(|target| Some(target.generation))
             .ok_or_else(|| "DEV_LOGIN_TARGET_NOT_REGISTERED".into())
     })
 }
@@ -2197,15 +2200,27 @@ fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight>
 fn profile_observation_preflight(
     workspace: &Path,
     target_url: &str,
-    require_target_authority: &dyn Fn(&Store) -> Result<u64>,
+    require_target_authority: &dyn Fn(&Store) -> Result<Option<u64>>,
 ) -> Result<LoginPreflight> {
     protocol::validate_target(target_url)?;
+    owner_profile_preflight(
+        workspace,
+        Some(conversation_id(target_url)?),
+        require_target_authority,
+    )
+}
+
+fn owner_profile_preflight(
+    workspace: &Path,
+    conversation: Option<&str>,
+    require_target_authority: &dyn Fn(&Store) -> Result<Option<u64>>,
+) -> Result<LoginPreflight> {
     let (root, authority) = validated_authority(workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
-    validate_against_production(&authority, target_url)?;
-    let store = Store::open(&root)?;
+    validate_production_roots(&authority, conversation)?;
+    let store = Store::open_read_only(&root)?;
     require_stopped_control(&root)?;
     let target_generation = require_target_authority(&store)?;
-    let host = store.host_lock()?;
+    let host = Store::open_existing_writer(&root)?.host_lock()?;
     let browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
     // A target or control change while locks were acquired must not open a
     // browser under a stale binding. The host lease prevents host startup.
@@ -2214,7 +2229,7 @@ fn profile_observation_preflight(
     if identity(&checked_root, true)? != identity(&root, true)? {
         return Err("DEV_RUNTIME_SELECTED_ROOT_MISMATCH".into());
     }
-    validate_against_production(&checked_authority, target_url)?;
+    validate_production_roots(&checked_authority, conversation)?;
     require_stopped_control(&root)?;
     if require_target_authority(&store)? != target_generation {
         return Err("DEV_READINESS_TARGET_CHANGED".into());
@@ -2370,7 +2385,9 @@ pub fn inspect_readiness_with_frozen_request(
     frozen_request: Option<(&Path, &str)>,
 ) -> Result<Value> {
     let prepared = login_preflight(workspace, target_url)?;
-    let generation = prepared.target_generation;
+    let generation = prepared
+        .target_generation
+        .ok_or("DEV_LOGIN_TARGET_NOT_REGISTERED")?;
     let root = prepared.root.clone();
     inspect_prepared_readiness(workspace, prepared, target_url, frozen_request, &|| {
         require_observed_target_generation(&Store::open(&root)?, target_url, generation)
@@ -2389,7 +2406,7 @@ pub fn inspect_approved_review_request(
 ) -> Result<Value> {
     let prepared = profile_observation_preflight(workspace, target_url, &|_| {
         keep_approved()?;
-        Ok(0)
+        Ok(None)
     })?;
     let mut result = inspect_prepared_readiness(
         workspace,
@@ -2504,24 +2521,42 @@ fn inspect_prepared_readiness(
 /// exited. Uncertain cleanup leaves a sticky marker requiring review.
 pub fn login(workspace: &Path, target_url: &str) -> Result<Value> {
     let prepared = login_preflight(workspace, target_url)?;
+    let marker = json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
+        "targetSha256":protocol::digest(target_url),"startedUtc":now()});
+    run_login(workspace, prepared, target_url, marker)
+}
+
+/// Project authority and the prepared journal are pinned by the caller's
+/// project lease. A fixed helper selector is the only route for this evidence.
+pub fn login_initial(
+    workspace: &Path,
+    proof: &InitialLogin,
+    check: impl Fn(&Store) -> Result<()>,
+) -> Result<Value> {
+    let prepared = owner_profile_preflight(workspace, None, &|store| check(store).map(|_| None))?;
+    run_login(workspace, prepared, "--initial-home", proof.marker())
+}
+
+fn run_login(
+    workspace: &Path,
+    prepared: LoginPreflight,
+    helper_destination: &str,
+    owner_record: Value,
+) -> Result<Value> {
     if !std::io::stdin().is_terminal() {
         return Err("DEV_LOGIN_INTERACTIVE_TERMINAL_REQUIRED".into());
     }
     let python = runtime::browser_process_root(&prepared.python)?;
     let profile = runtime::browser_process_root(&prepared.profile)?;
     let marker = dev_dir(&canonical_workspace(workspace)?).join("login-active.json");
-    write_json_new(
-        &marker,
-        &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
-            "targetSha256":protocol::digest(target_url),"startedUtc":now()}),
-    )?;
+    write_json_new(&marker, &owner_record)?;
     let mut command = Command::new(python);
     command
         .arg("-I")
         .arg("-c")
         .arg(include_str!("../../scripts/wake_development_login.py"))
         .arg(profile)
-        .arg(target_url)
+        .arg(helper_destination)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -4232,11 +4267,11 @@ mod tests {
         let checks = std::cell::Cell::new(0);
         let proof = || {
             checks.set(checks.get() + 1);
-            Ok(0)
+            Ok(None)
         };
         let prepared = profile_observation_preflight(&workspace, url, &|_| proof()).unwrap();
         assert_eq!(checks.get(), 2);
-        assert_eq!(prepared.target_generation, 0);
+        assert_eq!(prepared.target_generation, None);
         assert!(runtime::browser_session_lock(&root, Duration::ZERO).is_err());
         drop(prepared);
         let error = profile_observation_preflight(&workspace, url, &|_| {
@@ -4370,7 +4405,7 @@ mod tests {
         );
         let selected = login_preflight(&workspace, url).unwrap();
         assert_eq!(selected.root, root);
-        assert_eq!(selected.target_generation, 1);
+        assert_eq!(selected.target_generation, Some(1));
         assert_eq!(selected.primitives.file_name().unwrap(), "wake_bridge.py");
         assert_eq!(
             hash_file(&selected.primitives, MAX_PACKAGE_FILE).unwrap(),
@@ -4385,7 +4420,7 @@ mod tests {
             .unwrap();
         store.set_target("canary-project", 2, url).unwrap();
         assert_eq!(
-            require_observed_target_generation(&store, url, selected.target_generation)
+            require_observed_target_generation(&store, url, selected.target_generation.unwrap())
                 .unwrap_err(),
             "DEV_LOGIN_TARGET_GENERATION_CHANGED"
         );
@@ -4491,6 +4526,95 @@ mod tests {
             .get("alpha")
             .cloned()
             .ok_or("missing fixture target".into())
+    }
+
+    #[test]
+    fn initial_login_recovery_requires_exact_prepared_identity_before_archiving_interrupted_marker()
+    {
+        use login_recovery::{LoginEvidence, reconcile_evidence};
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let dev = dev_dir(&workspace);
+        let marker = dev.join("login-active.json");
+        let frozen = parent.join("initial.json");
+        let recreated = parent.join("recreated.json");
+        fs::write(&frozen, b"immutable prepared fixture").unwrap();
+        fs::copy(&frozen, &recreated).unwrap();
+        let (proof, pin) = InitialLogin::pin("alpha", "first", &frozen).unwrap();
+        let hash_a = hash_file(&frozen, 24 * 1024).unwrap();
+        write_json_new(&marker, &proof.marker()).unwrap();
+        let original = fs::read(&marker).unwrap();
+        let hash = hash_file(&marker, 4096).unwrap();
+        let config = fs::read(root.join("config.json")).unwrap();
+        let archive = dev.join(format!("login-recovered-{hash}.json"));
+        let journal = dev.join(format!("login-recovery-{hash}.json"));
+        for wrong in [
+            ("beta", "first", &frozen),
+            ("alpha", "other", &frozen),
+            ("alpha", "first", &recreated),
+        ] {
+            assert_eq!(
+                reconcile_evidence(
+                    &workspace,
+                    &hash,
+                    true,
+                    |_| Ok(LoginEvidence::Initial(
+                        InitialLogin::pin(wrong.0, wrong.1, wrong.2)?.0
+                    )),
+                    |_| panic!("identity mismatch must precede observation")
+                )
+                .unwrap_err(),
+                "DEV_LOGIN_RECOVERY_TARGET_CHANGED"
+            );
+        }
+        let paired = protocol::Target::new(1, "https://chatgpt.com/c/fixture".into()).unwrap();
+        assert!(
+            login_recovery::reconcile_with_observer(
+                &workspace,
+                &hash,
+                true,
+                |_| Ok(paired.clone()),
+                |_| panic!("paired recovery cannot accept Home")
+            )
+            .is_err()
+        );
+        let observed = std::cell::Cell::new(false);
+        assert!(
+            reconcile_evidence(
+                &workspace,
+                &hash,
+                true,
+                |_| {
+                    if observed.get() {
+                        return Err("WEB_INITIAL_LOGIN_INTENT_CHANGED".into());
+                    }
+                    Ok(LoginEvidence::Initial(proof.clone()))
+                },
+                |_| {
+                    observed.set(true);
+                    Ok(())
+                }
+            )
+            .is_err()
+        );
+        let evidence = |_: &Store| Ok(LoginEvidence::Initial(proof.clone()));
+        let preflight = reconcile_evidence(&workspace, &hash, false, evidence, |_| Ok(())).unwrap();
+        assert_eq!(preflight["initialLogin"]["journalSha256"], hash_a);
+        assert!(preflight.get("targetGeneration").is_none());
+        assert_eq!(fs::read(&marker).unwrap(), original);
+        assert!(!archive.exists() && !journal.exists());
+        let result = reconcile_evidence(&workspace, &hash, true, evidence, |_| Ok(())).unwrap();
+        assert_eq!(result["messagesSent"], 0);
+        assert_eq!(fs::read(&archive).unwrap(), original);
+        assert_eq!(
+            read_json::<Value>(&journal, 4096).unwrap()["initialLogin"],
+            json!(proof)
+        );
+        assert_eq!(fs::read(root.join("config.json")).unwrap(), config);
+        assert!(!marker.exists());
+        drop(pin);
+        cleanup(&parent);
     }
 
     #[test]
