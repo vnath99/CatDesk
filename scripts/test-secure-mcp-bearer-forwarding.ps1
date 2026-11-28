@@ -16,7 +16,7 @@ $setup=Join-Path $PSScriptRoot 'setup-secure-mcp.ps1'
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile($setup,[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'SETUP_PARSE_FAILED'}
-foreach($name in @('ConvertTo-NativeCommandLineArgument','Initialize-BoundedNativeProcessType','Invoke-BoundedTunnelClient','Get-LocalMcpRuntimeAuthorization','Get-LocalMcpRuntimeUrl','Test-SafeRuntimeRoute','Connect-Runtime','Invoke-ReconnectRuntimeTransition','Write-ReconnectEvidence')){
+foreach($name in @('ConvertTo-NativeCommandLineArgument','Initialize-BoundedNativeProcessType','Invoke-BoundedTunnelClient','Get-LocalMcpRuntimeAuthorization','Get-LocalMcpRuntimeUrl','Test-SafeRuntimeRoute','Connect-Runtime','Get-ReconnectMcpProbeState','Invoke-ReconnectRuntimeTransition','Write-ReconnectEvidence')){
     $nodes=@($ast.FindAll({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name},$true))
     if($nodes.Count -ne 1){throw 'HELPER_IDENTITY_INVALID'}
     . ([scriptblock]::Create($nodes[0].Extent.Text))
@@ -116,7 +116,22 @@ if(!$valid){exit 1}
                 $script:readIteration++
                 $running = $script:readIteration -ne 2 -or $fault -ceq 'stop-raced'
                 $pidValue = if ($script:readIteration -eq 3 -or $fault -ceq 'owner-changed') { 24 } else { 23 }
-                [pscustomobject]@{process_running=$running;process=@{pid=$pidValue};profile_path=$profile;healthy=$true;ready=$true}
+                $body = switch ($fault) {
+                    'auth-challenge' { 'ready (mcp initialize requires auth: redacted fixture)' }
+                    'probe-timeout' { 'ready (mcp startup probe timed out: redacted fixture)' }
+                    'unknown-probe' { 'ready (unexpected shape)' }
+                    'oversized-probe' { 'x' * 1025 }
+                    default { 'ready' }
+                }
+                $directProbe = if ($fault -cne 'fallback-ready') {
+                    [pscustomobject]@{ok=$true;status=200;body=$body}
+                }
+                [pscustomobject]@{process_running=$running;process=@{pid=$pidValue};profile_path=$profile;healthy=$true;ready=$true
+                    local=[pscustomobject]@{
+                        health=if ($fault -eq 'missing-direct-health') { [pscustomobject]@{} } else { [pscustomobject]@{readyz=$directProbe} }
+                        effective_health=[pscustomobject]@{readyz=[pscustomobject]@{ok=$true;status=200;body='ready'}}
+                    }
+                }
             }
             function Get-ReconnectRuntimeOwner { param($Status,$ClientPath) [pscustomobject]@{Id=[int]$Status.process.pid} }
             function Invoke-BoundedTunnelClient {
@@ -139,7 +154,13 @@ if(!$valid){exit 1}
                 @('stop-raced', 'SECURE_MCP_RECONNECT_STOP_UNPROVEN_NO_RETRY', 'stop'),
                 @('exit-unproven', 'SECURE_MCP_RECONNECT_STOP_UNPROVEN_NO_RETRY', 'stop'),
                 @('connect-timeout', 'SECURE_MCP_RECONNECT_RESULT_UNPROVEN_NO_RETRY', 'stop,connect'),
-                @('profile-bytes', 'SECURE_MCP_RECONNECT_RESULT_UNPROVEN_NO_RETRY', 'stop,connect')
+                @('profile-bytes', 'SECURE_MCP_RECONNECT_RESULT_UNPROVEN_NO_RETRY', 'stop,connect'),
+                @('auth-challenge', 'SECURE_MCP_RECONNECT_MCP_AUTH_REQUIRED_NO_RETRY', 'stop,connect'),
+                @('probe-timeout', 'SECURE_MCP_RECONNECT_MCP_PROBE_TIMED_OUT_NO_RETRY', 'stop,connect'),
+                @('unknown-probe', 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY', 'stop,connect'),
+                @('oversized-probe', 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY', 'stop,connect'),
+                @('fallback-ready', 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY', 'stop,connect'),
+                @('missing-direct-health', 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY', 'stop,connect')
             )) {
                 $fault = $case[0]
                 $script:transitions.Clear()
@@ -153,7 +174,7 @@ if(!$valid){exit 1}
             foreach ($path in @($profile,$configFile,$intent)) { [IO.File]::Delete($path) }
         }
     }
-    $checks += 8
+    $checks += 14
     @{state='PASS';checks=$checks;actualOwnedChild=$true;officialRuntimeStarts=0;operatorProfileReads=0;productionAuthChanges=0;parentEnvironmentPreserved=$true}|ConvertTo-Json -Compress
 }finally{
     foreach($name in $names){[Environment]::SetEnvironmentVariable($name,$before[$name],'Process')}

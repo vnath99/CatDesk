@@ -464,6 +464,34 @@ function Test-ReconnectBackendOwner {
         (Get-LocalMcpReadiness -LocalMcp $Local -Canonical $Canonical -RequireBearer).Ready)
 }
 
+function Get-ReconnectMcpProbeState {
+    param($Status)
+    # The registered alias's direct probe avoids the client's fallback to
+    # another runtime. Top-level readiness also accepts auth challenges.
+    $probe = $Status
+    foreach ($name in @('local', 'health', 'readyz')) {
+        if ($null -eq $probe) { break }
+        $property = $probe.PSObject.Properties[$name]
+        if ($null -eq $property) { $probe = $null; break }
+        $probe = $property.Value
+    }
+    if ($null -eq $probe -or @($probe.PSObject.Properties.Name) -notcontains 'body' -or
+        @($probe.PSObject.Properties.Name) -notcontains 'ok' -or @($probe.PSObject.Properties.Name) -notcontains 'status' -or
+        $probe.ok -isnot [bool] -or -not $probe.ok -or $probe.status -ne 200 -or
+        $probe.body -isnot [string] -or $probe.body.Length -gt 1024) {
+        return 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY'
+    }
+    $body = $probe.body.Trim()
+    if ($body -ceq 'ready') { return 'SECURE_MCP_RECONNECT_RUNTIME_READY' }
+    if ($body.StartsWith('ready (mcp initialize requires auth:', [StringComparison]::Ordinal)) {
+        return 'SECURE_MCP_RECONNECT_MCP_AUTH_REQUIRED_NO_RETRY'
+    }
+    if ($body.StartsWith('ready (mcp startup probe timed out:', [StringComparison]::Ordinal)) {
+        return 'SECURE_MCP_RECONNECT_MCP_PROBE_TIMED_OUT_NO_RETRY'
+    }
+    return 'SECURE_MCP_RECONNECT_MCP_PROBE_UNVERIFIED_NO_RETRY'
+}
+
 function Invoke-ReconnectRuntimeTransition {
     param($Plan)
     $stage = 'PREFLIGHT'
@@ -489,7 +517,7 @@ function Invoke-ReconnectRuntimeTransition {
             (Get-FileHash -LiteralPath $Plan.Profile).Hash -cne $Plan.ProfileHash -or
             (Get-FileHash -LiteralPath $Plan.ConfigPath).Hash -cne $Plan.ConfigHash -or
             -not (Test-ReconnectBackendOwner $Plan.Local $Plan.Canonical $Plan.Backend)) { return 'SECURE_MCP_RECONNECT_RESULT_UNPROVEN_NO_RETRY' }
-        return 'SECURE_MCP_RECONNECT_RUNTIME_READY'
+        return Get-ReconnectMcpProbeState -Status $ready
     } catch {
         if ($stage -eq 'STOP') { return 'SECURE_MCP_RECONNECT_STOP_UNPROVEN_NO_RETRY' }
         if ($stage -eq 'CONNECT') { return 'SECURE_MCP_RECONNECT_RESULT_UNPROVEN_NO_RETRY' }

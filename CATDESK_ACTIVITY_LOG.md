@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-28 16:05 UTC | Secure MCP readback.** The pinned client reported the existing process running and ready. Its own `/readyz` response was HTTP 200 with an MCP initialization auth challenge. The development reconnect helper now retains that distinction. PowerShell 7 and Windows PowerShell 5.1 each passed 31 focused assertions. [Evidence](docs/verification/SECURE_MCP_RECONNECT_AUTH_READBACK_2026_11_28.json).
+
 **2026-11-28 16:00 UTC — verify reconnect prerequisites before the backend handoff.** The installed full-stack backend and original Secure MCP owner passed the development read-only preflight together and stayed running. Windows PowerShell 5.1 and PowerShell 7 passed the paired handoff and reconnect tests. [Evidence](docs/verification/SECURE_MCP_COMBINED_PREFLIGHT_2026_11_28.json).
 
 **2026-11-28 15:55 UTC — qualify the same-alias Secure MCP reconnect path.** The development helper refused the actual full-stack listener before any lifecycle operation. Windows fixtures checked one stop and one bearer-forwarding connect, exact old-owner exit, profile/config readback, and retained intent on uncertain results. [Evidence](docs/verification/SECURE_MCP_SAME_ALIAS_RECONNECT_2026_11_28.json).

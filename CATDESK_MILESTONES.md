@@ -1,5 +1,7 @@
 # CatDesk milestones
 
+**November 28 | Separate runtime readiness from MCP authentication.** Live read-only evidence confirmed that the existing runtime's HTTP 200 carries an MCP initialization auth challenge. Development reconnect now classifies the alias's own probe before permitting Web discovery. Installed recovery and the Web coding cycle remain open. [Evidence](docs/verification/SECURE_MCP_RECONNECT_AUTH_READBACK_2026_11_28.json).
+
 **November 28 — backend handoff and Secure MCP reconnect can be planned before interruption.** The live read-only check verified the original owners and reconnect prerequisites together. The regression tests refused execution after restoration of full-stack mode or an ambiguous handoff. The installed transition, Web discovery and Web coding cycle remain open. [Evidence](docs/verification/SECURE_MCP_COMBINED_PREFLIGHT_2026_11_28.json).
 
 **November 28 — guarded Secure MCP reconnect qualified in development.** The same alias, tunnel ID, target and profile are bound to the original native process, and reconnect is allowed only after its confirmed exit and authenticated backend-only readiness. The installed full-stack owner correctly refused preflight. Actual authenticated v5 discovery, independent review and the installed Web coding cycle remain open. [Evidence](docs/verification/SECURE_MCP_SAME_ALIAS_RECONNECT_2026_11_28.json).
