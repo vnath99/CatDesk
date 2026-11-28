@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-28 15:47 UTC — exercised the same-image handoff preflight against the installed owner.** The development facade verified the full-stack listener, fixed release and existing bearer-protected MCP without starting or stopping a serving process. The current command runner refused persistent handoff eligibility. The exact native listener creation time was required after a direct CIM sample differed. [Evidence](docs/verification/BACKEND_ONLY_LIFECYCLE_HANDOFF_2026_11_28.json).
+
 **2026-11-28 15:39 UTC — verify the installed backend-only capability and current owner mode.** The exact canonical binary reported support through its early-exit check. The port-3200 daemon remained the same full-stack owner. Development diagnosis now exposes the verified local daemon's launch mode without publishing its command line. [Evidence](docs/verification/BACKEND_ONLY_HANDOFF_OWNER_MODE_2026_11_28.json).
 
 **2026-11-28 15:32 UTC — reuse exact reviewed promotion evidence for finite serving.** The installed listener and promoted image still match. One v5 discovery returned target HTTP 401, and the frozen review remained DRAFT with zero provider turns. Development now accepts an exact, completed and pinned promotion's interpreter identity for that installed release. The current promotion still pins earlier interpreter bytes. [Evidence](docs/verification/FINITE_SERVING_REVIEWED_INTERPRETER_2026_11_28.json).

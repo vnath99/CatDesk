@@ -10,6 +10,9 @@ param(
     [string]$BuildFingerprintPath = "",
     [string]$TunnelClientPath = "",
     [switch]$BackendOnly,
+    [switch]$HandoffBackendOnly,
+    [int]$ExpectedOwnerPid,
+    [string]$ExpectedOwnerCreatedUtc,
     [switch]$ConfirmRetainedSelection,
     [switch]$Execute
 )
@@ -1437,10 +1440,147 @@ function Invoke-BackendOnlyBootstrap {
     Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'bounded local backend readiness did not converge' '' $lastGate
 }
 
+function Test-IndependentBackendHandoffHost {
+    [bool](Invoke-BootstrapSeam -Name 'IndependentHandoffHost' -Arguments @() -Default {
+        if (-not ('CatDesk.BackendHandoffHost' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace CatDesk {
+    public static class BackendHandoffHost {
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetCurrentProcess();
+        [DllImport("kernel32.dll")]
+        private static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool contained);
+        public static bool IsIndependent() {
+            bool contained;
+            return IsProcessInJob(GetCurrentProcess(), IntPtr.Zero, out contained) && !contained;
+        }
+    }
+}
+'@
+        }
+        [CatDesk.BackendHandoffHost]::IsIndependent()
+    })
+}
+
+function Wait-BackendHandoffOwner {
+    param($Process, $Local, $Canonical, [string]$OwnerMode, [DateTime]$Deadline)
+    while ((Get-BackendOnlyUtcNow) -lt $Deadline -and -not $Process.HasExited) {
+        $listener = Get-LoopbackCatDeskListener -Port $Local.Port -Canonical $Canonical
+        if ($null -ne $listener) {
+            if (-not $listener.MatchesCanonical -or $listener.Pid -ne $Process.Id -or
+                $listener.OwnerMode -cne $OwnerMode) { return $false }
+            return [bool](Get-LocalMcpReadiness -LocalMcp $Local -Canonical $Canonical -ExpectedDaemonProcess $Process -RequireBearer).Ready
+        }
+        Start-Sleep -Milliseconds 250
+    }
+    return $false
+}
+
+function Invoke-BackendOnlyHandoff {
+    param([string]$Root, [System.IO.FileStream]$StoppedLifecycleLease)
+    if ($ExpectedBuildSha256 -cnotmatch '\A[a-f0-9]{64}\z' -or $ExpectedOwnerPid -le 0 -or
+        $ExpectedOwnerCreatedUtc -cnotmatch '\A[0-9TZ+:.\-]{20,33}\z') {
+        Write-RedactedStatus 'BACKEND_HANDOFF_EXPECTED_IDENTITY_REQUIRED' 'pass the exact original owner and verified release identity'
+        return
+    }
+    if ($Execute -and $null -eq $StoppedLifecycleLease) {
+        Write-RedactedStatus 'BACKEND_HANDOFF_RELEASE_UNAVAILABLE' 'handoff requires the canonical lifecycle lease'
+        return
+    }
+    if ((Get-CatDeskReleaseStartupGate -Root $Root -HeldLifecycleLease $StoppedLifecycleLease) -cne 'READY') {
+        Write-RedactedStatus 'BACKEND_HANDOFF_RELEASE_UNAVAILABLE' 'canonical lifecycle gate refused the handoff'
+        return
+    }
+    $canonical = Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
+    $local = Get-ConfiguredLocalMcp -Path $ConfigPath
+    $original = Get-LoopbackCatDeskListener -Port $local.Port -Canonical $canonical
+    if ($null -eq $original -or -not $original.MatchesCanonical -or $original.OwnerMode -cne 'FULL_STACK' -or
+        $original.Pid -ne $ExpectedOwnerPid -or $original.CreationTimeUtc -cne $ExpectedOwnerCreatedUtc) {
+        Write-RedactedStatus 'BACKEND_HANDOFF_OWNER_CHANGED' 'the exact full-stack listener could not be established'
+        return
+    }
+    $daemons = @(Get-CatDeskDaemonProcessCandidates -Canonical $canonical)
+    if ($daemons.Count -ne 1 -or -not $daemons[0].MatchesCanonical -or
+        $daemons[0].Pid -ne $original.Pid -or $daemons[0].CreationTimeUtc -cne $original.CreationTimeUtc) {
+        Write-RedactedStatus 'BACKEND_HANDOFF_OWNER_CHANGED' 'another daemon or stale process identity prevents the handoff'
+        return
+    }
+    if (-not (Test-BackendOnlySupport -Canonical $canonical) -or
+        -not (Get-LocalMcpReadiness -LocalMcp $local -Canonical $canonical -RequireBearer).Ready) {
+        Write-RedactedStatus 'BACKEND_HANDOFF_PREFLIGHT_REFUSED' 'backend-only support or authenticated local MCP was unverified'
+        return
+    }
+    if (-not $Execute) {
+        Write-RedactedStatus 'BACKEND_HANDOFF_PREFLIGHT_READY' 'read-only handoff preflight passed'
+        return
+    }
+
+    try {
+        $stopped = Stop-CatDeskListenerProcessForRecovery -LocalMcp $local -Canonical $canonical -Candidate $original -FailureMessage 'canonical owner exit was unproven'
+    } catch {
+        Write-RedactedStatus 'BACKEND_HANDOFF_RECOVERY_REQUIRED' 'original owner exit is unproven'
+        return
+    }
+    if (-not $stopped) {
+        Write-RedactedStatus 'BACKEND_HANDOFF_OWNER_CHANGED' 'the original listener changed before stop'
+        return
+    }
+    $replacement = $null
+    try {
+        if ((Get-LoopbackCatDeskListener -Port $local.Port -Canonical $canonical) -or
+            @(Get-CatDeskDaemonProcessCandidates -Canonical $canonical).Count) {
+            throw 'a listener or daemon appeared before launch'
+        }
+        $rechecked = Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
+        if ($rechecked.Path -cne $canonical.Path -or $rechecked.Sha256 -cne $canonical.Sha256) {
+            throw 'canonical identity changed after stop'
+        }
+        $replacement = Start-BackendOnlyDaemon -Canonical $rechecked -Root $Root -Config $ConfigPath
+        $deadline = (Get-BackendOnlyUtcNow).AddSeconds([Math]::Min(60,$ReadyTimeoutSeconds))
+        if (Wait-BackendHandoffOwner -Process $replacement -Local $local -Canonical $canonical -OwnerMode 'BACKEND_ONLY' -Deadline $deadline) {
+            Write-RedactedStatus 'BACKEND_HANDOFF_LOCAL_READY' 'same installed release verified under its backend-only owner'
+            return
+        }
+    } catch {
+        # Reconcile exact child and listener ownership before any restoration.
+    }
+    if ($null -ne $replacement -and -not $replacement.HasExited) {
+        try {
+            $replacement.Kill()
+            if (-not $replacement.WaitForExit(5000)) { throw 'replacement process exit unproven' }
+        } catch {
+            Write-RedactedStatus 'BACKEND_HANDOFF_RECOVERY_REQUIRED' 'replacement exit is unproven'
+            return
+        }
+    }
+    try {
+        if ((Get-LoopbackCatDeskListener -Port $local.Port -Canonical $canonical) -or
+            @(Get-CatDeskDaemonProcessCandidates -Canonical $canonical).Count) {
+            throw 'listener or daemon exists before restoration'
+        }
+        $retained = Get-CanonicalCatDeskIdentity -Root $Root -ExpectedHash $ExpectedBuildSha256 -FingerprintPath $BuildFingerprintPath
+        $restored = Start-CanonicalDaemon -Canonical $retained -Root $Root -Config $ConfigPath
+        $deadline = (Get-BackendOnlyUtcNow).AddSeconds([Math]::Min(60,$ReadyTimeoutSeconds))
+        if (Wait-BackendHandoffOwner -Process $restored -Local $local -Canonical $retained -OwnerMode 'FULL_STACK' -Deadline $deadline) {
+            Write-RedactedStatus 'BACKEND_HANDOFF_FULL_STACK_RESTORED' 'same installed release restored after handoff refusal'
+            return
+        }
+    } catch {
+        # Leave the existing supervisor to reconcile the exact local owner.
+    }
+    Write-RedactedStatus 'BACKEND_HANDOFF_RECOVERY_REQUIRED' 'check the installed local owner before further action'
+}
+
 function Invoke-CanonicalStackBootstrap {
     $root=(Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path
     if($ReadyTimeoutSeconds -lt 5 -or $ReadyTimeoutSeconds -gt 180){throw 'readiness timeout is invalid'}
     if($Mode -eq 'plan' -or -not $Execute){Invoke-CanonicalStackBootstrapCore;return}
+    if ($HandoffBackendOnly -and -not (Test-IndependentBackendHandoffHost)) {
+        Write-RedactedStatus 'BACKEND_HANDOFF_INDEPENDENT_OWNER_REQUIRED' 'persistent handoff requires an independent operator process'
+        return
+    }
     $lease=$null
     try{
         try{$lease=Enter-CatDeskStoppedLifecycleLease -Root $root}catch{
@@ -1459,6 +1599,10 @@ function Invoke-CanonicalStackBootstrap {
 function Invoke-CanonicalStackBootstrapCore {
     param([System.IO.FileStream]$StoppedLifecycleLease=$null)
     $root=(Resolve-Path -LiteralPath $Workspace -ErrorAction Stop).Path;if($ReadyTimeoutSeconds -lt 5 -or $ReadyTimeoutSeconds -gt 180){throw "readiness timeout is invalid"}
+    if ($HandoffBackendOnly) {
+        Invoke-BackendOnlyHandoff -Root $root -StoppedLifecycleLease $StoppedLifecycleLease
+        return
+    }
     # The original reviewed transaction owns a split pair as well as a
     # matching one. Check both journals before ordinary LKG recovery.
     $startupGate = Get-CatDeskReleaseStartupGate -Root $root -HeldLifecycleLease $StoppedLifecycleLease

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T15:47:00Z",
+  "scope": "LIVE_READ_ONLY_PREFLIGHT_AND_ISOLATED_LIFECYCLE_HANDOFF",
+  "startingDevelopmentCommit": "47d60e3c8ae98bca6fbda1bd7aa498c6f62186a3",
+  "installedReadOnly": {
+    "preflight": "BACKEND_HANDOFF_PREFLIGHT_READY",
+    "originalOwnerMode": "FULL_STACK",
+    "originalOwnerUnchanged": true,
+    "nativeListenerTimestampRequired": true,
+    "directCimTimestampMatchedNativeReader": false,
+    "commandRunnerCanOwnPersistentHandoff": false,
+    "handoffExecutionRequested": false,
+    "tunnelReconnects": 0,
+    "protectedWrites": 0
+  },
+  "development": {
+    "requiresExactImagePidAndCreationTime": true,
+    "usesExistingReleaseLifecycleLease": true,
+    "usesExistingNativeOwnerAndBearerChecks": true,
+    "restoresSameImageInOriginalModeAfterVerifiedCleanup": true,
+    "invokesTunnelLifecycleCommands": false,
+    "changesSupervisorRegistration": false,
+    "powerShell7BootstrapAndLifecycleSuitesPassed": true,
+    "windowsPowerShell51BootstrapAndLifecycleSuitesPassed": true,
+    "fixtureChecksOwnerDriftSuccessfulHandoffRestorationAndRacer": true,
+    "installed": false
+  },
+  "reviewStarted": false,
+  "installedWebLifecycleAccepted": false
+}

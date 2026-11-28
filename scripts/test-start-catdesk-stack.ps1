@@ -734,6 +734,88 @@ try {
   if($missingAuthority.State -cne 'LKG_AUTHORITY_MISSING' -or $script:actions.Count){throw 'backend-only bypassed trusted release recovery authority'}
   Assert-FixtureLifecycleLeaseReleased $root
   foreach($stage in @('repair','backend-start','backend-readiness')){if($script:leaseStages -notcontains $stage){throw "lifecycle lease was not verified at $stage"}}
+  & {
+    foreach ($name in @('Test-IndependentBackendHandoffHost','Wait-BackendHandoffOwner','Invoke-BackendOnlyHandoff')) {
+      $node = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq $name }, $true)
+      . ([scriptblock]::Create($node.Extent.Text))
+    }
+    $HandoffBackendOnly = $true
+    $ExpectedBuildSha256 = 'a' * 64
+    $ExpectedOwnerPid = 7101
+    $ExpectedOwnerCreatedUtc = '2026-11-28T12:00:00.0000000Z'
+    $script:handoffIndependent = $true
+    $script:handoffFault = ''
+    $script:handoffActions = [Collections.Generic.List[string]]::new()
+    $fixtureLease = $null
+    function Get-CatDeskReleaseStartupGate { param($Root,$HeldLifecycleLease) if ($Execute -and $null -eq $HeldLifecycleLease) { throw 'execution lost its lifecycle lease' }; 'READY' }
+    function Get-CanonicalCatDeskIdentity { param($Root,$ExpectedHash,$FingerprintPath) if($ExpectedHash -cne $ExpectedBuildSha256){throw 'expected image missing'}; [pscustomobject]@{Path='fixture-image';Sha256=$ExpectedHash} }
+    function Test-IndependentBackendHandoffHost { $script:handoffIndependent }
+    function Test-BackendOnlySupport { param($Canonical) $true }
+    function Get-ConfiguredLocalMcp { param($Path) [pscustomobject]@{Port=43124} }
+    function Get-BackendOnlyUtcNow { [DateTime]::UtcNow }
+    function New-HandoffListener($id,$mode) {
+      [pscustomobject]@{Pid=$id;CreationTimeUtc=$ExpectedOwnerCreatedUtc;MatchesCanonical=$true;OwnerMode=$mode}
+    }
+    function Get-LoopbackCatDeskListener { param($Port,$Canonical) $script:handoffListener }
+    function Get-CatDeskDaemonProcessCandidates { param($Canonical) if ($script:handoffListener) { $script:handoffListener } }
+    function Get-LocalMcpReadiness { param($LocalMcp,$Canonical,$ExpectedDaemonProcess,[switch]$RequireBearer)
+      if (-not $RequireBearer) { throw 'auth requirement disappeared' }
+      if ($ExpectedDaemonProcess -and $ExpectedDaemonProcess.Id -ne $script:handoffListener.Pid) { throw 'wrong owned child' }
+      [pscustomobject]@{Ready=$script:handoffFault -ne 'readiness' -or $script:handoffListener.OwnerMode -eq 'FULL_STACK'}
+    }
+    function Stop-CatDeskListenerProcessForRecovery { param($LocalMcp,$Canonical,$Candidate,$FailureMessage)
+      Assert-FixtureLifecycleLeaseHeld $root 'handoff-stop'
+      if ($Candidate.Pid -ne $ExpectedOwnerPid -or $Candidate.CreationTimeUtc -cne $ExpectedOwnerCreatedUtc) { throw 'wrong owner' }
+      [void]$script:handoffActions.Add('stop-original')
+      $script:handoffListener = if ($script:handoffFault -eq 'racer') { New-HandoffListener 7107 'FULL_STACK' }
+      $true
+    }
+    function Start-HandoffFixtureChild($id,$mode) {
+      Assert-FixtureLifecycleLeaseHeld $root 'handoff-launch'
+      $script:handoffListener = New-HandoffListener $id $mode
+      $child = [pscustomobject]@{Id=$id;HasExited=$false}
+      $child | Add-Member -MemberType ScriptMethod -Name Kill -Value {
+        [void]$script:handoffActions.Add('stop-owned-replacement')
+        if ($script:handoffListener.Pid -eq $this.Id) { $script:handoffListener = $null }
+        $this.HasExited = $true
+      }
+      $child | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { param($milliseconds) $this.HasExited }
+      $child
+    }
+    function Start-BackendOnlyDaemon { param($Canonical,$Root,$Config)
+      [void]$script:handoffActions.Add('start-backend-only')
+      Start-HandoffFixtureChild 7102 'BACKEND_ONLY'
+    }
+    function Start-CanonicalDaemon { param($Canonical,$Root,$Config)
+      [void]$script:handoffActions.Add('restore-full-stack')
+      Start-HandoffFixtureChild 7103 'FULL_STACK'
+    }
+    function Assert-Handoff([string]$ExpectedState,[string]$ExpectedActions) {
+      $frame = Invoke-CanonicalStackBootstrap | ConvertFrom-Json
+      if ($frame.State -cne $ExpectedState -or ($script:handoffActions -join ',') -cne $ExpectedActions) {
+        throw "handoff fixture expected $ExpectedState but observed $($frame.State) / $($script:handoffActions -join ',')"
+      }
+      Assert-FixtureLifecycleLeaseReleased $root
+      $script:handoffActions.Clear()
+    }
+    $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
+    $Mode = 'plan'; $Execute = $false
+    Assert-Handoff 'BACKEND_HANDOFF_PREFLIGHT_READY' ''
+    $Mode = 'recover'; $Execute = $true
+    $script:handoffIndependent = $false
+    Assert-Handoff 'BACKEND_HANDOFF_INDEPENDENT_OWNER_REQUIRED' ''
+    $script:handoffIndependent = $true
+    $script:handoffListener.CreationTimeUtc = '2026-11-28T12:00:01.0000000Z'
+    Assert-Handoff 'BACKEND_HANDOFF_OWNER_CHANGED' ''
+    $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
+    Assert-Handoff 'BACKEND_HANDOFF_LOCAL_READY' 'stop-original,start-backend-only'
+    $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
+    $script:handoffFault = 'readiness'
+    Assert-Handoff 'BACKEND_HANDOFF_FULL_STACK_RESTORED' 'stop-original,start-backend-only,stop-owned-replacement,restore-full-stack'
+    $script:handoffListener = New-HandoffListener $ExpectedOwnerPid 'FULL_STACK'
+    $script:handoffFault = 'racer'
+    Assert-Handoff 'BACKEND_HANDOFF_RECOVERY_REQUIRED' 'stop-original'
+  }
   $assessmentNode=$ast.Find({param($n)$n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-CanonicalReleaseRecoveryAssessment'},$true);if($null -eq $assessmentNode){throw 'missing read-only recovery assessment'};$assessmentSource=$assessmentNode.Extent.Text;if($assessmentSource -match 'Start-Process|Stop-Process|Invoke-OrderedOfficialRuntimeMigration|Test-OfficialRuntimeVerified'){throw 'read-only recovery assessment acquired daemon or tunnel authority'}
   if($source -match [regex]::Escape($route)){throw "test route leaked into bootstrap source"};foreach($required in @("--catdesk-daemon","--catdesk-binagotchy-cli","Start-CatDeskBinagotchyGui","catdesk_instruction","delegated_run_list","Get-VerifiedBuildFingerprint","healthz","readyz","Get-OfficialRuntimeVerification","Get-RedactedReadinessFailureGate","Save-RedactedRecoveryEvidence","Invoke-BoundedTunnelClient","Invoke-BoundedCodexProbe","Initialize-BoundedNativeProcessType","Invoke-SilentLoopbackHttp","ConvertTo-NativeCommandLineArgument","process.Kill()")){if($source -notmatch [regex]::Escape($required)){throw "missing $required"}};if($source -match "& \$clientPath runtimes status"){throw "unbounded runtime status remains"};if($source -match '& \$codex\.Source'){throw "unbounded Codex prerequisite probe remains"};if($source -match "--auto-start-computer"){throw "legacy TUI launch remains"}
 } finally {if($hadOuterNativeAuth){[Environment]::SetEnvironmentVariable('CATDESK_MCP_AUTH_TOKEN',$savedOuterNativeAuth,'Process')}else{Remove-Item Env:CATDESK_MCP_AUTH_TOKEN -ErrorAction SilentlyContinue};if($hadTunnelRef){$env:CATDESK_OPENAI_TUNNEL_ID=$priorTunnelRef}else{Remove-Item Env:CATDESK_OPENAI_TUNNEL_ID -ErrorAction SilentlyContinue};if($hadControlRef){$env:CONTROL_PLANE_API_KEY=$priorControlRef}else{Remove-Item Env:CONTROL_PLANE_API_KEY -ErrorAction SilentlyContinue};if($hadCodexExecutable){$env:CATDESK_CODEX_CLI_EXECUTABLE=$priorCodexExecutable}else{Remove-Item Env:CATDESK_CODEX_CLI_EXECUTABLE -ErrorAction SilentlyContinue};Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue}

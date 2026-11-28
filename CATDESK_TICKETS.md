@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 28.** The bounded same-image handoff reuses the existing lifecycle lease, fixed configuration, exact owner stop, and authenticated verification. An ambiguous replacement returns recovery required. A failed verified replacement can restore the original full-stack mode with the original image. Live preflight passed and the current Codex process did not qualify to own execution. [Evidence](docs/verification/BACKEND_ONLY_LIFECYCLE_HANDOFF_2026_11_28.json).
+
 **RELEASE-RECOVERY, November 28.** Verified backend-only support on the current installed image. `LOCAL_DAEMON.ownerMode` now distinguishes verified full-stack and backend-only ownership in development diagnostics. The current owner is full-stack. A qualified owner transition still precedes bearer-forwarding reconnect and the first fresh Web verification. [Evidence](docs/verification/BACKEND_ONLY_HANDOFF_OWNER_MODE_2026_11_28.json).
 
 **RELEASE-RECOVERY, November 28.** Development can renew finite-serving interpreter evidence through a completed reviewed promotion for the exact installed artifact. It preserves the helper-script pins, authenticated startup, lifecycle lease and selected-release checks. The current installation and tunnel are unchanged. Review admission still depends on the authorized existing-owner bearer repair and a verified destination. [Evidence](docs/verification/FINITE_SERVING_REVIEWED_INTERPRETER_2026_11_28.json).
