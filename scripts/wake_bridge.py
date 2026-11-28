@@ -4422,9 +4422,11 @@ class NewConversationSink(CdpSink):
         # Context observation keeps its existing small excerpts. An explicit
         # private source read may retain the same 8 KiB total window in one
         # message, matching the review reader's existing body limit.
-        # Receipt-bound review pairs have their own explicitly selected profile.
+        # Receipt-bound review pairs may retain a 48 KiB answer within the
+        # adapter's independently bounded 64 KiB wire frame. The 32 KiB
+        # profile remains valid for existing initialization readers.
         if (type(review_pair) is not bool or type(max_message_bytes) is not int or
-                max_message_bytes not in ({32768} if review_pair else {4096, 8192})):
+                max_message_bytes not in ({32768, 49152} if review_pair else {4096, 8192})):
             raise ValueError("unsupported private snapshot message budget")
         script = """(() => {
             const messageLimit = __CATDESK_SNAPSHOT_MESSAGE_BYTES__;
@@ -4549,7 +4551,7 @@ class NewConversationSink(CdpSink):
         truncated = value[2] or value[1] > len(value[5])
         # Only a receipt-bound private review can use the larger final-pair
         # window. A long answer must not consume the preceding USER witness.
-        remaining = 49152 if review_pair else 8192
+        remaining = max_message_bytes + 16384 if review_pair else 8192
         messages = []
         source_salt = digest(self.url)
         for item in reversed(value[5]):

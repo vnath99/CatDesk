@@ -1005,7 +1005,7 @@ def source_snapshot(bridge, sb, request):
             raise bridge.Attention("SOURCE_REVIEW_SEQUENCE_DRIFT")
     require_review_turn()
     snapshot = bounded_source_snapshot(bridge, sink, cdp,
-        max_message_bytes=32768 if review is not None else 8192, review_pair=review is not None)
+        max_message_bytes=49152 if review is not None else 8192, review_pair=review is not None)
     if event is not None:
         messages = snapshot["messages"]
         pair = messages[-2:]

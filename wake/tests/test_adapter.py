@@ -311,7 +311,7 @@ class AdapterTests(unittest.TestCase):
     def test_sent_review_pair_scope_stability_and_escaping_preserve_user(self):
         reasons = {(0, 0): "SOURCE_REVIEW_USER_NOT_FOUND", (2, 1): "SOURCE_REVIEW_DUPLICATE_USER",
                    (1, 0): "SOURCE_REVIEW_ASSISTANT_NOT_MOUNTED", (1, 2): "SOURCE_REVIEW_SEQUENCE_DRIFT"}
-        for count, answer in [((1, 1), "r" * 16000), ((1, 1), "😀" * 8192),
+        for count, answer in [((1, 1), "r" * 16000), ((1, 1), "r" * 33980), ((1, 1), "😀" * 8192),
                               *[(state, "answer") for state in reasons]]:
             with self.subTest(count=count, unicode=answer.startswith("😀")):
                 cdp = FakeCdp()
@@ -326,7 +326,7 @@ class AdapterTests(unittest.TestCase):
                         if message != self_message: raise AssertionError("wrong receipt message")
                         return count
                     def visible_message_snapshot(self, _, *, max_message_bytes, review_pair):
-                        if (max_message_bytes, review_pair) != (32768, True): raise AssertionError("wrong private budget")
+                        if (max_message_bytes, review_pair) != (49152, True): raise AssertionError("wrong private budget")
                         return {"messages":[dict(role=role,text=text,textComplete=True,revisionComplete=True,
                             revisionHash="a"*64,identityBasis="UNIT_KEY") for role,text in
                             [("USER","approved review"),("ASSISTANT",answer)]], "truncated":False,

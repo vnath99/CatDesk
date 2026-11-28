@@ -1353,7 +1353,7 @@ fn review_text(snapshot: &Value, expected_message_digest: &str) -> Result<String
     if assistant["role"] != "ASSISTANT"
         || assistant["textComplete"] != true
         || text.trim().is_empty()
-        || text.len() > 32768
+        || text.len() > 48 * 1024
     {
         return Err("WEB_REVIEW_RESPONSE_NOT_COMPLETE".into());
     }
@@ -3502,10 +3502,18 @@ mod tests {
             {"role":"ASSISTANT","text":"r".repeat(16000),"textComplete":true}
         ]});
         assert_eq!(review_text(&snapshot, &expected).unwrap().len(), 16000);
+        for size in [33980, 48 * 1024] {
+            snapshot["messages"][1]["text"] = json!("r".repeat(size));
+            assert_eq!(review_text(&snapshot, &expected).unwrap().len(), size);
+        }
+        snapshot["messages"][1]["text"] = json!("😀".repeat(12288));
+        assert_eq!(review_text(&snapshot, &expected).unwrap().len(), 48 * 1024);
+        snapshot["messages"][1]["text"] = json!("😀".repeat(12289));
+        assert!(review_text(&snapshot, &expected).is_err());
         snapshot["messages"][1]["text"] =
             json!("A UI may say This response couldn't load. Preserve the receipt.");
         assert!(review_text(&snapshot, &expected).is_ok());
-        snapshot["messages"][1]["text"] = json!("r".repeat(32769));
+        snapshot["messages"][1]["text"] = json!("r".repeat(48 * 1024 + 1));
         assert_eq!(
             review_text(&snapshot, &expected).unwrap_err(),
             "WEB_REVIEW_RESPONSE_NOT_COMPLETE"

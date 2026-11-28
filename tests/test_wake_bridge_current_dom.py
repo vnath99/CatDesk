@@ -1109,6 +1109,22 @@ class CurrentDomTests(unittest.TestCase):
         ordinary = self.sink.visible_message_snapshot(cdp, max_message_bytes=8192)
         self.assertLessEqual(sum(len(item["text"].encode()) for item in ordinary["messages"]), 8192)
 
+    def test_receipt_review_reads_33980_character_answer_and_keeps_a_hard_limit(self):
+        for size, complete in [(33980, True), (49152, True), (49153, False)]:
+            with self.subTest(size=size):
+                observed = self.sink.visible_message_snapshot(
+                    CurrentDom(answer="r" * size), max_message_bytes=49152, review_pair=True)
+                user, answer = observed["messages"]
+                self.assertEqual(user["text"], "exact wake message")
+                self.assertTrue(user["textComplete"])
+                self.assertEqual(answer["text"], "r" * min(size, 49152))
+                self.assertEqual(answer["textComplete"], complete)
+                self.assertEqual(answer["revisionComplete"], complete)
+        for budget, review in [(49152, False), (49153, True), (65536, True)]:
+            with self.subTest(budget=budget, review=review), self.assertRaises(ValueError):
+                self.sink.visible_message_snapshot(
+                    CurrentDom(), max_message_bytes=budget, review_pair=review)
+
     def test_sent_review_pair_caps_unicode_without_discarding_user(self):
         observed = self.sink.visible_message_snapshot(CurrentDom(answer="😀" * 10000),
             max_message_bytes=32768, review_pair=True)
