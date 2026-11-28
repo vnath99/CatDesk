@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 28.** Recovery controller scope and Git blob identities are frozen for independent review. Existing Windows shell candidates did not qualify. The command runner rejected the disposable read-only Scheduler fixture before process creation. That refusal leaves production and the ordinary outside-Job requirement unchanged. [Review intake and owner evidence](docs/verification/SECURE_MCP_RECOVERY_CONTROLLER_REVIEW_INTAKE_2026_11_28.json).
+
 **RELEASE-RECOVERY, November 28.** The actual v0.0.14 executable consumed the forwarded bearer and completed loopback MCP initialization. No MCP bearer reached a separate local control-plane listener. This qualifies the local client behavior for the planned recovery. The installed v5 path and independent reviewer admission remain open. [Evidence](docs/verification/SECURE_MCP_PINNED_NATIVE_LOOPBACK_2026_11_28.json).
 
 **RELEASE-RECOVERY, November 28.** The reconnect result now distinguishes an authentication challenge, startup-probe timeout and unavailable direct proof from confirmed local probe readiness. The native client's fallback to an effective health result cannot establish readiness for the selected alias. The original owner passed the live classification check with an auth challenge. Independent controller review and an eligible Windows owner remain required for execution. [Evidence](docs/verification/SECURE_MCP_RECONNECT_AUTH_READBACK_2026_11_28.json).

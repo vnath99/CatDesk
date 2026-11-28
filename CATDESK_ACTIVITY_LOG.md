@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-28 16:16 UTC | Freeze Secure MCP recovery review inputs.** Pinned the exact controller files and test evidence at `3ce3f70`. The read-only Windows check found no accessible shell outside a Job and no exact registered scheduled-task owner. The command runner refused a disposable, demand-only owner probe before execution. [Review intake and owner evidence](docs/verification/SECURE_MCP_RECOVERY_CONTROLLER_REVIEW_INTAKE_2026_11_28.json).
+
 **2026-11-28 16:12 UTC | Pinned Windows tunnel client confirmed bearer forwarding.** The real executable authenticated and completed MCP initialization on a disposable loopback target after CatDesk injected its child-only bearer. Initialization without forwarding was refused. Both cases sent traffic to a separate loopback control-plane server, which received zero MCP bearer matches. The owned processes and fixture listeners exited. [Evidence](docs/verification/SECURE_MCP_PINNED_NATIVE_LOOPBACK_2026_11_28.json).
 
 **2026-11-28 16:05 UTC | Secure MCP readback.** The pinned client reported the existing process running and ready. Its own `/readyz` response was HTTP 200 with an MCP initialization auth challenge. The development reconnect helper now retains that distinction. PowerShell 7 and Windows PowerShell 5.1 each passed 31 focused assertions. [Evidence](docs/verification/SECURE_MCP_RECONNECT_AUTH_READBACK_2026_11_28.json).

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T16:16:00Z",
+  "scope": "INERT_EXACT_SOURCE_REVIEW_INTAKE_AND_READ_ONLY_WINDOWS_OWNER_INVENTORY",
+  "source": {
+    "baselineCommit": "1df9f30e98dbceba9c693e86bb008e03f84d5677",
+    "reviewCommit": "3ce3f7015776292525306e454d2990a85cbc4c7f",
+    "reviewTree": "0265767a9948c0fa6b6b7b1498b3e9b3404192c7",
+    "reviewCommitVerifiedOnExistingRemote": true,
+    "blobs": {
+      "catdesk.ps1": "3ee22d152873c634ad51e8aa2088f8b9cce86540",
+      "scripts/start-catdesk-stack.ps1": "fb31c8ff453547925e0f24d37bb89cf2a7e74635",
+      "scripts/setup-secure-mcp.ps1": "7f5f3f0bab57b388dd74344df6607745e7fcfde8",
+      "scripts/test-catdesk-lifecycle.ps1": "55179bb8d5c8bb906e2510991203746dbe1fbe11",
+      "scripts/test-start-catdesk-stack.ps1": "4db5173be60f1337b63f7ffd7ac57adae986fa48",
+      "scripts/test-secure-mcp-bearer-forwarding.ps1": "1489e086bc0121d2fd5b6f3b43b7d26255c30b1f",
+      "scripts/test-secure-mcp-native-loopback.py": "aec664de5c7312cd50fc86dc26c991d33be6202f"
+    }
+  },
+  "review": {
+    "decision": "PENDING_INDEPENDENT_REVIEW",
+    "scopeChecks": [
+      "Verify no automatic release promotion, registry change, Wake action or external tunnel creation.",
+      "Verify exact owner identities and the existing Windows lease across stop, replacement, rollback and reconnect.",
+      "Verify the bearer stays scoped to the existing target and is excluded from evidence.",
+      "Verify direct alias readiness, durable intent and refusal to repeat unproven operations."
+    ],
+    "dependentFrozenBackendCommit": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "backendReviewIsSeparate": true,
+    "externalSubmissions": 0
+  },
+  "evidence": [
+    "BACKEND_ONLY_LIFECYCLE_HANDOFF_2026_11_28.json",
+    "SECURE_MCP_SAME_ALIAS_RECONNECT_2026_11_28.json",
+    "SECURE_MCP_COMBINED_PREFLIGHT_2026_11_28.json",
+    "SECURE_MCP_RECONNECT_AUTH_READBACK_2026_11_28.json",
+    "SECURE_MCP_PINNED_NATIVE_LOOPBACK_2026_11_28.json"
+  ],
+  "windowsOwner": {
+    "accessibleCurrentSessionShellsInJob": 7,
+    "accessibleCurrentSessionShellsOutsideJob": 0,
+    "exactInstalledTaskFound": false,
+    "exactInstalledLogonRegistrationFound": true,
+    "disposableDemandOnlyInspection": "COMMAND_RUNNER_REJECTED_BEFORE_PROCESS_CREATION",
+    "disposableTaskRegistered": false,
+    "productionProcessesStarted": 0,
+    "productionProcessesStopped": 0
+  },
+  "installedTransitionExecuted": false,
+  "installedWebLifecycleAccepted": false
+}
