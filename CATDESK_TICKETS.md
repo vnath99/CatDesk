@@ -1,5 +1,7 @@
 # CatDesk tickets
 
+**RELEASE-RECOVERY, November 28.** The guarded same-alias reconnect uses the existing client and release lifecycle lease, pins the original runtime PID/time, verifies its exit, and validates the replacement and retained profile/configuration. An unresolved result leaves a durable attempt fence. Source qualification passed. The live operation requires independent review, an eligible operator process and a proven backend-only listener. [Evidence](docs/verification/SECURE_MCP_SAME_ALIAS_RECONNECT_2026_11_28.json).
+
 **RELEASE-RECOVERY, November 28.** The bounded same-image handoff reuses the existing lifecycle lease, fixed configuration, exact owner stop, and authenticated verification. An ambiguous replacement returns recovery required. A failed verified replacement can restore the original full-stack mode with the original image. Live preflight passed and the current Codex process did not qualify to own execution. [Evidence](docs/verification/BACKEND_ONLY_LIFECYCLE_HANDOFF_2026_11_28.json).
 
 **RELEASE-RECOVERY, November 28.** Verified backend-only support on the current installed image. `LOCAL_DAEMON.ownerMode` now distinguishes verified full-stack and backend-only ownership in development diagnostics. The current owner is full-stack. A qualified owner transition still precedes bearer-forwarding reconnect and the first fresh Web verification. [Evidence](docs/verification/BACKEND_ONLY_HANDOFF_OWNER_MODE_2026_11_28.json).

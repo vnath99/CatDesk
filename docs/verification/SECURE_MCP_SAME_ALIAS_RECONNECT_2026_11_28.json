@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T15:55:00Z",
+  "scope": "READ_ONLY_INSTALLED_PREFLIGHT_AND_ISOLATED_RUNTIME_RECONNECT_FIXTURES",
+  "startingDevelopmentCommit": "0c3761ed211c976f6e66fed86937f42245207852",
+  "installedReadOnly": {
+    "existingNativeClientReportedOneNamedRunningOwner": true,
+    "existingTargetIsCanonicalLoopback": true,
+    "preflight": "SECURE_MCP_RECONNECT_BACKEND_ONLY_REQUIRED",
+    "originalRuntimePidAndCreationTimeUnchanged": true,
+    "reconnectExecutionRequested": false,
+    "nativeStopCommandsInvoked": 0,
+    "nativeConnectCommandsInvoked": 0,
+    "freshV5Discoveries": 0,
+    "protectedWrites": 0
+  },
+  "development": {
+    "powerShell7AssertionsPassed": 25,
+    "windowsPowerShell51AssertionsPassed": 25,
+    "actualOwnedBearerChildPassed": true,
+    "fixtureChecksExitProofRacingOwnerUncertainConnectAndProfileDrift": true,
+    "fixtureAttemptCannotBeOverwritten": true,
+    "sameOwnerProfileAndConfigRemeasured": true,
+    "executionRequiresExistingLifecycleLeaseAndIndependentHost": true,
+    "installed": false
+  },
+  "webDiscoveryVerified": false,
+  "installedWebLifecycleAccepted": false
+}

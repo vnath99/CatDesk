@@ -1,5 +1,7 @@
 # CatDesk activity log
 
+**2026-11-28 15:55 UTC — qualify the same-alias Secure MCP reconnect path.** The development helper refused the actual full-stack listener before any lifecycle operation. Windows fixtures checked one stop and one bearer-forwarding connect, exact old-owner exit, profile/config readback, and retained intent on uncertain results. [Evidence](docs/verification/SECURE_MCP_SAME_ALIAS_RECONNECT_2026_11_28.json).
+
 **2026-11-28 15:47 UTC — exercised the same-image handoff preflight against the installed owner.** The development facade verified the full-stack listener, fixed release and existing bearer-protected MCP without starting or stopping a serving process. The current command runner refused persistent handoff eligibility. The exact native listener creation time was required after a direct CIM sample differed. [Evidence](docs/verification/BACKEND_ONLY_LIFECYCLE_HANDOFF_2026_11_28.json).
 
 **2026-11-28 15:39 UTC — verify the installed backend-only capability and current owner mode.** The exact canonical binary reported support through its early-exit check. The port-3200 daemon remained the same full-stack owner. Development diagnosis now exposes the verified local daemon's launch mode without publishing its command line. [Evidence](docs/verification/BACKEND_ONLY_HANDOFF_OWNER_MODE_2026_11_28.json).
