@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "observedUtc": "2026-11-28T17:25:00Z",
+  "scope": "Independent review of development source and read-only observation of installed serving",
+  "review": {
+    "process": "Independent delegated peer review",
+    "owner": "recovery_source_review",
+    "precedent": "WAKE_RECOVERY_REVIEWED_OPERATOR_HANDOFF_2026_11_21.json",
+    "intake": "SECURE_MCP_RECOVERY_CONTROLLER_REVIEW_INTAKE_2026_11_28.json",
+    "base": "1df9f30e98dbceba9c693e86bb008e03f84d5677",
+    "reviewedCommits": [
+      "3ce3f7015776292525306e454d2990a85cbc4c7f",
+      "984e3add71a9288d4838525397120b768f3c1c35"
+    ],
+    "verdict": "REQUIRES_CHANGES",
+    "findings": [
+      {
+        "location": "scripts/setup-secure-mcp.ps1",
+        "finding": "Different config readers could select different local bearer targets."
+      },
+      {
+        "location": "scripts/setup-secure-mcp.ps1",
+        "finding": "Alias-only stop re-resolves the instance after the controller verifies its process."
+      },
+      {
+        "location": "scripts/start-catdesk-stack.ps1",
+        "finding": "Full-stack rollback can start transport, rehydrate eligible Wake work and start the Web scheduler."
+      }
+    ],
+    "installedSourceCrossCheck": {
+      "commit": "9ea9e7beedf986db95cd5bea7b750544e452caa8",
+      "source": "src/main.rs",
+      "effectsObserved": false,
+      "replayControlsPreserved": true
+    },
+    "githubDraft": 43,
+    "githubReviewRequested": false,
+    "nativeBackendReleaseAttestation": false
+  },
+  "client": {
+    "qualifiedVersion": "v0.0.14",
+    "expectedSha256": "fcc85a69ec0ad82518e4f8964f60c45e31787957782a0fc9c1b0c44e82d61b9b",
+    "instanceConditionalStopSupported": false,
+    "independentSourceReadback": [
+      "https://github.com/openai/tunnel-client/blob/0f870e50a973fa820d4c409000059e181e8d242b/pkg/codexplugin/manager.go#L664-L723",
+      "https://github.com/openai/tunnel-client/blob/0f870e50a973fa820d4c409000059e181e8d242b/pkg/codexplugin/session/session.go#L382-L403"
+    ]
+  },
+  "installedReadOnly": {
+    "developmentControllerUsed": true,
+    "canonicalDaemonSha256": "0c19770e1a73101a260778a19b8d4c8d94f7c44bfa24eb04b9b1207787b5e901",
+    "releaseIdentityVerified": true,
+    "localAuthenticatedMcpPassed": true,
+    "registeredRuntimeOwnerVerified": true,
+    "mode": "reconnect",
+    "state": "SECURE_MCP_RECONNECT_MCP_AUTH_REQUIRED_NO_RETRY",
+    "ownerConditionalStopSupported": false,
+    "webDiscoveryVerified": false,
+    "workloadsStartedOrStopped": 0,
+    "protectedChanges": 0,
+    "freshConnectorRequests": 0,
+    "strictConfigAndListenerReadback": {
+      "fixedConfigParsed": true,
+      "canonicalListener": true,
+      "ipv4LoopbackOwner": true,
+      "servingMode": "FULL_STACK",
+      "nativeConnects": 0
+    }
+  },
+  "owner": {
+    "priorReadback": "BACKEND_HANDOFF_STARTUP_TIMEOUT_2026_11_28.json",
+    "registeredLogonMode": "FULL_STACK",
+    "statusAtPriorReadback": "AUTOSTART_REGISTERED_MONITOR_STOPPED",
+    "demandHandoffSupported": false,
+    "scheduledProbe": "Runner refused before execution. No task was registered.",
+    "qualifiedMaintenanceOwner": false
+  },
+  "separateBackend": {
+    "source": "56aa9912fe790bc50084329aa4932b02c0bbfc4e",
+    "mode": "chatgpt_web_direct_autonomous",
+    "frozenReconstructedContractMatchesRetainedCopy": true,
+    "contractState": "DRAFT",
+    "dedicatedFirstChat": "PREPARED",
+    "bootstrapAttemptRecorded": false,
+    "pairedTarget": false,
+    "selectedDevelopmentProfile": "EMPTY",
+    "reportAcknowledged": false,
+    "promotionPerformed": false,
+    "setupContextSelectsV5": true,
+    "publicSourceReviewRequiresNativeToolCall": false,
+    "developmentLoginRestriction": "The selected profile is empty. Existing login relies on a project-paired conversation URL and interrupted-login recovery records its digest. No user sign-in was requested before an admissible path existed."
+  },
+  "installedWebLifecycleAccepted": false,
+  "developmentQualification": {
+    "sourceCommit": "d8581896ef4b60f2e354bba8d3ac10251d44f7a7",
+    "independentSourceDecision": "PASS_FOR_CORRECTED_ENDPOINT_HANDLING_AND_READ_ONLY_RECOVERY_COMMANDS",
+    "reviewer": "recovery_source_review",
+    "finalBlobs": {
+      "catdesk.ps1": "39894b567e455ea22d4f6a77fee6852aeeb6bf54",
+      "scripts/setup-secure-mcp.ps1": "e5d89d6374c0e0c08eab2d5d23fd38a72e5f72dd",
+      "scripts/start-catdesk-stack.ps1": "765eb770043d4f5da500e618fb12a5dc38928373",
+      "scripts/test-secure-mcp-bearer-forwarding.ps1": "10610966c3dec5fb6132ee6a58be9bf71240c5f7",
+      "scripts/test-start-catdesk-stack.ps1": "4958984f8e095a714f25c09299b098a781f2e9cd"
+    },
+    "editions": [
+      "Windows PowerShell 5.1",
+      "PowerShell 7"
+    ],
+    "bearerSuiteChecksPerEdition": 59,
+    "bootstrapBehavioralSuitePassed": true,
+    "consumerLifecycleFacadePassed": true,
+    "routeAndMigrationSuitePassed": true,
+    "fixtureNotes": [
+      "The two facade runs use the same named test mutex for this checkout. A concurrent run failed an absence assertion. The affected edition passed when run alone after the other released the guard.",
+      "The first journal fixture exposed an empty-directory cleanup issue. Its three empty directories were verified and removed. Corrected fixture cleanup passed."
+    ],
+    "productionExecutionAuthorizedByThisReview": false
+  }
+}
